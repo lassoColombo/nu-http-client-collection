@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -129,7 +138,7 @@ def type-completer-3 [] { ["all" "member" "owner"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "meta meta-root" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "meta get-root" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +163,7 @@ export def commands []: nothing -> table {
 # GET /
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/overview/resources-in-the-rest-api#root-endpoint — API method documentation
 # operationId: meta/root
-export def "meta meta-root" [
+export def "meta get-root" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +186,7 @@ export def "meta meta-root" [
 # GET /admin/hooks
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#list-global-webhooks — API method documentation
 # operationId: enterprise-admin/list-global-webhooks
-export def "admin-hooks list-global-webhooks" [
+export def "admin-hooks list-enterprise-global-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,10 +203,10 @@ export def "admin-hooks list-global-webhooks" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/hooks" $qp)
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -207,7 +216,7 @@ export def "admin-hooks list-global-webhooks" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#create-a-global-webhook — API method documentation
 # operationId: enterprise-admin/create-global-webhook
 # --config shape: {content_type?: string, insecure_ssl?: string, secret?: string, url: string}
-export def "admin-hooks create-global-webhook" [
+export def "admin-hooks create-enterprise-global-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,20 +228,20 @@ export def "admin-hooks create-global-webhook" [
   --hdr-accept: string # This API is under preview and subject to change.
   --active: oneof<nothing, bool> # Determines if notifications are sent when the webhook is triggered. Set to `true` to send notifications. (default: true)
   config: record # Key/value pairs to provide settings for this webhook. — shape: {content_type?: string, insecure_ssl?: string, secret?: string, url: string}
-  --events: list # The [events](https://docs.github.com/enterprise-server@2.18/webhooks/event-payloads) that trigger this webhook. A global webhook can be triggered by `user` and `organization` events. Default: `user` and `organization`.
+  --events: list<string> # The [events](https://docs.github.com/enterprise-server@2.18/webhooks/event-payloads) that trigger this webhook. A global webhook can be triggered by `user` and `organization` events. Default: `user` and `organization`.
   name: string # Must be passed as "web".
 ]: any -> record<active: bool, config: record<content_type: string, insecure_ssl: string, secret: string, url: string>, created_at: string, events: list<string>, id: int, name: string, ping_url: string, type: string, updated_at: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/hooks")
-  let body = {"active": $active, "config": $config, "events": $events, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"active": $active, "config": $config, "events": $events, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a global webhook
@@ -240,7 +249,7 @@ export def "admin-hooks create-global-webhook" [
 # DELETE /admin/hooks/{hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#delete-a-global-webhook — API method documentation
 # operationId: enterprise-admin/delete-global-webhook
-export def "admin-hooks delete-global-webhook" [
+export def "admin-hooks delete-enterprise-global-webhook" [
   hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -254,11 +263,11 @@ export def "admin-hooks delete-global-webhook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({hook_id: $hook_id} | format pattern "/admin/hooks/{hook_id}"))
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({hook_id: (encode-path-segment $hook_id)} | format pattern "/admin/hooks/{hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -267,7 +276,7 @@ export def "admin-hooks delete-global-webhook" [
 # GET /admin/hooks/{hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-a-global-webhook — API method documentation
 # operationId: enterprise-admin/get-global-webhook
-export def "admin-hooks get-global-webhook" [
+export def "admin-hooks get-enterprise-global-webhook" [
   hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -281,11 +290,11 @@ export def "admin-hooks get-global-webhook" [
 ]: nothing -> record<active: bool, config: record<content_type: string, insecure_ssl: string, secret: string, url: string>, created_at: string, events: list<string>, id: int, name: string, ping_url: string, type: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({hook_id: $hook_id} | format pattern "/admin/hooks/{hook_id}"))
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({hook_id: (encode-path-segment $hook_id)} | format pattern "/admin/hooks/{hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -295,7 +304,7 @@ export def "admin-hooks get-global-webhook" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#update-a-global-webhook — API method documentation
 # operationId: enterprise-admin/update-global-webhook
 # --config shape: {content_type?: string, insecure_ssl?: string, secret?: string, url: string}
-export def "admin-hooks update-global-webhook" [
+export def "admin-hooks update-enterprise-global-webhook" [
   hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -308,19 +317,19 @@ export def "admin-hooks update-global-webhook" [
   --hdr-accept: string # This API is under preview and subject to change.
   --active: oneof<nothing, bool> # Determines if notifications are sent when the webhook is triggered. Set to `true` to send notifications. (default: true)
   --config: record # Key/value pairs to provide settings for this webhook. — shape: {content_type?: string, insecure_ssl?: string, secret?: string, url: string}
-  --events: list # The [events](https://docs.github.com/enterprise-server@2.18/webhooks/event-payloads) that trigger this webhook. A global webhook can be triggered by `user` and `organization` events. Default: `user` and `organization`.
+  --events: list<string> # The [events](https://docs.github.com/enterprise-server@2.18/webhooks/event-payloads) that trigger this webhook. A global webhook can be triggered by `user` and `organization` events. Default: `user` and `organization`.
 ]: any -> record<active: bool, config: record<content_type: string, insecure_ssl: string, url: string>, created_at: string, events: list<string>, id: int, name: string, ping_url: string, type: string, updated_at: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({hook_id: $hook_id} | format pattern "/admin/hooks/{hook_id}"))
-  let body = {"active": $active, "config": $config, "events": $events} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({hook_id: (encode-path-segment $hook_id)} | format pattern "/admin/hooks/{hook_id}"))
+  let req_body = {"active": $active, "config": $config, "events": $events} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Ping a global webhook
@@ -328,7 +337,7 @@ export def "admin-hooks update-global-webhook" [
 # POST /admin/hooks/{hook_id}/pings
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#ping-a-global-webhook — API method documentation
 # operationId: enterprise-admin/ping-global-webhook
-export def "admin-hooks-pings ping-global-webhook" [
+export def "admin-hooks-pings ping-enterprise-global-webhook" [
   hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,11 +351,11 @@ export def "admin-hooks-pings ping-global-webhook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({hook_id: $hook_id} | format pattern "/admin/hooks/{hook_id}/pings"))
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({hook_id: (encode-path-segment $hook_id)} | format pattern "/admin/hooks/{hook_id}/pings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -355,7 +364,7 @@ export def "admin-hooks-pings ping-global-webhook" [
 # GET /admin/keys
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#list-public-keys — API method documentation
 # operationId: enterprise-admin/list-public-keys
-export def "admin-keys list-public-keys" [
+export def "admin-keys list-enterprise-public" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -384,7 +393,7 @@ export def "admin-keys list-public-keys" [
 # DELETE /admin/keys/{key_ids}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#delete-a-public-key — API method documentation
 # operationId: enterprise-admin/delete-public-key
-export def "admin-keys delete-public-key" [
+export def "admin-keys delete-enterprise-public" [
   key_ids: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -397,7 +406,7 @@ export def "admin-keys delete-public-key" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key_ids: $key_ids} | format pattern "/admin/keys/{key_ids}"))
+  let full_url = (build-url $base ({key_ids: (encode-path-segment $key_ids)} | format pattern "/admin/keys/{key_ids}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -408,7 +417,7 @@ export def "admin-keys delete-public-key" [
 # PATCH /admin/ldap/teams/{team_id}/mapping
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#update-ldap-mapping-for-a-team — API method documentation
 # operationId: enterprise-admin/update-ldap-mapping-for-team
-export def "admin-ldap-teams-mapping update-ldap-mapping-for-team" [
+export def "admin-ldap-teams-mapping update-enterprise" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -423,12 +432,12 @@ export def "admin-ldap-teams-mapping update-ldap-mapping-for-team" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/admin/ldap/teams/{team_id}/mapping"))
-  let body = {"ldap_dn": $ldap_dn} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/admin/ldap/teams/{team_id}/mapping"))
+  let req_body = {"ldap_dn": $ldap_dn} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sync LDAP mapping for a team
@@ -436,7 +445,7 @@ export def "admin-ldap-teams-mapping update-ldap-mapping-for-team" [
 # POST /admin/ldap/teams/{team_id}/sync
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#sync-ldap-mapping-for-a-team — API method documentation
 # operationId: enterprise-admin/sync-ldap-mapping-for-team
-export def "admin-ldap-teams-sync sync-ldap-mapping-for-team" [
+export def "admin-ldap-teams-sync sync-enterprise-mapping" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -449,7 +458,7 @@ export def "admin-ldap-teams-sync sync-ldap-mapping-for-team" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/admin/ldap/teams/{team_id}/sync"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/admin/ldap/teams/{team_id}/sync"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -460,7 +469,7 @@ export def "admin-ldap-teams-sync sync-ldap-mapping-for-team" [
 # PATCH /admin/ldap/users/{username}/mapping
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#update-ldap-mapping-for-a-user — API method documentation
 # operationId: enterprise-admin/update-ldap-mapping-for-user
-export def "admin-ldap-users-mapping update-ldap-mapping-for-user" [
+export def "admin-ldap-users-mapping update-enterprise" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -475,12 +484,12 @@ export def "admin-ldap-users-mapping update-ldap-mapping-for-user" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username} | format pattern "/admin/ldap/users/{username}/mapping"))
-  let body = {"ldap_dn": $ldap_dn} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/ldap/users/{username}/mapping"))
+  let req_body = {"ldap_dn": $ldap_dn} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sync LDAP mapping for a user
@@ -488,7 +497,7 @@ export def "admin-ldap-users-mapping update-ldap-mapping-for-user" [
 # POST /admin/ldap/users/{username}/sync
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#sync-ldap-mapping-for-a-user — API method documentation
 # operationId: enterprise-admin/sync-ldap-mapping-for-user
-export def "admin-ldap-users-sync sync-ldap-mapping-for-user" [
+export def "admin-ldap-users-sync sync-enterprise-mapping" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -501,7 +510,7 @@ export def "admin-ldap-users-sync sync-ldap-mapping-for-user" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username} | format pattern "/admin/ldap/users/{username}/sync"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/ldap/users/{username}/sync"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -512,7 +521,7 @@ export def "admin-ldap-users-sync sync-ldap-mapping-for-user" [
 # POST /admin/organizations
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#create-an-organization — API method documentation
 # operationId: enterprise-admin/create-org
-export def "admin-organizations create-org" [
+export def "admin-organizations create-enterprise-org" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -529,11 +538,11 @@ export def "admin-organizations create-org" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/organizations")
-  let body = {"admin": $admin, "login": $login, "profile_name": $profile_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"admin": $admin, "login": $login, "profile_name": $profile_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an organization name
@@ -541,7 +550,7 @@ export def "admin-organizations create-org" [
 # PATCH /admin/organizations/{org}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#update-an-organization-name — API method documentation
 # operationId: enterprise-admin/update-org-name
-export def "admin-organizations update-org-name" [
+export def "admin-organizations update-enterprise-name" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -556,12 +565,12 @@ export def "admin-organizations update-org-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org} | format pattern "/admin/organizations/{org}"))
-  let body = {"login": $login} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/admin/organizations/{org}"))
+  let req_body = {"login": $login} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List pre-receive environments
@@ -569,7 +578,7 @@ export def "admin-organizations update-org-name" [
 # GET /admin/pre-receive-environments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#list-pre-receive-environments — API method documentation
 # operationId: enterprise-admin/list-pre-receive-environments
-export def "admin-pre-receive-environments list-pre-receive-environments" [
+export def "admin-pre-receive-environments list-enterprise" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -597,7 +606,7 @@ export def "admin-pre-receive-environments list-pre-receive-environments" [
 # POST /admin/pre-receive-environments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#create-a-pre-receive-environment — API method documentation
 # operationId: enterprise-admin/create-pre-receive-environment
-export def "admin-pre-receive-environments create-pre-receive-environment" [
+export def "admin-pre-receive-environments create-enterprise" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -613,11 +622,11 @@ export def "admin-pre-receive-environments create-pre-receive-environment" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/pre-receive-environments")
-  let body = {"image_url": $image_url, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"image_url": $image_url, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a pre-receive environment
@@ -625,7 +634,7 @@ export def "admin-pre-receive-environments create-pre-receive-environment" [
 # DELETE /admin/pre-receive-environments/{pre_receive_environment_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#delete-a-pre-receive-environment — API method documentation
 # operationId: enterprise-admin/delete-pre-receive-environment
-export def "admin-pre-receive-environments delete-pre-receive-environment" [
+export def "admin-pre-receive-environments delete-enterprise" [
   pre_receive_environment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -638,7 +647,7 @@ export def "admin-pre-receive-environments delete-pre-receive-environment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pre_receive_environment_id: $pre_receive_environment_id} | format pattern "/admin/pre-receive-environments/{pre_receive_environment_id}"))
+  let full_url = (build-url $base ({pre_receive_environment_id: (encode-path-segment $pre_receive_environment_id)} | format pattern "/admin/pre-receive-environments/{pre_receive_environment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -649,7 +658,7 @@ export def "admin-pre-receive-environments delete-pre-receive-environment" [
 # GET /admin/pre-receive-environments/{pre_receive_environment_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-a-pre-receive-environment — API method documentation
 # operationId: enterprise-admin/get-pre-receive-environment
-export def "admin-pre-receive-environments get-pre-receive-environment" [
+export def "admin-pre-receive-environments get-enterprise" [
   pre_receive_environment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -662,7 +671,7 @@ export def "admin-pre-receive-environments get-pre-receive-environment" [
 ]: nothing -> record<created_at: string, default_environment: bool, download: record<downloaded_at: string, message: string, state: string, url: string>, hooks_count: int, html_url: string, id: int, image_url: string, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pre_receive_environment_id: $pre_receive_environment_id} | format pattern "/admin/pre-receive-environments/{pre_receive_environment_id}"))
+  let full_url = (build-url $base ({pre_receive_environment_id: (encode-path-segment $pre_receive_environment_id)} | format pattern "/admin/pre-receive-environments/{pre_receive_environment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -673,7 +682,7 @@ export def "admin-pre-receive-environments get-pre-receive-environment" [
 # PATCH /admin/pre-receive-environments/{pre_receive_environment_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#update-a-pre-receive-environment — API method documentation
 # operationId: enterprise-admin/update-pre-receive-environment
-export def "admin-pre-receive-environments update-pre-receive-environment" [
+export def "admin-pre-receive-environments update-enterprise" [
   pre_receive_environment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -689,12 +698,12 @@ export def "admin-pre-receive-environments update-pre-receive-environment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pre_receive_environment_id: $pre_receive_environment_id} | format pattern "/admin/pre-receive-environments/{pre_receive_environment_id}"))
-  let body = {"image_url": $image_url, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({pre_receive_environment_id: (encode-path-segment $pre_receive_environment_id)} | format pattern "/admin/pre-receive-environments/{pre_receive_environment_id}"))
+  let req_body = {"image_url": $image_url, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Start a pre-receive environment download
@@ -702,7 +711,7 @@ export def "admin-pre-receive-environments update-pre-receive-environment" [
 # POST /admin/pre-receive-environments/{pre_receive_environment_id}/downloads
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#start-a-pre-receive-environment-download — API method documentation
 # operationId: enterprise-admin/start-pre-receive-environment-download
-export def "admin-pre-receive-environments-downloads start-pre-receive-environment-download" [
+export def "admin-pre-receive-environments-downloads start-enterprise" [
   pre_receive_environment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -715,7 +724,7 @@ export def "admin-pre-receive-environments-downloads start-pre-receive-environme
 ]: nothing -> record<downloaded_at: string, message: string, state: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pre_receive_environment_id: $pre_receive_environment_id} | format pattern "/admin/pre-receive-environments/{pre_receive_environment_id}/downloads"))
+  let full_url = (build-url $base ({pre_receive_environment_id: (encode-path-segment $pre_receive_environment_id)} | format pattern "/admin/pre-receive-environments/{pre_receive_environment_id}/downloads"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -726,7 +735,7 @@ export def "admin-pre-receive-environments-downloads start-pre-receive-environme
 # GET /admin/pre-receive-environments/{pre_receive_environment_id}/downloads/latest
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-the-download-status-for-a-pre-receive-environment — API method documentation
 # operationId: enterprise-admin/get-download-status-for-pre-receive-environment
-export def "admin-pre-receive-environments-downloads-latest get-download-status-for-pre-receive-environment" [
+export def "admin-pre-receive-environments-downloads-latest get-enterprise-status" [
   pre_receive_environment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -739,7 +748,7 @@ export def "admin-pre-receive-environments-downloads-latest get-download-status-
 ]: nothing -> record<downloaded_at: string, message: string, state: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pre_receive_environment_id: $pre_receive_environment_id} | format pattern "/admin/pre-receive-environments/{pre_receive_environment_id}/downloads/latest"))
+  let full_url = (build-url $base ({pre_receive_environment_id: (encode-path-segment $pre_receive_environment_id)} | format pattern "/admin/pre-receive-environments/{pre_receive_environment_id}/downloads/latest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -750,7 +759,7 @@ export def "admin-pre-receive-environments-downloads-latest get-download-status-
 # GET /admin/pre-receive-hooks
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#list-pre-receive-hooks — API method documentation
 # operationId: enterprise-admin/list-pre-receive-hooks
-export def "admin-pre-receive-hooks list-pre-receive-hooks" [
+export def "admin-pre-receive-hooks list-enterprise" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -778,7 +787,7 @@ export def "admin-pre-receive-hooks list-pre-receive-hooks" [
 # POST /admin/pre-receive-hooks
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#create-a-pre-receive-hook — API method documentation
 # operationId: enterprise-admin/create-pre-receive-hook
-export def "admin-pre-receive-hooks create-pre-receive-hook" [
+export def "admin-pre-receive-hooks create-enterprise" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -798,11 +807,11 @@ export def "admin-pre-receive-hooks create-pre-receive-hook" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/pre-receive-hooks")
-  let body = {"allow_downstream_configuration": $allow_downstream_configuration, "enforcement": $enforcement, "environment": $environment, "name": $name, "script": $script, "script_repository": $script_repository} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allow_downstream_configuration": $allow_downstream_configuration, "enforcement": $enforcement, "environment": $environment, "name": $name, "script": $script, "script_repository": $script_repository} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a pre-receive hook
@@ -810,7 +819,7 @@ export def "admin-pre-receive-hooks create-pre-receive-hook" [
 # DELETE /admin/pre-receive-hooks/{pre_receive_hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#delete-a-pre-receive-hook — API method documentation
 # operationId: enterprise-admin/delete-pre-receive-hook
-export def "admin-pre-receive-hooks delete-pre-receive-hook" [
+export def "admin-pre-receive-hooks delete-enterprise" [
   pre_receive_hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -823,7 +832,7 @@ export def "admin-pre-receive-hooks delete-pre-receive-hook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pre_receive_hook_id: $pre_receive_hook_id} | format pattern "/admin/pre-receive-hooks/{pre_receive_hook_id}"))
+  let full_url = (build-url $base ({pre_receive_hook_id: (encode-path-segment $pre_receive_hook_id)} | format pattern "/admin/pre-receive-hooks/{pre_receive_hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -834,7 +843,7 @@ export def "admin-pre-receive-hooks delete-pre-receive-hook" [
 # GET /admin/pre-receive-hooks/{pre_receive_hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-a-pre-receive-hook — API method documentation
 # operationId: enterprise-admin/get-pre-receive-hook
-export def "admin-pre-receive-hooks get-pre-receive-hook" [
+export def "admin-pre-receive-hooks get-enterprise" [
   pre_receive_hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -847,7 +856,7 @@ export def "admin-pre-receive-hooks get-pre-receive-hook" [
 ]: nothing -> record<allow_downstream_configuration: bool, enforcement: string, environment: record<created_at: string, default_environment: bool, download: record<downloaded_at: string, message: string, state: string, url: string>, hooks_count: int, html_url: string, id: int, image_url: string, name: string, url: string>, id: int, name: string, script: string, script_repository: record<full_name: string, html_url: string, id: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pre_receive_hook_id: $pre_receive_hook_id} | format pattern "/admin/pre-receive-hooks/{pre_receive_hook_id}"))
+  let full_url = (build-url $base ({pre_receive_hook_id: (encode-path-segment $pre_receive_hook_id)} | format pattern "/admin/pre-receive-hooks/{pre_receive_hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -858,7 +867,7 @@ export def "admin-pre-receive-hooks get-pre-receive-hook" [
 # PATCH /admin/pre-receive-hooks/{pre_receive_hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#update-a-pre-receive-hook — API method documentation
 # operationId: enterprise-admin/update-pre-receive-hook
-export def "admin-pre-receive-hooks update-pre-receive-hook" [
+export def "admin-pre-receive-hooks update-enterprise" [
   pre_receive_hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -878,12 +887,12 @@ export def "admin-pre-receive-hooks update-pre-receive-hook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pre_receive_hook_id: $pre_receive_hook_id} | format pattern "/admin/pre-receive-hooks/{pre_receive_hook_id}"))
-  let body = {"allow_downstream_configuration": $allow_downstream_configuration, "enforcement": $enforcement, "environment": $environment, "name": $name, "script": $script, "script_repository": $script_repository} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({pre_receive_hook_id: (encode-path-segment $pre_receive_hook_id)} | format pattern "/admin/pre-receive-hooks/{pre_receive_hook_id}"))
+  let req_body = {"allow_downstream_configuration": $allow_downstream_configuration, "enforcement": $enforcement, "environment": $environment, "name": $name, "script": $script, "script_repository": $script_repository} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List personal access tokens
@@ -891,7 +900,7 @@ export def "admin-pre-receive-hooks update-pre-receive-hook" [
 # GET /admin/tokens
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#list-personal-access-tokens — API method documentation
 # operationId: enterprise-admin/list-personal-access-tokens
-export def "admin-tokens list-personal-access-tokens" [
+export def "admin-tokens list-enterprise-personal-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -917,7 +926,7 @@ export def "admin-tokens list-personal-access-tokens" [
 # DELETE /admin/tokens/{token_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#delete-a-personal-access-token — API method documentation
 # operationId: enterprise-admin/delete-personal-access-token
-export def "admin-tokens delete-personal-access-token" [
+export def "admin-tokens delete-enterprise-personal-access" [
   token_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -930,7 +939,7 @@ export def "admin-tokens delete-personal-access-token" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({token_id: $token_id} | format pattern "/admin/tokens/{token_id}"))
+  let full_url = (build-url $base ({token_id: (encode-path-segment $token_id)} | format pattern "/admin/tokens/{token_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -941,7 +950,7 @@ export def "admin-tokens delete-personal-access-token" [
 # POST /admin/users
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#create-a-user — API method documentation
 # operationId: enterprise-admin/create-user
-export def "admin-users create-user" [
+export def "admin-users create-enterprise" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -957,11 +966,11 @@ export def "admin-users create-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/users")
-  let body = {"email": $email, "login": $login} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "login": $login} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a user
@@ -969,7 +978,7 @@ export def "admin-users create-user" [
 # DELETE /admin/users/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#delete-a-user — API method documentation
 # operationId: enterprise-admin/delete-user
-export def "admin-users delete-user" [
+export def "admin-users delete-enterprise" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -982,7 +991,7 @@ export def "admin-users delete-user" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username} | format pattern "/admin/users/{username}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/users/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -993,7 +1002,7 @@ export def "admin-users delete-user" [
 # PATCH /admin/users/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#update-the-username-for-a-user — API method documentation
 # operationId: enterprise-admin/update-username-for-user
-export def "admin-users update-username-for-user" [
+export def "admin-users update-enterprise" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1008,12 +1017,12 @@ export def "admin-users update-username-for-user" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username} | format pattern "/admin/users/{username}"))
-  let body = {"login": $login} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/users/{username}"))
+  let req_body = {"login": $login} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an impersonation OAuth token
@@ -1021,7 +1030,7 @@ export def "admin-users update-username-for-user" [
 # DELETE /admin/users/{username}/authorizations
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#delete-an-impersonation-oauth-token — API method documentation
 # operationId: enterprise-admin/delete-impersonation-o-auth-token
-export def "admin-users-authorizations delete-impersonation-o-auth-token" [
+export def "admin-users-authorizations delete-enterprise-impersonation-o-auth-token" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1034,7 +1043,7 @@ export def "admin-users-authorizations delete-impersonation-o-auth-token" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username} | format pattern "/admin/users/{username}/authorizations"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/users/{username}/authorizations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1045,7 +1054,7 @@ export def "admin-users-authorizations delete-impersonation-o-auth-token" [
 # POST /admin/users/{username}/authorizations
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#create-an-impersonation-oauth-token — API method documentation
 # operationId: enterprise-admin/create-impersonation-o-auth-token
-export def "admin-users-authorizations create-impersonation-o-auth-token" [
+export def "admin-users-authorizations create-enterprise-impersonation-o-auth-token" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1055,17 +1064,17 @@ export def "admin-users-authorizations create-impersonation-o-auth-token" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --scopes: list # A list of [scopes](https://docs.github.com/enterprise-server@2.18/apps/building-oauth-apps/understanding-scopes-for-oauth-apps/).
+  --scopes: list<string> # A list of [scopes](https://docs.github.com/enterprise-server@2.18/apps/building-oauth-apps/understanding-scopes-for-oauth-apps/).
 ]: any -> record<app: record<client_id: string, name: string, url: string>, created_at: string, fingerprint: string, hashed_token: string, id: int, installation: record<account: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, has_multiple_single_files: bool, permissions: record<actions: string, administration: string, checks: string, content_references: string, contents: string, deployments: string, environments: string, issues: string, members: string, metadata: string, organization_administration: string, organization_hooks: string, organization_packages: string, organization_plan: string, organization_projects: string, organization_secrets: string, organization_self_hosted_runners: string, organization_user_blocking: string, packages: string, pages: string, pull_requests: string, repository_hooks: string, repository_projects: string, secret_scanning_alerts: string, secrets: string, security_events: string, single_file: string, statuses: string, team_discussions: string, vulnerability_alerts: string, workflows: string>, repositories_url: string, repository_selection: string, single_file_name: string, single_file_paths: list<string>>, note: string, note_url: string, scopes: list<string>, token: string, token_last_eight: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username} | format pattern "/admin/users/{username}/authorizations"))
-  let body = {"scopes": $scopes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/users/{username}/authorizations"))
+  let req_body = {"scopes": $scopes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the authenticated app
@@ -1096,7 +1105,7 @@ export def "app get-authenticated" [
 # POST /app-manifests/{code}/conversions
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/apps#create-a-github-app-from-a-manifest — API method documentation
 # operationId: apps/create-from-manifest
-export def "app-manifests-conversions create-from-manifest" [
+export def "app-manifests-conversions create" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1111,11 +1120,12 @@ export def "app-manifests-conversions create-from-manifest" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({code: $code} | format pattern "/app-manifests/{code}/conversions"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/app-manifests/{code}/conversions"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List installations for the authenticated app
@@ -1123,7 +1133,7 @@ export def "app-manifests-conversions create-from-manifest" [
 # GET /app/installations
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/apps#list-installations-for-the-authenticated-app — API method documentation
 # operationId: apps/list-installations
-export def "app-installations list-installations" [
+export def "app-installations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1140,10 +1150,10 @@ export def "app-installations list-installations" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/app/installations" $qp)
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1152,7 +1162,7 @@ export def "app-installations list-installations" [
 # DELETE /app/installations/{installation_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/apps#delete-an-installation-for-the-authenticated-app — API method documentation
 # operationId: apps/delete-installation
-export def "app-installations delete-installation" [
+export def "app-installations delete" [
   installation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1166,11 +1176,11 @@ export def "app-installations delete-installation" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({installation_id: $installation_id} | format pattern "/app/installations/{installation_id}"))
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({installation_id: (encode-path-segment $installation_id)} | format pattern "/app/installations/{installation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1179,7 +1189,7 @@ export def "app-installations delete-installation" [
 # GET /app/installations/{installation_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/apps#get-an-installation-for-the-authenticated-app — API method documentation
 # operationId: apps/get-installation
-export def "app-installations get-installation" [
+export def "app-installations get" [
   installation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1193,11 +1203,11 @@ export def "app-installations get-installation" [
 ]: nothing -> record<access_tokens_url: string, account: any, app_id: int, app_slug: string, contact_email: string, created_at: string, events: list<string>, html_url: string, id: int, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string, organization_administration: string, pull_requests: string, statuses: string>, repositories_url: string, repository_selection: string, single_file_name: string, suspended_at: string, suspended_by: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, target_id: int, target_type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({installation_id: $installation_id} | format pattern "/app/installations/{installation_id}"))
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({installation_id: (encode-path-segment $installation_id)} | format pattern "/app/installations/{installation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1206,8 +1216,8 @@ export def "app-installations get-installation" [
 # POST /app/installations/{installation_id}/access_tokens
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/apps/#create-an-installation-access-token-for-an-app — API method documentation
 # operationId: apps/create-installation-access-token
-# --permissions shape: {actions?: "read"|"write", administration?: "read"|"write", checks?: "read"|"write", content_references?: "read"|"write", contents?: "read"|"write", deployments?: "read"|"write", environments?: "read"|"write", issues?: "read"|"write", members?: "read"|"write", metadata?: "read"|"write", organization_administration?: "read"|"write", organization_hooks?: "read"|"write", organization_packages?: "read"|"write", organization_plan?: "read", organization_projects?: "read"|"write"|"admin", organization_secrets?: "read"|"write", organization_self_hosted_runners?: "read"|"write", organization_user_blocking?: "read"|"write", packages?: "read"|"write", pages?: "read"|"write", pull_requests?: "read"|"write", repository_hooks?: "read"|"write", repository_projects?: "read"|"write"|"admin", secret_scanning_alerts?: "read"|"write", secrets?: "read"|"write", security_events?: "read"|"write", single_file?: "read"|"write", statuses?: "read"|"write", team_discussions?: "read"|"write", vulnerability_alerts?: "read", workflows?: "write"}
-export def "app-installations-access-tokens create-installation-access-token" [
+# --permissions shape: {actions?: "read"|"write", administration?: "read"|"write", checks?: "read"|"write", content_references?: "read"|"write", contents?: "read"|"write", deployments?: "read"|"write", environments?: "read"|"write", issues?: "read"|"write", members?: "read"|"write", metadata?: "read"|"write", organization_administration?: "read"|"write", organization_hooks?: "read"|"write", organization_packages?: "read"|"write", organization_plan?: "read", organization_projects?: "read"|"write"|"admin", ... (16 more fields)}
+export def "app-installations-access-tokens create" [
   installation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1218,21 +1228,21 @@ export def "app-installations-access-tokens create-installation-access-token" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # This API is under preview and subject to change.
-  --permissions: record # The permissions granted to the user-to-server access token. (e.g. {contents: read, deployments: write, issues: read, single_file: read}) — shape: {actions?: "read"|"write", administration?: "read"|"write", checks?: "read"|"write", content_references?: "read"|"write", contents?: "read"|"write", deployments?: "read"|"write", environments?: "read"|"write", issues?: "read"|"write", members?: "read"|"write", metadata?: "read"|"write", organization_administration?: "read"|"write", organization_hooks?: "read"|"write", organization_packages?: "read"|"write", organization_plan?: "read", organization_projects?: "read"|"write"|"admin", organization_secrets?: "read"|"write", organization_self_hosted_runners?: "read"|"write", organization_user_blocking?: "read"|"write", packages?: "read"|"write", pages?: "read"|"write", pull_requests?: "read"|"write", repository_hooks?: "read"|"write", repository_projects?: "read"|"write"|"admin", secret_scanning_alerts?: "read"|"write", secrets?: "read"|"write", security_events?: "read"|"write", single_file?: "read"|"write", statuses?: "read"|"write", team_discussions?: "read"|"write", vulnerability_alerts?: "read", workflows?: "write"}
-  --repositories: list # List of repository names that the token should have access to
-  --repository-ids: list # List of repository IDs that the token should have access to (e.g. [1])
+  --permissions: record # The permissions granted to the user-to-server access token. (e.g. {contents: read, deployments: write, issues: read, single_file: read}) — shape: {actions?: "read"|"write", administration?: "read"|"write", checks?: "read"|"write", content_references?: "read"|"write", contents?: "read"|"write", deployments?: "read"|"write", environments?: "read"|"write", issues?: "read"|"write", members?: "read"|"write", metadata?: "read"|"write", organization_administration?: "read"|"write", organization_hooks?: "read"|"write", organization_packages?: "read"|"write", organization_plan?: "read", organization_projects?: "read"|"write"|"admin", ... (16 more fields)}
+  --repositories: list<string> # List of repository names that the token should have access to
+  --repository-ids: list<int> # List of repository IDs that the token should have access to (e.g. [1])
 ]: any -> record<expires_at: string, has_multiple_single_files: bool, permissions: record<actions: string, administration: string, checks: string, content_references: string, contents: string, deployments: string, environments: string, issues: string, members: string, metadata: string, organization_administration: string, organization_hooks: string, organization_packages: string, organization_plan: string, organization_projects: string, organization_secrets: string, organization_self_hosted_runners: string, organization_user_blocking: string, packages: string, pages: string, pull_requests: string, repository_hooks: string, repository_projects: string, secret_scanning_alerts: string, secrets: string, security_events: string, single_file: string, statuses: string, team_discussions: string, vulnerability_alerts: string, workflows: string>, repositories: table<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, repository_selection: string, single_file: string, single_file_paths: list<string>, token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({installation_id: $installation_id} | format pattern "/app/installations/{installation_id}/access_tokens"))
-  let body = {"permissions": $permissions, "repositories": $repositories, "repository_ids": $repository_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({installation_id: (encode-path-segment $installation_id)} | format pattern "/app/installations/{installation_id}/access_tokens"))
+  let req_body = {"permissions": $permissions, "repositories": $repositories, "repository_ids": $repository_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List your grants
@@ -1242,7 +1252,7 @@ export def "app-installations-access-tokens create-installation-access-token" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/oauth-authorizations#list-your-grants — API method documentation
 # operationId: oauth-authorizations/list-grants
 @deprecated
-export def "applications-grants list-grants" [
+export def "applications-grants list-oauth-authorizations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1271,7 +1281,7 @@ export def "applications-grants list-grants" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/oauth-authorizations#delete-a-grant — API method documentation
 # operationId: oauth-authorizations/delete-grant
 @deprecated
-export def "applications-grants delete-grant" [
+export def "applications-grants delete-oauth-authorizations-by-grant_id" [
   grant_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1284,7 +1294,7 @@ export def "applications-grants delete-grant" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({grant_id: $grant_id} | format pattern "/applications/grants/{grant_id}"))
+  let full_url = (build-url $base ({grant_id: (encode-path-segment $grant_id)} | format pattern "/applications/grants/{grant_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1297,7 +1307,7 @@ export def "applications-grants delete-grant" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/oauth-authorizations#get-a-single-grant — API method documentation
 # operationId: oauth-authorizations/get-grant
 @deprecated
-export def "applications-grants get-grant" [
+export def "applications-grants get-oauth-authorizations" [
   grant_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1310,7 +1320,7 @@ export def "applications-grants get-grant" [
 ]: nothing -> record<app: record<client_id: string, name: string, url: string>, created_at: string, id: int, scopes: list<string>, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({grant_id: $grant_id} | format pattern "/applications/grants/{grant_id}"))
+  let full_url = (build-url $base ({grant_id: (encode-path-segment $grant_id)} | format pattern "/applications/grants/{grant_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1321,7 +1331,7 @@ export def "applications-grants get-grant" [
 # DELETE /applications/{client_id}/grants/{access_token}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/oauth-authorizations#revoke-a-grant-for-an-application — API method documentation
 # operationId: oauth-authorizations/revoke-grant-for-application
-export def "applications-grants revoke-grant-for-application" [
+export def "applications-grants delete-oauth-authorizations-by-client_id-access_token" [
   client_id: string
   access_token: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1335,7 +1345,7 @@ export def "applications-grants revoke-grant-for-application" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id, access_token: $access_token} | format pattern "/applications/{client_id}/grants/{access_token}"))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id), access_token: (encode-path-segment $access_token)} | format pattern "/applications/{client_id}/grants/{access_token}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1346,7 +1356,7 @@ export def "applications-grants revoke-grant-for-application" [
 # DELETE /applications/{client_id}/tokens/{access_token}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/oauth-authorizations#revoke-an-authorization-for-an-application — API method documentation
 # operationId: oauth-authorizations/revoke-authorization-for-application
-export def "applications-tokens revoke-authorization-for-application" [
+export def "applications-tokens delete-oauth-authorizations-authorization" [
   client_id: string
   access_token: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1360,7 +1370,7 @@ export def "applications-tokens revoke-authorization-for-application" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id, access_token: $access_token} | format pattern "/applications/{client_id}/tokens/{access_token}"))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id), access_token: (encode-path-segment $access_token)} | format pattern "/applications/{client_id}/tokens/{access_token}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1371,7 +1381,7 @@ export def "applications-tokens revoke-authorization-for-application" [
 # GET /applications/{client_id}/tokens/{access_token}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/oauth-authorizations#check-an-authorization — API method documentation
 # operationId: oauth-authorizations/check-authorization
-export def "applications-tokens check-authorization" [
+export def "applications-tokens check-oauth-authorizations-authorization" [
   client_id: string
   access_token: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1385,7 +1395,7 @@ export def "applications-tokens check-authorization" [
 ]: nothing -> record<app: record<client_id: string, name: string, url: string>, created_at: string, fingerprint: string, hashed_token: string, id: int, note: string, note_url: string, scopes: list<string>, token: string, token_last_eight: string, updated_at: string, url: string, user: record<avatar_url: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id, access_token: $access_token} | format pattern "/applications/{client_id}/tokens/{access_token}"))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id), access_token: (encode-path-segment $access_token)} | format pattern "/applications/{client_id}/tokens/{access_token}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1396,7 +1406,7 @@ export def "applications-tokens check-authorization" [
 # POST /applications/{client_id}/tokens/{access_token}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/oauth-authorizations#reset-an-authorization — API method documentation
 # operationId: oauth-authorizations/reset-authorization
-export def "applications-tokens reset-authorization" [
+export def "applications-tokens reset-oauth-authorizations-authorization" [
   client_id: string
   access_token: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1410,7 +1420,7 @@ export def "applications-tokens reset-authorization" [
 ]: nothing -> record<app: record<client_id: string, name: string, url: string>, created_at: string, fingerprint: string, hashed_token: string, id: int, note: string, note_url: string, scopes: list<string>, token: string, token_last_eight: string, updated_at: string, url: string, user: record<avatar_url: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id, access_token: $access_token} | format pattern "/applications/{client_id}/tokens/{access_token}"))
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id), access_token: (encode-path-segment $access_token)} | format pattern "/applications/{client_id}/tokens/{access_token}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1421,7 +1431,7 @@ export def "applications-tokens reset-authorization" [
 # GET /apps/{app_slug}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/apps/#get-an-app — API method documentation
 # operationId: apps/get-by-slug
-export def "apps get-by-slug" [
+export def "apps get" [
   app_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1434,7 +1444,7 @@ export def "apps get-by-slug" [
 ]: nothing -> record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, updated_at: string, webhook_secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_slug: $app_slug} | format pattern "/apps/{app_slug}"))
+  let full_url = (build-url $base ({app_slug: (encode-path-segment $app_slug)} | format pattern "/apps/{app_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1447,7 +1457,7 @@ export def "apps get-by-slug" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/oauth-authorizations#list-your-authorizations — API method documentation
 # operationId: oauth-authorizations/list-authorizations
 @deprecated
-export def "authorizations list-authorizations" [
+export def "authorizations list-oauth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1476,7 +1486,7 @@ export def "authorizations list-authorizations" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/oauth-authorizations#create-a-new-authorization — API method documentation
 # operationId: oauth-authorizations/create-authorization
 @deprecated
-export def "authorizations create-authorization" [
+export def "authorizations create-oauth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1490,17 +1500,17 @@ export def "authorizations create-authorization" [
   --fingerprint: string # A unique string to distinguish an authorization from others created for the same client ID and user.
   --note: string # A note to remind you what the OAuth token is for. (e.g. Update all gems)
   --note-url: string # A URL to remind you what app the OAuth token is for.
-  --scopes: list # A list of scopes that this authorization is in. (nullable, e.g. [public_repo, user])
+  --scopes: list<string> # A list of scopes that this authorization is in. (nullable, e.g. [public_repo, user])
 ]: any -> record<app: record<client_id: string, name: string, url: string>, created_at: string, fingerprint: string, hashed_token: string, id: int, installation: record<account: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, has_multiple_single_files: bool, permissions: record<actions: string, administration: string, checks: string, content_references: string, contents: string, deployments: string, environments: string, issues: string, members: string, metadata: string, organization_administration: string, organization_hooks: string, organization_packages: string, organization_plan: string, organization_projects: string, organization_secrets: string, organization_self_hosted_runners: string, organization_user_blocking: string, packages: string, pages: string, pull_requests: string, repository_hooks: string, repository_projects: string, secret_scanning_alerts: string, secrets: string, security_events: string, single_file: string, statuses: string, team_discussions: string, vulnerability_alerts: string, workflows: string>, repositories_url: string, repository_selection: string, single_file_name: string, single_file_paths: list<string>>, note: string, note_url: string, scopes: list<string>, token: string, token_last_eight: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authorizations")
-  let body = {"client_id": $client_id, "client_secret": $client_secret, "fingerprint": $fingerprint, "note": $note, "note_url": $note_url, "scopes": $scopes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "client_secret": $client_secret, "fingerprint": $fingerprint, "note": $note, "note_url": $note_url, "scopes": $scopes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get-or-create an authorization for a specific app
@@ -1510,7 +1520,7 @@ export def "authorizations create-authorization" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/oauth-authorizations#get-or-create-an-authorization-for-a-specific-app — API method documentation
 # operationId: oauth-authorizations/get-or-create-authorization-for-app
 @deprecated
-export def "authorizations-clients get-or-create-authorization-for-app" [
+export def "authorizations-clients get-oauth-or-create-for-app" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1524,17 +1534,17 @@ export def "authorizations-clients get-or-create-authorization-for-app" [
   --fingerprint: string # A unique string to distinguish an authorization from others created for the same client ID and user.
   --note: string # A note to remind you what the OAuth token is for. (e.g. Update all gems)
   --note-url: string # A URL to remind you what app the OAuth token is for.
-  --scopes: list # A list of scopes that this authorization is in. (nullable, e.g. [public_repo, user])
+  --scopes: list<string> # A list of scopes that this authorization is in. (nullable, e.g. [public_repo, user])
 ]: any -> record<app: record<client_id: string, name: string, url: string>, created_at: string, fingerprint: string, hashed_token: string, id: int, installation: record<account: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, has_multiple_single_files: bool, permissions: record<actions: string, administration: string, checks: string, content_references: string, contents: string, deployments: string, environments: string, issues: string, members: string, metadata: string, organization_administration: string, organization_hooks: string, organization_packages: string, organization_plan: string, organization_projects: string, organization_secrets: string, organization_self_hosted_runners: string, organization_user_blocking: string, packages: string, pages: string, pull_requests: string, repository_hooks: string, repository_projects: string, secret_scanning_alerts: string, secrets: string, security_events: string, single_file: string, statuses: string, team_discussions: string, vulnerability_alerts: string, workflows: string>, repositories_url: string, repository_selection: string, single_file_name: string, single_file_paths: list<string>>, note: string, note_url: string, scopes: list<string>, token: string, token_last_eight: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id} | format pattern "/authorizations/clients/{client_id}"))
-  let body = {"client_secret": $client_secret, "fingerprint": $fingerprint, "note": $note, "note_url": $note_url, "scopes": $scopes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/authorizations/clients/{client_id}"))
+  let req_body = {"client_secret": $client_secret, "fingerprint": $fingerprint, "note": $note, "note_url": $note_url, "scopes": $scopes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get-or-create an authorization for a specific app and fingerprint
@@ -1544,7 +1554,7 @@ export def "authorizations-clients get-or-create-authorization-for-app" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/oauth-authorizations#get-or-create-an-authorization-for-a-specific-app-and-fingerprint — API method documentation
 # operationId: oauth-authorizations/get-or-create-authorization-for-app-and-fingerprint
 @deprecated
-export def "authorizations-clients get-or-create-authorization-for-app-and-fingerprint" [
+export def "authorizations-clients get-oauth-or-create-for-app-and" [
   client_id: string
   fingerprint: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1558,17 +1568,17 @@ export def "authorizations-clients get-or-create-authorization-for-app-and-finge
   client_secret: string # The OAuth app client secret for which to create the token.
   --note: string # A note to remind you what the OAuth token is for. (e.g. Update all gems)
   --note-url: string # A URL to remind you what app the OAuth token is for.
-  --scopes: list # A list of scopes that this authorization is in. (nullable, e.g. [public_repo, user])
+  --scopes: list<string> # A list of scopes that this authorization is in. (nullable, e.g. [public_repo, user])
 ]: any -> record<app: record<client_id: string, name: string, url: string>, created_at: string, fingerprint: string, hashed_token: string, id: int, installation: record<account: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, has_multiple_single_files: bool, permissions: record<actions: string, administration: string, checks: string, content_references: string, contents: string, deployments: string, environments: string, issues: string, members: string, metadata: string, organization_administration: string, organization_hooks: string, organization_packages: string, organization_plan: string, organization_projects: string, organization_secrets: string, organization_self_hosted_runners: string, organization_user_blocking: string, packages: string, pages: string, pull_requests: string, repository_hooks: string, repository_projects: string, secret_scanning_alerts: string, secrets: string, security_events: string, single_file: string, statuses: string, team_discussions: string, vulnerability_alerts: string, workflows: string>, repositories_url: string, repository_selection: string, single_file_name: string, single_file_paths: list<string>>, note: string, note_url: string, scopes: list<string>, token: string, token_last_eight: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({client_id: $client_id, fingerprint: $fingerprint} | format pattern "/authorizations/clients/{client_id}/{fingerprint}"))
-  let body = {"client_secret": $client_secret, "note": $note, "note_url": $note_url, "scopes": $scopes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({client_id: (encode-path-segment $client_id), fingerprint: (encode-path-segment $fingerprint)} | format pattern "/authorizations/clients/{client_id}/{fingerprint}"))
+  let req_body = {"client_secret": $client_secret, "note": $note, "note_url": $note_url, "scopes": $scopes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an authorization
@@ -1578,7 +1588,7 @@ export def "authorizations-clients get-or-create-authorization-for-app-and-finge
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/oauth-authorizations#delete-an-authorization — API method documentation
 # operationId: oauth-authorizations/delete-authorization
 @deprecated
-export def "authorizations delete-authorization" [
+export def "authorizations delete-oauth" [
   authorization_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1591,7 +1601,7 @@ export def "authorizations delete-authorization" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({authorization_id: $authorization_id} | format pattern "/authorizations/{authorization_id}"))
+  let full_url = (build-url $base ({authorization_id: (encode-path-segment $authorization_id)} | format pattern "/authorizations/{authorization_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1604,7 +1614,7 @@ export def "authorizations delete-authorization" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/oauth-authorizations#get-a-single-authorization — API method documentation
 # operationId: oauth-authorizations/get-authorization
 @deprecated
-export def "authorizations get-authorization" [
+export def "authorizations get-oauth" [
   authorization_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1617,7 +1627,7 @@ export def "authorizations get-authorization" [
 ]: nothing -> record<app: record<client_id: string, name: string, url: string>, created_at: string, fingerprint: string, hashed_token: string, id: int, installation: record<account: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, has_multiple_single_files: bool, permissions: record<actions: string, administration: string, checks: string, content_references: string, contents: string, deployments: string, environments: string, issues: string, members: string, metadata: string, organization_administration: string, organization_hooks: string, organization_packages: string, organization_plan: string, organization_projects: string, organization_secrets: string, organization_self_hosted_runners: string, organization_user_blocking: string, packages: string, pages: string, pull_requests: string, repository_hooks: string, repository_projects: string, secret_scanning_alerts: string, secrets: string, security_events: string, single_file: string, statuses: string, team_discussions: string, vulnerability_alerts: string, workflows: string>, repositories_url: string, repository_selection: string, single_file_name: string, single_file_paths: list<string>>, note: string, note_url: string, scopes: list<string>, token: string, token_last_eight: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({authorization_id: $authorization_id} | format pattern "/authorizations/{authorization_id}"))
+  let full_url = (build-url $base ({authorization_id: (encode-path-segment $authorization_id)} | format pattern "/authorizations/{authorization_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1630,7 +1640,7 @@ export def "authorizations get-authorization" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/oauth-authorizations#update-an-existing-authorization — API method documentation
 # operationId: oauth-authorizations/update-authorization
 @deprecated
-export def "authorizations update-authorization" [
+export def "authorizations update-oauth" [
   authorization_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1640,22 +1650,22 @@ export def "authorizations update-authorization" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --add-scopes: list # A list of scopes to add to this authorization.
+  --add-scopes: list<string> # A list of scopes to add to this authorization.
   --fingerprint: string # A unique string to distinguish an authorization from others created for the same client ID and user.
   --note: string # A note to remind you what the OAuth token is for. (e.g. Update all gems)
   --note-url: string # A URL to remind you what app the OAuth token is for.
-  --remove-scopes: list # A list of scopes to remove from this authorization.
-  --scopes: list # A list of scopes that this authorization is in. (nullable, e.g. [public_repo, user])
+  --remove-scopes: list<string> # A list of scopes to remove from this authorization.
+  --scopes: list<string> # A list of scopes that this authorization is in. (nullable, e.g. [public_repo, user])
 ]: any -> record<app: record<client_id: string, name: string, url: string>, created_at: string, fingerprint: string, hashed_token: string, id: int, installation: record<account: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, has_multiple_single_files: bool, permissions: record<actions: string, administration: string, checks: string, content_references: string, contents: string, deployments: string, environments: string, issues: string, members: string, metadata: string, organization_administration: string, organization_hooks: string, organization_packages: string, organization_plan: string, organization_projects: string, organization_secrets: string, organization_self_hosted_runners: string, organization_user_blocking: string, packages: string, pages: string, pull_requests: string, repository_hooks: string, repository_projects: string, secret_scanning_alerts: string, secrets: string, security_events: string, single_file: string, statuses: string, team_discussions: string, vulnerability_alerts: string, workflows: string>, repositories_url: string, repository_selection: string, single_file_name: string, single_file_paths: list<string>>, note: string, note_url: string, scopes: list<string>, token: string, token_last_eight: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({authorization_id: $authorization_id} | format pattern "/authorizations/{authorization_id}"))
-  let body = {"add_scopes": $add_scopes, "fingerprint": $fingerprint, "note": $note, "note_url": $note_url, "remove_scopes": $remove_scopes, "scopes": $scopes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({authorization_id: (encode-path-segment $authorization_id)} | format pattern "/authorizations/{authorization_id}"))
+  let req_body = {"add_scopes": $add_scopes, "fingerprint": $fingerprint, "note": $note, "note_url": $note_url, "remove_scopes": $remove_scopes, "scopes": $scopes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all codes of conduct
@@ -1663,7 +1673,7 @@ export def "authorizations update-authorization" [
 # GET /codes_of_conduct
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/codes-of-conduct#get-all-codes-of-conduct — API method documentation
 # operationId: codes-of-conduct/get-all-codes-of-conduct
-export def "codes-of-conduct get-all-codes-of-conduct" [
+export def "codes-of-conduct get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1686,7 +1696,7 @@ export def "codes-of-conduct get-all-codes-of-conduct" [
 # GET /codes_of_conduct/{key}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/codes-of-conduct#get-a-code-of-conduct — API method documentation
 # operationId: codes-of-conduct/get-conduct-code
-export def "codes-of-conduct get-conduct-code" [
+export def "codes-of-conduct get" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1699,7 +1709,7 @@ export def "codes-of-conduct get-conduct-code" [
 ]: nothing -> record<body: string, html_url: string, key: string, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key} | format pattern "/codes_of_conduct/{key}"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/codes_of_conduct/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1733,7 +1743,7 @@ export def "emojis get" [
 # GET /enterprise/settings/license
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-license-information — API method documentation
 # operationId: enterprise-admin/get-license-information
-export def "enterprise-settings-license get-license-information" [
+export def "enterprise-settings-license get-admin-information" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1756,7 +1766,7 @@ export def "enterprise-settings-license get-license-information" [
 # GET /enterprise/stats/all
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-statistics — API method documentation
 # operationId: enterprise-admin/get-all-stats
-export def "enterprise-stats-all get-all-stats" [
+export def "enterprise-stats-all get-admin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1779,7 +1789,7 @@ export def "enterprise-stats-all get-all-stats" [
 # GET /enterprise/stats/comments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-comment-statistics — API method documentation
 # operationId: enterprise-admin/get-comment-stats
-export def "enterprise-stats-comments get-comment-stats" [
+export def "enterprise-stats-comments get-admin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1824,7 +1834,7 @@ export def "enterprise-stats-gists get" [
 # GET /enterprise/stats/hooks
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-hooks-statistics — API method documentation
 # operationId: enterprise-admin/get-hooks-stats
-export def "enterprise-stats-hooks get-hooks-stats" [
+export def "enterprise-stats-hooks get-admin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1847,7 +1857,7 @@ export def "enterprise-stats-hooks get-hooks-stats" [
 # GET /enterprise/stats/issues
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-issues-statistics — API method documentation
 # operationId: enterprise-admin/get-issue-stats
-export def "enterprise-stats-issues get-issue-stats" [
+export def "enterprise-stats-issues get-admin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1870,7 +1880,7 @@ export def "enterprise-stats-issues get-issue-stats" [
 # GET /enterprise/stats/milestones
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-milestone-statistics — API method documentation
 # operationId: enterprise-admin/get-milestone-stats
-export def "enterprise-stats-milestones get-milestone-stats" [
+export def "enterprise-stats-milestones get-admin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1893,7 +1903,7 @@ export def "enterprise-stats-milestones get-milestone-stats" [
 # GET /enterprise/stats/orgs
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-organization-statistics — API method documentation
 # operationId: enterprise-admin/get-org-stats
-export def "enterprise-stats-orgs get-org-stats" [
+export def "enterprise-stats-orgs get-admin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1916,7 +1926,7 @@ export def "enterprise-stats-orgs get-org-stats" [
 # GET /enterprise/stats/pages
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-pages-statistics — API method documentation
 # operationId: enterprise-admin/get-pages-stats
-export def "enterprise-stats-pages get-pages-stats" [
+export def "enterprise-stats-pages get-admin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1939,7 +1949,7 @@ export def "enterprise-stats-pages get-pages-stats" [
 # GET /enterprise/stats/pulls
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-pull-requests-statistics — API method documentation
 # operationId: enterprise-admin/get-pull-request-stats
-export def "enterprise-stats-pulls get-pull-request-stats" [
+export def "enterprise-stats-pulls get-admin-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1962,7 +1972,7 @@ export def "enterprise-stats-pulls get-pull-request-stats" [
 # GET /enterprise/stats/repos
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-repository-statistics — API method documentation
 # operationId: enterprise-admin/get-repo-stats
-export def "enterprise-stats-repos get-repo-stats" [
+export def "enterprise-stats-repos get-admin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1985,7 +1995,7 @@ export def "enterprise-stats-repos get-repo-stats" [
 # GET /enterprise/stats/users
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-users-statistics — API method documentation
 # operationId: enterprise-admin/get-user-stats
-export def "enterprise-stats-users get-user-stats" [
+export def "enterprise-stats-users get-admin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2008,7 +2018,7 @@ export def "enterprise-stats-users get-user-stats" [
 # GET /events
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#list-public-events — API method documentation
 # operationId: activity/list-public-events
-export def "events list-public-events" [
+export def "events list-activity-public" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2034,7 +2044,7 @@ export def "events list-public-events" [
 # GET /feeds
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#get-feeds — API method documentation
 # operationId: activity/get-feeds
-export def "feeds get-feeds" [
+export def "feeds get-activity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2101,11 +2111,11 @@ export def "gists create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/gists")
-  let body = {"description": $description, "files": $files, "public": $public} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "files": $files, "public": $public} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List public gists
@@ -2113,7 +2123,7 @@ export def "gists create" [
 # GET /gists/public
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/gists#list-public-gists — API method documentation
 # operationId: gists/list-public
-export def "gists-public list-public" [
+export def "gists-public list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2140,7 +2150,7 @@ export def "gists-public list-public" [
 # GET /gists/starred
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/gists#list-starred-gists — API method documentation
 # operationId: gists/list-starred
-export def "gists-starred list-starred" [
+export def "gists-starred list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2180,7 +2190,7 @@ export def "gists delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({gist_id: $gist_id} | format pattern "/gists/{gist_id}"))
+  let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2204,7 +2214,7 @@ export def "gists get" [
 ]: nothing -> record<comments: int, comments_url: string, commits_url: string, created_at: string, description: string, files: record, fork_of: record<comments: int, comments_url: string, commits_url: string, created_at: string, description: string, files: record, forks: list<any>, forks_url: string, git_pull_url: string, git_push_url: string, history: list<any>, html_url: string, id: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, public: bool, truncated: bool, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>>, forks: table<created_at: string, id: string, updated_at: string, url: string, user: record>, forks_url: string, git_pull_url: string, git_push_url: string, history: table<change_status: record, committed_at: string, url: string, user: record, version: string>, html_url: string, id: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, public: bool, truncated: bool, updated_at: string, url: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({gist_id: $gist_id} | format pattern "/gists/{gist_id}"))
+  let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2231,12 +2241,12 @@ export def "gists update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({gist_id: $gist_id} | format pattern "/gists/{gist_id}"))
-  let body = {"description": $description, "files": $files} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}"))
+  let req_body = {"description": $description, "files": $files} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List gist comments
@@ -2244,7 +2254,7 @@ export def "gists update" [
 # GET /gists/{gist_id}/comments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/gists#list-gist-comments — API method documentation
 # operationId: gists/list-comments
-export def "gists-comments list-comments" [
+export def "gists-comments list" [
   gist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2260,7 +2270,7 @@ export def "gists-comments list-comments" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({gist_id: $gist_id} | format pattern "/gists/{gist_id}/comments") $qp)
+  let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2271,7 +2281,7 @@ export def "gists-comments list-comments" [
 # POST /gists/{gist_id}/comments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/gists#create-a-gist-comment — API method documentation
 # operationId: gists/create-comment
-export def "gists-comments create-comment" [
+export def "gists-comments create" [
   gist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2281,17 +2291,17 @@ export def "gists-comments create-comment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # The comment text. (e.g. Body of the attachment)
+  body: string # The comment text. (e.g. Body of the attachment)
 ]: any -> record<author_association: string, body: string, created_at: string, id: int, node_id: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({gist_id: $gist_id} | format pattern "/gists/{gist_id}/comments"))
-  let body = {"body": $body_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}/comments"))
+  let req_body = {"body": $body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a gist comment
@@ -2299,7 +2309,7 @@ export def "gists-comments create-comment" [
 # DELETE /gists/{gist_id}/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/gists#delete-a-gist-comment — API method documentation
 # operationId: gists/delete-comment
-export def "gists-comments delete-comment" [
+export def "gists-comments delete" [
   gist_id: string
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2313,7 +2323,7 @@ export def "gists-comments delete-comment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({gist_id: $gist_id, comment_id: $comment_id} | format pattern "/gists/{gist_id}/comments/{comment_id}"))
+  let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/gists/{gist_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2324,7 +2334,7 @@ export def "gists-comments delete-comment" [
 # GET /gists/{gist_id}/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/gists#get-a-gist-comment — API method documentation
 # operationId: gists/get-comment
-export def "gists-comments get-comment" [
+export def "gists-comments get" [
   gist_id: string
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2338,7 +2348,7 @@ export def "gists-comments get-comment" [
 ]: nothing -> record<author_association: string, body: string, created_at: string, id: int, node_id: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({gist_id: $gist_id, comment_id: $comment_id} | format pattern "/gists/{gist_id}/comments/{comment_id}"))
+  let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/gists/{gist_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2349,7 +2359,7 @@ export def "gists-comments get-comment" [
 # PATCH /gists/{gist_id}/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/gists#update-a-gist-comment — API method documentation
 # operationId: gists/update-comment
-export def "gists-comments update-comment" [
+export def "gists-comments update" [
   gist_id: string
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2360,17 +2370,17 @@ export def "gists-comments update-comment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # The comment text. (e.g. Body of the attachment)
+  body: string # The comment text. (e.g. Body of the attachment)
 ]: any -> record<author_association: string, body: string, created_at: string, id: int, node_id: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({gist_id: $gist_id, comment_id: $comment_id} | format pattern "/gists/{gist_id}/comments/{comment_id}"))
-  let body = {"body": $body_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/gists/{gist_id}/comments/{comment_id}"))
+  let req_body = {"body": $body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List gist commits
@@ -2378,7 +2388,7 @@ export def "gists-comments update-comment" [
 # GET /gists/{gist_id}/commits
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/gists#list-gist-commits — API method documentation
 # operationId: gists/list-commits
-export def "gists-commits list-commits" [
+export def "gists-commits list" [
   gist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2394,7 +2404,7 @@ export def "gists-commits list-commits" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({gist_id: $gist_id} | format pattern "/gists/{gist_id}/commits") $qp)
+  let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}/commits") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2405,7 +2415,7 @@ export def "gists-commits list-commits" [
 # GET /gists/{gist_id}/forks
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/gists#list-gist-forks — API method documentation
 # operationId: gists/list-forks
-export def "gists-forks list-forks" [
+export def "gists-forks list" [
   gist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2421,7 +2431,7 @@ export def "gists-forks list-forks" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({gist_id: $gist_id} | format pattern "/gists/{gist_id}/forks") $qp)
+  let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}/forks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2432,7 +2442,7 @@ export def "gists-forks list-forks" [
 # POST /gists/{gist_id}/forks
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/gists#fork-a-gist — API method documentation
 # operationId: gists/fork
-export def "gists-forks gists-fork" [
+export def "gists-forks create" [
   gist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2445,7 +2455,7 @@ export def "gists-forks gists-fork" [
 ]: nothing -> record<comments: int, comments_url: string, commits_url: string, created_at: string, description: string, files: record, forks: list<any>, forks_url: string, git_pull_url: string, git_push_url: string, history: list<any>, html_url: string, id: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, public: bool, truncated: bool, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({gist_id: $gist_id} | format pattern "/gists/{gist_id}/forks"))
+  let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}/forks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2456,7 +2466,7 @@ export def "gists-forks gists-fork" [
 # DELETE /gists/{gist_id}/star
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/gists#unstar-a-gist — API method documentation
 # operationId: gists/unstar
-export def "gists-star gists-unstar" [
+export def "gists-star delete-unstar" [
   gist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2469,7 +2479,7 @@ export def "gists-star gists-unstar" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({gist_id: $gist_id} | format pattern "/gists/{gist_id}/star"))
+  let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}/star"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2493,7 +2503,7 @@ export def "gists-star check-is-starred" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({gist_id: $gist_id} | format pattern "/gists/{gist_id}/star"))
+  let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}/star"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2504,7 +2514,7 @@ export def "gists-star check-is-starred" [
 # PUT /gists/{gist_id}/star
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/gists#star-a-gist — API method documentation
 # operationId: gists/star
-export def "gists-star put" [
+export def "gists-star update" [
   gist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2517,7 +2527,7 @@ export def "gists-star put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({gist_id: $gist_id} | format pattern "/gists/{gist_id}/star"))
+  let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}/star"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2542,7 +2552,7 @@ export def "gists get-revision" [
 ]: nothing -> record<comments: int, comments_url: string, commits_url: string, created_at: string, description: string, files: record, fork_of: record<comments: int, comments_url: string, commits_url: string, created_at: string, description: string, files: record, forks: list<any>, forks_url: string, git_pull_url: string, git_push_url: string, history: list<any>, html_url: string, id: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, public: bool, truncated: bool, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>>, forks: table<created_at: string, id: string, updated_at: string, url: string, user: record>, forks_url: string, git_pull_url: string, git_push_url: string, history: table<change_status: record, committed_at: string, url: string, user: record, version: string>, html_url: string, id: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, public: bool, truncated: bool, updated_at: string, url: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({gist_id: $gist_id, sha: $sha} | format pattern "/gists/{gist_id}/{sha}"))
+  let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id), sha: (encode-path-segment $sha)} | format pattern "/gists/{gist_id}/{sha}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2553,7 +2563,7 @@ export def "gists get-revision" [
 # GET /gitignore/templates
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/gitignore#get-all-gitignore-templates — API method documentation
 # operationId: gitignore/get-all-templates
-export def "gitignore-templates get-all-templates" [
+export def "gitignore-templates get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2576,7 +2586,7 @@ export def "gitignore-templates get-all-templates" [
 # GET /gitignore/templates/{name}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/gitignore#get-a-gitignore-template — API method documentation
 # operationId: gitignore/get-template
-export def "gitignore-templates get-template" [
+export def "gitignore-templates get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2589,7 +2599,7 @@ export def "gitignore-templates get-template" [
 ]: nothing -> record<name: string, source: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/gitignore/templates/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/gitignore/templates/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2600,7 +2610,7 @@ export def "gitignore-templates get-template" [
 # GET /installation/repositories
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/apps#list-repositories-accessible-to-the-app-installation — API method documentation
 # operationId: apps/list-repos-accessible-to-installation
-export def "installation-repositories list-repos-accessible-to-installation" [
+export def "installation-repositories list-apps-repos-accessible" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2617,10 +2627,10 @@ export def "installation-repositories list-repos-accessible-to-installation" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/installation/repositories" $qp)
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2638,7 +2648,7 @@ export def "issues list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter: string@filter-completer # Indicates which sorts of issues to return. Can be one of:   \* `assigned`: Issues assigned to you   \* `created`: Issues created by you   \* `mentioned`: Issues mentioning you   \* `subscribed`: Issues you're subscribed to updates for   \* `all` or `repos`: All issues the authenticated user can see, regardless of participation or creation (default: assigned)
+  --filter: string@filter-completer # Indicates which sorts of issues to return. Can be one of: \* `assigned`: Issues assigned to you \* `created`: Issues created by you \* `mentioned`: Issues mentioning you \* `subscribed`: Issues you're subscribed to updates for \* `all` or `repos`: All issues the authenticated user can see, regardless of participation or creation (default: assigned)
   --state: string@state-completer # Indicates the state of the issues to return. Can be either `open`, `closed`, or `all`. (default: open)
   --labels: string # A list of comma separated label names. Example: `bug,ui,@high`
   --qp-sort: string@sort-completer-2 # What to sort results by. Can be either `created`, `updated`, `comments`. (default: created)
@@ -2665,7 +2675,7 @@ export def "issues list" [
 # GET /licenses
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/licenses#get-all-commonly-used-licenses — API method documentation
 # operationId: licenses/get-all-commonly-used
-export def "licenses get-all-commonly-used" [
+export def "licenses get-list-commonly-used" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2705,7 +2715,7 @@ export def "licenses get" [
 ]: nothing -> record<body: string, conditions: list<string>, description: string, featured: bool, html_url: string, implementation: string, key: string, limitations: list<string>, name: string, node_id: string, permissions: list<string>, spdx_id: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({license: $license} | format pattern "/licenses/{license}"))
+  let full_url = (build-url $base ({license: (encode-path-segment $license)} | format pattern "/licenses/{license}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2716,7 +2726,7 @@ export def "licenses get" [
 # POST /markdown
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/markdown#render-a-markdown-document — API method documentation
 # operationId: markdown/render
-export def "markdown markdown-render" [
+export def "markdown create-render" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2733,11 +2743,11 @@ export def "markdown markdown-render" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/markdown")
-  let body = {"context": $context, "mode": $mode, "text": $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"context": $context, "mode": $mode, "text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Render a Markdown document in raw mode
@@ -2745,7 +2755,7 @@ export def "markdown markdown-render" [
 # POST /markdown/raw
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/markdown#render-a-markdown-document-in-raw-mode — API method documentation
 # operationId: markdown/render-raw
-export def "markdown-raw markdown-render-raw" [
+export def "markdown-raw create-render" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2760,10 +2770,11 @@ export def "markdown-raw markdown-render-raw" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/markdown/raw")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $req_body
 }
 
 # Get GitHub Enterprise Server meta information
@@ -2794,7 +2805,7 @@ export def "meta get" [
 # GET /networks/{owner}/{repo}/events
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#list-public-events-for-a-network-of-repositories — API method documentation
 # operationId: activity/list-public-events-for-repo-network
-export def "networks-events list-public-events-for-repo-network" [
+export def "networks-events list-activity-public" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2811,7 +2822,7 @@ export def "networks-events list-public-events-for-repo-network" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/networks/{owner}/{repo}/events") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/networks/{owner}/{repo}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2822,7 +2833,7 @@ export def "networks-events list-public-events-for-repo-network" [
 # GET /notifications
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#list-notifications-for-the-authenticated-user — API method documentation
 # operationId: activity/list-notifications-for-authenticated-user
-export def "notifications list-notifications-for-authenticated-user" [
+export def "notifications list-activity-for-authenticated-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2852,7 +2863,7 @@ export def "notifications list-notifications-for-authenticated-user" [
 # PUT /notifications
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#mark-notifications-as-read — API method documentation
 # operationId: activity/mark-notifications-as-read
-export def "notifications activity-mark-notifications-as-read" [
+export def "notifications get-activity-mark-as" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2868,11 +2879,11 @@ export def "notifications activity-mark-notifications-as-read" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/notifications")
-  let body = {"last_read_at": $last_read_at, "read": $read} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"last_read_at": $last_read_at, "read": $read} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a thread
@@ -2880,7 +2891,7 @@ export def "notifications activity-mark-notifications-as-read" [
 # GET /notifications/threads/{thread_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#get-a-thread — API method documentation
 # operationId: activity/get-thread
-export def "notifications-threads get-thread" [
+export def "notifications-threads get-activity" [
   thread_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2893,7 +2904,7 @@ export def "notifications-threads get-thread" [
 ]: nothing -> record<id: string, last_read_at: string, reason: string, repository: record<allow_forking: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, code_of_conduct: record<body: string, html_url: string, key: string, name: string, url: string>, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<key: string, name: string, node_id: string, spdx_id: string, url: string>, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, subject: record<latest_comment_url: string, title: string, type: string, url: string>, subscription_url: string, unread: bool, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({thread_id: $thread_id} | format pattern "/notifications/threads/{thread_id}"))
+  let full_url = (build-url $base ({thread_id: (encode-path-segment $thread_id)} | format pattern "/notifications/threads/{thread_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2904,7 +2915,7 @@ export def "notifications-threads get-thread" [
 # PATCH /notifications/threads/{thread_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#mark-a-thread-as-read — API method documentation
 # operationId: activity/mark-thread-as-read
-export def "notifications-threads activity-mark-thread-as-read" [
+export def "notifications-threads get-activity-mark-as" [
   thread_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2917,7 +2928,7 @@ export def "notifications-threads activity-mark-thread-as-read" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({thread_id: $thread_id} | format pattern "/notifications/threads/{thread_id}"))
+  let full_url = (build-url $base ({thread_id: (encode-path-segment $thread_id)} | format pattern "/notifications/threads/{thread_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2928,7 +2939,7 @@ export def "notifications-threads activity-mark-thread-as-read" [
 # DELETE /notifications/threads/{thread_id}/subscription
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#delete-a-thread-subscription — API method documentation
 # operationId: activity/delete-thread-subscription
-export def "notifications-threads-subscription delete-thread-subscription" [
+export def "notifications-threads-subscription delete-activity" [
   thread_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2941,7 +2952,7 @@ export def "notifications-threads-subscription delete-thread-subscription" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({thread_id: $thread_id} | format pattern "/notifications/threads/{thread_id}/subscription"))
+  let full_url = (build-url $base ({thread_id: (encode-path-segment $thread_id)} | format pattern "/notifications/threads/{thread_id}/subscription"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2952,7 +2963,7 @@ export def "notifications-threads-subscription delete-thread-subscription" [
 # GET /notifications/threads/{thread_id}/subscription
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#get-a-thread-subscription-for-the-authenticated-user — API method documentation
 # operationId: activity/get-thread-subscription-for-authenticated-user
-export def "notifications-threads-subscription get-thread-subscription-for-authenticated-user" [
+export def "notifications-threads-subscription get-activity-for-authenticated-user" [
   thread_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2965,7 +2976,7 @@ export def "notifications-threads-subscription get-thread-subscription-for-authe
 ]: nothing -> record<created_at: string, ignored: bool, reason: string, repository_url: string, subscribed: bool, thread_url: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({thread_id: $thread_id} | format pattern "/notifications/threads/{thread_id}/subscription"))
+  let full_url = (build-url $base ({thread_id: (encode-path-segment $thread_id)} | format pattern "/notifications/threads/{thread_id}/subscription"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2976,7 +2987,7 @@ export def "notifications-threads-subscription get-thread-subscription-for-authe
 # PUT /notifications/threads/{thread_id}/subscription
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#set-a-thread-subscription — API method documentation
 # operationId: activity/set-thread-subscription
-export def "notifications-threads-subscription activity-set-thread-subscription" [
+export def "notifications-threads-subscription update-activity" [
   thread_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2991,12 +3002,12 @@ export def "notifications-threads-subscription activity-set-thread-subscription"
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({thread_id: $thread_id} | format pattern "/notifications/threads/{thread_id}/subscription"))
-  let body = {"ignored": $ignored} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({thread_id: (encode-path-segment $thread_id)} | format pattern "/notifications/threads/{thread_id}/subscription"))
+  let req_body = {"ignored": $ignored} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Octocat
@@ -3004,7 +3015,7 @@ export def "notifications-threads-subscription activity-set-thread-subscription"
 # GET /octocat
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/meta#get-octocat — API method documentation
 # operationId: meta/get-octocat
-export def "octocat get-octocat" [
+export def "octocat get-meta" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3029,7 +3040,7 @@ export def "octocat get-octocat" [
 # GET /organizations
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#list-organizations — API method documentation
 # operationId: orgs/list
-export def "organizations list" [
+export def "organizations list-orgs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3068,7 +3079,7 @@ export def "orgs get" [
 ]: nothing -> record<avatar_url: string, billing_email: string, blog: string, collaborators: int, company: string, created_at: string, default_repository_permission: string, description: string, disk_usage: int, email: string, events_url: string, followers: int, following: int, has_organization_projects: bool, has_repository_projects: bool, hooks_url: string, html_url: string, id: int, issues_url: string, location: string, login: string, members_allowed_repository_creation_type: string, members_can_create_pages: bool, members_can_create_private_pages: bool, members_can_create_public_pages: bool, members_can_create_repositories: bool, members_url: string, name: string, node_id: string, owned_private_repos: int, plan: record<filled_seats: int, name: string, private_repos: int, seats: int, space: int>, private_gists: int, public_gists: int, public_members_url: string, public_repos: int, repos_url: string, total_private_repos: int, two_factor_requirement_enabled: bool, type: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}"))
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3092,29 +3103,29 @@ export def "orgs update" [
   --billing-email: string # Billing email address. This address is not publicized.
   --blog: string # e.g. "http://github.blog"
   --company: string # The company name.
-  --default-repository-permission: string@default-repository-permission-completer # Default permission level members have for organization repositories:   \* `read` - can pull, but not push to or administer this repository.   \* `write` - can pull and push, but not administer this repository.   \* `admin` - can pull, push, and administer this repository.   \* `none` - no permissions granted by default. (default: read)
+  --default-repository-permission: string@default-repository-permission-completer # Default permission level members have for organization repositories: \* `read` - can pull, but not push to or administer this repository. \* `write` - can pull and push, but not administer this repository. \* `admin` - can pull, push, and administer this repository. \* `none` - no permissions granted by default. (default: read)
   --description: string # The description of the company.
   --email: string # The publicly visible email address.
   --has-organization-projects: oneof<nothing, bool> # Toggles whether an organization can use organization projects.
   --has-repository-projects: oneof<nothing, bool> # Toggles whether repositories that belong to the organization can use repository projects.
   --location: string # The location.
-  --members-allowed-repository-creation-type: string@members-allowed-repository-creation-type-completer # Specifies which types of repositories non-admin organization members can create. Can be one of:   \* `all` - all organization members can create public and private repositories.   \* `private` - members can create private repositories. This option is only available to repositories that are part of an organization on GitHub Enterprise Cloud.   \* `none` - only admin members can create repositories.   **Note:** This parameter is deprecated and will be removed in the future. Its return value ignores internal repositories. Using this parameter overrides values set in `members_can_create_repositories`. See the parameter deprecation notice in the operation description for details.
-  --members-can-create-internal-repositories: oneof<nothing, bool> # Toggles whether organization members can create internal repositories, which are visible to all enterprise members. You can only allow members to create internal repositories if your organization is associated with an enterprise account using GitHub Enterprise Cloud or GitHub Enterprise Server 2.20+. Can be one of:   \* `true` - all organization members can create internal repositories.   \* `false` - only organization owners can create internal repositories.   Default: `true`. For more information, see "[Restricting repository creation in your organization](https://help.github.com/github/setting-up-and-managing-organizations-and-teams/restricting-repository-creation-in-your-organization)" in the GitHub Help documentation.
-  --members-can-create-private-repositories: oneof<nothing, bool> # Toggles whether organization members can create private repositories, which are visible to organization members with permission. Can be one of:   \* `true` - all organization members can create private repositories.   \* `false` - only organization owners can create private repositories.   Default: `true`. For more information, see "[Restricting repository creation in your organization](https://help.github.com/github/setting-up-and-managing-organizations-and-teams/restricting-repository-creation-in-your-organization)" in the GitHub Help documentation.
-  --members-can-create-public-repositories: oneof<nothing, bool> # Toggles whether organization members can create public repositories, which are visible to anyone. Can be one of:   \* `true` - all organization members can create public repositories.   \* `false` - only organization owners can create public repositories.   Default: `true`. For more information, see "[Restricting repository creation in your organization](https://help.github.com/github/setting-up-and-managing-organizations-and-teams/restricting-repository-creation-in-your-organization)" in the GitHub Help documentation.
-  --members-can-create-repositories: oneof<nothing, bool> # Toggles the ability of non-admin organization members to create repositories. Can be one of:   \* `true` - all organization members can create repositories.   \* `false` - only organization owners can create repositories.   Default: `true`   **Note:** A parameter can override this parameter. See `members_allowed_repository_creation_type` in this table for details. **Note:** A parameter can override this parameter. See `members_allowed_repository_creation_type` in this table for details. (default: true)
+  --members-allowed-repository-creation-type: string@members-allowed-repository-creation-type-completer # Specifies which types of repositories non-admin organization members can create. Can be one of: \* `all` - all organization members can create public and private repositories. \* `private` - members can create private repositories. This option is only available to repositories that are part of an organization on GitHub Enterprise Cloud. \* `none` - only admin members can create repositories. **Note:** This parameter is deprecated and will be removed in the future. Its return value ignores internal repositories. Using this parameter overrides values set in `members_can_create_repositories`. See the parameter deprecation notice in the operation description for details.
+  --members-can-create-internal-repositories: oneof<nothing, bool> # Toggles whether organization members can create internal repositories, which are visible to all enterprise members. You can only allow members to create internal repositories if your organization is associated with an enterprise account using GitHub Enterprise Cloud or GitHub Enterprise Server 2.20+. Can be one of: \* `true` - all organization members can create internal repositories. \* `false` - only organization owners can create internal repositories. Default: `true`. For more information, see "[Restricting repository creation in your organization](https://help.github.com/github/setting-up-and-managing-organizations-and-teams/restricting-repository-creation-in-your-organization)" in the GitHub Help documentation.
+  --members-can-create-private-repositories: oneof<nothing, bool> # Toggles whether organization members can create private repositories, which are visible to organization members with permission. Can be one of: \* `true` - all organization members can create private repositories. \* `false` - only organization owners can create private repositories. Default: `true`. For more information, see "[Restricting repository creation in your organization](https://help.github.com/github/setting-up-and-managing-organizations-and-teams/restricting-repository-creation-in-your-organization)" in the GitHub Help documentation.
+  --members-can-create-public-repositories: oneof<nothing, bool> # Toggles whether organization members can create public repositories, which are visible to anyone. Can be one of: \* `true` - all organization members can create public repositories. \* `false` - only organization owners can create public repositories. Default: `true`. For more information, see "[Restricting repository creation in your organization](https://help.github.com/github/setting-up-and-managing-organizations-and-teams/restricting-repository-creation-in-your-organization)" in the GitHub Help documentation.
+  --members-can-create-repositories: oneof<nothing, bool> # Toggles the ability of non-admin organization members to create repositories. Can be one of: \* `true` - all organization members can create repositories. \* `false` - only organization owners can create repositories. Default: `true` **Note:** A parameter can override this parameter. See `members_allowed_repository_creation_type` in this table for details. **Note:** A parameter can override this parameter. See `members_allowed_repository_creation_type` in this table for details. (default: true)
   --name: string # The shorthand name of the company.
   --twitter-username: string # The Twitter username of the company.
 ]: any -> record<avatar_url: string, billing_email: string, blog: string, collaborators: int, company: string, created_at: string, default_repository_permission: string, description: string, disk_usage: int, email: string, events_url: string, followers: int, following: int, has_organization_projects: bool, has_repository_projects: bool, hooks_url: string, html_url: string, id: int, issues_url: string, location: string, login: string, members_allowed_repository_creation_type: string, members_can_create_pages: bool, members_can_create_private_pages: bool, members_can_create_public_pages: bool, members_can_create_repositories: bool, members_url: string, name: string, node_id: string, owned_private_repos: int, plan: record<filled_seats: int, name: string, private_repos: int, seats: int, space: int>, private_gists: int, public_gists: int, public_members_url: string, public_repos: int, repos_url: string, total_private_repos: int, two_factor_requirement_enabled: bool, type: string, updated_at: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}"))
-  let body = {"billing_email": $billing_email, "blog": $blog, "company": $company, "default_repository_permission": $default_repository_permission, "description": $description, "email": $email, "has_organization_projects": $has_organization_projects, "has_repository_projects": $has_repository_projects, "location": $location, "members_allowed_repository_creation_type": $members_allowed_repository_creation_type, "members_can_create_internal_repositories": $members_can_create_internal_repositories, "members_can_create_private_repositories": $members_can_create_private_repositories, "members_can_create_public_repositories": $members_can_create_public_repositories, "members_can_create_repositories": $members_can_create_repositories, "name": $name, "twitter_username": $twitter_username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}"))
+  let req_body = {"billing_email": $billing_email, "blog": $blog, "company": $company, "default_repository_permission": $default_repository_permission, "description": $description, "email": $email, "has_organization_projects": $has_organization_projects, "has_repository_projects": $has_repository_projects, "location": $location, "members_allowed_repository_creation_type": $members_allowed_repository_creation_type, "members_can_create_internal_repositories": $members_can_create_internal_repositories, "members_can_create_private_repositories": $members_can_create_private_repositories, "members_can_create_public_repositories": $members_can_create_public_repositories, "members_can_create_repositories": $members_can_create_repositories, "name": $name, "twitter_username": $twitter_username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List public organization events
@@ -3122,7 +3133,7 @@ export def "orgs update" [
 # GET /orgs/{org}/events
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#list-public-organization-events — API method documentation
 # operationId: activity/list-public-org-events
-export def "orgs-events list-public-org-events" [
+export def "orgs-events list-activity-public" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3138,7 +3149,7 @@ export def "orgs-events list-public-org-events" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/events") $qp)
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3165,7 +3176,7 @@ export def "orgs-hooks list-webhooks" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/hooks") $qp)
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/hooks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3189,18 +3200,18 @@ export def "orgs-hooks create-webhook" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Determines if notifications are sent when the webhook is triggered. Set to `true` to send notifications. (default: true)
   config: record # Key/value pairs to provide settings for this webhook. [These are defined below](https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#create-hook-config-params). — shape: {content_type?: string, insecure_ssl?: any, password?: string, secret?: string, url: string, username?: string}
-  --events: list # Determines what [events](https://docs.github.com/enterprise-server@2.18/webhooks/event-payloads) the hook is triggered for. (default: [push])
+  --events: list<string> # Determines what [events](https://docs.github.com/enterprise-server@2.18/webhooks/event-payloads) the hook is triggered for. (default: [push])
   name: string # Must be passed as "web".
 ]: any -> record<active: bool, config: record<content_type: string, insecure_ssl: string, secret: string, url: string>, created_at: string, events: list<string>, id: int, name: string, ping_url: string, type: string, updated_at: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/hooks"))
-  let body = {"active": $active, "config": $config, "events": $events, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/hooks"))
+  let req_body = {"active": $active, "config": $config, "events": $events, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an organization webhook
@@ -3222,7 +3233,7 @@ export def "orgs-hooks delete-webhook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org, hook_id: $hook_id} | format pattern "/orgs/{org}/hooks/{hook_id}"))
+  let full_url = (build-url $base ({org: (encode-path-segment $org), hook_id: (encode-path-segment $hook_id)} | format pattern "/orgs/{org}/hooks/{hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3247,7 +3258,7 @@ export def "orgs-hooks get-webhook" [
 ]: nothing -> record<active: bool, config: record<content_type: string, insecure_ssl: string, secret: string, url: string>, created_at: string, events: list<string>, id: int, name: string, ping_url: string, type: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org, hook_id: $hook_id} | format pattern "/orgs/{org}/hooks/{hook_id}"))
+  let full_url = (build-url $base ({org: (encode-path-segment $org), hook_id: (encode-path-segment $hook_id)} | format pattern "/orgs/{org}/hooks/{hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3272,18 +3283,18 @@ export def "orgs-hooks update-webhook" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Determines if notifications are sent when the webhook is triggered. Set to `true` to send notifications. (default: true)
   --config: record # Key/value pairs to provide settings for this webhook. [These are defined below](https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#update-hook-config-params). — shape: {content_type?: string, insecure_ssl?: any, secret?: string, url: string}
-  --events: list # Determines what [events](https://docs.github.com/enterprise-server@2.18/webhooks/event-payloads) the hook is triggered for. (default: [push])
+  --events: list<string> # Determines what [events](https://docs.github.com/enterprise-server@2.18/webhooks/event-payloads) the hook is triggered for. (default: [push])
   --name: string # e.g. "web"
 ]: any -> record<active: bool, config: record<content_type: string, insecure_ssl: string, secret: string, url: string>, created_at: string, events: list<string>, id: int, name: string, ping_url: string, type: string, updated_at: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org, hook_id: $hook_id} | format pattern "/orgs/{org}/hooks/{hook_id}"))
-  let body = {"active": $active, "config": $config, "events": $events, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org: (encode-path-segment $org), hook_id: (encode-path-segment $hook_id)} | format pattern "/orgs/{org}/hooks/{hook_id}"))
+  let req_body = {"active": $active, "config": $config, "events": $events, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Ping an organization webhook
@@ -3305,7 +3316,7 @@ export def "orgs-hooks-pings ping-webhook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org, hook_id: $hook_id} | format pattern "/orgs/{org}/hooks/{hook_id}/pings"))
+  let full_url = (build-url $base ({org: (encode-path-segment $org), hook_id: (encode-path-segment $hook_id)} | format pattern "/orgs/{org}/hooks/{hook_id}/pings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3316,7 +3327,7 @@ export def "orgs-hooks-pings ping-webhook" [
 # GET /orgs/{org}/installation
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/apps#get-an-organization-installation-for-the-authenticated-app — API method documentation
 # operationId: apps/get-org-installation
-export def "orgs-installation get-org-installation" [
+export def "orgs-installation get-apps" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3330,11 +3341,11 @@ export def "orgs-installation get-org-installation" [
 ]: nothing -> record<access_tokens_url: string, account: any, app_id: int, app_slug: string, contact_email: string, created_at: string, events: list<string>, html_url: string, id: int, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string, organization_administration: string, pull_requests: string, statuses: string>, repositories_url: string, repository_selection: string, single_file_name: string, suspended_at: string, suspended_by: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, target_id: int, target_type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/installation"))
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/installation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3343,7 +3354,7 @@ export def "orgs-installation get-org-installation" [
 # GET /orgs/{org}/issues
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#list-organization-issues-assigned-to-the-authenticated-user — API method documentation
 # operationId: issues/list-for-org
-export def "orgs-issues list-for-org" [
+export def "orgs-issues list" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3353,7 +3364,7 @@ export def "orgs-issues list-for-org" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter: string@filter-completer # Indicates which sorts of issues to return. Can be one of:   \* `assigned`: Issues assigned to you   \* `created`: Issues created by you   \* `mentioned`: Issues mentioning you   \* `subscribed`: Issues you're subscribed to updates for   \* `all` or `repos`: All issues the authenticated user can see, regardless of participation or creation (default: assigned)
+  --filter: string@filter-completer # Indicates which sorts of issues to return. Can be one of: \* `assigned`: Issues assigned to you \* `created`: Issues created by you \* `mentioned`: Issues mentioning you \* `subscribed`: Issues you're subscribed to updates for \* `all` or `repos`: All issues the authenticated user can see, regardless of participation or creation (default: assigned)
   --state: string@state-completer # Indicates the state of the issues to return. Can be either `open`, `closed`, or `all`. (default: open)
   --labels: string # A list of comma separated label names. Example: `bug,ui,@high`
   --qp-sort: string@sort-completer-2 # What to sort results by. Can be either `created`, `updated`, `comments`. (default: created)
@@ -3365,7 +3376,7 @@ export def "orgs-issues list-for-org" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/issues") $qp)
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/issues") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3376,7 +3387,7 @@ export def "orgs-issues list-for-org" [
 # GET /orgs/{org}/members
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#list-organization-members — API method documentation
 # operationId: orgs/list-members
-export def "orgs-members list-members" [
+export def "orgs-members list" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3386,15 +3397,15 @@ export def "orgs-members list-members" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter: string@filter-completer-1 # Filter members returned in the list. Can be one of:   \* `2fa_disabled` - Members without [two-factor authentication](https://github.com/blog/1614-two-factor-authentication) enabled. Available for organization owners.   \* `all` - All members the authenticated user can see. (default: all)
-  --role: string@role-completer # Filter members returned by their role. Can be one of:   \* `all` - All members of the organization, regardless of role.   \* `admin` - Organization owners.   \* `member` - Non-owner organization members. (default: all)
+  --filter: string@filter-completer-1 # Filter members returned in the list. Can be one of: \* `2fa_disabled` - Members without [two-factor authentication](https://github.com/blog/1614-two-factor-authentication) enabled. Available for organization owners. \* `all` - All members the authenticated user can see. (default: all)
+  --role: string@role-completer # Filter members returned by their role. Can be one of: \* `all` - All members of the organization, regardless of role. \* `admin` - Organization owners. \* `member` - Non-owner organization members. (default: all)
   --per-page: int # Results per page (max 100) (default: 30)
   --page: int # Page number of the results to fetch. (default: 1)
 ]: nothing -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/members") $qp)
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3405,7 +3416,7 @@ export def "orgs-members list-members" [
 # DELETE /orgs/{org}/members/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#remove-an-organization-member — API method documentation
 # operationId: orgs/remove-member
-export def "orgs-members remove-member" [
+export def "orgs-members delete" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3419,7 +3430,7 @@ export def "orgs-members remove-member" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org, username: $username} | format pattern "/orgs/{org}/members/{username}"))
+  let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3444,7 +3455,7 @@ export def "orgs-members check-membership-for-user" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org, username: $username} | format pattern "/orgs/{org}/members/{username}"))
+  let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3455,7 +3466,7 @@ export def "orgs-members check-membership-for-user" [
 # DELETE /orgs/{org}/memberships/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#remove-organization-membership-for-a-user — API method documentation
 # operationId: orgs/remove-membership-for-user
-export def "orgs-memberships remove-membership-for-user" [
+export def "orgs-memberships delete-for-user" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3469,7 +3480,7 @@ export def "orgs-memberships remove-membership-for-user" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org, username: $username} | format pattern "/orgs/{org}/memberships/{username}"))
+  let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/memberships/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3480,7 +3491,7 @@ export def "orgs-memberships remove-membership-for-user" [
 # GET /orgs/{org}/memberships/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#get-organization-membership-for-a-user — API method documentation
 # operationId: orgs/get-membership-for-user
-export def "orgs-memberships get-membership-for-user" [
+export def "orgs-memberships get-for-user" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3494,7 +3505,7 @@ export def "orgs-memberships get-membership-for-user" [
 ]: nothing -> record<organization: record<avatar_url: string, description: string, events_url: string, hooks_url: string, id: int, issues_url: string, login: string, members_url: string, node_id: string, public_members_url: string, repos_url: string, url: string>, organization_url: string, permissions: record<can_create_repository: bool>, role: string, state: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org, username: $username} | format pattern "/orgs/{org}/memberships/{username}"))
+  let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/memberships/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3505,7 +3516,7 @@ export def "orgs-memberships get-membership-for-user" [
 # PUT /orgs/{org}/memberships/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#set-organization-membership-for-a-user — API method documentation
 # operationId: orgs/set-membership-for-user
-export def "orgs-memberships orgs-set-membership-for-user" [
+export def "orgs-memberships update-for-user" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3516,17 +3527,17 @@ export def "orgs-memberships orgs-set-membership-for-user" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --role: string@role-completer-1 # The role to give the user in the organization. Can be one of:   \* `admin` - The user will become an owner of the organization.   \* `member` - The user will become a non-owner member of the organization. (default: member)
+  --role: string@role-completer-1 # The role to give the user in the organization. Can be one of: \* `admin` - The user will become an owner of the organization. \* `member` - The user will become a non-owner member of the organization. (default: member)
 ]: any -> record<organization: record<avatar_url: string, description: string, events_url: string, hooks_url: string, id: int, issues_url: string, login: string, members_url: string, node_id: string, public_members_url: string, repos_url: string, url: string>, organization_url: string, permissions: record<can_create_repository: bool>, role: string, state: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org, username: $username} | format pattern "/orgs/{org}/memberships/{username}"))
-  let body = {"role": $role} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/memberships/{username}"))
+  let req_body = {"role": $role} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List outside collaborators for an organization
@@ -3534,7 +3545,7 @@ export def "orgs-memberships orgs-set-membership-for-user" [
 # GET /orgs/{org}/outside_collaborators
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#list-outside-collaborators-for-an-organization — API method documentation
 # operationId: orgs/list-outside-collaborators
-export def "orgs-outside-collaborators list-outside-collaborators" [
+export def "orgs-outside-collaborators list" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3544,14 +3555,14 @@ export def "orgs-outside-collaborators list-outside-collaborators" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter: string@filter-completer-1 # Filter the list of outside collaborators. Can be one of:   \* `2fa_disabled`: Outside collaborators without [two-factor authentication](https://github.com/blog/1614-two-factor-authentication) enabled.   \* `all`: All outside collaborators. (default: all)
+  --filter: string@filter-completer-1 # Filter the list of outside collaborators. Can be one of: \* `2fa_disabled`: Outside collaborators without [two-factor authentication](https://github.com/blog/1614-two-factor-authentication) enabled. \* `all`: All outside collaborators. (default: all)
   --per-page: int # Results per page (max 100) (default: 30)
   --page: int # Page number of the results to fetch. (default: 1)
 ]: nothing -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/outside_collaborators") $qp)
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/outside_collaborators") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3562,7 +3573,7 @@ export def "orgs-outside-collaborators list-outside-collaborators" [
 # DELETE /orgs/{org}/outside_collaborators/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#remove-outside-collaborator-from-an-organization — API method documentation
 # operationId: orgs/remove-outside-collaborator
-export def "orgs-outside-collaborators remove-outside-collaborator" [
+export def "orgs-outside-collaborators delete" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3576,7 +3587,7 @@ export def "orgs-outside-collaborators remove-outside-collaborator" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org, username: $username} | format pattern "/orgs/{org}/outside_collaborators/{username}"))
+  let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/outside_collaborators/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3587,7 +3598,7 @@ export def "orgs-outside-collaborators remove-outside-collaborator" [
 # PUT /orgs/{org}/outside_collaborators/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#convert-an-organization-member-to-outside-collaborator — API method documentation
 # operationId: orgs/convert-member-to-outside-collaborator
-export def "orgs-outside-collaborators orgs-convert-member-to-outside-collaborator" [
+export def "orgs-outside-collaborators update-convert-member" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3601,7 +3612,7 @@ export def "orgs-outside-collaborators orgs-convert-member-to-outside-collaborat
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org, username: $username} | format pattern "/orgs/{org}/outside_collaborators/{username}"))
+  let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/outside_collaborators/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3612,7 +3623,7 @@ export def "orgs-outside-collaborators orgs-convert-member-to-outside-collaborat
 # GET /orgs/{org}/pre-receive-hooks
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#list-pre-receive-hooks-for-an-organization — API method documentation
 # operationId: enterprise-admin/list-pre-receive-hooks-for-org
-export def "orgs-pre-receive-hooks list-pre-receive-hooks-for-org" [
+export def "orgs-pre-receive-hooks list-enterprise-admin" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3630,7 +3641,7 @@ export def "orgs-pre-receive-hooks list-pre-receive-hooks-for-org" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/pre-receive-hooks") $qp)
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/pre-receive-hooks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3641,7 +3652,7 @@ export def "orgs-pre-receive-hooks list-pre-receive-hooks-for-org" [
 # DELETE /orgs/{org}/pre-receive-hooks/{pre_receive_hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#remove-pre-receive-hook-enforcement-for-an-organization — API method documentation
 # operationId: enterprise-admin/remove-pre-receive-hook-enforcement-for-org
-export def "orgs-pre-receive-hooks remove-pre-receive-hook-enforcement-for-org" [
+export def "orgs-pre-receive-hooks delete-enterprise-admin-enforcement" [
   org: string
   pre_receive_hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3655,7 +3666,7 @@ export def "orgs-pre-receive-hooks remove-pre-receive-hook-enforcement-for-org" 
 ]: nothing -> record<allow_downstream_configuration: bool, configuration_url: string, enforcement: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org, pre_receive_hook_id: $pre_receive_hook_id} | format pattern "/orgs/{org}/pre-receive-hooks/{pre_receive_hook_id}"))
+  let full_url = (build-url $base ({org: (encode-path-segment $org), pre_receive_hook_id: (encode-path-segment $pre_receive_hook_id)} | format pattern "/orgs/{org}/pre-receive-hooks/{pre_receive_hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3666,7 +3677,7 @@ export def "orgs-pre-receive-hooks remove-pre-receive-hook-enforcement-for-org" 
 # GET /orgs/{org}/pre-receive-hooks/{pre_receive_hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-a-pre-receive-hook-for-an-organization — API method documentation
 # operationId: enterprise-admin/get-pre-receive-hook-for-org
-export def "orgs-pre-receive-hooks get-pre-receive-hook-for-org" [
+export def "orgs-pre-receive-hooks get-enterprise-admin" [
   org: string
   pre_receive_hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3680,7 +3691,7 @@ export def "orgs-pre-receive-hooks get-pre-receive-hook-for-org" [
 ]: nothing -> record<allow_downstream_configuration: bool, configuration_url: string, enforcement: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org, pre_receive_hook_id: $pre_receive_hook_id} | format pattern "/orgs/{org}/pre-receive-hooks/{pre_receive_hook_id}"))
+  let full_url = (build-url $base ({org: (encode-path-segment $org), pre_receive_hook_id: (encode-path-segment $pre_receive_hook_id)} | format pattern "/orgs/{org}/pre-receive-hooks/{pre_receive_hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3691,7 +3702,7 @@ export def "orgs-pre-receive-hooks get-pre-receive-hook-for-org" [
 # PATCH /orgs/{org}/pre-receive-hooks/{pre_receive_hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#update-pre-receive-hook-enforcement-for-an-organization — API method documentation
 # operationId: enterprise-admin/update-pre-receive-hook-enforcement-for-org
-export def "orgs-pre-receive-hooks update-pre-receive-hook-enforcement-for-org" [
+export def "orgs-pre-receive-hooks update-enterprise-admin-enforcement" [
   org: string
   pre_receive_hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3708,12 +3719,12 @@ export def "orgs-pre-receive-hooks update-pre-receive-hook-enforcement-for-org" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org, pre_receive_hook_id: $pre_receive_hook_id} | format pattern "/orgs/{org}/pre-receive-hooks/{pre_receive_hook_id}"))
-  let body = {"allow_downstream_configuration": $allow_downstream_configuration, "enforcement": $enforcement} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org: (encode-path-segment $org), pre_receive_hook_id: (encode-path-segment $pre_receive_hook_id)} | format pattern "/orgs/{org}/pre-receive-hooks/{pre_receive_hook_id}"))
+  let req_body = {"allow_downstream_configuration": $allow_downstream_configuration, "enforcement": $enforcement} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List organization projects
@@ -3721,7 +3732,7 @@ export def "orgs-pre-receive-hooks update-pre-receive-hook-enforcement-for-org" 
 # GET /orgs/{org}/projects
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#list-organization-projects — API method documentation
 # operationId: projects/list-for-org
-export def "orgs-projects list-for-org" [
+export def "orgs-projects list" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3738,7 +3749,7 @@ export def "orgs-projects list-for-org" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/projects") $qp)
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3749,7 +3760,7 @@ export def "orgs-projects list-for-org" [
 # POST /orgs/{org}/projects
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#create-an-organization-project — API method documentation
 # operationId: projects/create-for-org
-export def "orgs-projects create-for-org" [
+export def "orgs-projects create" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3759,18 +3770,18 @@ export def "orgs-projects create-for-org" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # The description of the project.
+  --body: string # The description of the project.
   name: string # The name of the project.
 ]: any -> record<body: string, columns_url: string, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, html_url: string, id: int, name: string, node_id: string, number: int, organization_permission: string, owner_url: string, private: bool, state: string, updated_at: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/projects"))
-  let body = {"body": $body_body, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/projects"))
+  let req_body = {"body": $body, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List public organization members
@@ -3778,7 +3789,7 @@ export def "orgs-projects create-for-org" [
 # GET /orgs/{org}/public_members
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#list-public-organization-members — API method documentation
 # operationId: orgs/list-public-members
-export def "orgs-public-members list-public-members" [
+export def "orgs-public-members list" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3794,7 +3805,7 @@ export def "orgs-public-members list-public-members" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/public_members") $qp)
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/public_members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3805,7 +3816,7 @@ export def "orgs-public-members list-public-members" [
 # DELETE /orgs/{org}/public_members/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#remove-public-organization-membership-for-the-authenticated-user — API method documentation
 # operationId: orgs/remove-public-membership-for-authenticated-user
-export def "orgs-public-members remove-public-membership-for-authenticated-user" [
+export def "orgs-public-members delete-membership-for-authenticated-user" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3819,7 +3830,7 @@ export def "orgs-public-members remove-public-membership-for-authenticated-user"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org, username: $username} | format pattern "/orgs/{org}/public_members/{username}"))
+  let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/public_members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3830,7 +3841,7 @@ export def "orgs-public-members remove-public-membership-for-authenticated-user"
 # GET /orgs/{org}/public_members/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#check-public-organization-membership-for-a-user — API method documentation
 # operationId: orgs/check-public-membership-for-user
-export def "orgs-public-members check-public-membership-for-user" [
+export def "orgs-public-members check-membership-for-user" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3844,7 +3855,7 @@ export def "orgs-public-members check-public-membership-for-user" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org, username: $username} | format pattern "/orgs/{org}/public_members/{username}"))
+  let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/public_members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3855,7 +3866,7 @@ export def "orgs-public-members check-public-membership-for-user" [
 # PUT /orgs/{org}/public_members/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#set-public-organization-membership-for-the-authenticated-user — API method documentation
 # operationId: orgs/set-public-membership-for-authenticated-user
-export def "orgs-public-members orgs-set-public-membership-for-authenticated-user" [
+export def "orgs-public-members update-membership-for-authenticated-user" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3869,7 +3880,7 @@ export def "orgs-public-members orgs-set-public-membership-for-authenticated-use
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org, username: $username} | format pattern "/orgs/{org}/public_members/{username}"))
+  let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/public_members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3880,7 +3891,7 @@ export def "orgs-public-members orgs-set-public-membership-for-authenticated-use
 # GET /orgs/{org}/repos
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-organization-repositories — API method documentation
 # operationId: repos/list-for-org
-export def "orgs-repos list-for-org" [
+export def "orgs-repos list" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3899,7 +3910,7 @@ export def "orgs-repos list-for-org" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/repos") $qp)
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/repos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3910,7 +3921,7 @@ export def "orgs-repos list-for-org" [
 # POST /orgs/{org}/repos
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#create-an-organization-repository — API method documentation
 # operationId: repos/create-in-org
-export def "orgs-repos create-in-org" [
+export def "orgs-repos create" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3936,17 +3947,17 @@ export def "orgs-repos create-in-org" [
   name: string # The name of the repository.
   --private: oneof<nothing, bool> # Whether the repository is private. (default: false)
   --team-id: int # The id of the team that will be granted access to this repository. This is only valid when creating a repository in an organization.
-  --visibility: string@visibility-completer # Can be `public` or `private`. If your organization is associated with an enterprise account using GitHub Enterprise Cloud or GitHub Enterprise Server 2.20+, `visibility` can also be `internal`. Note: For GitHub Enterprise Server and GitHub AE, this endpoint will only list repositories available to all users on the enterprise. For more information, see "[Creating an internal repository](https://help.github.com/en/github/creating-cloning-and-archiving-repositories/about-repository-visibility#about-internal-repositories)" in the GitHub Help documentation.   The `visibility` parameter overrides the `private` parameter when you use both parameters with the `nebula-preview` preview header.
+  --visibility: string@visibility-completer # Can be `public` or `private`. If your organization is associated with an enterprise account using GitHub Enterprise Cloud or GitHub Enterprise Server 2.20+, `visibility` can also be `internal`. Note: For GitHub Enterprise Server and GitHub AE, this endpoint will only list repositories available to all users on the enterprise. For more information, see "[Creating an internal repository](https://help.github.com/en/github/creating-cloning-and-archiving-repositories/about-repository-visibility#about-internal-repositories)" in the GitHub Help documentation. The `visibility` parameter overrides the `private` parameter when you use both parameters with the `nebula-preview` preview header.
 ]: any -> record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues_count: int, owner: record<avatar_url: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/repos"))
-  let body = {"allow_merge_commit": $allow_merge_commit, "allow_rebase_merge": $allow_rebase_merge, "allow_squash_merge": $allow_squash_merge, "auto_init": $auto_init, "delete_branch_on_merge": $delete_branch_on_merge, "description": $description, "gitignore_template": $gitignore_template, "has_issues": $has_issues, "has_projects": $has_projects, "has_wiki": $has_wiki, "homepage": $homepage, "is_template": $is_template, "license_template": $license_template, "name": $name, "private": $private, "team_id": $team_id, "visibility": $visibility} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/repos"))
+  let req_body = {"allow_merge_commit": $allow_merge_commit, "allow_rebase_merge": $allow_rebase_merge, "allow_squash_merge": $allow_squash_merge, "auto_init": $auto_init, "delete_branch_on_merge": $delete_branch_on_merge, "description": $description, "gitignore_template": $gitignore_template, "has_issues": $has_issues, "has_projects": $has_projects, "has_wiki": $has_wiki, "homepage": $homepage, "is_template": $is_template, "license_template": $license_template, "name": $name, "private": $private, "team_id": $team_id, "visibility": $visibility} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List teams
@@ -3970,7 +3981,7 @@ export def "orgs-teams list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/teams") $qp)
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/teams") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3992,22 +4003,22 @@ export def "orgs-teams create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the team.
-  --maintainers: list # List GitHub IDs for organization members who will become team maintainers.
+  --maintainers: list<string> # List GitHub IDs for organization members who will become team maintainers.
   name: string # The name of the team.
   --parent-team-id: int # The ID of a team to set as the parent team.
-  --permission: string@permission-completer # **Deprecated**. The permission that new repositories will be added to the team with when none is specified. Can be one of:   \* `pull` - team members can pull, but not push to or administer newly-added repositories.   \* `push` - team members can pull and push, but not administer newly-added repositories.   \* `admin` - team members can pull, push and administer newly-added repositories. (default: pull)
-  --privacy: string@privacy-completer # The level of privacy this team should have. The options are:   **For a non-nested team:**   \* `secret` - only visible to organization owners and members of this team.   \* `closed` - visible to all members of this organization.   Default: `secret`   **For a parent or child team:**   \* `closed` - visible to all members of this organization.   Default for child team: `closed`
-  --repo-names: list # The full name (e.g., "organization-name/repository-name") of repositories to add the team to.
+  --permission: string@permission-completer # **Deprecated**. The permission that new repositories will be added to the team with when none is specified. Can be one of: \* `pull` - team members can pull, but not push to or administer newly-added repositories. \* `push` - team members can pull and push, but not administer newly-added repositories. \* `admin` - team members can pull, push and administer newly-added repositories. (default: pull)
+  --privacy: string@privacy-completer # The level of privacy this team should have. The options are: **For a non-nested team:** \* `secret` - only visible to organization owners and members of this team. \* `closed` - visible to all members of this organization. Default: `secret` **For a parent or child team:** \* `closed` - visible to all members of this organization. Default for child team: `closed`
+  --repo-names: list<string> # The full name (e.g., "organization-name/repository-name") of repositories to add the team to.
 ]: any -> record<created_at: string, description: string, html_url: string, id: int, ldap_dn: string, members_count: int, members_url: string, name: string, node_id: string, organization: record<avatar_url: string, billing_email: string, blog: string, collaborators: int, company: string, created_at: string, default_repository_permission: string, description: string, disk_usage: int, email: string, events_url: string, followers: int, following: int, has_organization_projects: bool, has_repository_projects: bool, hooks_url: string, html_url: string, id: int, issues_url: string, location: string, login: string, members_allowed_repository_creation_type: string, members_can_create_pages: bool, members_can_create_private_pages: bool, members_can_create_public_pages: bool, members_can_create_repositories: bool, members_url: string, name: string, node_id: string, owned_private_repos: int, plan: record<filled_seats: int, name: string, private_repos: int, seats: int, space: int>, private_gists: int, public_gists: int, public_members_url: string, public_repos: int, repos_url: string, total_private_repos: int, two_factor_requirement_enabled: bool, type: string, updated_at: string, url: string>, parent: record<description: string, html_url: string, id: int, ldap_dn: string, members_url: string, name: string, node_id: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, permission: string, privacy: string, repos_count: int, repositories_url: string, slug: string, updated_at: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/teams"))
-  let body = {"description": $description, "maintainers": $maintainers, "name": $name, "parent_team_id": $parent_team_id, "permission": $permission, "privacy": $privacy, "repo_names": $repo_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/teams"))
+  let req_body = {"description": $description, "maintainers": $maintainers, "name": $name, "parent_team_id": $parent_team_id, "permission": $permission, "privacy": $privacy, "repo_names": $repo_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a team by name
@@ -4029,7 +4040,7 @@ export def "orgs-teams get-by-name" [
 ]: nothing -> record<created_at: string, description: string, html_url: string, id: int, ldap_dn: string, members_count: int, members_url: string, name: string, node_id: string, organization: record<avatar_url: string, billing_email: string, blog: string, collaborators: int, company: string, created_at: string, default_repository_permission: string, description: string, disk_usage: int, email: string, events_url: string, followers: int, following: int, has_organization_projects: bool, has_repository_projects: bool, hooks_url: string, html_url: string, id: int, issues_url: string, location: string, login: string, members_allowed_repository_creation_type: string, members_can_create_pages: bool, members_can_create_private_pages: bool, members_can_create_public_pages: bool, members_can_create_repositories: bool, members_url: string, name: string, node_id: string, owned_private_repos: int, plan: record<filled_seats: int, name: string, private_repos: int, seats: int, space: int>, private_gists: int, public_gists: int, public_members_url: string, public_repos: int, repos_url: string, total_private_repos: int, two_factor_requirement_enabled: bool, type: string, updated_at: string, url: string>, parent: record<description: string, html_url: string, id: int, ldap_dn: string, members_url: string, name: string, node_id: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, permission: string, privacy: string, repos_count: int, repositories_url: string, slug: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org, team_slug: $team_slug} | format pattern "/orgs/{org}/teams/{team_slug}"))
+  let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug)} | format pattern "/orgs/{org}/teams/{team_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4040,7 +4051,7 @@ export def "orgs-teams get-by-name" [
 # DELETE /projects/columns/cards/{card_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#delete-a-project-card — API method documentation
 # operationId: projects/delete-card
-export def "projects-columns-cards delete-card" [
+export def "projects-columns-cards delete" [
   card_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4053,7 +4064,7 @@ export def "projects-columns-cards delete-card" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({card_id: $card_id} | format pattern "/projects/columns/cards/{card_id}"))
+  let full_url = (build-url $base ({card_id: (encode-path-segment $card_id)} | format pattern "/projects/columns/cards/{card_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4064,7 +4075,7 @@ export def "projects-columns-cards delete-card" [
 # GET /projects/columns/cards/{card_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#get-a-project-card — API method documentation
 # operationId: projects/get-card
-export def "projects-columns-cards get-card" [
+export def "projects-columns-cards get" [
   card_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4077,7 +4088,7 @@ export def "projects-columns-cards get-card" [
 ]: nothing -> record<archived: bool, column_name: string, column_url: string, content_url: string, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, id: int, node_id: string, note: string, project_id: string, project_url: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({card_id: $card_id} | format pattern "/projects/columns/cards/{card_id}"))
+  let full_url = (build-url $base ({card_id: (encode-path-segment $card_id)} | format pattern "/projects/columns/cards/{card_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4088,7 +4099,7 @@ export def "projects-columns-cards get-card" [
 # PATCH /projects/columns/cards/{card_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#update-a-project-card — API method documentation
 # operationId: projects/update-card
-export def "projects-columns-cards update-card" [
+export def "projects-columns-cards update" [
   card_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4104,12 +4115,12 @@ export def "projects-columns-cards update-card" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({card_id: $card_id} | format pattern "/projects/columns/cards/{card_id}"))
-  let body = {"archived": $archived, "note": $note} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({card_id: (encode-path-segment $card_id)} | format pattern "/projects/columns/cards/{card_id}"))
+  let req_body = {"archived": $archived, "note": $note} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Move a project card
@@ -4117,7 +4128,7 @@ export def "projects-columns-cards update-card" [
 # POST /projects/columns/cards/{card_id}/moves
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#move-a-project-card — API method documentation
 # operationId: projects/move-card
-export def "projects-columns-cards-moves move-card" [
+export def "projects-columns-cards-moves move" [
   card_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4133,12 +4144,12 @@ export def "projects-columns-cards-moves move-card" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({card_id: $card_id} | format pattern "/projects/columns/cards/{card_id}/moves"))
-  let body = {"column_id": $column_id, "position": $position} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({card_id: (encode-path-segment $card_id)} | format pattern "/projects/columns/cards/{card_id}/moves"))
+  let req_body = {"column_id": $column_id, "position": $position} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a project column
@@ -4146,7 +4157,7 @@ export def "projects-columns-cards-moves move-card" [
 # DELETE /projects/columns/{column_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#delete-a-project-column — API method documentation
 # operationId: projects/delete-column
-export def "projects-columns delete-column" [
+export def "projects-columns delete" [
   column_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4159,7 +4170,7 @@ export def "projects-columns delete-column" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({column_id: $column_id} | format pattern "/projects/columns/{column_id}"))
+  let full_url = (build-url $base ({column_id: (encode-path-segment $column_id)} | format pattern "/projects/columns/{column_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4170,7 +4181,7 @@ export def "projects-columns delete-column" [
 # GET /projects/columns/{column_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#get-a-project-column — API method documentation
 # operationId: projects/get-column
-export def "projects-columns get-column" [
+export def "projects-columns get" [
   column_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4183,7 +4194,7 @@ export def "projects-columns get-column" [
 ]: nothing -> record<cards_url: string, created_at: string, id: int, name: string, node_id: string, project_url: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({column_id: $column_id} | format pattern "/projects/columns/{column_id}"))
+  let full_url = (build-url $base ({column_id: (encode-path-segment $column_id)} | format pattern "/projects/columns/{column_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4194,7 +4205,7 @@ export def "projects-columns get-column" [
 # PATCH /projects/columns/{column_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#update-a-project-column — API method documentation
 # operationId: projects/update-column
-export def "projects-columns update-column" [
+export def "projects-columns update" [
   column_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4209,12 +4220,12 @@ export def "projects-columns update-column" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({column_id: $column_id} | format pattern "/projects/columns/{column_id}"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({column_id: (encode-path-segment $column_id)} | format pattern "/projects/columns/{column_id}"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List project cards
@@ -4222,7 +4233,7 @@ export def "projects-columns update-column" [
 # GET /projects/columns/{column_id}/cards
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#list-project-cards — API method documentation
 # operationId: projects/list-cards
-export def "projects-columns-cards list-cards" [
+export def "projects-columns-cards list" [
   column_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4239,7 +4250,7 @@ export def "projects-columns-cards list-cards" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "archived_state" $archived_state "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({column_id: $column_id} | format pattern "/projects/columns/{column_id}/cards") $qp)
+  let full_url = (build-url $base ({column_id: (encode-path-segment $column_id)} | format pattern "/projects/columns/{column_id}/cards") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4250,7 +4261,7 @@ export def "projects-columns-cards list-cards" [
 # POST /projects/columns/{column_id}/cards
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#create-a-project-card — API method documentation
 # operationId: projects/create-card
-export def "projects-columns-cards create-card" [
+export def "projects-columns-cards create" [
   column_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4267,12 +4278,12 @@ export def "projects-columns-cards create-card" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({column_id: $column_id} | format pattern "/projects/columns/{column_id}/cards"))
-  let body = {"note": $note, "content_id": $content_id, "content_type": $content_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({column_id: (encode-path-segment $column_id)} | format pattern "/projects/columns/{column_id}/cards"))
+  let req_body = {"note": $note, "content_id": $content_id, "content_type": $content_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Move a project column
@@ -4280,7 +4291,7 @@ export def "projects-columns-cards create-card" [
 # POST /projects/columns/{column_id}/moves
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#move-a-project-column — API method documentation
 # operationId: projects/move-column
-export def "projects-columns-moves move-column" [
+export def "projects-columns-moves move" [
   column_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4295,12 +4306,12 @@ export def "projects-columns-moves move-column" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({column_id: $column_id} | format pattern "/projects/columns/{column_id}/moves"))
-  let body = {"position": $position} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({column_id: (encode-path-segment $column_id)} | format pattern "/projects/columns/{column_id}/moves"))
+  let req_body = {"position": $position} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a project
@@ -4321,7 +4332,7 @@ export def "projects delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4345,7 +4356,7 @@ export def "projects get" [
 ]: nothing -> record<body: string, columns_url: string, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, html_url: string, id: int, name: string, node_id: string, number: int, organization_permission: string, owner_url: string, private: bool, state: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4366,7 +4377,7 @@ export def "projects update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # Body of the project (nullable, e.g. This project represents the sprint of the first week in January)
+  --body: string # Body of the project (nullable, e.g. This project represents the sprint of the first week in January)
   --name: string # Name of the project (e.g. Week One Sprint)
   --organization-permission: string@organization-permission-completer # The baseline permission that all organization members have on this project
   --private: oneof<nothing, bool> # Whether or not this project can be seen by everyone.
@@ -4375,12 +4386,12 @@ export def "projects update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}"))
-  let body = {"body": $body_body, "name": $name, "organization_permission": $organization_permission, "private": $private, "state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}"))
+  let req_body = {"body": $body, "name": $name, "organization_permission": $organization_permission, "private": $private, "state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List project collaborators
@@ -4388,7 +4399,7 @@ export def "projects update" [
 # GET /projects/{project_id}/collaborators
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#list-project-collaborators — API method documentation
 # operationId: projects/list-collaborators
-export def "projects-collaborators list-collaborators" [
+export def "projects-collaborators list" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4398,14 +4409,14 @@ export def "projects-collaborators list-collaborators" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --affiliation: string@affiliation-completer # Filters the collaborators by their affiliation. Can be one of:   \* `outside`: Outside collaborators of a project that are not a member of the project's organization.   \* `direct`: Collaborators with permissions to a project, regardless of organization membership status.   \* `all`: All collaborators the authenticated user can see. (default: all)
+  --affiliation: string@affiliation-completer # Filters the collaborators by their affiliation. Can be one of: \* `outside`: Outside collaborators of a project that are not a member of the project's organization. \* `direct`: Collaborators with permissions to a project, regardless of organization membership status. \* `all`: All collaborators the authenticated user can see. (default: all)
   --per-page: int # Results per page (max 100) (default: 30)
   --page: int # Page number of the results to fetch. (default: 1)
 ]: nothing -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "affiliation" $affiliation "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/collaborators") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/collaborators") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4416,7 +4427,7 @@ export def "projects-collaborators list-collaborators" [
 # DELETE /projects/{project_id}/collaborators/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#remove-project-collaborator — API method documentation
 # operationId: projects/remove-collaborator
-export def "projects-collaborators remove-collaborator" [
+export def "projects-collaborators delete" [
   project_id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4430,7 +4441,7 @@ export def "projects-collaborators remove-collaborator" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, username: $username} | format pattern "/projects/{project_id}/collaborators/{username}"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), username: (encode-path-segment $username)} | format pattern "/projects/{project_id}/collaborators/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4441,7 +4452,7 @@ export def "projects-collaborators remove-collaborator" [
 # PUT /projects/{project_id}/collaborators/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#add-project-collaborator — API method documentation
 # operationId: projects/add-collaborator
-export def "projects-collaborators add-collaborator" [
+export def "projects-collaborators create" [
   project_id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4457,12 +4468,12 @@ export def "projects-collaborators add-collaborator" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, username: $username} | format pattern "/projects/{project_id}/collaborators/{username}"))
-  let body = {"permission": $permission} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), username: (encode-path-segment $username)} | format pattern "/projects/{project_id}/collaborators/{username}"))
+  let req_body = {"permission": $permission} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get project permission for a user
@@ -4470,7 +4481,7 @@ export def "projects-collaborators add-collaborator" [
 # GET /projects/{project_id}/collaborators/{username}/permission
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#get-project-permission-for-a-user — API method documentation
 # operationId: projects/get-permission-for-user
-export def "projects-collaborators-permission get-permission-for-user" [
+export def "projects-collaborators-permission get-for-user" [
   project_id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4484,7 +4495,7 @@ export def "projects-collaborators-permission get-permission-for-user" [
 ]: nothing -> record<permission: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id, username: $username} | format pattern "/projects/{project_id}/collaborators/{username}/permission"))
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), username: (encode-path-segment $username)} | format pattern "/projects/{project_id}/collaborators/{username}/permission"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4495,7 +4506,7 @@ export def "projects-collaborators-permission get-permission-for-user" [
 # GET /projects/{project_id}/columns
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#list-project-columns — API method documentation
 # operationId: projects/list-columns
-export def "projects-columns list-columns" [
+export def "projects-columns list" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4511,7 +4522,7 @@ export def "projects-columns list-columns" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/columns") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/columns") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4522,7 +4533,7 @@ export def "projects-columns list-columns" [
 # POST /projects/{project_id}/columns
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#create-a-project-column — API method documentation
 # operationId: projects/create-column
-export def "projects-columns create-column" [
+export def "projects-columns create" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4537,12 +4548,12 @@ export def "projects-columns create-column" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/columns"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/columns"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get rate limit status for the authenticated user
@@ -4587,11 +4598,11 @@ export def "reactions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({reaction_id: $reaction_id} | format pattern "/reactions/{reaction_id}"))
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({reaction_id: (encode-path-segment $reaction_id)} | format pattern "/reactions/{reaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4614,7 +4625,7 @@ export def "repos delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4639,7 +4650,7 @@ export def "repos get" [
 ]: nothing -> record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, code_of_conduct: record<html_url: string, key: string, name: string, url: string>, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, parent: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, source: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4675,18 +4686,18 @@ export def "repos update" [
   --homepage: string # A URL with more information about the repository.
   --is-template: oneof<nothing, bool> # Either `true` to make this repo available as a template repository or `false` to prevent it. (default: false)
   --name: string # The name of the repository.
-  --private: oneof<nothing, bool> # Either `true` to make the repository private or `false` to make it public. Default: `false`.   **Note**: You will get a `422` error if the organization restricts [changing repository visibility](https://help.github.com/articles/repository-permission-levels-for-an-organization#changing-the-visibility-of-repositories) to organization owners and a non-owner tries to change the value of private. **Note**: You will get a `422` error if the organization restricts [changing repository visibility](https://help.github.com/articles/repository-permission-levels-for-an-organization#changing-the-visibility-of-repositories) to organization owners and a non-owner tries to change the value of private. (default: false)
+  --private: oneof<nothing, bool> # Either `true` to make the repository private or `false` to make it public. Default: `false`. **Note**: You will get a `422` error if the organization restricts [changing repository visibility](https://help.github.com/articles/repository-permission-levels-for-an-organization#changing-the-visibility-of-repositories) to organization owners and a non-owner tries to change the value of private. **Note**: You will get a `422` error if the organization restricts [changing repository visibility](https://help.github.com/articles/repository-permission-levels-for-an-organization#changing-the-visibility-of-repositories) to organization owners and a non-owner tries to change the value of private. (default: false)
   --visibility: string@visibility-completer # Can be `public` or `private`. If your organization is associated with an enterprise account using GitHub Enterprise Cloud or GitHub Enterprise Server 2.20+, `visibility` can also be `internal`. The `visibility` parameter overrides the `private` parameter when you use both along with the `nebula-preview` preview header.
 ]: any -> record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, code_of_conduct: record<html_url: string, key: string, name: string, url: string>, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, parent: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, source: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}"))
-  let body = {"allow_forking": $allow_forking, "allow_merge_commit": $allow_merge_commit, "allow_rebase_merge": $allow_rebase_merge, "allow_squash_merge": $allow_squash_merge, "archived": $archived, "default_branch": $default_branch, "delete_branch_on_merge": $delete_branch_on_merge, "description": $description, "has_issues": $has_issues, "has_projects": $has_projects, "has_wiki": $has_wiki, "homepage": $homepage, "is_template": $is_template, "name": $name, "private": $private, "visibility": $visibility} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}"))
+  let req_body = {"allow_forking": $allow_forking, "allow_merge_commit": $allow_merge_commit, "allow_rebase_merge": $allow_rebase_merge, "allow_squash_merge": $allow_squash_merge, "archived": $archived, "default_branch": $default_branch, "delete_branch_on_merge": $delete_branch_on_merge, "description": $description, "has_issues": $has_issues, "has_projects": $has_projects, "has_wiki": $has_wiki, "homepage": $homepage, "is_template": $is_template, "name": $name, "private": $private, "visibility": $visibility} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List assignees
@@ -4694,7 +4705,7 @@ export def "repos update" [
 # GET /repos/{owner}/{repo}/assignees
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#list-assignees — API method documentation
 # operationId: issues/list-assignees
-export def "repos-assignees list-assignees" [
+export def "repos-assignees list-issues" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4711,7 +4722,7 @@ export def "repos-assignees list-assignees" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/assignees") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/assignees") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4722,7 +4733,7 @@ export def "repos-assignees list-assignees" [
 # GET /repos/{owner}/{repo}/assignees/{assignee}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#check-if-a-user-can-be-assigned — API method documentation
 # operationId: issues/check-user-can-be-assigned
-export def "repos-assignees check-user-can-be-assigned" [
+export def "repos-assignees check-issues-user-can-be-assigned" [
   owner: string
   repo: string
   assignee: string
@@ -4737,7 +4748,7 @@ export def "repos-assignees check-user-can-be-assigned" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, assignee: $assignee} | format pattern "/repos/{owner}/{repo}/assignees/{assignee}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), assignee: (encode-path-segment $assignee)} | format pattern "/repos/{owner}/{repo}/assignees/{assignee}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4748,7 +4759,7 @@ export def "repos-assignees check-user-can-be-assigned" [
 # GET /repos/{owner}/{repo}/branches
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-branches — API method documentation
 # operationId: repos/list-branches
-export def "repos-branches list-branches" [
+export def "repos-branches list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4766,7 +4777,7 @@ export def "repos-branches list-branches" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "protected" $protected "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/branches") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/branches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4777,7 +4788,7 @@ export def "repos-branches list-branches" [
 # GET /repos/{owner}/{repo}/branches/{branch}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-a-branch — API method documentation
 # operationId: repos/get-branch
-export def "repos-branches get-branch" [
+export def "repos-branches get" [
   owner: string
   repo: string
   branch: string
@@ -4792,7 +4803,7 @@ export def "repos-branches get-branch" [
 ]: nothing -> record<_links: record<html: string, self: string>, commit: record<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, comments_url: string, commit: record<author: record, comment_count: int, committer: record, message: string, tree: record, url: string, verification: record>, committer: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, files: list<record>, html_url: string, node_id: string, parents: list<record>, sha: string, stats: record<additions: int, deletions: int, total: int>, url: string>, name: string, pattern: string, protected: bool, protection: record<enabled: bool, enforce_admins: record<enabled: bool, url: string>, name: string, protection_url: string, required_conversation_resolution: record<enabled: bool>, required_pull_request_reviews: record<dismiss_stale_reviews: bool, dismissal_restrictions: record, require_code_owner_reviews: bool, required_approving_review_count: int, url: string>, required_signatures: record<enabled: bool, url: string>, required_status_checks: record<contexts: list, contexts_url: string, enforcement_level: string, strict: bool, url: string>, restrictions: record<apps: list, apps_url: string, restrictions: list, teams: list, teams_url: string, url: string, users: list, users_url: string>, url: string>, protection_url: string, required_approving_review_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4803,7 +4814,7 @@ export def "repos-branches get-branch" [
 # DELETE /repos/{owner}/{repo}/branches/{branch}/protection
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#delete-branch-protection — API method documentation
 # operationId: repos/delete-branch-protection
-export def "repos-branches-protection delete-branch-protection" [
+export def "repos-branches-protection delete" [
   owner: string
   repo: string
   branch: string
@@ -4818,7 +4829,7 @@ export def "repos-branches-protection delete-branch-protection" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4829,7 +4840,7 @@ export def "repos-branches-protection delete-branch-protection" [
 # GET /repos/{owner}/{repo}/branches/{branch}/protection
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-branch-protection — API method documentation
 # operationId: repos/get-branch-protection
-export def "repos-branches-protection get-branch-protection" [
+export def "repos-branches-protection get" [
   owner: string
   repo: string
   branch: string
@@ -4844,7 +4855,7 @@ export def "repos-branches-protection get-branch-protection" [
 ]: nothing -> record<enabled: bool, enforce_admins: record<enabled: bool, url: string>, name: string, protection_url: string, required_conversation_resolution: record<enabled: bool>, required_pull_request_reviews: record<dismiss_stale_reviews: bool, dismissal_restrictions: record<teams: list, teams_url: string, url: string, users: list, users_url: string>, require_code_owner_reviews: bool, required_approving_review_count: int, url: string>, required_signatures: record<enabled: bool, url: string>, required_status_checks: record<contexts: list<string>, contexts_url: string, enforcement_level: string, strict: bool, url: string>, restrictions: record<apps: list<record>, apps_url: string, restrictions: list<record>, teams: list<record>, teams_url: string, url: string, users: list<record>, users_url: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4856,9 +4867,9 @@ export def "repos-branches-protection get-branch-protection" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#update-branch-protection — API method documentation
 # operationId: repos/update-branch-protection
 # --required_pull_request_reviews shape: {dismiss_stale_reviews?: bool, dismissal_restrictions?: record, require_code_owner_reviews?: bool, required_approving_review_count?: int}
-# --required_status_checks shape: {contexts: list, strict: bool}
-# --restrictions shape: {apps?: list, teams: list, users: list}
-export def "repos-branches-protection update-branch-protection" [
+# --required_status_checks shape: {contexts: list<string>, strict: bool}
+# --restrictions shape: {apps?: list<string>, teams: list<string>, users: list<string>}
+export def "repos-branches-protection update" [
   owner: string
   repo: string
   branch: string
@@ -4876,18 +4887,18 @@ export def "repos-branches-protection update-branch-protection" [
   --required-conversation-resolution: oneof<nothing, bool> # Requires all conversations on code to be resolved before a pull request can be merged into a branch that matches this rule. Set to `false` to disable. Default: `false`.
   --required-linear-history: oneof<nothing, bool> # Enforces a linear commit Git history, which prevents anyone from pushing merge commits to a branch. Set to `true` to enforce a linear commit history. Set to `false` to disable a linear commit Git history. Your repository must allow squash merging or rebase merging before you can enable a linear commit history. Default: `false`. For more information, see "[Requiring a linear commit history](https://help.github.com/github/administering-a-repository/requiring-a-linear-commit-history)" in the GitHub Help documentation.
   --required-pull-request-reviews: record # Require at least one approving review on a pull request, before merging. Set to `null` to disable. (nullable) — shape: {dismiss_stale_reviews?: bool, dismissal_restrictions?: record, require_code_owner_reviews?: bool, required_approving_review_count?: int}
-  --required-status-checks: record # Require status checks to pass before merging. Set to `null` to disable. (nullable) — shape: {contexts: list, strict: bool}
-  --restrictions: record # Restrict who can push to the protected branch. User, app, and team `restrictions` are only available for organization-owned repositories. Set to `null` to disable. (nullable) — shape: {apps?: list, teams: list, users: list}
+  --required-status-checks: record # Require status checks to pass before merging. Set to `null` to disable. (nullable) — shape: {contexts: list<string>, strict: bool}
+  --restrictions: record # Restrict who can push to the protected branch. User, app, and team `restrictions` are only available for organization-owned repositories. Set to `null` to disable. (nullable) — shape: {apps?: list<string>, teams: list<string>, users: list<string>}
 ]: any -> record<allow_deletions: record<enabled: bool>, allow_force_pushes: record<enabled: bool>, enforce_admins: record<enabled: bool, url: string>, required_conversation_resolution: record<enabled: bool>, required_linear_history: record<enabled: bool>, required_pull_request_reviews: record<dismiss_stale_reviews: bool, dismissal_restrictions: record<teams: list, teams_url: string, url: string, users: list, users_url: string>, require_code_owner_reviews: bool, required_approving_review_count: int, url: string>, required_signatures: record<enabled: bool, url: string>, required_status_checks: record<contexts: list<string>, contexts_url: string, strict: bool, url: string>, restrictions: record<apps: list<record>, apps_url: string, restrictions: list<record>, teams: list<record>, teams_url: string, url: string, users: list<record>, users_url: string>, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection"))
-  let body = {"allow_deletions": $allow_deletions, "allow_force_pushes": $allow_force_pushes, "enforce_admins": $enforce_admins, "required_conversation_resolution": $required_conversation_resolution, "required_linear_history": $required_linear_history, "required_pull_request_reviews": $required_pull_request_reviews, "required_status_checks": $required_status_checks, "restrictions": $restrictions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection"))
+  let req_body = {"allow_deletions": $allow_deletions, "allow_force_pushes": $allow_force_pushes, "enforce_admins": $enforce_admins, "required_conversation_resolution": $required_conversation_resolution, "required_linear_history": $required_linear_history, "required_pull_request_reviews": $required_pull_request_reviews, "required_status_checks": $required_status_checks, "restrictions": $restrictions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete admin branch protection
@@ -4895,7 +4906,7 @@ export def "repos-branches-protection update-branch-protection" [
 # DELETE /repos/{owner}/{repo}/branches/{branch}/protection/enforce_admins
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#delete-admin-branch-protection — API method documentation
 # operationId: repos/delete-admin-branch-protection
-export def "repos-branches-protection-enforce-admins delete-admin-branch-protection" [
+export def "repos-branches-protection-enforce-admins delete" [
   owner: string
   repo: string
   branch: string
@@ -4910,7 +4921,7 @@ export def "repos-branches-protection-enforce-admins delete-admin-branch-protect
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/enforce_admins"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/enforce_admins"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4921,7 +4932,7 @@ export def "repos-branches-protection-enforce-admins delete-admin-branch-protect
 # GET /repos/{owner}/{repo}/branches/{branch}/protection/enforce_admins
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-admin-branch-protection — API method documentation
 # operationId: repos/get-admin-branch-protection
-export def "repos-branches-protection-enforce-admins get-admin-branch-protection" [
+export def "repos-branches-protection-enforce-admins get" [
   owner: string
   repo: string
   branch: string
@@ -4936,7 +4947,7 @@ export def "repos-branches-protection-enforce-admins get-admin-branch-protection
 ]: nothing -> record<enabled: bool, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/enforce_admins"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/enforce_admins"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4947,7 +4958,7 @@ export def "repos-branches-protection-enforce-admins get-admin-branch-protection
 # POST /repos/{owner}/{repo}/branches/{branch}/protection/enforce_admins
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#set-admin-branch-protection — API method documentation
 # operationId: repos/set-admin-branch-protection
-export def "repos-branches-protection-enforce-admins repos-set-admin-branch-protection" [
+export def "repos-branches-protection-enforce-admins update" [
   owner: string
   repo: string
   branch: string
@@ -4962,7 +4973,7 @@ export def "repos-branches-protection-enforce-admins repos-set-admin-branch-prot
 ]: nothing -> record<enabled: bool, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/enforce_admins"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/enforce_admins"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4973,7 +4984,7 @@ export def "repos-branches-protection-enforce-admins repos-set-admin-branch-prot
 # DELETE /repos/{owner}/{repo}/branches/{branch}/protection/required_pull_request_reviews
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#delete-pull-request-review-protection — API method documentation
 # operationId: repos/delete-pull-request-review-protection
-export def "repos-branches-protection-required-pull-request-reviews delete-pull-request-review-protection" [
+export def "repos-branches-protection-required-pull-request-reviews delete" [
   owner: string
   repo: string
   branch: string
@@ -4988,7 +4999,7 @@ export def "repos-branches-protection-required-pull-request-reviews delete-pull-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_pull_request_reviews"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_pull_request_reviews"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4999,7 +5010,7 @@ export def "repos-branches-protection-required-pull-request-reviews delete-pull-
 # GET /repos/{owner}/{repo}/branches/{branch}/protection/required_pull_request_reviews
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-pull-request-review-protection — API method documentation
 # operationId: repos/get-pull-request-review-protection
-export def "repos-branches-protection-required-pull-request-reviews get-pull-request-review-protection" [
+export def "repos-branches-protection-required-pull-request-reviews get" [
   owner: string
   repo: string
   branch: string
@@ -5014,7 +5025,7 @@ export def "repos-branches-protection-required-pull-request-reviews get-pull-req
 ]: nothing -> record<dismiss_stale_reviews: bool, dismissal_restrictions: record<teams: list<record>, teams_url: string, url: string, users: list<record>, users_url: string>, require_code_owner_reviews: bool, required_approving_review_count: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_pull_request_reviews"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_pull_request_reviews"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5025,8 +5036,8 @@ export def "repos-branches-protection-required-pull-request-reviews get-pull-req
 # PATCH /repos/{owner}/{repo}/branches/{branch}/protection/required_pull_request_reviews
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#update-pull-request-review-protection — API method documentation
 # operationId: repos/update-pull-request-review-protection
-# --dismissal_restrictions shape: {teams?: list, users?: list}
-export def "repos-branches-protection-required-pull-request-reviews update-pull-request-review-protection" [
+# --dismissal_restrictions shape: {teams?: list<string>, users?: list<string>}
+export def "repos-branches-protection-required-pull-request-reviews update" [
   owner: string
   repo: string
   branch: string
@@ -5039,19 +5050,19 @@ export def "repos-branches-protection-required-pull-request-reviews update-pull-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --dismiss-stale-reviews: oneof<nothing, bool> # Set to `true` if you want to automatically dismiss approving reviews when someone pushes a new commit.
-  --dismissal-restrictions: record # Specify which users and teams can dismiss pull request reviews. Pass an empty `dismissal_restrictions` object to disable. User and team `dismissal_restrictions` are only available for organization-owned repositories. Omit this parameter for personal repositories. — shape: {teams?: list, users?: list}
+  --dismissal-restrictions: record # Specify which users and teams can dismiss pull request reviews. Pass an empty `dismissal_restrictions` object to disable. User and team `dismissal_restrictions` are only available for organization-owned repositories. Omit this parameter for personal repositories. — shape: {teams?: list<string>, users?: list<string>}
   --require-code-owner-reviews: oneof<nothing, bool> # Blocks merging pull requests until [code owners](https://help.github.com/articles/about-code-owners/) have reviewed.
   --required-approving-review-count: int # Specifies the number of reviewers required to approve pull requests. Use a number between 1 and 6.
 ]: any -> record<dismiss_stale_reviews: bool, dismissal_restrictions: record<teams: list<record>, teams_url: string, url: string, users: list<record>, users_url: string>, require_code_owner_reviews: bool, required_approving_review_count: int, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_pull_request_reviews"))
-  let body = {"dismiss_stale_reviews": $dismiss_stale_reviews, "dismissal_restrictions": $dismissal_restrictions, "require_code_owner_reviews": $require_code_owner_reviews, "required_approving_review_count": $required_approving_review_count} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_pull_request_reviews"))
+  let req_body = {"dismiss_stale_reviews": $dismiss_stale_reviews, "dismissal_restrictions": $dismissal_restrictions, "require_code_owner_reviews": $require_code_owner_reviews, "required_approving_review_count": $required_approving_review_count} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete commit signature protection
@@ -5059,7 +5070,7 @@ export def "repos-branches-protection-required-pull-request-reviews update-pull-
 # DELETE /repos/{owner}/{repo}/branches/{branch}/protection/required_signatures
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#delete-commit-signature-protection — API method documentation
 # operationId: repos/delete-commit-signature-protection
-export def "repos-branches-protection-required-signatures delete-commit-signature-protection" [
+export def "repos-branches-protection-required-signatures delete-commit" [
   owner: string
   repo: string
   branch: string
@@ -5074,7 +5085,7 @@ export def "repos-branches-protection-required-signatures delete-commit-signatur
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_signatures"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_signatures"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5085,7 +5096,7 @@ export def "repos-branches-protection-required-signatures delete-commit-signatur
 # GET /repos/{owner}/{repo}/branches/{branch}/protection/required_signatures
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-commit-signature-protection — API method documentation
 # operationId: repos/get-commit-signature-protection
-export def "repos-branches-protection-required-signatures get-commit-signature-protection" [
+export def "repos-branches-protection-required-signatures get-commit" [
   owner: string
   repo: string
   branch: string
@@ -5100,7 +5111,7 @@ export def "repos-branches-protection-required-signatures get-commit-signature-p
 ]: nothing -> record<enabled: bool, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_signatures"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_signatures"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5111,7 +5122,7 @@ export def "repos-branches-protection-required-signatures get-commit-signature-p
 # POST /repos/{owner}/{repo}/branches/{branch}/protection/required_signatures
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#create-commit-signature-protection — API method documentation
 # operationId: repos/create-commit-signature-protection
-export def "repos-branches-protection-required-signatures create-commit-signature-protection" [
+export def "repos-branches-protection-required-signatures create-commit" [
   owner: string
   repo: string
   branch: string
@@ -5126,7 +5137,7 @@ export def "repos-branches-protection-required-signatures create-commit-signatur
 ]: nothing -> record<enabled: bool, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_signatures"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_signatures"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5137,7 +5148,7 @@ export def "repos-branches-protection-required-signatures create-commit-signatur
 # DELETE /repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#remove-status-check-protection — API method documentation
 # operationId: repos/remove-status-check-protection
-export def "repos-branches-protection-required-status-checks remove-status-check-protection" [
+export def "repos-branches-protection-required-status-checks delete" [
   owner: string
   repo: string
   branch: string
@@ -5152,7 +5163,7 @@ export def "repos-branches-protection-required-status-checks remove-status-check
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5163,7 +5174,7 @@ export def "repos-branches-protection-required-status-checks remove-status-check
 # GET /repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-status-checks-protection — API method documentation
 # operationId: repos/get-status-checks-protection
-export def "repos-branches-protection-required-status-checks get-status-checks-protection" [
+export def "repos-branches-protection-required-status-checks get" [
   owner: string
   repo: string
   branch: string
@@ -5178,7 +5189,7 @@ export def "repos-branches-protection-required-status-checks get-status-checks-p
 ]: nothing -> record<contexts: list<string>, contexts_url: string, strict: bool, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5189,7 +5200,7 @@ export def "repos-branches-protection-required-status-checks get-status-checks-p
 # PATCH /repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#update-status-check-potection — API method documentation
 # operationId: repos/update-status-check-protection
-export def "repos-branches-protection-required-status-checks update-status-check-protection" [
+export def "repos-branches-protection-required-status-checks update" [
   owner: string
   repo: string
   branch: string
@@ -5201,18 +5212,18 @@ export def "repos-branches-protection-required-status-checks update-status-check
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contexts: list # The list of status checks to require in order to merge into this branch
+  --contexts: list<string> # The list of status checks to require in order to merge into this branch
   --strict: oneof<nothing, bool> # Require branches to be up to date before merging.
 ]: any -> record<contexts: list<string>, contexts_url: string, strict: bool, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks"))
-  let body = {"contexts": $contexts, "strict": $strict} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks"))
+  let req_body = {"contexts": $contexts, "strict": $strict} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove status check contexts
@@ -5220,7 +5231,7 @@ export def "repos-branches-protection-required-status-checks update-status-check
 # DELETE /repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#remove-status-check-contexts — API method documentation
 # operationId: repos/remove-status-check-contexts
-export def "repos-branches-protection-required-status-checks-contexts remove-status-check-contexts" [
+export def "repos-branches-protection-required-status-checks-contexts delete" [
   owner: string
   repo: string
   branch: string
@@ -5232,17 +5243,17 @@ export def "repos-branches-protection-required-status-checks-contexts remove-sta
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contexts: list # contexts parameter
+  --contexts: list<string> # contexts parameter
 ]: any -> list<string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts"))
-  let body = {"contexts": $contexts} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts"))
+  let req_body = {"contexts": $contexts} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all status check contexts
@@ -5250,7 +5261,7 @@ export def "repos-branches-protection-required-status-checks-contexts remove-sta
 # GET /repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-all-status-check-contexts — API method documentation
 # operationId: repos/get-all-status-check-contexts
-export def "repos-branches-protection-required-status-checks-contexts get-all-status-check-contexts" [
+export def "repos-branches-protection-required-status-checks-contexts get-list" [
   owner: string
   repo: string
   branch: string
@@ -5265,7 +5276,7 @@ export def "repos-branches-protection-required-status-checks-contexts get-all-st
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5276,7 +5287,7 @@ export def "repos-branches-protection-required-status-checks-contexts get-all-st
 # POST /repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#add-status-check-contexts — API method documentation
 # operationId: repos/add-status-check-contexts
-export def "repos-branches-protection-required-status-checks-contexts add-status-check-contexts" [
+export def "repos-branches-protection-required-status-checks-contexts create" [
   owner: string
   repo: string
   branch: string
@@ -5288,17 +5299,17 @@ export def "repos-branches-protection-required-status-checks-contexts add-status
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contexts: list # contexts parameter
+  --contexts: list<string> # contexts parameter
 ]: any -> list<string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts"))
-  let body = {"contexts": $contexts} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts"))
+  let req_body = {"contexts": $contexts} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Set status check contexts
@@ -5306,7 +5317,7 @@ export def "repos-branches-protection-required-status-checks-contexts add-status
 # PUT /repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#set-status-check-contexts — API method documentation
 # operationId: repos/set-status-check-contexts
-export def "repos-branches-protection-required-status-checks-contexts repos-set-status-check-contexts" [
+export def "repos-branches-protection-required-status-checks-contexts update" [
   owner: string
   repo: string
   branch: string
@@ -5318,17 +5329,17 @@ export def "repos-branches-protection-required-status-checks-contexts repos-set-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contexts: list # contexts parameter
+  --contexts: list<string> # contexts parameter
 ]: any -> list<string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts"))
-  let body = {"contexts": $contexts} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts"))
+  let req_body = {"contexts": $contexts} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete access restrictions
@@ -5336,7 +5347,7 @@ export def "repos-branches-protection-required-status-checks-contexts repos-set-
 # DELETE /repos/{owner}/{repo}/branches/{branch}/protection/restrictions
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#delete-access-restrictions — API method documentation
 # operationId: repos/delete-access-restrictions
-export def "repos-branches-protection-restrictions delete-access-restrictions" [
+export def "repos-branches-protection-restrictions delete-access" [
   owner: string
   repo: string
   branch: string
@@ -5351,7 +5362,7 @@ export def "repos-branches-protection-restrictions delete-access-restrictions" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5362,7 +5373,7 @@ export def "repos-branches-protection-restrictions delete-access-restrictions" [
 # GET /repos/{owner}/{repo}/branches/{branch}/protection/restrictions
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-access-restrictions — API method documentation
 # operationId: repos/get-access-restrictions
-export def "repos-branches-protection-restrictions get-access-restrictions" [
+export def "repos-branches-protection-restrictions get-access" [
   owner: string
   repo: string
   branch: string
@@ -5377,7 +5388,7 @@ export def "repos-branches-protection-restrictions get-access-restrictions" [
 ]: nothing -> record<apps: table<created_at: string, description: string, events: list, external_url: string, html_url: string, id: int, name: string, node_id: string, owner: record, permissions: record, slug: string, updated_at: string>, apps_url: string, restrictions: table<teams: list, teams_url: string, url: string, users: list, users_url: string>, teams: table<description: string, html_url: string, id: int, members_url: string, name: string, node_id: string, parent: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, teams_url: string, url: string, users: table<avatar_url: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_url: string, subscriptions_url: string, type: string, url: string>, users_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5388,7 +5399,7 @@ export def "repos-branches-protection-restrictions get-access-restrictions" [
 # DELETE /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#remove-team-access-restrictions — API method documentation
 # operationId: repos/remove-team-access-restrictions
-export def "repos-branches-protection-restrictions-teams remove-team-access-restrictions" [
+export def "repos-branches-protection-restrictions-teams delete-access" [
   owner: string
   repo: string
   branch: string
@@ -5400,17 +5411,17 @@ export def "repos-branches-protection-restrictions-teams remove-team-access-rest
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --teams: list # teams parameter
+  --teams: list<string> # teams parameter
 ]: any -> table<description: string, html_url: string, id: int, members_url: string, name: string, node_id: string, parent: record<description: string, html_url: string, id: int, ldap_dn: string, members_url: string, name: string, node_id: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, permission: string, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, privacy: string, repositories_url: string, slug: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams"))
-  let body = {"teams": $teams} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams"))
+  let req_body = {"teams": $teams} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get teams with access to the protected branch
@@ -5418,7 +5429,7 @@ export def "repos-branches-protection-restrictions-teams remove-team-access-rest
 # GET /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-teams-with-access-to-the-protected-branch — API method documentation
 # operationId: repos/get-teams-with-access-to-protected-branch
-export def "repos-branches-protection-restrictions-teams get-teams-with-access-to-protected-branch" [
+export def "repos-branches-protection-restrictions-teams get-with-access-to-protected" [
   owner: string
   repo: string
   branch: string
@@ -5433,7 +5444,7 @@ export def "repos-branches-protection-restrictions-teams get-teams-with-access-t
 ]: nothing -> table<description: string, html_url: string, id: int, members_url: string, name: string, node_id: string, parent: record<description: string, html_url: string, id: int, ldap_dn: string, members_url: string, name: string, node_id: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, permission: string, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, privacy: string, repositories_url: string, slug: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5444,7 +5455,7 @@ export def "repos-branches-protection-restrictions-teams get-teams-with-access-t
 # POST /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#add-team-access-restrictions — API method documentation
 # operationId: repos/add-team-access-restrictions
-export def "repos-branches-protection-restrictions-teams add-team-access-restrictions" [
+export def "repos-branches-protection-restrictions-teams create-access" [
   owner: string
   repo: string
   branch: string
@@ -5456,17 +5467,17 @@ export def "repos-branches-protection-restrictions-teams add-team-access-restric
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --teams: list # teams parameter
+  --teams: list<string> # teams parameter
 ]: any -> table<description: string, html_url: string, id: int, members_url: string, name: string, node_id: string, parent: record<description: string, html_url: string, id: int, ldap_dn: string, members_url: string, name: string, node_id: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, permission: string, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, privacy: string, repositories_url: string, slug: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams"))
-  let body = {"teams": $teams} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams"))
+  let req_body = {"teams": $teams} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Set team access restrictions
@@ -5474,7 +5485,7 @@ export def "repos-branches-protection-restrictions-teams add-team-access-restric
 # PUT /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#set-team-access-restrictions — API method documentation
 # operationId: repos/set-team-access-restrictions
-export def "repos-branches-protection-restrictions-teams repos-set-team-access-restrictions" [
+export def "repos-branches-protection-restrictions-teams update-access" [
   owner: string
   repo: string
   branch: string
@@ -5486,17 +5497,17 @@ export def "repos-branches-protection-restrictions-teams repos-set-team-access-r
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --teams: list # teams parameter
+  --teams: list<string> # teams parameter
 ]: any -> table<description: string, html_url: string, id: int, members_url: string, name: string, node_id: string, parent: record<description: string, html_url: string, id: int, ldap_dn: string, members_url: string, name: string, node_id: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, permission: string, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, privacy: string, repositories_url: string, slug: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams"))
-  let body = {"teams": $teams} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams"))
+  let req_body = {"teams": $teams} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove user access restrictions
@@ -5504,7 +5515,7 @@ export def "repos-branches-protection-restrictions-teams repos-set-team-access-r
 # DELETE /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#remove-user-access-restrictions — API method documentation
 # operationId: repos/remove-user-access-restrictions
-export def "repos-branches-protection-restrictions-users remove-user-access-restrictions" [
+export def "repos-branches-protection-restrictions-users delete-access" [
   owner: string
   repo: string
   branch: string
@@ -5516,17 +5527,17 @@ export def "repos-branches-protection-restrictions-users remove-user-access-rest
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --users: list # users parameter
+  --users: list<string> # users parameter
 ]: any -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users"))
-  let body = {"users": $users} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users"))
+  let req_body = {"users": $users} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get users with access to the protected branch
@@ -5534,7 +5545,7 @@ export def "repos-branches-protection-restrictions-users remove-user-access-rest
 # GET /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-users-with-access-to-the-protected-branch — API method documentation
 # operationId: repos/get-users-with-access-to-protected-branch
-export def "repos-branches-protection-restrictions-users get-users-with-access-to-protected-branch" [
+export def "repos-branches-protection-restrictions-users get-with-access-to-protected" [
   owner: string
   repo: string
   branch: string
@@ -5549,7 +5560,7 @@ export def "repos-branches-protection-restrictions-users get-users-with-access-t
 ]: nothing -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5560,7 +5571,7 @@ export def "repos-branches-protection-restrictions-users get-users-with-access-t
 # POST /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#add-user-access-restrictions — API method documentation
 # operationId: repos/add-user-access-restrictions
-export def "repos-branches-protection-restrictions-users add-user-access-restrictions" [
+export def "repos-branches-protection-restrictions-users create-access" [
   owner: string
   repo: string
   branch: string
@@ -5572,17 +5583,17 @@ export def "repos-branches-protection-restrictions-users add-user-access-restric
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --users: list # users parameter
+  --users: list<string> # users parameter
 ]: any -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users"))
-  let body = {"users": $users} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users"))
+  let req_body = {"users": $users} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Set user access restrictions
@@ -5590,7 +5601,7 @@ export def "repos-branches-protection-restrictions-users add-user-access-restric
 # PUT /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#set-user-access-restrictions — API method documentation
 # operationId: repos/set-user-access-restrictions
-export def "repos-branches-protection-restrictions-users repos-set-user-access-restrictions" [
+export def "repos-branches-protection-restrictions-users update-access" [
   owner: string
   repo: string
   branch: string
@@ -5602,17 +5613,17 @@ export def "repos-branches-protection-restrictions-users repos-set-user-access-r
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --users: list # users parameter
+  --users: list<string> # users parameter
 ]: any -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users"))
-  let body = {"users": $users} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users"))
+  let req_body = {"users": $users} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a check run
@@ -5635,7 +5646,7 @@ export def "repos-check-runs create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --actions: list # Displays a button on GitHub that can be clicked to alert your app to do additional tasks. For example, a code linting app can display a button that automatically fixes detected errors. The button created in this object is displayed after the check run completes. When a user clicks the button, GitHub sends the [`check_run.requested_action` webhook](https://docs.github.com/enterprise-server@2.18/webhooks/event-payloads/#check_run) to your app. Each action includes a `label`, `identifier` and `description`. A maximum of three actions are accepted. See the [`actions` object](https://docs.github.com/enterprise-server@2.18/rest/reference/checks#actions-object) description. To learn more about check runs and requested actions, see "[Check runs and requested actions](https://docs.github.com/enterprise-server@2.18/rest/reference/checks#check-runs-and-requested-actions)." To learn more about check runs and requested actions, see "[Check runs and requested actions](https://docs.github.com/enterprise-server@2.18/rest/reference/checks#check-runs-and-requested-actions)." — item shape: {description: string, identifier: string, label: string}
   --completed-at: string # The time the check completed. This is a timestamp in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format: `YYYY-MM-DDTHH:MM:SSZ`. (format: date-time)
-  --conclusion: string@conclusion-completer # **Required if you provide `completed_at` or a `status` of `completed`**. The final conclusion of the check. Can be one of `action_required`, `cancelled`, `failure`, `neutral`, `success`, `skipped`, `stale`, or `timed_out`. When the conclusion is `action_required`, additional details should be provided on the site specified by `details_url`.   **Note:** Providing `conclusion` will automatically set the `status` parameter to `completed`. You cannot change a check run conclusion to `stale`, only GitHub can set this.
+  --conclusion: string@conclusion-completer # **Required if you provide `completed_at` or a `status` of `completed`**. The final conclusion of the check. Can be one of `action_required`, `cancelled`, `failure`, `neutral`, `success`, `skipped`, `stale`, or `timed_out`. When the conclusion is `action_required`, additional details should be provided on the site specified by `details_url`. **Note:** Providing `conclusion` will automatically set the `status` parameter to `completed`. You cannot change a check run conclusion to `stale`, only GitHub can set this.
   --details-url: string # The URL of the integrator's site that has the full details of the check. If the integrator does not provide this, then the homepage of the GitHub app is used.
   --external-id: string # A reference for the run on the integrator's system.
   head_sha: string # The SHA of the commit.
@@ -5647,12 +5658,12 @@ export def "repos-check-runs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/check-runs"))
-  let body = {"actions": $actions, "completed_at": $completed_at, "conclusion": $conclusion, "details_url": $details_url, "external_id": $external_id, "head_sha": $head_sha, "name": $name, "output": $output, "started_at": $started_at, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/check-runs"))
+  let req_body = {"actions": $actions, "completed_at": $completed_at, "conclusion": $conclusion, "details_url": $details_url, "external_id": $external_id, "head_sha": $head_sha, "name": $name, "output": $output, "started_at": $started_at, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a check run
@@ -5675,7 +5686,7 @@ export def "repos-check-runs get" [
 ]: nothing -> record<app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, updated_at: string, webhook_secret: string>, check_suite: record<id: int>, completed_at: string, conclusion: string, deployment: record<created_at: string, description: string, environment: string, id: int, node_id: string, original_environment: string, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record, pem: string, permissions: record, updated_at: string, webhook_secret: string>, production_environment: bool, repository_url: string, statuses_url: string, task: string, transient_environment: bool, updated_at: string, url: string>, details_url: string, external_id: string, head_sha: string, html_url: string, id: int, name: string, node_id: string, output: record<annotations_count: int, annotations_url: string, summary: string, text: string, title: string>, pull_requests: list<record<base: record, head: record, id: int, number: int, url: string>>, started_at: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, check_run_id: $check_run_id} | format pattern "/repos/{owner}/{repo}/check-runs/{check_run_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), check_run_id: (encode-path-segment $check_run_id)} | format pattern "/repos/{owner}/{repo}/check-runs/{check_run_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5702,7 +5713,7 @@ export def "repos-check-runs update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --actions: list # Possible further actions the integrator can perform, which a user may trigger. Each action includes a `label`, `identifier` and `description`. A maximum of three actions are accepted. See the [`actions` object](https://docs.github.com/enterprise-server@2.18/rest/reference/checks#actions-object) description. To learn more about check runs and requested actions, see "[Check runs and requested actions](https://docs.github.com/enterprise-server@2.18/rest/reference/checks#check-runs-and-requested-actions)." — item shape: {description: string, identifier: string, label: string}
   --completed-at: string # The time the check completed. This is a timestamp in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format: `YYYY-MM-DDTHH:MM:SSZ`. (format: date-time)
-  --conclusion: string@conclusion-completer # **Required if you provide `completed_at` or a `status` of `completed`**. The final conclusion of the check. Can be one of `action_required`, `cancelled`, `failure`, `neutral`, `success`, `skipped`, `stale`, or `timed_out`.   **Note:** Providing `conclusion` will automatically set the `status` parameter to `completed`. You cannot change a check run conclusion to `stale`, only GitHub can set this.
+  --conclusion: string@conclusion-completer # **Required if you provide `completed_at` or a `status` of `completed`**. The final conclusion of the check. Can be one of `action_required`, `cancelled`, `failure`, `neutral`, `success`, `skipped`, `stale`, or `timed_out`. **Note:** Providing `conclusion` will automatically set the `status` parameter to `completed`. You cannot change a check run conclusion to `stale`, only GitHub can set this.
   --details-url: string # The URL of the integrator's site that has the full details of the check.
   --external-id: string # A reference for the run on the integrator's system.
   --name: string # The name of the check. For example, "code-coverage".
@@ -5713,12 +5724,12 @@ export def "repos-check-runs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, check_run_id: $check_run_id} | format pattern "/repos/{owner}/{repo}/check-runs/{check_run_id}"))
-  let body = {"actions": $actions, "completed_at": $completed_at, "conclusion": $conclusion, "details_url": $details_url, "external_id": $external_id, "name": $name, "output": $output, "started_at": $started_at, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), check_run_id: (encode-path-segment $check_run_id)} | format pattern "/repos/{owner}/{repo}/check-runs/{check_run_id}"))
+  let req_body = {"actions": $actions, "completed_at": $completed_at, "conclusion": $conclusion, "details_url": $details_url, "external_id": $external_id, "name": $name, "output": $output, "started_at": $started_at, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List check run annotations
@@ -5726,7 +5737,7 @@ export def "repos-check-runs update" [
 # GET /repos/{owner}/{repo}/check-runs/{check_run_id}/annotations
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/checks#list-check-run-annotations — API method documentation
 # operationId: checks/list-annotations
-export def "repos-check-runs-annotations list-annotations" [
+export def "repos-check-runs-annotations list" [
   owner: string
   repo: string
   check_run_id: int
@@ -5744,7 +5755,7 @@ export def "repos-check-runs-annotations list-annotations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, check_run_id: $check_run_id} | format pattern "/repos/{owner}/{repo}/check-runs/{check_run_id}/annotations") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), check_run_id: (encode-path-segment $check_run_id)} | format pattern "/repos/{owner}/{repo}/check-runs/{check_run_id}/annotations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5755,7 +5766,7 @@ export def "repos-check-runs-annotations list-annotations" [
 # POST /repos/{owner}/{repo}/check-suites
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/checks#create-a-check-suite — API method documentation
 # operationId: checks/create-suite
-export def "repos-check-suites create-suite" [
+export def "repos-check-suites create" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5771,12 +5782,12 @@ export def "repos-check-suites create-suite" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/check-suites"))
-  let body = {"head_sha": $head_sha} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/check-suites"))
+  let req_body = {"head_sha": $head_sha} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update repository preferences for check suites
@@ -5785,7 +5796,7 @@ export def "repos-check-suites create-suite" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/checks#update-repository-preferences-for-check-suites — API method documentation
 # operationId: checks/set-suites-preferences
 # --auto_trigger_checks item shape: {app_id: int, setting: bool}
-export def "repos-check-suites-preferences check-s-set" [
+export def "repos-check-suites-preferences update" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5801,12 +5812,12 @@ export def "repos-check-suites-preferences check-s-set" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/check-suites/preferences"))
-  let body = {"auto_trigger_checks": $auto_trigger_checks} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/check-suites/preferences"))
+  let req_body = {"auto_trigger_checks": $auto_trigger_checks} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a check suite
@@ -5814,7 +5825,7 @@ export def "repos-check-suites-preferences check-s-set" [
 # GET /repos/{owner}/{repo}/check-suites/{check_suite_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/checks#get-a-check-suite — API method documentation
 # operationId: checks/get-suite
-export def "repos-check-suites get-suite" [
+export def "repos-check-suites get" [
   owner: string
   repo: string
   check_suite_id: int
@@ -5829,7 +5840,7 @@ export def "repos-check-suites get-suite" [
 ]: nothing -> record<after: string, app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, updated_at: string, webhook_secret: string>, before: string, check_runs_url: string, conclusion: string, created_at: string, head_branch: string, head_commit: record<author: record<email: string, name: string>, committer: record<email: string, name: string>, id: string, message: string, timestamp: string, tree_id: string>, head_sha: string, id: int, latest_check_runs_count: int, node_id: string, pull_requests: table<base: record, head: record, id: int, number: int, url: string>, repository: record<allow_forking: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, code_of_conduct: record<body: string, html_url: string, key: string, name: string, url: string>, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<key: string, name: string, node_id: string, spdx_id: string, url: string>, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, status: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, check_suite_id: $check_suite_id} | format pattern "/repos/{owner}/{repo}/check-suites/{check_suite_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), check_suite_id: (encode-path-segment $check_suite_id)} | format pattern "/repos/{owner}/{repo}/check-suites/{check_suite_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5840,7 +5851,7 @@ export def "repos-check-suites get-suite" [
 # GET /repos/{owner}/{repo}/check-suites/{check_suite_id}/check-runs
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/checks#list-check-runs-in-a-check-suite — API method documentation
 # operationId: checks/list-for-suite
-export def "repos-check-suites-check-runs list-for-suite" [
+export def "repos-check-suites-check-runs list" [
   owner: string
   repo: string
   check_suite_id: int
@@ -5861,7 +5872,7 @@ export def "repos-check-suites-check-runs list-for-suite" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "check_name" $check_name "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, check_suite_id: $check_suite_id} | format pattern "/repos/{owner}/{repo}/check-suites/{check_suite_id}/check-runs") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), check_suite_id: (encode-path-segment $check_suite_id)} | format pattern "/repos/{owner}/{repo}/check-suites/{check_suite_id}/check-runs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5872,7 +5883,7 @@ export def "repos-check-suites-check-runs list-for-suite" [
 # POST /repos/{owner}/{repo}/check-suites/{check_suite_id}/rerequest
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/checks#rerequest-a-check-suite — API method documentation
 # operationId: checks/rerequest-suite
-export def "repos-check-suites-rerequest check-s" [
+export def "repos-check-suites-rerequest create" [
   owner: string
   repo: string
   check_suite_id: int
@@ -5887,7 +5898,7 @@ export def "repos-check-suites-rerequest check-s" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, check_suite_id: $check_suite_id} | format pattern "/repos/{owner}/{repo}/check-suites/{check_suite_id}/rerequest"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), check_suite_id: (encode-path-segment $check_suite_id)} | format pattern "/repos/{owner}/{repo}/check-suites/{check_suite_id}/rerequest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5898,7 +5909,7 @@ export def "repos-check-suites-rerequest check-s" [
 # GET /repos/{owner}/{repo}/collaborators
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-repository-collaborators — API method documentation
 # operationId: repos/list-collaborators
-export def "repos-collaborators list-collaborators" [
+export def "repos-collaborators list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5909,14 +5920,14 @@ export def "repos-collaborators list-collaborators" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --affiliation: string@affiliation-completer # Filter collaborators returned by their affiliation. Can be one of:   \* `outside`: All outside collaborators of an organization-owned repository.   \* `direct`: All collaborators with permissions to an organization-owned repository, regardless of organization membership status.   \* `all`: All collaborators the authenticated user can see. (default: all)
+  --affiliation: string@affiliation-completer # Filter collaborators returned by their affiliation. Can be one of: \* `outside`: All outside collaborators of an organization-owned repository. \* `direct`: All collaborators with permissions to an organization-owned repository, regardless of organization membership status. \* `all`: All collaborators the authenticated user can see. (default: all)
   --per-page: int # Results per page (max 100) (default: 30)
   --page: int # Page number of the results to fetch. (default: 1)
 ]: nothing -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, received_events_url: string, repos_url: string, site_admin: bool, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "affiliation" $affiliation "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/collaborators") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/collaborators") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5927,7 +5938,7 @@ export def "repos-collaborators list-collaborators" [
 # DELETE /repos/{owner}/{repo}/collaborators/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#remove-a-repository-collaborator — API method documentation
 # operationId: repos/remove-collaborator
-export def "repos-collaborators remove-collaborator" [
+export def "repos-collaborators delete" [
   owner: string
   repo: string
   username: string
@@ -5942,7 +5953,7 @@ export def "repos-collaborators remove-collaborator" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, username: $username} | format pattern "/repos/{owner}/{repo}/collaborators/{username}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), username: (encode-path-segment $username)} | format pattern "/repos/{owner}/{repo}/collaborators/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5953,7 +5964,7 @@ export def "repos-collaborators remove-collaborator" [
 # GET /repos/{owner}/{repo}/collaborators/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#check-if-a-user-is-a-repository-collaborator — API method documentation
 # operationId: repos/check-collaborator
-export def "repos-collaborators check-collaborator" [
+export def "repos-collaborators check" [
   owner: string
   repo: string
   username: string
@@ -5968,7 +5979,7 @@ export def "repos-collaborators check-collaborator" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, username: $username} | format pattern "/repos/{owner}/{repo}/collaborators/{username}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), username: (encode-path-segment $username)} | format pattern "/repos/{owner}/{repo}/collaborators/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5979,7 +5990,7 @@ export def "repos-collaborators check-collaborator" [
 # PUT /repos/{owner}/{repo}/collaborators/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#add-a-repository-collaborator — API method documentation
 # operationId: repos/add-collaborator
-export def "repos-collaborators add-collaborator" [
+export def "repos-collaborators create" [
   owner: string
   repo: string
   username: string
@@ -5991,18 +6002,18 @@ export def "repos-collaborators add-collaborator" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --permission: string@permission-completer-2 # The permission to grant the collaborator. **Only valid on organization-owned repositories.** Can be one of:   \* `pull` - can pull, but not push to or administer this repository.   \* `push` - can pull and push, but not administer this repository.   \* `admin` - can pull, push and administer this repository.   \* `maintain` - Recommended for project managers who need to manage the repository without access to sensitive or destructive actions.   \* `triage` - Recommended for contributors who need to proactively manage issues and pull requests without write access.  \* custom repository role name - Can assign a custom repository role if the owning organization has defined any. (default: push)
+  --permission: string@permission-completer-2 # The permission to grant the collaborator. **Only valid on organization-owned repositories.** Can be one of: \* `pull` - can pull, but not push to or administer this repository. \* `push` - can pull and push, but not administer this repository. \* `admin` - can pull, push and administer this repository. \* `maintain` - Recommended for project managers who need to manage the repository without access to sensitive or destructive actions. \* `triage` - Recommended for contributors who need to proactively manage issues and pull requests without write access. \* custom repository role name - Can assign a custom repository role if the owning organization has defined any. (default: push)
   --permissions: string # e.g. "push"
 ]: any -> record<created_at: string, expired: bool, html_url: string, id: int, invitee: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, inviter: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, node_id: string, permissions: string, repository: record<allow_forking: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, code_of_conduct: record<body: string, html_url: string, key: string, name: string, url: string>, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<key: string, name: string, node_id: string, spdx_id: string, url: string>, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, username: $username} | format pattern "/repos/{owner}/{repo}/collaborators/{username}"))
-  let body = {"permission": $permission, "permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), username: (encode-path-segment $username)} | format pattern "/repos/{owner}/{repo}/collaborators/{username}"))
+  let req_body = {"permission": $permission, "permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get repository permissions for a user
@@ -6010,7 +6021,7 @@ export def "repos-collaborators add-collaborator" [
 # GET /repos/{owner}/{repo}/collaborators/{username}/permission
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-repository-permissions-for-a-user — API method documentation
 # operationId: repos/get-collaborator-permission-level
-export def "repos-collaborators-permission get-collaborator-permission-level" [
+export def "repos-collaborators-permission get-level" [
   owner: string
   repo: string
   username: string
@@ -6025,7 +6036,7 @@ export def "repos-collaborators-permission get-collaborator-permission-level" [
 ]: nothing -> record<permission: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, username: $username} | format pattern "/repos/{owner}/{repo}/collaborators/{username}/permission"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), username: (encode-path-segment $username)} | format pattern "/repos/{owner}/{repo}/collaborators/{username}/permission"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6036,7 +6047,7 @@ export def "repos-collaborators-permission get-collaborator-permission-level" [
 # GET /repos/{owner}/{repo}/comments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-commit-comments-for-a-repository — API method documentation
 # operationId: repos/list-commit-comments-for-repo
-export def "repos-comments list-commit-comments-for-repo" [
+export def "repos-comments list-commit" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6053,7 +6064,7 @@ export def "repos-comments list-commit-comments-for-repo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/comments") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6064,7 +6075,7 @@ export def "repos-comments list-commit-comments-for-repo" [
 # DELETE /repos/{owner}/{repo}/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#delete-a-commit-comment — API method documentation
 # operationId: repos/delete-commit-comment
-export def "repos-comments delete-commit-comment" [
+export def "repos-comments delete-commit" [
   owner: string
   repo: string
   comment_id: int
@@ -6079,7 +6090,7 @@ export def "repos-comments delete-commit-comment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, comment_id: $comment_id} | format pattern "/repos/{owner}/{repo}/comments/{comment_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6090,7 +6101,7 @@ export def "repos-comments delete-commit-comment" [
 # GET /repos/{owner}/{repo}/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-a-commit-comment — API method documentation
 # operationId: repos/get-commit-comment
-export def "repos-comments get-commit-comment" [
+export def "repos-comments get-commit" [
   owner: string
   repo: string
   comment_id: int
@@ -6105,7 +6116,7 @@ export def "repos-comments get-commit-comment" [
 ]: nothing -> record<author_association: string, body: string, commit_id: string, created_at: string, html_url: string, id: int, line: int, node_id: string, path: string, position: int, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, comment_id: $comment_id} | format pattern "/repos/{owner}/{repo}/comments/{comment_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6116,7 +6127,7 @@ export def "repos-comments get-commit-comment" [
 # PATCH /repos/{owner}/{repo}/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#update-a-commit-comment — API method documentation
 # operationId: repos/update-commit-comment
-export def "repos-comments update-commit-comment" [
+export def "repos-comments update-commit" [
   owner: string
   repo: string
   comment_id: int
@@ -6128,17 +6139,17 @@ export def "repos-comments update-commit-comment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # The contents of the comment
+  body: string # The contents of the comment
 ]: any -> record<author_association: string, body: string, commit_id: string, created_at: string, html_url: string, id: int, line: int, node_id: string, path: string, position: int, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, comment_id: $comment_id} | format pattern "/repos/{owner}/{repo}/comments/{comment_id}"))
-  let body = {"body": $body_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/comments/{comment_id}"))
+  let req_body = {"body": $body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List reactions for a commit comment
@@ -6146,7 +6157,7 @@ export def "repos-comments update-commit-comment" [
 # GET /repos/{owner}/{repo}/comments/{comment_id}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/reactions#list-reactions-for-a-commit-comment — API method documentation
 # operationId: reactions/list-for-commit-comment
-export def "repos-comments-reactions list-for-commit-comment" [
+export def "repos-comments-reactions list-for-commit" [
   owner: string
   repo: string
   comment_id: int
@@ -6165,7 +6176,7 @@ export def "repos-comments-reactions list-for-commit-comment" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, comment_id: $comment_id} | format pattern "/repos/{owner}/{repo}/comments/{comment_id}/reactions") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/comments/{comment_id}/reactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6176,7 +6187,7 @@ export def "repos-comments-reactions list-for-commit-comment" [
 # POST /repos/{owner}/{repo}/comments/{comment_id}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/reactions#create-reaction-for-a-commit-comment — API method documentation
 # operationId: reactions/create-for-commit-comment
-export def "repos-comments-reactions create-for-commit-comment" [
+export def "repos-comments-reactions create-for-commit" [
   owner: string
   repo: string
   comment_id: int
@@ -6193,12 +6204,12 @@ export def "repos-comments-reactions create-for-commit-comment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, comment_id: $comment_id} | format pattern "/repos/{owner}/{repo}/comments/{comment_id}/reactions"))
-  let body = {"content": $content} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/comments/{comment_id}/reactions"))
+  let req_body = {"content": $content} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List commits
@@ -6206,7 +6217,7 @@ export def "repos-comments-reactions create-for-commit-comment" [
 # GET /repos/{owner}/{repo}/commits
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-commits — API method documentation
 # operationId: repos/list-commits
-export def "repos-commits list-commits" [
+export def "repos-commits list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6228,7 +6239,7 @@ export def "repos-commits list-commits" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sha" $sha "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/commits") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/commits") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6239,7 +6250,7 @@ export def "repos-commits list-commits" [
 # GET /repos/{owner}/{repo}/commits/{commit_sha}/branches-where-head
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-branches-for-head-commit — API method documentation
 # operationId: repos/list-branches-for-head-commit
-export def "repos-commits-branches-where-head list-branches-for-head-commit" [
+export def "repos-commits-branches-where-head list" [
   owner: string
   repo: string
   commit_sha: string
@@ -6254,7 +6265,7 @@ export def "repos-commits-branches-where-head list-branches-for-head-commit" [
 ]: nothing -> table<commit: record<sha: string, url: string>, name: string, protected: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, commit_sha: $commit_sha} | format pattern "/repos/{owner}/{repo}/commits/{commit_sha}/branches-where-head"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), commit_sha: (encode-path-segment $commit_sha)} | format pattern "/repos/{owner}/{repo}/commits/{commit_sha}/branches-where-head"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6265,7 +6276,7 @@ export def "repos-commits-branches-where-head list-branches-for-head-commit" [
 # GET /repos/{owner}/{repo}/commits/{commit_sha}/comments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-commit-comments — API method documentation
 # operationId: repos/list-comments-for-commit
-export def "repos-commits-comments list-comments-for-commit" [
+export def "repos-commits-comments list" [
   owner: string
   repo: string
   commit_sha: string
@@ -6283,7 +6294,7 @@ export def "repos-commits-comments list-comments-for-commit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, commit_sha: $commit_sha} | format pattern "/repos/{owner}/{repo}/commits/{commit_sha}/comments") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), commit_sha: (encode-path-segment $commit_sha)} | format pattern "/repos/{owner}/{repo}/commits/{commit_sha}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6294,7 +6305,7 @@ export def "repos-commits-comments list-comments-for-commit" [
 # POST /repos/{owner}/{repo}/commits/{commit_sha}/comments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#create-a-commit-comment — API method documentation
 # operationId: repos/create-commit-comment
-export def "repos-commits-comments create-commit-comment" [
+export def "repos-commits-comments create" [
   owner: string
   repo: string
   commit_sha: string
@@ -6306,7 +6317,7 @@ export def "repos-commits-comments create-commit-comment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # The contents of the comment.
+  body: string # The contents of the comment.
   --line: int # **Deprecated**. Use **position** parameter instead. Line number in the file to comment on.
   --path: string # Relative path of the file to comment on.
   --position: int # Line index in the diff to comment on.
@@ -6314,12 +6325,12 @@ export def "repos-commits-comments create-commit-comment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, commit_sha: $commit_sha} | format pattern "/repos/{owner}/{repo}/commits/{commit_sha}/comments"))
-  let body = {"body": $body_body, "line": $line, "path": $path, "position": $position} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), commit_sha: (encode-path-segment $commit_sha)} | format pattern "/repos/{owner}/{repo}/commits/{commit_sha}/comments"))
+  let req_body = {"body": $body, "line": $line, "path": $path, "position": $position} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List pull requests associated with a commit
@@ -6327,7 +6338,7 @@ export def "repos-commits-comments create-commit-comment" [
 # GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-pull-requests-associated-with-a-commit — API method documentation
 # operationId: repos/list-pull-requests-associated-with-commit
-export def "repos-commits-pulls list-pull-requests-associated-with-commit" [
+export def "repos-commits-pulls list-requests-associated" [
   owner: string
   repo: string
   commit_sha: string
@@ -6345,7 +6356,7 @@ export def "repos-commits-pulls list-pull-requests-associated-with-commit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, commit_sha: $commit_sha} | format pattern "/repos/{owner}/{repo}/commits/{commit_sha}/pulls") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), commit_sha: (encode-path-segment $commit_sha)} | format pattern "/repos/{owner}/{repo}/commits/{commit_sha}/pulls") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6356,7 +6367,7 @@ export def "repos-commits-pulls list-pull-requests-associated-with-commit" [
 # GET /repos/{owner}/{repo}/commits/{ref}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-a-commit — API method documentation
 # operationId: repos/get-commit
-export def "repos-commits get-commit" [
+export def "repos-commits get" [
   owner: string
   repo: string
   ref: string
@@ -6374,7 +6385,7 @@ export def "repos-commits get-commit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, ref: $ref} | format pattern "/repos/{owner}/{repo}/commits/{ref}") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/commits/{ref}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6385,7 +6396,7 @@ export def "repos-commits get-commit" [
 # GET /repos/{owner}/{repo}/commits/{ref}/check-runs
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/checks#list-check-runs-for-a-git-reference — API method documentation
 # operationId: checks/list-for-ref
-export def "repos-commits-check-runs list-for-ref" [
+export def "repos-commits-check-runs list" [
   owner: string
   repo: string
   ref: string
@@ -6407,7 +6418,7 @@ export def "repos-commits-check-runs list-for-ref" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "check_name" $check_name "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "app_id" $app_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, ref: $ref} | format pattern "/repos/{owner}/{repo}/commits/{ref}/check-runs") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/commits/{ref}/check-runs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6418,7 +6429,7 @@ export def "repos-commits-check-runs list-for-ref" [
 # GET /repos/{owner}/{repo}/commits/{ref}/check-suites
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/checks#list-check-suites-for-a-git-reference — API method documentation
 # operationId: checks/list-suites-for-ref
-export def "repos-commits-check-suites list-suites-for-ref" [
+export def "repos-commits-check-suites list" [
   owner: string
   repo: string
   ref: string
@@ -6438,7 +6449,7 @@ export def "repos-commits-check-suites list-suites-for-ref" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "app_id" $app_id "scalar") (serialize-qp "check_name" $check_name "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, ref: $ref} | format pattern "/repos/{owner}/{repo}/commits/{ref}/check-suites") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/commits/{ref}/check-suites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6449,7 +6460,7 @@ export def "repos-commits-check-suites list-suites-for-ref" [
 # GET /repos/{owner}/{repo}/commits/{ref}/status
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-the-combined-status-for-a-specific-reference — API method documentation
 # operationId: repos/get-combined-status-for-ref
-export def "repos-commits-status get-combined-status-for-ref" [
+export def "repos-commits-status get-combined" [
   owner: string
   repo: string
   ref: string
@@ -6467,7 +6478,7 @@ export def "repos-commits-status get-combined-status-for-ref" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, ref: $ref} | format pattern "/repos/{owner}/{repo}/commits/{ref}/status") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/commits/{ref}/status") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6478,7 +6489,7 @@ export def "repos-commits-status get-combined-status-for-ref" [
 # GET /repos/{owner}/{repo}/commits/{ref}/statuses
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-commit-statuses-for-a-reference — API method documentation
 # operationId: repos/list-commit-statuses-for-ref
-export def "repos-commits-statuses list-commit-statuses-for-ref" [
+export def "repos-commits-statuses list" [
   owner: string
   repo: string
   ref: string
@@ -6496,7 +6507,7 @@ export def "repos-commits-statuses list-commit-statuses-for-ref" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, ref: $ref} | format pattern "/repos/{owner}/{repo}/commits/{ref}/statuses") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/commits/{ref}/statuses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6507,7 +6518,7 @@ export def "repos-commits-statuses list-commit-statuses-for-ref" [
 # GET /repos/{owner}/{repo}/compare/{basehead}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#compare-two-commits — API method documentation
 # operationId: repos/compare-commits
-export def "repos-compare repos-compare-commits" [
+export def "repos-compare get-commits" [
   owner: string
   repo: string
   basehead: string
@@ -6522,7 +6533,7 @@ export def "repos-compare repos-compare-commits" [
 ]: nothing -> record<ahead_by: int, base_commit: record<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, comments_url: string, commit: record<author: record, comment_count: int, committer: record, message: string, tree: record, url: string, verification: record>, committer: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, files: list<record>, html_url: string, node_id: string, parents: list<record>, sha: string, stats: record<additions: int, deletions: int, total: int>, url: string>, behind_by: int, commits: table<author: record, comments_url: string, commit: record, committer: record, files: list, html_url: string, node_id: string, parents: list, sha: string, stats: record, url: string>, diff_url: string, files: table<additions: int, blob_url: string, changes: int, contents_url: string, deletions: int, filename: string, patch: string, previous_filename: string, raw_url: string, sha: string, status: string>, html_url: string, merge_base_commit: record<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, comments_url: string, commit: record<author: record, comment_count: int, committer: record, message: string, tree: record, url: string, verification: record>, committer: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, files: list<record>, html_url: string, node_id: string, parents: list<record>, sha: string, stats: record<additions: int, deletions: int, total: int>, url: string>, patch_url: string, permalink_url: string, status: string, total_commits: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, basehead: $basehead} | format pattern "/repos/{owner}/{repo}/compare/{basehead}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), basehead: (encode-path-segment $basehead)} | format pattern "/repos/{owner}/{repo}/compare/{basehead}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6533,7 +6544,7 @@ export def "repos-compare repos-compare-commits" [
 # POST /repos/{owner}/{repo}/content_references/{content_reference_id}/attachments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/apps#create-a-content-attachment — API method documentation
 # operationId: apps/create-content-attachment
-export def "repos-content-references-attachments create-content-attachment" [
+export def "repos-content-references-attachments create-apps" [
   owner: string
   repo: string
   content_reference_id: int
@@ -6545,18 +6556,18 @@ export def "repos-content-references-attachments create-content-attachment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # The body of the attachment (e.g. Body of the attachment)
+  body: string # The body of the attachment (e.g. Body of the attachment)
   title: string # The title of the attachment (e.g. Title of the attachment)
 ]: any -> record<body: string, id: int, node_id: string, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, content_reference_id: $content_reference_id} | format pattern "/repos/{owner}/{repo}/content_references/{content_reference_id}/attachments"))
-  let body = {"body": $body_body, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), content_reference_id: (encode-path-segment $content_reference_id)} | format pattern "/repos/{owner}/{repo}/content_references/{content_reference_id}/attachments"))
+  let req_body = {"body": $body, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a file
@@ -6587,12 +6598,12 @@ export def "repos-contents delete-file" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, path: $path} | format pattern "/repos/{owner}/{repo}/contents/{path}"))
-  let body = {"author": $author, "branch": $branch, "committer": $committer, "message": $message, "sha": $sha} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), path: (encode-path-segment $path)} | format pattern "/repos/{owner}/{repo}/contents/{path}"))
+  let req_body = {"author": $author, "branch": $branch, "committer": $committer, "message": $message, "sha": $sha} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get repository content
@@ -6600,7 +6611,7 @@ export def "repos-contents delete-file" [
 # GET /repos/{owner}/{repo}/contents/{path}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-repository-content — API method documentation
 # operationId: repos/get-content
-export def "repos-contents get-content" [
+export def "repos-contents get" [
   owner: string
   repo: string
   path: string
@@ -6618,7 +6629,7 @@ export def "repos-contents get-content" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, path: $path} | format pattern "/repos/{owner}/{repo}/contents/{path}") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), path: (encode-path-segment $path)} | format pattern "/repos/{owner}/{repo}/contents/{path}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6631,7 +6642,7 @@ export def "repos-contents get-content" [
 # operationId: repos/create-or-update-file-contents
 # --author shape: {date?: string, email: string, name: string}
 # --committer shape: {date?: string, email: string, name: string}
-export def "repos-contents create-or-update-file-contents" [
+export def "repos-contents create-or-update-file" [
   owner: string
   repo: string
   path: string
@@ -6653,12 +6664,12 @@ export def "repos-contents create-or-update-file-contents" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, path: $path} | format pattern "/repos/{owner}/{repo}/contents/{path}"))
-  let body = {"author": $author, "branch": $branch, "committer": $committer, "content": $content, "message": $message, "sha": $sha} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), path: (encode-path-segment $path)} | format pattern "/repos/{owner}/{repo}/contents/{path}"))
+  let req_body = {"author": $author, "branch": $branch, "committer": $committer, "content": $content, "message": $message, "sha": $sha} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List repository contributors
@@ -6666,7 +6677,7 @@ export def "repos-contents create-or-update-file-contents" [
 # GET /repos/{owner}/{repo}/contributors
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-repository-contributors — API method documentation
 # operationId: repos/list-contributors
-export def "repos-contributors list-contributors" [
+export def "repos-contributors list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6684,7 +6695,7 @@ export def "repos-contributors list-contributors" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "anon" $anon "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/contributors") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/contributors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6695,7 +6706,7 @@ export def "repos-contributors list-contributors" [
 # GET /repos/{owner}/{repo}/deployments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-deployments — API method documentation
 # operationId: repos/list-deployments
-export def "repos-deployments list-deployments" [
+export def "repos-deployments list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6716,7 +6727,7 @@ export def "repos-deployments list-deployments" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sha" $sha "scalar") (serialize-qp "ref" $ref "scalar") (serialize-qp "task" $task "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/deployments") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6727,7 +6738,7 @@ export def "repos-deployments list-deployments" [
 # POST /repos/{owner}/{repo}/deployments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#create-a-deployment — API method documentation
 # operationId: repos/create-deployment
-export def "repos-deployments create-deployment" [
+export def "repos-deployments create" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6742,21 +6753,21 @@ export def "repos-deployments create-deployment" [
   --description: string # Short description of the deployment. (nullable, default: )
   --environment: string # Name for the target deployment environment (e.g., `production`, `staging`, `qa`). (default: production)
   --payload: any
-  --production-environment: oneof<nothing, bool> # Specifies if the given environment is one that end-users directly interact with. Default: `true` when `environment` is `production` and `false` otherwise.   **Note:** This parameter requires you to use the [`application/vnd.github.ant-man-preview+json`](https://docs.github.com/enterprise-server@2.18/rest/overview/api-previews#enhanced-deployments) custom media type.
+  --production-environment: oneof<nothing, bool> # Specifies if the given environment is one that end-users directly interact with. Default: `true` when `environment` is `production` and `false` otherwise. **Note:** This parameter requires you to use the [`application/vnd.github.ant-man-preview+json`](https://docs.github.com/enterprise-server@2.18/rest/overview/api-previews#enhanced-deployments) custom media type.
   ref: string # The ref to deploy. This can be a branch, tag, or SHA.
-  --required-contexts: list # The [status](https://docs.github.com/enterprise-server@2.18/rest/reference/repos#statuses) contexts to verify against commit status checks. If you omit this parameter, GitHub verifies all unique contexts before creating a deployment. To bypass checking entirely, pass an empty array. Defaults to all unique contexts.
+  --required-contexts: list<string> # The [status](https://docs.github.com/enterprise-server@2.18/rest/reference/repos#statuses) contexts to verify against commit status checks. If you omit this parameter, GitHub verifies all unique contexts before creating a deployment. To bypass checking entirely, pass an empty array. Defaults to all unique contexts.
   --task: string # Specifies a task to execute (e.g., `deploy` or `deploy:migrations`). (default: deploy)
-  --transient-environment: oneof<nothing, bool> # Specifies if the given environment is specific to the deployment and will no longer exist at some point in the future. Default: `false`   **Note:** This parameter requires you to use the [`application/vnd.github.ant-man-preview+json`](https://docs.github.com/enterprise-server@2.18/rest/overview/api-previews#enhanced-deployments) custom media type. (default: false)
+  --transient-environment: oneof<nothing, bool> # Specifies if the given environment is specific to the deployment and will no longer exist at some point in the future. Default: `false` **Note:** This parameter requires you to use the [`application/vnd.github.ant-man-preview+json`](https://docs.github.com/enterprise-server@2.18/rest/overview/api-previews#enhanced-deployments) custom media type. (default: false)
 ]: any -> record<created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, description: string, environment: string, id: int, node_id: string, original_environment: string, payload: any, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, updated_at: string, webhook_secret: string>, production_environment: bool, ref: string, repository_url: string, sha: string, statuses_url: string, task: string, transient_environment: bool, updated_at: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/deployments"))
-  let body = {"auto_merge": $auto_merge, "description": $description, "environment": $environment, "payload": $payload, "production_environment": $production_environment, "ref": $ref, "required_contexts": $required_contexts, "task": $task, "transient_environment": $transient_environment} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/deployments"))
+  let req_body = {"auto_merge": $auto_merge, "description": $description, "environment": $environment, "payload": $payload, "production_environment": $production_environment, "ref": $ref, "required_contexts": $required_contexts, "task": $task, "transient_environment": $transient_environment} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a deployment
@@ -6764,7 +6775,7 @@ export def "repos-deployments create-deployment" [
 # GET /repos/{owner}/{repo}/deployments/{deployment_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-a-deployment — API method documentation
 # operationId: repos/get-deployment
-export def "repos-deployments get-deployment" [
+export def "repos-deployments get" [
   owner: string
   repo: string
   deployment_id: int
@@ -6779,7 +6790,7 @@ export def "repos-deployments get-deployment" [
 ]: nothing -> record<created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, description: string, environment: string, id: int, node_id: string, original_environment: string, payload: any, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, updated_at: string, webhook_secret: string>, production_environment: bool, ref: string, repository_url: string, sha: string, statuses_url: string, task: string, transient_environment: bool, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, deployment_id: $deployment_id} | format pattern "/repos/{owner}/{repo}/deployments/{deployment_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), deployment_id: (encode-path-segment $deployment_id)} | format pattern "/repos/{owner}/{repo}/deployments/{deployment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6790,7 +6801,7 @@ export def "repos-deployments get-deployment" [
 # GET /repos/{owner}/{repo}/deployments/{deployment_id}/statuses
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-deployment-statuses — API method documentation
 # operationId: repos/list-deployment-statuses
-export def "repos-deployments-statuses list-deployment-statuses" [
+export def "repos-deployments-statuses list" [
   owner: string
   repo: string
   deployment_id: int
@@ -6808,7 +6819,7 @@ export def "repos-deployments-statuses list-deployment-statuses" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, deployment_id: $deployment_id} | format pattern "/repos/{owner}/{repo}/deployments/{deployment_id}/statuses") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), deployment_id: (encode-path-segment $deployment_id)} | format pattern "/repos/{owner}/{repo}/deployments/{deployment_id}/statuses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6819,7 +6830,7 @@ export def "repos-deployments-statuses list-deployment-statuses" [
 # POST /repos/{owner}/{repo}/deployments/{deployment_id}/statuses
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#create-a-deployment-status — API method documentation
 # operationId: repos/create-deployment-status
-export def "repos-deployments-statuses create-deployment-status" [
+export def "repos-deployments-statuses create-status" [
   owner: string
   repo: string
   deployment_id: int
@@ -6831,23 +6842,23 @@ export def "repos-deployments-statuses create-deployment-status" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --auto-inactive: oneof<nothing, bool> # Adds a new `inactive` status to all prior non-transient, non-production environment deployments with the same repository and `environment` name as the created status's deployment. An `inactive` status is only added to deployments that had a `success` state. Default: `true`   **Note:** To add an `inactive` status to `production` environments, you must use the [`application/vnd.github.flash-preview+json`](https://docs.github.com/enterprise-server@2.18/rest/overview/api-previews#deployment-statuses) custom media type.   **Note:** This parameter requires you to use the [`application/vnd.github.ant-man-preview+json`](https://docs.github.com/enterprise-server@2.18/rest/overview/api-previews#enhanced-deployments) custom media type.
+  --auto-inactive: oneof<nothing, bool> # Adds a new `inactive` status to all prior non-transient, non-production environment deployments with the same repository and `environment` name as the created status's deployment. An `inactive` status is only added to deployments that had a `success` state. Default: `true` **Note:** To add an `inactive` status to `production` environments, you must use the [`application/vnd.github.flash-preview+json`](https://docs.github.com/enterprise-server@2.18/rest/overview/api-previews#deployment-statuses) custom media type. **Note:** This parameter requires you to use the [`application/vnd.github.ant-man-preview+json`](https://docs.github.com/enterprise-server@2.18/rest/overview/api-previews#enhanced-deployments) custom media type.
   --description: string # A short description of the status. The maximum description length is 140 characters. (default: )
   --environment: string@environment-completer # Name for the target deployment environment, which can be changed when setting a deploy status. For example, `production`, `staging`, or `qa`. **Note:** This parameter requires you to use the [`application/vnd.github.flash-preview+json`](https://docs.github.com/enterprise-server@2.18/rest/overview/api-previews#deployment-statuses) custom media type.
-  --environment-url: string # Sets the URL for accessing your environment. Default: `""`   **Note:** This parameter requires you to use the [`application/vnd.github.ant-man-preview+json`](https://docs.github.com/enterprise-server@2.18/rest/overview/api-previews#enhanced-deployments) custom media type. (default: )
-  --log-url: string # The full URL of the deployment's output. This parameter replaces `target_url`. We will continue to accept `target_url` to support legacy uses, but we recommend replacing `target_url` with `log_url`. Setting `log_url` will automatically set `target_url` to the same value. Default: `""`   **Note:** This parameter requires you to use the [`application/vnd.github.ant-man-preview+json`](https://docs.github.com/enterprise-server@2.18/rest/overview/api-previews#enhanced-deployments) custom media type. (default: )
+  --environment-url: string # Sets the URL for accessing your environment. Default: `""` **Note:** This parameter requires you to use the [`application/vnd.github.ant-man-preview+json`](https://docs.github.com/enterprise-server@2.18/rest/overview/api-previews#enhanced-deployments) custom media type. (default: )
+  --log-url: string # The full URL of the deployment's output. This parameter replaces `target_url`. We will continue to accept `target_url` to support legacy uses, but we recommend replacing `target_url` with `log_url`. Setting `log_url` will automatically set `target_url` to the same value. Default: `""` **Note:** This parameter requires you to use the [`application/vnd.github.ant-man-preview+json`](https://docs.github.com/enterprise-server@2.18/rest/overview/api-previews#enhanced-deployments) custom media type. (default: )
   state: string@state-completer-1 # The state of the status. Can be one of `error`, `failure`, `inactive`, `in_progress`, `queued` `pending`, or `success`. **Note:** To use the `inactive` state, you must provide the [`application/vnd.github.ant-man-preview+json`](https://docs.github.com/enterprise-server@2.18/rest/overview/api-previews#enhanced-deployments) custom media type. To use the `in_progress` and `queued` states, you must provide the [`application/vnd.github.flash-preview+json`](https://docs.github.com/enterprise-server@2.18/rest/overview/api-previews#deployment-statuses) custom media type. When you set a transient deployment to `inactive`, the deployment will be shown as `destroyed` in GitHub.
   --target-url: string # The target URL to associate with this status. This URL should contain output to keep the user updated while the task is running or serve as historical information for what happened in the deployment. **Note:** It's recommended to use the `log_url` parameter, which replaces `target_url`. (default: )
 ]: any -> record<created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, deployment_url: string, description: string, environment: string, environment_url: string, id: int, log_url: string, node_id: string, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, updated_at: string, webhook_secret: string>, repository_url: string, state: string, target_url: string, updated_at: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, deployment_id: $deployment_id} | format pattern "/repos/{owner}/{repo}/deployments/{deployment_id}/statuses"))
-  let body = {"auto_inactive": $auto_inactive, "description": $description, "environment": $environment, "environment_url": $environment_url, "log_url": $log_url, "state": $state, "target_url": $target_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), deployment_id: (encode-path-segment $deployment_id)} | format pattern "/repos/{owner}/{repo}/deployments/{deployment_id}/statuses"))
+  let req_body = {"auto_inactive": $auto_inactive, "description": $description, "environment": $environment, "environment_url": $environment_url, "log_url": $log_url, "state": $state, "target_url": $target_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a deployment status
@@ -6855,7 +6866,7 @@ export def "repos-deployments-statuses create-deployment-status" [
 # GET /repos/{owner}/{repo}/deployments/{deployment_id}/statuses/{status_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-a-deployment-status — API method documentation
 # operationId: repos/get-deployment-status
-export def "repos-deployments-statuses get-deployment-status" [
+export def "repos-deployments-statuses get" [
   owner: string
   repo: string
   deployment_id: int
@@ -6871,7 +6882,7 @@ export def "repos-deployments-statuses get-deployment-status" [
 ]: nothing -> record<created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, deployment_url: string, description: string, environment: string, environment_url: string, id: int, log_url: string, node_id: string, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, updated_at: string, webhook_secret: string>, repository_url: string, state: string, target_url: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, deployment_id: $deployment_id, status_id: $status_id} | format pattern "/repos/{owner}/{repo}/deployments/{deployment_id}/statuses/{status_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), deployment_id: (encode-path-segment $deployment_id), status_id: (encode-path-segment $status_id)} | format pattern "/repos/{owner}/{repo}/deployments/{deployment_id}/statuses/{status_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6882,7 +6893,7 @@ export def "repos-deployments-statuses get-deployment-status" [
 # GET /repos/{owner}/{repo}/events
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#list-repository-events — API method documentation
 # operationId: activity/list-repo-events
-export def "repos-events list-repo-events" [
+export def "repos-events list-activity" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6899,7 +6910,7 @@ export def "repos-events list-repo-events" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/events") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6910,7 +6921,7 @@ export def "repos-events list-repo-events" [
 # GET /repos/{owner}/{repo}/forks
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-forks — API method documentation
 # operationId: repos/list-forks
-export def "repos-forks list-forks" [
+export def "repos-forks list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6928,7 +6939,7 @@ export def "repos-forks list-forks" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/forks") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/forks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6939,7 +6950,7 @@ export def "repos-forks list-forks" [
 # POST /repos/{owner}/{repo}/forks
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#create-a-fork — API method documentation
 # operationId: repos/create-fork
-export def "repos-forks create-fork" [
+export def "repos-forks create" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6955,12 +6966,12 @@ export def "repos-forks create-fork" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/forks"))
-  let body = {"organization": $organization} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/forks"))
+  let req_body = {"organization": $organization} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a blob
@@ -6968,7 +6979,7 @@ export def "repos-forks create-fork" [
 # POST /repos/{owner}/{repo}/git/blobs
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/git#create-a-blob — API method documentation
 # operationId: git/create-blob
-export def "repos-git-blobs create-blob" [
+export def "repos-git-blobs create" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6985,12 +6996,12 @@ export def "repos-git-blobs create-blob" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/git/blobs"))
-  let body = {"content": $content, "encoding": $encoding} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/git/blobs"))
+  let req_body = {"content": $content, "encoding": $encoding} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a blob
@@ -6998,7 +7009,7 @@ export def "repos-git-blobs create-blob" [
 # GET /repos/{owner}/{repo}/git/blobs/{file_sha}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/git#get-a-blob — API method documentation
 # operationId: git/get-blob
-export def "repos-git-blobs get-blob" [
+export def "repos-git-blobs get" [
   owner: string
   repo: string
   file_sha: string
@@ -7013,7 +7024,7 @@ export def "repos-git-blobs get-blob" [
 ]: nothing -> record<content: string, encoding: string, highlighted_content: string, node_id: string, sha: string, size: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, file_sha: $file_sha} | format pattern "/repos/{owner}/{repo}/git/blobs/{file_sha}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), file_sha: (encode-path-segment $file_sha)} | format pattern "/repos/{owner}/{repo}/git/blobs/{file_sha}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7026,7 +7037,7 @@ export def "repos-git-blobs get-blob" [
 # operationId: git/create-commit
 # --author shape: {date?: string, email: string, name: string}
 # --committer shape: {date?: string, email?: string, name?: string}
-export def "repos-git-commits create-commit" [
+export def "repos-git-commits create" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7040,19 +7051,19 @@ export def "repos-git-commits create-commit" [
   --author: record # Information about the author of the commit. By default, the `author` will be the authenticated user and the current date. See the `author` and `committer` object below for details. — shape: {date?: string, email: string, name: string}
   --committer: record # Information about the person who is making the commit. By default, `committer` will use the information set in `author`. See the `author` and `committer` object below for details. — shape: {date?: string, email?: string, name?: string}
   message: string # The commit message
-  --parents: list # The SHAs of the commits that were the parents of this commit. If omitted or empty, the commit will be written as a root commit. For a single parent, an array of one SHA should be provided; for a merge commit, an array of more than one should be provided.
+  --parents: list<string> # The SHAs of the commits that were the parents of this commit. If omitted or empty, the commit will be written as a root commit. For a single parent, an array of one SHA should be provided; for a merge commit, an array of more than one should be provided.
   --signature: string # The [PGP signature](https://en.wikipedia.org/wiki/Pretty_Good_Privacy) of the commit. GitHub adds the signature to the `gpgsig` header of the created commit. For a commit signature to be verifiable by Git or GitHub, it must be an ASCII-armored detached PGP signature over the string commit as it would be written to the object database. To pass a `signature` parameter, you need to first manually create a valid PGP signature, which can be complicated. You may find it easier to [use the command line](https://git-scm.com/book/id/v2/Git-Tools-Signing-Your-Work) to create signed commits.
   tree: string # The SHA of the tree object this commit points to
 ]: any -> record<author: record<date: string, email: string, name: string>, committer: record<date: string, email: string, name: string>, html_url: string, message: string, node_id: string, parents: table<html_url: string, sha: string, url: string>, sha: string, tree: record<sha: string, url: string>, url: string, verification: record<payload: string, reason: string, signature: string, verified: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/git/commits"))
-  let body = {"author": $author, "committer": $committer, "message": $message, "parents": $parents, "signature": $signature, "tree": $tree} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/git/commits"))
+  let req_body = {"author": $author, "committer": $committer, "message": $message, "parents": $parents, "signature": $signature, "tree": $tree} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a commit
@@ -7060,7 +7071,7 @@ export def "repos-git-commits create-commit" [
 # GET /repos/{owner}/{repo}/git/commits/{commit_sha}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/git#get-a-commit — API method documentation
 # operationId: git/get-commit
-export def "repos-git-commits get-commit" [
+export def "repos-git-commits get" [
   owner: string
   repo: string
   commit_sha: string
@@ -7075,7 +7086,7 @@ export def "repos-git-commits get-commit" [
 ]: nothing -> record<author: record<date: string, email: string, name: string>, committer: record<date: string, email: string, name: string>, html_url: string, message: string, node_id: string, parents: table<html_url: string, sha: string, url: string>, sha: string, tree: record<sha: string, url: string>, url: string, verification: record<payload: string, reason: string, signature: string, verified: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, commit_sha: $commit_sha} | format pattern "/repos/{owner}/{repo}/git/commits/{commit_sha}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), commit_sha: (encode-path-segment $commit_sha)} | format pattern "/repos/{owner}/{repo}/git/commits/{commit_sha}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7086,7 +7097,7 @@ export def "repos-git-commits get-commit" [
 # POST /repos/{owner}/{repo}/git/refs
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/git#create-a-reference — API method documentation
 # operationId: git/create-ref
-export def "repos-git-refs create-ref" [
+export def "repos-git-refs create" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7104,12 +7115,12 @@ export def "repos-git-refs create-ref" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/git/refs"))
-  let body = {"key": $key, "ref": $ref, "sha": $sha} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/git/refs"))
+  let req_body = {"key": $key, "ref": $ref, "sha": $sha} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all references
@@ -7117,7 +7128,7 @@ export def "repos-git-refs create-ref" [
 # GET /repos/{owner}/{repo}/git/refs/{namespace}
 # Docs: https://docs.github.com/enterprise-server@2.18/enterprise/2.18/rest/reference/git#get-a-reference — API method documentation
 # operationId: git/get-all-refs
-export def "repos-git-refs get-all-refs" [
+export def "repos-git-refs get-list" [
   owner: string
   repo: string
   namespace: string
@@ -7135,7 +7146,7 @@ export def "repos-git-refs get-all-refs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, namespace: $namespace} | format pattern "/repos/{owner}/{repo}/git/refs/{namespace}") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), namespace: (encode-path-segment $namespace)} | format pattern "/repos/{owner}/{repo}/git/refs/{namespace}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7146,7 +7157,7 @@ export def "repos-git-refs get-all-refs" [
 # DELETE /repos/{owner}/{repo}/git/refs/{ref}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/git#delete-a-reference — API method documentation
 # operationId: git/delete-ref
-export def "repos-git-refs delete-ref" [
+export def "repos-git-refs delete" [
   owner: string
   repo: string
   ref: string
@@ -7161,7 +7172,7 @@ export def "repos-git-refs delete-ref" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, ref: $ref} | format pattern "/repos/{owner}/{repo}/git/refs/{ref}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/git/refs/{ref}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7172,7 +7183,7 @@ export def "repos-git-refs delete-ref" [
 # PATCH /repos/{owner}/{repo}/git/refs/{ref}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/git#update-a-reference — API method documentation
 # operationId: git/update-ref
-export def "repos-git-refs update-ref" [
+export def "repos-git-refs update" [
   owner: string
   repo: string
   ref: string
@@ -7190,12 +7201,12 @@ export def "repos-git-refs update-ref" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, ref: $ref} | format pattern "/repos/{owner}/{repo}/git/refs/{ref}"))
-  let body = {"force": $force, "sha": $sha} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/git/refs/{ref}"))
+  let req_body = {"force": $force, "sha": $sha} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a tag object
@@ -7204,7 +7215,7 @@ export def "repos-git-refs update-ref" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/git#create-a-tag-object — API method documentation
 # operationId: git/create-tag
 # --tagger shape: {date?: string, email: string, name: string}
-export def "repos-git-tags create-tag" [
+export def "repos-git-tags create" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7224,12 +7235,12 @@ export def "repos-git-tags create-tag" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/git/tags"))
-  let body = {"message": $message, "object": $object, "tag": $tag, "tagger": $tagger, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/git/tags"))
+  let req_body = {"message": $message, "object": $object, "tag": $tag, "tagger": $tagger, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a tag
@@ -7237,7 +7248,7 @@ export def "repos-git-tags create-tag" [
 # GET /repos/{owner}/{repo}/git/tags/{tag_sha}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/git#get-a-tag — API method documentation
 # operationId: git/get-tag
-export def "repos-git-tags get-tag" [
+export def "repos-git-tags get" [
   owner: string
   repo: string
   tag_sha: string
@@ -7252,7 +7263,7 @@ export def "repos-git-tags get-tag" [
 ]: nothing -> record<message: string, node_id: string, object: record<sha: string, type: string, url: string>, sha: string, tag: string, tagger: record<date: string, email: string, name: string>, url: string, verification: record<payload: string, reason: string, signature: string, verified: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, tag_sha: $tag_sha} | format pattern "/repos/{owner}/{repo}/git/tags/{tag_sha}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), tag_sha: (encode-path-segment $tag_sha)} | format pattern "/repos/{owner}/{repo}/git/tags/{tag_sha}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7264,7 +7275,7 @@ export def "repos-git-tags get-tag" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/git#create-a-tree — API method documentation
 # operationId: git/create-tree
 # --tree item shape: {content?: string, mode?: "100644"|"100755"|"040000"|"160000"|"120000", path?: string, sha?: string, type?: "blob"|"tree"|"commit"}
-export def "repos-git-trees create-tree" [
+export def "repos-git-trees create" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7281,12 +7292,12 @@ export def "repos-git-trees create-tree" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/git/trees"))
-  let body = {"base_tree": $base_tree, "tree": $tree} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/git/trees"))
+  let req_body = {"base_tree": $base_tree, "tree": $tree} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a tree
@@ -7294,7 +7305,7 @@ export def "repos-git-trees create-tree" [
 # GET /repos/{owner}/{repo}/git/trees/{tree_sha}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/git#get-a-tree — API method documentation
 # operationId: git/get-tree
-export def "repos-git-trees get-tree" [
+export def "repos-git-trees get" [
   owner: string
   repo: string
   tree_sha: string
@@ -7311,7 +7322,7 @@ export def "repos-git-trees get-tree" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "recursive" $recursive "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, tree_sha: $tree_sha} | format pattern "/repos/{owner}/{repo}/git/trees/{tree_sha}") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), tree_sha: (encode-path-segment $tree_sha)} | format pattern "/repos/{owner}/{repo}/git/trees/{tree_sha}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7339,7 +7350,7 @@ export def "repos-hooks list-webhooks" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/hooks") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/hooks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7364,18 +7375,18 @@ export def "repos-hooks create-webhook" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Determines if notifications are sent when the webhook is triggered. Set to `true` to send notifications. (default: true)
   --config: record # Key/value pairs to provide settings for this webhook. [These are defined below](https://docs.github.com/enterprise-server@2.18/rest/reference/repos#create-hook-config-params). — shape: {content_type?: string, digest?: string, insecure_ssl?: any, secret?: string, token?: string, url?: string}
-  --events: list # Determines what [events](https://docs.github.com/enterprise-server@2.18/webhooks/event-payloads) the hook is triggered for. (default: [push])
+  --events: list<string> # Determines what [events](https://docs.github.com/enterprise-server@2.18/webhooks/event-payloads) the hook is triggered for. (default: [push])
   --name: string # Use `web` to create a webhook. Default: `web`. This parameter only accepts the value `web`.
 ]: any -> record<active: bool, config: record<content_type: string, digest: string, email: string, insecure_ssl: any, password: string, room: string, secret: string, subdomain: string, token: string, url: string>, created_at: string, events: list<string>, id: int, last_response: record<code: int, message: string, status: string>, name: string, ping_url: string, test_url: string, type: string, updated_at: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/hooks"))
-  let body = {"active": $active, "config": $config, "events": $events, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/hooks"))
+  let req_body = {"active": $active, "config": $config, "events": $events, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a repository webhook
@@ -7398,7 +7409,7 @@ export def "repos-hooks delete-webhook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, hook_id: $hook_id} | format pattern "/repos/{owner}/{repo}/hooks/{hook_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), hook_id: (encode-path-segment $hook_id)} | format pattern "/repos/{owner}/{repo}/hooks/{hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7424,7 +7435,7 @@ export def "repos-hooks get-webhook" [
 ]: nothing -> record<active: bool, config: record<content_type: string, digest: string, email: string, insecure_ssl: any, password: string, room: string, secret: string, subdomain: string, token: string, url: string>, created_at: string, events: list<string>, id: int, last_response: record<code: int, message: string, status: string>, name: string, ping_url: string, test_url: string, type: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, hook_id: $hook_id} | format pattern "/repos/{owner}/{repo}/hooks/{hook_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), hook_id: (encode-path-segment $hook_id)} | format pattern "/repos/{owner}/{repo}/hooks/{hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7449,20 +7460,20 @@ export def "repos-hooks update-webhook" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Determines if notifications are sent when the webhook is triggered. Set to `true` to send notifications. (default: true)
-  --add-events: list # Determines a list of events to be added to the list of events that the Hook triggers for.
+  --add-events: list<string> # Determines a list of events to be added to the list of events that the Hook triggers for.
   --config: record # Key/value pairs to provide settings for this webhook. [These are defined below](https://docs.github.com/enterprise-server@2.18/rest/reference/repos#create-hook-config-params). — shape: {address?: string, content_type?: string, insecure_ssl?: any, room?: string, secret?: string, url: string}
-  --events: list # Determines what [events](https://docs.github.com/enterprise-server@2.18/webhooks/event-payloads) the hook is triggered for. This replaces the entire array of events. (default: [push])
-  --remove-events: list # Determines a list of events to be removed from the list of events that the Hook triggers for.
+  --events: list<string> # Determines what [events](https://docs.github.com/enterprise-server@2.18/webhooks/event-payloads) the hook is triggered for. This replaces the entire array of events. (default: [push])
+  --remove-events: list<string> # Determines a list of events to be removed from the list of events that the Hook triggers for.
 ]: any -> record<active: bool, config: record<content_type: string, digest: string, email: string, insecure_ssl: any, password: string, room: string, secret: string, subdomain: string, token: string, url: string>, created_at: string, events: list<string>, id: int, last_response: record<code: int, message: string, status: string>, name: string, ping_url: string, test_url: string, type: string, updated_at: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, hook_id: $hook_id} | format pattern "/repos/{owner}/{repo}/hooks/{hook_id}"))
-  let body = {"active": $active, "add_events": $add_events, "config": $config, "events": $events, "remove_events": $remove_events} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), hook_id: (encode-path-segment $hook_id)} | format pattern "/repos/{owner}/{repo}/hooks/{hook_id}"))
+  let req_body = {"active": $active, "add_events": $add_events, "config": $config, "events": $events, "remove_events": $remove_events} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Ping a repository webhook
@@ -7485,7 +7496,7 @@ export def "repos-hooks-pings ping-webhook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, hook_id: $hook_id} | format pattern "/repos/{owner}/{repo}/hooks/{hook_id}/pings"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), hook_id: (encode-path-segment $hook_id)} | format pattern "/repos/{owner}/{repo}/hooks/{hook_id}/pings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7496,7 +7507,7 @@ export def "repos-hooks-pings ping-webhook" [
 # POST /repos/{owner}/{repo}/hooks/{hook_id}/tests
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#test-the-push-repository-webhook — API method documentation
 # operationId: repos/test-push-webhook
-export def "repos-hooks-tests test-push-webhook" [
+export def "repos-hooks-tests push-webhook" [
   owner: string
   repo: string
   hook_id: int
@@ -7511,7 +7522,7 @@ export def "repos-hooks-tests test-push-webhook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, hook_id: $hook_id} | format pattern "/repos/{owner}/{repo}/hooks/{hook_id}/tests"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), hook_id: (encode-path-segment $hook_id)} | format pattern "/repos/{owner}/{repo}/hooks/{hook_id}/tests"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7522,7 +7533,7 @@ export def "repos-hooks-tests test-push-webhook" [
 # GET /repos/{owner}/{repo}/installation
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/apps#get-a-repository-installation-for-the-authenticated-app — API method documentation
 # operationId: apps/get-repo-installation
-export def "repos-installation get-repo-installation" [
+export def "repos-installation get-apps" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7537,11 +7548,11 @@ export def "repos-installation get-repo-installation" [
 ]: nothing -> record<access_tokens_url: string, account: any, app_id: int, app_slug: string, contact_email: string, created_at: string, events: list<string>, html_url: string, id: int, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string, organization_administration: string, pull_requests: string, statuses: string>, repositories_url: string, repository_selection: string, single_file_name: string, suspended_at: string, suspended_by: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, target_id: int, target_type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/installation"))
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/installation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7550,7 +7561,7 @@ export def "repos-installation get-repo-installation" [
 # GET /repos/{owner}/{repo}/invitations
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-repository-invitations — API method documentation
 # operationId: repos/list-invitations
-export def "repos-invitations list-invitations" [
+export def "repos-invitations list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7567,7 +7578,7 @@ export def "repos-invitations list-invitations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/invitations") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/invitations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7578,7 +7589,7 @@ export def "repos-invitations list-invitations" [
 # DELETE /repos/{owner}/{repo}/invitations/{invitation_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#delete-a-repository-invitation — API method documentation
 # operationId: repos/delete-invitation
-export def "repos-invitations delete-invitation" [
+export def "repos-invitations delete" [
   owner: string
   repo: string
   invitation_id: int
@@ -7593,7 +7604,7 @@ export def "repos-invitations delete-invitation" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, invitation_id: $invitation_id} | format pattern "/repos/{owner}/{repo}/invitations/{invitation_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), invitation_id: (encode-path-segment $invitation_id)} | format pattern "/repos/{owner}/{repo}/invitations/{invitation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7604,7 +7615,7 @@ export def "repos-invitations delete-invitation" [
 # PATCH /repos/{owner}/{repo}/invitations/{invitation_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#update-a-repository-invitation — API method documentation
 # operationId: repos/update-invitation
-export def "repos-invitations update-invitation" [
+export def "repos-invitations update" [
   owner: string
   repo: string
   invitation_id: int
@@ -7621,12 +7632,12 @@ export def "repos-invitations update-invitation" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, invitation_id: $invitation_id} | format pattern "/repos/{owner}/{repo}/invitations/{invitation_id}"))
-  let body = {"permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), invitation_id: (encode-path-segment $invitation_id)} | format pattern "/repos/{owner}/{repo}/invitations/{invitation_id}"))
+  let req_body = {"permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List repository issues
@@ -7634,7 +7645,7 @@ export def "repos-invitations update-invitation" [
 # GET /repos/{owner}/{repo}/issues
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#list-repository-issues — API method documentation
 # operationId: issues/list-for-repo
-export def "repos-issues list-for-repo" [
+export def "repos-issues list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7660,7 +7671,7 @@ export def "repos-issues list-for-repo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "milestone" $milestone "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "assignee" $assignee "scalar") (serialize-qp "creator" $creator "scalar") (serialize-qp "mentioned" $mentioned "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/issues") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/issues") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7683,8 +7694,8 @@ export def "repos-issues create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --assignee: string # Login for the user that this issue should be assigned to. _NOTE: Only users with push access can set the assignee for new issues. The assignee is silently dropped otherwise. **This field is deprecated.**_ (nullable)
-  --assignees: list # Logins for Users to assign to this issue. _NOTE: Only users with push access can set assignees for new issues. Assignees are silently dropped otherwise._
-  --body-body: string # The contents of the issue.
+  --assignees: list<string> # Logins for Users to assign to this issue. _NOTE: Only users with push access can set assignees for new issues. Assignees are silently dropped otherwise._
+  --body: string # The contents of the issue.
   --labels: list # Labels to associate with this issue. _NOTE: Only users with push access can set labels for new issues. Labels are silently dropped otherwise._
   --milestone: any # nullable
   title: any # The title of the issue.
@@ -7692,12 +7703,12 @@ export def "repos-issues create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/issues"))
-  let body = {"assignee": $assignee, "assignees": $assignees, "body": $body_body, "labels": $labels, "milestone": $milestone, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/issues"))
+  let req_body = {"assignee": $assignee, "assignees": $assignees, "body": $body, "labels": $labels, "milestone": $milestone, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List issue comments for a repository
@@ -7705,7 +7716,7 @@ export def "repos-issues create" [
 # GET /repos/{owner}/{repo}/issues/comments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#list-issue-comments-for-a-repository — API method documentation
 # operationId: issues/list-comments-for-repo
-export def "repos-issues-comments list-comments-for-repo" [
+export def "repos-issues-comments list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7725,7 +7736,7 @@ export def "repos-issues-comments list-comments-for-repo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/issues/comments") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/issues/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7736,7 +7747,7 @@ export def "repos-issues-comments list-comments-for-repo" [
 # DELETE /repos/{owner}/{repo}/issues/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#delete-an-issue-comment — API method documentation
 # operationId: issues/delete-comment
-export def "repos-issues-comments delete-comment" [
+export def "repos-issues-comments delete" [
   owner: string
   repo: string
   comment_id: int
@@ -7751,7 +7762,7 @@ export def "repos-issues-comments delete-comment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, comment_id: $comment_id} | format pattern "/repos/{owner}/{repo}/issues/comments/{comment_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7762,7 +7773,7 @@ export def "repos-issues-comments delete-comment" [
 # GET /repos/{owner}/{repo}/issues/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#get-an-issue-comment — API method documentation
 # operationId: issues/get-comment
-export def "repos-issues-comments get-comment" [
+export def "repos-issues-comments get" [
   owner: string
   repo: string
   comment_id: int
@@ -7777,7 +7788,7 @@ export def "repos-issues-comments get-comment" [
 ]: nothing -> record<author_association: string, body: string, body_html: string, body_text: string, created_at: string, html_url: string, id: int, issue_url: string, node_id: string, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, updated_at: string, webhook_secret: string>, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, comment_id: $comment_id} | format pattern "/repos/{owner}/{repo}/issues/comments/{comment_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7788,7 +7799,7 @@ export def "repos-issues-comments get-comment" [
 # PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#update-an-issue-comment — API method documentation
 # operationId: issues/update-comment
-export def "repos-issues-comments update-comment" [
+export def "repos-issues-comments update" [
   owner: string
   repo: string
   comment_id: int
@@ -7800,17 +7811,17 @@ export def "repos-issues-comments update-comment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # The contents of the comment.
+  body: string # The contents of the comment.
 ]: any -> record<author_association: string, body: string, body_html: string, body_text: string, created_at: string, html_url: string, id: int, issue_url: string, node_id: string, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, updated_at: string, webhook_secret: string>, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, comment_id: $comment_id} | format pattern "/repos/{owner}/{repo}/issues/comments/{comment_id}"))
-  let body = {"body": $body_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{comment_id}"))
+  let req_body = {"body": $body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List reactions for an issue comment
@@ -7818,7 +7829,7 @@ export def "repos-issues-comments update-comment" [
 # GET /repos/{owner}/{repo}/issues/comments/{comment_id}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/reactions#list-reactions-for-an-issue-comment — API method documentation
 # operationId: reactions/list-for-issue-comment
-export def "repos-issues-comments-reactions list-for-issue-comment" [
+export def "repos-issues-comments-reactions list" [
   owner: string
   repo: string
   comment_id: int
@@ -7837,7 +7848,7 @@ export def "repos-issues-comments-reactions list-for-issue-comment" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, comment_id: $comment_id} | format pattern "/repos/{owner}/{repo}/issues/comments/{comment_id}/reactions") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{comment_id}/reactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7848,7 +7859,7 @@ export def "repos-issues-comments-reactions list-for-issue-comment" [
 # POST /repos/{owner}/{repo}/issues/comments/{comment_id}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/reactions#create-reaction-for-an-issue-comment — API method documentation
 # operationId: reactions/create-for-issue-comment
-export def "repos-issues-comments-reactions create-for-issue-comment" [
+export def "repos-issues-comments-reactions create" [
   owner: string
   repo: string
   comment_id: int
@@ -7865,12 +7876,12 @@ export def "repos-issues-comments-reactions create-for-issue-comment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, comment_id: $comment_id} | format pattern "/repos/{owner}/{repo}/issues/comments/{comment_id}/reactions"))
-  let body = {"content": $content} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{comment_id}/reactions"))
+  let req_body = {"content": $content} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List issue events for a repository
@@ -7878,7 +7889,7 @@ export def "repos-issues-comments-reactions create-for-issue-comment" [
 # GET /repos/{owner}/{repo}/issues/events
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#list-issue-events-for-a-repository — API method documentation
 # operationId: issues/list-events-for-repo
-export def "repos-issues-events list-events-for-repo" [
+export def "repos-issues-events list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7895,7 +7906,7 @@ export def "repos-issues-events list-events-for-repo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/issues/events") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/issues/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7906,7 +7917,7 @@ export def "repos-issues-events list-events-for-repo" [
 # GET /repos/{owner}/{repo}/issues/events/{event_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#get-an-issue-event — API method documentation
 # operationId: issues/get-event
-export def "repos-issues-events get-event" [
+export def "repos-issues-events get" [
   owner: string
   repo: string
   event_id: int
@@ -7921,7 +7932,7 @@ export def "repos-issues-events get-event" [
 ]: nothing -> record<actor: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assignee: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assigner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, author_association: string, commit_id: string, commit_url: string, created_at: string, dismissed_review: record<dismissal_commit_id: string, dismissal_message: string, review_id: int, state: string>, event: string, id: int, issue: record<active_lock_reason: string, assignee: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assignees: list<record>, author_association: string, body: string, body_html: string, body_text: string, closed_at: string, comments: int, comments_url: string, created_at: string, events_url: string, html_url: string, id: int, labels: list<record>, labels_url: string, locked: bool, milestone: record<closed_at: string, closed_issues: int, created_at: string, creator: record, description: string, due_on: string, html_url: string, id: int, labels_url: string, node_id: string, number: int, open_issues: int, state: string, title: string, updated_at: string, url: string>, node_id: string, number: int, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record, pem: string, permissions: record, updated_at: string, webhook_secret: string>, pull_request: record<diff_url: string, html_url: string, merged_at: string, patch_url: string, url: string>, repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, repository_url: string, state: string, timeline_url: string, title: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>>, label: record<color: string, name: string>, lock_reason: string, milestone: record<title: string>, node_id: string, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, updated_at: string, webhook_secret: string>, project_card: record<column_name: string, id: int, previous_column_name: string, project_id: int, project_url: string, url: string>, rename: record<from: string, to: string>, requested_reviewer: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, requested_team: record<description: string, html_url: string, id: int, members_url: string, name: string, node_id: string, parent: record<description: string, html_url: string, id: int, ldap_dn: string, members_url: string, name: string, node_id: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, permission: string, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, privacy: string, repositories_url: string, slug: string, url: string>, review_requester: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, event_id: $event_id} | format pattern "/repos/{owner}/{repo}/issues/events/{event_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), event_id: (encode-path-segment $event_id)} | format pattern "/repos/{owner}/{repo}/issues/events/{event_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7947,7 +7958,7 @@ export def "repos-issues get" [
 ]: nothing -> record<active_lock_reason: string, assignee: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assignees: table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, author_association: string, body: string, body_html: string, body_text: string, closed_at: string, closed_by: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, comments: int, comments_url: string, created_at: string, events_url: string, html_url: string, id: int, labels: list<any>, labels_url: string, locked: bool, milestone: record<closed_at: string, closed_issues: int, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, description: string, due_on: string, html_url: string, id: int, labels_url: string, node_id: string, number: int, open_issues: int, state: string, title: string, updated_at: string, url: string>, node_id: string, number: int, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, updated_at: string, webhook_secret: string>, pull_request: record<diff_url: string, html_url: string, merged_at: string, patch_url: string, url: string>, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, repository_url: string, state: string, timeline_url: string, title: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, issue_number: $issue_number} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7971,8 +7982,8 @@ export def "repos-issues update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --assignee: string # Login for the user that this issue should be assigned to. **This field is deprecated.** (nullable)
-  --assignees: list # Logins for Users to assign to this issue. Pass one or more user logins to _replace_ the set of assignees on this Issue. Send an empty array (`[]`) to clear all assignees from the Issue. _NOTE: Only users with push access can set assignees for new issues. Assignees are silently dropped otherwise._
-  --body-body: string # The contents of the issue. (nullable)
+  --assignees: list<string> # Logins for Users to assign to this issue. Pass one or more user logins to _replace_ the set of assignees on this Issue. Send an empty array (`[]`) to clear all assignees from the Issue. _NOTE: Only users with push access can set assignees for new issues. Assignees are silently dropped otherwise._
+  --body: string # The contents of the issue. (nullable)
   --labels: list # Labels to associate with this issue. Pass one or more Labels to _replace_ the set of Labels on this Issue. Send an empty array (`[]`) to clear all Labels from the Issue. _NOTE: Only users with push access can set labels for issues. Labels are silently dropped otherwise._
   --milestone: any # nullable
   --state: string@state-completer-2 # State of the issue. Either `open` or `closed`.
@@ -7981,12 +7992,12 @@ export def "repos-issues update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, issue_number: $issue_number} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}"))
-  let body = {"assignee": $assignee, "assignees": $assignees, "body": $body_body, "labels": $labels, "milestone": $milestone, "state": $state, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}"))
+  let req_body = {"assignee": $assignee, "assignees": $assignees, "body": $body, "labels": $labels, "milestone": $milestone, "state": $state, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove assignees from an issue
@@ -7994,7 +8005,7 @@ export def "repos-issues update" [
 # DELETE /repos/{owner}/{repo}/issues/{issue_number}/assignees
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#remove-assignees-from-an-issue — API method documentation
 # operationId: issues/remove-assignees
-export def "repos-issues-assignees remove-assignees" [
+export def "repos-issues-assignees delete" [
   owner: string
   repo: string
   issue_number: int
@@ -8006,17 +8017,17 @@ export def "repos-issues-assignees remove-assignees" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --assignees: list # Usernames of assignees to remove from an issue. _NOTE: Only users with push access can remove assignees from an issue. Assignees are silently ignored otherwise._
+  --assignees: list<string> # Usernames of assignees to remove from an issue. _NOTE: Only users with push access can remove assignees from an issue. Assignees are silently ignored otherwise._
 ]: any -> record<active_lock_reason: string, assignee: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assignees: table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, author_association: string, body: string, body_html: string, body_text: string, closed_at: string, comments: int, comments_url: string, created_at: string, events_url: string, html_url: string, id: int, labels: table<color: string, default: bool, description: string, id: int, name: string, node_id: string, url: string>, labels_url: string, locked: bool, milestone: record<closed_at: string, closed_issues: int, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, description: string, due_on: string, html_url: string, id: int, labels_url: string, node_id: string, number: int, open_issues: int, state: string, title: string, updated_at: string, url: string>, node_id: string, number: int, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, updated_at: string, webhook_secret: string>, pull_request: record<diff_url: string, html_url: string, merged_at: string, patch_url: string, url: string>, repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, repository_url: string, state: string, timeline_url: string, title: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, issue_number: $issue_number} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/assignees"))
-  let body = {"assignees": $assignees} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/assignees"))
+  let req_body = {"assignees": $assignees} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add assignees to an issue
@@ -8024,7 +8035,7 @@ export def "repos-issues-assignees remove-assignees" [
 # POST /repos/{owner}/{repo}/issues/{issue_number}/assignees
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#add-assignees-to-an-issue — API method documentation
 # operationId: issues/add-assignees
-export def "repos-issues-assignees add-assignees" [
+export def "repos-issues-assignees create" [
   owner: string
   repo: string
   issue_number: int
@@ -8036,17 +8047,17 @@ export def "repos-issues-assignees add-assignees" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --assignees: list # Usernames of people to assign this issue to. _NOTE: Only users with push access can add assignees to an issue. Assignees are silently ignored otherwise._
+  --assignees: list<string> # Usernames of people to assign this issue to. _NOTE: Only users with push access can add assignees to an issue. Assignees are silently ignored otherwise._
 ]: any -> record<active_lock_reason: string, assignee: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assignees: table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, author_association: string, body: string, body_html: string, body_text: string, closed_at: string, comments: int, comments_url: string, created_at: string, events_url: string, html_url: string, id: int, labels: table<color: string, default: bool, description: string, id: int, name: string, node_id: string, url: string>, labels_url: string, locked: bool, milestone: record<closed_at: string, closed_issues: int, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, description: string, due_on: string, html_url: string, id: int, labels_url: string, node_id: string, number: int, open_issues: int, state: string, title: string, updated_at: string, url: string>, node_id: string, number: int, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, updated_at: string, webhook_secret: string>, pull_request: record<diff_url: string, html_url: string, merged_at: string, patch_url: string, url: string>, repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, repository_url: string, state: string, timeline_url: string, title: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, issue_number: $issue_number} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/assignees"))
-  let body = {"assignees": $assignees} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/assignees"))
+  let req_body = {"assignees": $assignees} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List issue comments
@@ -8054,7 +8065,7 @@ export def "repos-issues-assignees add-assignees" [
 # GET /repos/{owner}/{repo}/issues/{issue_number}/comments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#list-issue-comments — API method documentation
 # operationId: issues/list-comments
-export def "repos-issues-comments list-comments" [
+export def "repos-issues-comments list-1" [
   owner: string
   repo: string
   issue_number: int
@@ -8073,7 +8084,7 @@ export def "repos-issues-comments list-comments" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, issue_number: $issue_number} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/comments") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8084,7 +8095,7 @@ export def "repos-issues-comments list-comments" [
 # POST /repos/{owner}/{repo}/issues/{issue_number}/comments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#create-an-issue-comment — API method documentation
 # operationId: issues/create-comment
-export def "repos-issues-comments create-comment" [
+export def "repos-issues-comments create" [
   owner: string
   repo: string
   issue_number: int
@@ -8096,17 +8107,17 @@ export def "repos-issues-comments create-comment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # The contents of the comment.
+  body: string # The contents of the comment.
 ]: any -> record<author_association: string, body: string, body_html: string, body_text: string, created_at: string, html_url: string, id: int, issue_url: string, node_id: string, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, updated_at: string, webhook_secret: string>, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, issue_number: $issue_number} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/comments"))
-  let body = {"body": $body_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/comments"))
+  let req_body = {"body": $body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List issue events
@@ -8114,7 +8125,7 @@ export def "repos-issues-comments create-comment" [
 # GET /repos/{owner}/{repo}/issues/{issue_number}/events
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#list-issue-events — API method documentation
 # operationId: issues/list-events
-export def "repos-issues-events list-events" [
+export def "repos-issues-events list-1" [
   owner: string
   repo: string
   issue_number: int
@@ -8132,7 +8143,7 @@ export def "repos-issues-events list-events" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, issue_number: $issue_number} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/events") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8143,7 +8154,7 @@ export def "repos-issues-events list-events" [
 # DELETE /repos/{owner}/{repo}/issues/{issue_number}/labels
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#remove-all-labels-from-an-issue — API method documentation
 # operationId: issues/remove-all-labels
-export def "repos-issues-labels remove-all-labels" [
+export def "repos-issues-labels delete-list" [
   owner: string
   repo: string
   issue_number: int
@@ -8158,7 +8169,7 @@ export def "repos-issues-labels remove-all-labels" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, issue_number: $issue_number} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/labels"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/labels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8169,7 +8180,7 @@ export def "repos-issues-labels remove-all-labels" [
 # GET /repos/{owner}/{repo}/issues/{issue_number}/labels
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#list-labels-for-an-issue — API method documentation
 # operationId: issues/list-labels-on-issue
-export def "repos-issues-labels list-labels-on-issue" [
+export def "repos-issues-labels list" [
   owner: string
   repo: string
   issue_number: int
@@ -8187,7 +8198,7 @@ export def "repos-issues-labels list-labels-on-issue" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, issue_number: $issue_number} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/labels") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/labels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8198,7 +8209,7 @@ export def "repos-issues-labels list-labels-on-issue" [
 # POST /repos/{owner}/{repo}/issues/{issue_number}/labels
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#add-labels-to-an-issue — API method documentation
 # operationId: issues/add-labels
-export def "repos-issues-labels add-labels" [
+export def "repos-issues-labels create" [
   owner: string
   repo: string
   issue_number: int
@@ -8210,17 +8221,17 @@ export def "repos-issues-labels add-labels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --labels: list # The names of the labels to add to the issue. You can pass an empty array to remove all labels. **Note:** Alternatively, you can pass a single label as a `string` or an `array` of labels directly, but GitHub recommends passing an object with the `labels` key.
+  --labels: list<string> # The names of the labels to add to the issue. You can pass an empty array to remove all labels. **Note:** Alternatively, you can pass a single label as a `string` or an `array` of labels directly, but GitHub recommends passing an object with the `labels` key.
 ]: any -> table<color: string, default: bool, description: string, id: int, name: string, node_id: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, issue_number: $issue_number} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/labels"))
-  let body = {"labels": $labels} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/labels"))
+  let req_body = {"labels": $labels} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Set labels for an issue
@@ -8228,7 +8239,7 @@ export def "repos-issues-labels add-labels" [
 # PUT /repos/{owner}/{repo}/issues/{issue_number}/labels
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#set-labels-for-an-issue — API method documentation
 # operationId: issues/set-labels
-export def "repos-issues-labels issues-set-labels" [
+export def "repos-issues-labels update" [
   owner: string
   repo: string
   issue_number: int
@@ -8240,17 +8251,17 @@ export def "repos-issues-labels issues-set-labels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --labels: list # The names of the labels to add to the issue. You can pass an empty array to remove all labels. **Note:** Alternatively, you can pass a single label as a `string` or an `array` of labels directly, but GitHub recommends passing an object with the `labels` key.
+  --labels: list<string> # The names of the labels to add to the issue. You can pass an empty array to remove all labels. **Note:** Alternatively, you can pass a single label as a `string` or an `array` of labels directly, but GitHub recommends passing an object with the `labels` key.
 ]: any -> table<color: string, default: bool, description: string, id: int, name: string, node_id: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, issue_number: $issue_number} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/labels"))
-  let body = {"labels": $labels} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/labels"))
+  let req_body = {"labels": $labels} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove a label from an issue
@@ -8258,7 +8269,7 @@ export def "repos-issues-labels issues-set-labels" [
 # DELETE /repos/{owner}/{repo}/issues/{issue_number}/labels/{name}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#remove-a-label-from-an-issue — API method documentation
 # operationId: issues/remove-label
-export def "repos-issues-labels remove-label" [
+export def "repos-issues-labels delete" [
   owner: string
   repo: string
   issue_number: int
@@ -8274,7 +8285,7 @@ export def "repos-issues-labels remove-label" [
 ]: nothing -> table<color: string, default: bool, description: string, id: int, name: string, node_id: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, issue_number: $issue_number, name: $name} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/labels/{name}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number), name: (encode-path-segment $name)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/labels/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8300,7 +8311,7 @@ export def "repos-issues-lock unlock" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, issue_number: $issue_number} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/lock"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/lock"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8323,17 +8334,17 @@ export def "repos-issues-lock lock" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lock-reason: string@lock-reason-completer # The reason for locking the issue or pull request conversation. Lock will fail if you don't use one of these reasons:   \* `off-topic`   \* `too heated`   \* `resolved`   \* `spam`
+  --lock-reason: string@lock-reason-completer # The reason for locking the issue or pull request conversation. Lock will fail if you don't use one of these reasons: \* `off-topic` \* `too heated` \* `resolved` \* `spam`
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, issue_number: $issue_number} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/lock"))
-  let body = {"lock_reason": $lock_reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/lock"))
+  let req_body = {"lock_reason": $lock_reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List reactions for an issue
@@ -8341,7 +8352,7 @@ export def "repos-issues-lock lock" [
 # GET /repos/{owner}/{repo}/issues/{issue_number}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/reactions#list-reactions-for-an-issue — API method documentation
 # operationId: reactions/list-for-issue
-export def "repos-issues-reactions list-for-issue" [
+export def "repos-issues-reactions list" [
   owner: string
   repo: string
   issue_number: int
@@ -8360,7 +8371,7 @@ export def "repos-issues-reactions list-for-issue" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, issue_number: $issue_number} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/reactions") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/reactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8371,7 +8382,7 @@ export def "repos-issues-reactions list-for-issue" [
 # POST /repos/{owner}/{repo}/issues/{issue_number}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/reactions#create-reaction-for-an-issue — API method documentation
 # operationId: reactions/create-for-issue
-export def "repos-issues-reactions create-for-issue" [
+export def "repos-issues-reactions create" [
   owner: string
   repo: string
   issue_number: int
@@ -8388,12 +8399,12 @@ export def "repos-issues-reactions create-for-issue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, issue_number: $issue_number} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/reactions"))
-  let body = {"content": $content} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/reactions"))
+  let req_body = {"content": $content} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List timeline events for an issue
@@ -8401,7 +8412,7 @@ export def "repos-issues-reactions create-for-issue" [
 # GET /repos/{owner}/{repo}/issues/{issue_number}/timeline
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#list-timeline-events-for-an-issue — API method documentation
 # operationId: issues/list-events-for-timeline
-export def "repos-issues-timeline list-events-for-timeline" [
+export def "repos-issues-timeline list-events" [
   owner: string
   repo: string
   issue_number: int
@@ -8419,7 +8430,7 @@ export def "repos-issues-timeline list-events-for-timeline" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, issue_number: $issue_number} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/timeline") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/timeline") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8430,7 +8441,7 @@ export def "repos-issues-timeline list-events-for-timeline" [
 # GET /repos/{owner}/{repo}/keys
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-deploy-keys — API method documentation
 # operationId: repos/list-deploy-keys
-export def "repos-keys list-deploy-keys" [
+export def "repos-keys list-deploy" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8447,7 +8458,7 @@ export def "repos-keys list-deploy-keys" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/keys") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/keys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8458,7 +8469,7 @@ export def "repos-keys list-deploy-keys" [
 # POST /repos/{owner}/{repo}/keys
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#create-a-deploy-key — API method documentation
 # operationId: repos/create-deploy-key
-export def "repos-keys create-deploy-key" [
+export def "repos-keys create-deploy" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8470,18 +8481,18 @@ export def "repos-keys create-deploy-key" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   key: string # The contents of the key.
-  --read-only: oneof<nothing, bool> # If `true`, the key will only be able to read repository contents. Otherwise, the key will be able to read and write.      Deploy keys with write access can perform the same actions as an organization member with admin access, or a collaborator on a personal repository. For more information, see "[Repository permission levels for an organization](https://help.github.com/articles/repository-permission-levels-for-an-organization/)" and "[Permission levels for a user account repository](https://help.github.com/articles/permission-levels-for-a-user-account-repository/)."
+  --read-only: oneof<nothing, bool> # If `true`, the key will only be able to read repository contents. Otherwise, the key will be able to read and write. Deploy keys with write access can perform the same actions as an organization member with admin access, or a collaborator on a personal repository. For more information, see "[Repository permission levels for an organization](https://help.github.com/articles/repository-permission-levels-for-an-organization/)" and "[Permission levels for a user account repository](https://help.github.com/articles/permission-levels-for-a-user-account-repository/)."
   --title: string # A name for the key.
 ]: any -> record<created_at: string, id: int, key: string, read_only: bool, title: string, url: string, verified: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/keys"))
-  let body = {"key": $key, "read_only": $read_only, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/keys"))
+  let req_body = {"key": $key, "read_only": $read_only, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a deploy key
@@ -8489,7 +8500,7 @@ export def "repos-keys create-deploy-key" [
 # DELETE /repos/{owner}/{repo}/keys/{key_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#delete-a-deploy-key — API method documentation
 # operationId: repos/delete-deploy-key
-export def "repos-keys delete-deploy-key" [
+export def "repos-keys delete-deploy" [
   owner: string
   repo: string
   key_id: int
@@ -8504,7 +8515,7 @@ export def "repos-keys delete-deploy-key" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, key_id: $key_id} | format pattern "/repos/{owner}/{repo}/keys/{key_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), key_id: (encode-path-segment $key_id)} | format pattern "/repos/{owner}/{repo}/keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8515,7 +8526,7 @@ export def "repos-keys delete-deploy-key" [
 # GET /repos/{owner}/{repo}/keys/{key_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-a-deploy-key — API method documentation
 # operationId: repos/get-deploy-key
-export def "repos-keys get-deploy-key" [
+export def "repos-keys get-deploy" [
   owner: string
   repo: string
   key_id: int
@@ -8530,7 +8541,7 @@ export def "repos-keys get-deploy-key" [
 ]: nothing -> record<created_at: string, id: int, key: string, read_only: bool, title: string, url: string, verified: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, key_id: $key_id} | format pattern "/repos/{owner}/{repo}/keys/{key_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), key_id: (encode-path-segment $key_id)} | format pattern "/repos/{owner}/{repo}/keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8541,7 +8552,7 @@ export def "repos-keys get-deploy-key" [
 # GET /repos/{owner}/{repo}/labels
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#list-labels-for-a-repository — API method documentation
 # operationId: issues/list-labels-for-repo
-export def "repos-labels list-labels-for-repo" [
+export def "repos-labels list-issues" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8558,7 +8569,7 @@ export def "repos-labels list-labels-for-repo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/labels") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/labels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8569,7 +8580,7 @@ export def "repos-labels list-labels-for-repo" [
 # POST /repos/{owner}/{repo}/labels
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#create-a-label — API method documentation
 # operationId: issues/create-label
-export def "repos-labels create-label" [
+export def "repos-labels create-issues" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8587,12 +8598,12 @@ export def "repos-labels create-label" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/labels"))
-  let body = {"color": $color, "description": $description, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/labels"))
+  let req_body = {"color": $color, "description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a label
@@ -8600,7 +8611,7 @@ export def "repos-labels create-label" [
 # DELETE /repos/{owner}/{repo}/labels/{name}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#delete-a-label — API method documentation
 # operationId: issues/delete-label
-export def "repos-labels delete-label" [
+export def "repos-labels delete-issues" [
   owner: string
   repo: string
   name: string
@@ -8615,7 +8626,7 @@ export def "repos-labels delete-label" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, name: $name} | format pattern "/repos/{owner}/{repo}/labels/{name}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), name: (encode-path-segment $name)} | format pattern "/repos/{owner}/{repo}/labels/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8626,7 +8637,7 @@ export def "repos-labels delete-label" [
 # GET /repos/{owner}/{repo}/labels/{name}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#get-a-label — API method documentation
 # operationId: issues/get-label
-export def "repos-labels get-label" [
+export def "repos-labels get-issues" [
   owner: string
   repo: string
   name: string
@@ -8641,7 +8652,7 @@ export def "repos-labels get-label" [
 ]: nothing -> record<color: string, default: bool, description: string, id: int, name: string, node_id: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, name: $name} | format pattern "/repos/{owner}/{repo}/labels/{name}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), name: (encode-path-segment $name)} | format pattern "/repos/{owner}/{repo}/labels/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8652,7 +8663,7 @@ export def "repos-labels get-label" [
 # GET /repos/{owner}/{repo}/languages
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-repository-languages — API method documentation
 # operationId: repos/list-languages
-export def "repos-languages list-languages" [
+export def "repos-languages list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8666,7 +8677,7 @@ export def "repos-languages list-languages" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/languages"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/languages"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8677,7 +8688,7 @@ export def "repos-languages list-languages" [
 # GET /repos/{owner}/{repo}/license
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/licenses/#get-the-license-for-a-repository — API method documentation
 # operationId: licenses/get-for-repo
-export def "repos-license get-for-repo" [
+export def "repos-license get" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8691,7 +8702,7 @@ export def "repos-license get-for-repo" [
 ]: nothing -> record<_links: record<git: string, html: string, self: string>, content: string, download_url: string, encoding: string, git_url: string, html_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, name: string, path: string, sha: string, size: int, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/license"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/license"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8702,7 +8713,7 @@ export def "repos-license get-for-repo" [
 # POST /repos/{owner}/{repo}/merges
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#merge-a-branch — API method documentation
 # operationId: repos/merge
-export def "repos-merges repos-merge" [
+export def "repos-merges create" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8720,12 +8731,12 @@ export def "repos-merges repos-merge" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/merges"))
-  let body = {"base": $body_base, "commit_message": $commit_message, "head": $head} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/merges"))
+  let req_body = {"base": $body_base, "commit_message": $commit_message, "head": $head} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List milestones
@@ -8733,7 +8744,7 @@ export def "repos-merges repos-merge" [
 # GET /repos/{owner}/{repo}/milestones
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#list-milestones — API method documentation
 # operationId: issues/list-milestones
-export def "repos-milestones list-milestones" [
+export def "repos-milestones list-issues" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8753,7 +8764,7 @@ export def "repos-milestones list-milestones" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/milestones") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/milestones") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8764,7 +8775,7 @@ export def "repos-milestones list-milestones" [
 # POST /repos/{owner}/{repo}/milestones
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#create-a-milestone — API method documentation
 # operationId: issues/create-milestone
-export def "repos-milestones create-milestone" [
+export def "repos-milestones create-issues" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8783,12 +8794,12 @@ export def "repos-milestones create-milestone" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/milestones"))
-  let body = {"description": $description, "due_on": $due_on, "state": $state, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/milestones"))
+  let req_body = {"description": $description, "due_on": $due_on, "state": $state, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a milestone
@@ -8796,7 +8807,7 @@ export def "repos-milestones create-milestone" [
 # DELETE /repos/{owner}/{repo}/milestones/{milestone_number}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#delete-a-milestone — API method documentation
 # operationId: issues/delete-milestone
-export def "repos-milestones delete-milestone" [
+export def "repos-milestones delete-issues" [
   owner: string
   repo: string
   milestone_number: int
@@ -8811,7 +8822,7 @@ export def "repos-milestones delete-milestone" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, milestone_number: $milestone_number} | format pattern "/repos/{owner}/{repo}/milestones/{milestone_number}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), milestone_number: (encode-path-segment $milestone_number)} | format pattern "/repos/{owner}/{repo}/milestones/{milestone_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8822,7 +8833,7 @@ export def "repos-milestones delete-milestone" [
 # GET /repos/{owner}/{repo}/milestones/{milestone_number}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#get-a-milestone — API method documentation
 # operationId: issues/get-milestone
-export def "repos-milestones get-milestone" [
+export def "repos-milestones get-issues" [
   owner: string
   repo: string
   milestone_number: int
@@ -8837,7 +8848,7 @@ export def "repos-milestones get-milestone" [
 ]: nothing -> record<closed_at: string, closed_issues: int, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, description: string, due_on: string, html_url: string, id: int, labels_url: string, node_id: string, number: int, open_issues: int, state: string, title: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, milestone_number: $milestone_number} | format pattern "/repos/{owner}/{repo}/milestones/{milestone_number}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), milestone_number: (encode-path-segment $milestone_number)} | format pattern "/repos/{owner}/{repo}/milestones/{milestone_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8848,7 +8859,7 @@ export def "repos-milestones get-milestone" [
 # PATCH /repos/{owner}/{repo}/milestones/{milestone_number}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#update-a-milestone — API method documentation
 # operationId: issues/update-milestone
-export def "repos-milestones update-milestone" [
+export def "repos-milestones update-issues" [
   owner: string
   repo: string
   milestone_number: int
@@ -8868,12 +8879,12 @@ export def "repos-milestones update-milestone" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, milestone_number: $milestone_number} | format pattern "/repos/{owner}/{repo}/milestones/{milestone_number}"))
-  let body = {"description": $description, "due_on": $due_on, "state": $state, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), milestone_number: (encode-path-segment $milestone_number)} | format pattern "/repos/{owner}/{repo}/milestones/{milestone_number}"))
+  let req_body = {"description": $description, "due_on": $due_on, "state": $state, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List labels for issues in a milestone
@@ -8881,7 +8892,7 @@ export def "repos-milestones update-milestone" [
 # GET /repos/{owner}/{repo}/milestones/{milestone_number}/labels
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#list-labels-for-issues-in-a-milestone — API method documentation
 # operationId: issues/list-labels-for-milestone
-export def "repos-milestones-labels list-labels-for-milestone" [
+export def "repos-milestones-labels list-issues" [
   owner: string
   repo: string
   milestone_number: int
@@ -8899,7 +8910,7 @@ export def "repos-milestones-labels list-labels-for-milestone" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, milestone_number: $milestone_number} | format pattern "/repos/{owner}/{repo}/milestones/{milestone_number}/labels") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), milestone_number: (encode-path-segment $milestone_number)} | format pattern "/repos/{owner}/{repo}/milestones/{milestone_number}/labels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8910,7 +8921,7 @@ export def "repos-milestones-labels list-labels-for-milestone" [
 # GET /repos/{owner}/{repo}/notifications
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#list-repository-notifications-for-the-authenticated-user — API method documentation
 # operationId: activity/list-repo-notifications-for-authenticated-user
-export def "repos-notifications list-repo-notifications-for-authenticated-user" [
+export def "repos-notifications list-activity-for-authenticated-user" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8931,7 +8942,7 @@ export def "repos-notifications list-repo-notifications-for-authenticated-user" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "participating" $participating "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/notifications") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/notifications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8942,7 +8953,7 @@ export def "repos-notifications list-repo-notifications-for-authenticated-user" 
 # PUT /repos/{owner}/{repo}/notifications
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#mark-repository-notifications-as-read — API method documentation
 # operationId: activity/mark-repo-notifications-as-read
-export def "repos-notifications activity-mark-repo-notifications-as-read" [
+export def "repos-notifications get-activity-mark-as" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8958,12 +8969,12 @@ export def "repos-notifications activity-mark-repo-notifications-as-read" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/notifications"))
-  let body = {"last_read_at": $last_read_at} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/notifications"))
+  let req_body = {"last_read_at": $last_read_at} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a GitHub Enterprise Server Pages site
@@ -8971,7 +8982,7 @@ export def "repos-notifications activity-mark-repo-notifications-as-read" [
 # DELETE /repos/{owner}/{repo}/pages
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#delete-a-github-pages-site — API method documentation
 # operationId: repos/delete-pages-site
-export def "repos-pages delete-pages-site" [
+export def "repos-pages delete-site" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8985,7 +8996,7 @@ export def "repos-pages delete-pages-site" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/pages"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pages"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8996,7 +9007,7 @@ export def "repos-pages delete-pages-site" [
 # GET /repos/{owner}/{repo}/pages
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-a-github-pages-site — API method documentation
 # operationId: repos/get-pages
-export def "repos-pages get-pages" [
+export def "repos-pages get" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9010,7 +9021,7 @@ export def "repos-pages get-pages" [
 ]: nothing -> record<cname: string, custom_404: bool, html_url: string, https_certificate: record<description: string, domains: list<any>, expires_at: string, state: string>, https_enforced: bool, public: bool, source: record<branch: string, path: string>, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/pages"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pages"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9022,7 +9033,7 @@ export def "repos-pages get-pages" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#create-a-github-pages-site — API method documentation
 # operationId: repos/create-pages-site
 # --source shape: {branch: "master"|"gh-pages", path?: "/"|"/docs"}
-export def "repos-pages create-pages-site" [
+export def "repos-pages create-site" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9038,12 +9049,12 @@ export def "repos-pages create-pages-site" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/pages"))
-  let body = {"source": $body_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pages"))
+  let req_body = {"source": $body_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update information about a GitHub Pages site
@@ -9051,7 +9062,7 @@ export def "repos-pages create-pages-site" [
 # PUT /repos/{owner}/{repo}/pages
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#update-information-about-a-github-pages-site — API method documentation
 # operationId: repos/update-information-about-pages-site
-export def "repos-pages update-information-about-pages-site" [
+export def "repos-pages update-information-about-site" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9069,12 +9080,12 @@ export def "repos-pages update-information-about-pages-site" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/pages"))
-  let body = {"https_enforced": $https_enforced, "public": $public, "source": $body_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pages"))
+  let req_body = {"https_enforced": $https_enforced, "public": $public, "source": $body_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List GitHub Enterprise Server Pages builds
@@ -9082,7 +9093,7 @@ export def "repos-pages update-information-about-pages-site" [
 # GET /repos/{owner}/{repo}/pages/builds
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-github-pages-builds — API method documentation
 # operationId: repos/list-pages-builds
-export def "repos-pages-builds list-pages-builds" [
+export def "repos-pages-builds list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9099,7 +9110,7 @@ export def "repos-pages-builds list-pages-builds" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/pages/builds") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pages/builds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9110,7 +9121,7 @@ export def "repos-pages-builds list-pages-builds" [
 # POST /repos/{owner}/{repo}/pages/builds
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#request-a-github-pages-build — API method documentation
 # operationId: repos/request-pages-build
-export def "repos-pages-builds request-pages-build" [
+export def "repos-pages-builds request" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9124,7 +9135,7 @@ export def "repos-pages-builds request-pages-build" [
 ]: nothing -> record<status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/pages/builds"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pages/builds"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9135,7 +9146,7 @@ export def "repos-pages-builds request-pages-build" [
 # GET /repos/{owner}/{repo}/pages/builds/latest
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-latest-pages-build — API method documentation
 # operationId: repos/get-latest-pages-build
-export def "repos-pages-builds-latest get-latest-pages-build" [
+export def "repos-pages-builds-latest get" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9149,7 +9160,7 @@ export def "repos-pages-builds-latest get-latest-pages-build" [
 ]: nothing -> record<commit: string, created_at: string, duration: int, error: record<message: string>, pusher: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, status: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/pages/builds/latest"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pages/builds/latest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9160,7 +9171,7 @@ export def "repos-pages-builds-latest get-latest-pages-build" [
 # GET /repos/{owner}/{repo}/pages/builds/{build_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-github-pages-build — API method documentation
 # operationId: repos/get-pages-build
-export def "repos-pages-builds get-pages-build" [
+export def "repos-pages-builds get" [
   owner: string
   repo: string
   build_id: int
@@ -9175,7 +9186,7 @@ export def "repos-pages-builds get-pages-build" [
 ]: nothing -> record<commit: string, created_at: string, duration: int, error: record<message: string>, pusher: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, status: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, build_id: $build_id} | format pattern "/repos/{owner}/{repo}/pages/builds/{build_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), build_id: (encode-path-segment $build_id)} | format pattern "/repos/{owner}/{repo}/pages/builds/{build_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9186,7 +9197,7 @@ export def "repos-pages-builds get-pages-build" [
 # GET /repos/{owner}/{repo}/pre-receive-hooks
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#list-pre-receive-hooks-for-a-repository — API method documentation
 # operationId: enterprise-admin/list-pre-receive-hooks-for-repo
-export def "repos-pre-receive-hooks list-pre-receive-hooks-for-repo" [
+export def "repos-pre-receive-hooks list-enterprise-admin" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9205,7 +9216,7 @@ export def "repos-pre-receive-hooks list-pre-receive-hooks-for-repo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/pre-receive-hooks") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pre-receive-hooks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9216,7 +9227,7 @@ export def "repos-pre-receive-hooks list-pre-receive-hooks-for-repo" [
 # DELETE /repos/{owner}/{repo}/pre-receive-hooks/{pre_receive_hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#remove-pre-receive-hook-enforcement-for-a-repository — API method documentation
 # operationId: enterprise-admin/remove-pre-receive-hook-enforcement-for-repo
-export def "repos-pre-receive-hooks remove-pre-receive-hook-enforcement-for-repo" [
+export def "repos-pre-receive-hooks delete-enterprise-admin-enforcement" [
   owner: string
   repo: string
   pre_receive_hook_id: int
@@ -9231,7 +9242,7 @@ export def "repos-pre-receive-hooks remove-pre-receive-hook-enforcement-for-repo
 ]: nothing -> record<configuration_url: string, enforcement: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pre_receive_hook_id: $pre_receive_hook_id} | format pattern "/repos/{owner}/{repo}/pre-receive-hooks/{pre_receive_hook_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pre_receive_hook_id: (encode-path-segment $pre_receive_hook_id)} | format pattern "/repos/{owner}/{repo}/pre-receive-hooks/{pre_receive_hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9242,7 +9253,7 @@ export def "repos-pre-receive-hooks remove-pre-receive-hook-enforcement-for-repo
 # GET /repos/{owner}/{repo}/pre-receive-hooks/{pre_receive_hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-a-pre-receive-hook-for-a-repository — API method documentation
 # operationId: enterprise-admin/get-pre-receive-hook-for-repo
-export def "repos-pre-receive-hooks get-pre-receive-hook-for-repo" [
+export def "repos-pre-receive-hooks get-enterprise-admin" [
   owner: string
   repo: string
   pre_receive_hook_id: int
@@ -9257,7 +9268,7 @@ export def "repos-pre-receive-hooks get-pre-receive-hook-for-repo" [
 ]: nothing -> record<configuration_url: string, enforcement: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pre_receive_hook_id: $pre_receive_hook_id} | format pattern "/repos/{owner}/{repo}/pre-receive-hooks/{pre_receive_hook_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pre_receive_hook_id: (encode-path-segment $pre_receive_hook_id)} | format pattern "/repos/{owner}/{repo}/pre-receive-hooks/{pre_receive_hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9268,7 +9279,7 @@ export def "repos-pre-receive-hooks get-pre-receive-hook-for-repo" [
 # PATCH /repos/{owner}/{repo}/pre-receive-hooks/{pre_receive_hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#update-pre-receive-hook-enforcement-for-a-repository — API method documentation
 # operationId: enterprise-admin/update-pre-receive-hook-enforcement-for-repo
-export def "repos-pre-receive-hooks update-pre-receive-hook-enforcement-for-repo" [
+export def "repos-pre-receive-hooks update-enterprise-admin-enforcement" [
   owner: string
   repo: string
   pre_receive_hook_id: int
@@ -9285,12 +9296,12 @@ export def "repos-pre-receive-hooks update-pre-receive-hook-enforcement-for-repo
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pre_receive_hook_id: $pre_receive_hook_id} | format pattern "/repos/{owner}/{repo}/pre-receive-hooks/{pre_receive_hook_id}"))
-  let body = {"enforcement": $enforcement} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pre_receive_hook_id: (encode-path-segment $pre_receive_hook_id)} | format pattern "/repos/{owner}/{repo}/pre-receive-hooks/{pre_receive_hook_id}"))
+  let req_body = {"enforcement": $enforcement} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List repository projects
@@ -9298,7 +9309,7 @@ export def "repos-pre-receive-hooks update-pre-receive-hook-enforcement-for-repo
 # GET /repos/{owner}/{repo}/projects
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#list-repository-projects — API method documentation
 # operationId: projects/list-for-repo
-export def "repos-projects list-for-repo" [
+export def "repos-projects list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9316,7 +9327,7 @@ export def "repos-projects list-for-repo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/projects") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9327,7 +9338,7 @@ export def "repos-projects list-for-repo" [
 # POST /repos/{owner}/{repo}/projects
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#create-a-repository-project — API method documentation
 # operationId: projects/create-for-repo
-export def "repos-projects create-for-repo" [
+export def "repos-projects create" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9338,18 +9349,18 @@ export def "repos-projects create-for-repo" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # The description of the project.
+  --body: string # The description of the project.
   name: string # The name of the project.
 ]: any -> record<body: string, columns_url: string, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, html_url: string, id: int, name: string, node_id: string, number: int, organization_permission: string, owner_url: string, private: bool, state: string, updated_at: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/projects"))
-  let body = {"body": $body_body, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/projects"))
+  let req_body = {"body": $body, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List pull requests
@@ -9379,7 +9390,7 @@ export def "repos-pulls list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "head" $head "scalar") (serialize-qp "base" $qp_base "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/pulls") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pulls") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9402,7 +9413,7 @@ export def "repos-pulls create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-base: string # The name of the branch you want the changes pulled into. This should be an existing branch on the current repository. You cannot submit a pull request to one repository that requests a merge to a base of another repository.
-  --body-body: string # The contents of the pull request.
+  --body: string # The contents of the pull request.
   --draft: oneof<nothing, bool> # Indicates whether the pull request is a draft. See "[Draft Pull Requests](https://help.github.com/en/articles/about-pull-requests#draft-pull-requests)" in the GitHub Help documentation to learn more.
   head: string # The name of the branch where your changes are implemented. For cross-repository pull requests in the same network, namespace `head` with a user like this: `username:branch`.
   --issue: int # e.g. 1
@@ -9412,12 +9423,12 @@ export def "repos-pulls create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/pulls"))
-  let body = {"base": $body_base, "body": $body_body, "draft": $draft, "head": $head, "issue": $issue, "maintainer_can_modify": $maintainer_can_modify, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pulls"))
+  let req_body = {"base": $body_base, "body": $body, "draft": $draft, "head": $head, "issue": $issue, "maintainer_can_modify": $maintainer_can_modify, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List review comments in a repository
@@ -9425,7 +9436,7 @@ export def "repos-pulls create" [
 # GET /repos/{owner}/{repo}/pulls/comments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#list-review-comments-in-a-repository — API method documentation
 # operationId: pulls/list-review-comments-for-repo
-export def "repos-pulls-comments list-review-comments-for-repo" [
+export def "repos-pulls-comments list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9445,7 +9456,7 @@ export def "repos-pulls-comments list-review-comments-for-repo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/pulls/comments") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pulls/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9456,7 +9467,7 @@ export def "repos-pulls-comments list-review-comments-for-repo" [
 # DELETE /repos/{owner}/{repo}/pulls/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#delete-a-review-comment-for-a-pull-request — API method documentation
 # operationId: pulls/delete-review-comment
-export def "repos-pulls-comments delete-review-comment" [
+export def "repos-pulls-comments delete-review" [
   owner: string
   repo: string
   comment_id: int
@@ -9471,7 +9482,7 @@ export def "repos-pulls-comments delete-review-comment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, comment_id: $comment_id} | format pattern "/repos/{owner}/{repo}/pulls/comments/{comment_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/pulls/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9482,7 +9493,7 @@ export def "repos-pulls-comments delete-review-comment" [
 # GET /repos/{owner}/{repo}/pulls/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#get-a-review-comment-for-a-pull-request — API method documentation
 # operationId: pulls/get-review-comment
-export def "repos-pulls-comments get-review-comment" [
+export def "repos-pulls-comments get-review" [
   owner: string
   repo: string
   comment_id: int
@@ -9497,7 +9508,7 @@ export def "repos-pulls-comments get-review-comment" [
 ]: nothing -> record<_links: record<html: record<href: string>, pull_request: record<href: string>, self: record<href: string>>, author_association: string, body: string, body_html: string, body_text: string, commit_id: string, created_at: string, diff_hunk: string, html_url: string, id: int, in_reply_to_id: int, node_id: string, original_commit_id: string, original_position: int, path: string, position: int, pull_request_review_id: int, pull_request_url: string, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, comment_id: $comment_id} | format pattern "/repos/{owner}/{repo}/pulls/comments/{comment_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/pulls/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9508,7 +9519,7 @@ export def "repos-pulls-comments get-review-comment" [
 # PATCH /repos/{owner}/{repo}/pulls/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#update-a-review-comment-for-a-pull-request — API method documentation
 # operationId: pulls/update-review-comment
-export def "repos-pulls-comments update-review-comment" [
+export def "repos-pulls-comments update-review" [
   owner: string
   repo: string
   comment_id: int
@@ -9520,17 +9531,17 @@ export def "repos-pulls-comments update-review-comment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # The text of the reply to the review comment.
+  body: string # The text of the reply to the review comment.
 ]: any -> record<_links: record<html: record<href: string>, pull_request: record<href: string>, self: record<href: string>>, author_association: string, body: string, body_html: string, body_text: string, commit_id: string, created_at: string, diff_hunk: string, html_url: string, id: int, in_reply_to_id: int, node_id: string, original_commit_id: string, original_position: int, path: string, position: int, pull_request_review_id: int, pull_request_url: string, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, comment_id: $comment_id} | format pattern "/repos/{owner}/{repo}/pulls/comments/{comment_id}"))
-  let body = {"body": $body_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/pulls/comments/{comment_id}"))
+  let req_body = {"body": $body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List reactions for a pull request review comment
@@ -9538,7 +9549,7 @@ export def "repos-pulls-comments update-review-comment" [
 # GET /repos/{owner}/{repo}/pulls/comments/{comment_id}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/reactions#list-reactions-for-a-pull-request-review-comment — API method documentation
 # operationId: reactions/list-for-pull-request-review-comment
-export def "repos-pulls-comments-reactions list-for-pull-request-review-comment" [
+export def "repos-pulls-comments-reactions list-for-request-review" [
   owner: string
   repo: string
   comment_id: int
@@ -9557,7 +9568,7 @@ export def "repos-pulls-comments-reactions list-for-pull-request-review-comment"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, comment_id: $comment_id} | format pattern "/repos/{owner}/{repo}/pulls/comments/{comment_id}/reactions") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/pulls/comments/{comment_id}/reactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9568,7 +9579,7 @@ export def "repos-pulls-comments-reactions list-for-pull-request-review-comment"
 # POST /repos/{owner}/{repo}/pulls/comments/{comment_id}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/reactions#create-reaction-for-a-pull-request-review-comment — API method documentation
 # operationId: reactions/create-for-pull-request-review-comment
-export def "repos-pulls-comments-reactions create-for-pull-request-review-comment" [
+export def "repos-pulls-comments-reactions create-for-request-review" [
   owner: string
   repo: string
   comment_id: int
@@ -9585,12 +9596,12 @@ export def "repos-pulls-comments-reactions create-for-pull-request-review-commen
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, comment_id: $comment_id} | format pattern "/repos/{owner}/{repo}/pulls/comments/{comment_id}/reactions"))
-  let body = {"content": $content} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/pulls/comments/{comment_id}/reactions"))
+  let req_body = {"content": $content} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a pull request
@@ -9613,7 +9624,7 @@ export def "repos-pulls get" [
 ]: nothing -> record<_links: record<comments: record<href: string>, commits: record<href: string>, html: record<href: string>, issue: record<href: string>, review_comment: record<href: string>, review_comments: record<href: string>, self: record<href: string>, statuses: record<href: string>>, active_lock_reason: string, additions: int, assignee: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assignees: table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, author_association: string, base: record<label: string, ref: string, repo: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, sha: string, user: record<avatar_url: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_url: string, subscriptions_url: string, type: string, url: string>>, body: string, changed_files: int, closed_at: string, comments: int, comments_url: string, commits: int, commits_url: string, created_at: string, deletions: int, diff_url: string, draft: bool, head: record<label: string, ref: string, repo: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, sha: string, user: record<avatar_url: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_url: string, subscriptions_url: string, type: string, url: string>>, html_url: string, id: int, issue_url: string, labels: table<color: string, default: bool, description: string, id: int, name: string, node_id: string, url: string>, locked: bool, maintainer_can_modify: bool, merge_commit_sha: string, mergeable: bool, mergeable_state: string, merged: bool, merged_at: string, merged_by: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, milestone: record<closed_at: string, closed_issues: int, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, description: string, due_on: string, html_url: string, id: int, labels_url: string, node_id: string, number: int, open_issues: int, state: string, title: string, updated_at: string, url: string>, node_id: string, number: int, patch_url: string, rebaseable: bool, requested_reviewers: table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, requested_teams: table<description: string, html_url: string, id: int, ldap_dn: string, members_url: string, name: string, node_id: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, review_comment_url: string, review_comments: int, review_comments_url: string, state: string, statuses_url: string, title: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9637,7 +9648,7 @@ export def "repos-pulls update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-base: string # The name of the branch you want your changes pulled into. This should be an existing branch on the current repository. You cannot update the base branch on a pull request to point to another repository.
-  --body-body: string # The contents of the pull request.
+  --body: string # The contents of the pull request.
   --maintainer-can-modify: oneof<nothing, bool> # Indicates whether [maintainers can modify](https://help.github.com/articles/allowing-changes-to-a-pull-request-branch-created-from-a-fork/) the pull request.
   --state: string@state-completer-2 # State of this Pull Request. Either `open` or `closed`.
   --title: string # The title of the pull request.
@@ -9645,12 +9656,12 @@ export def "repos-pulls update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}"))
-  let body = {"base": $body_base, "body": $body_body, "maintainer_can_modify": $maintainer_can_modify, "state": $state, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}"))
+  let req_body = {"base": $body_base, "body": $body, "maintainer_can_modify": $maintainer_can_modify, "state": $state, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List review comments on a pull request
@@ -9658,7 +9669,7 @@ export def "repos-pulls update" [
 # GET /repos/{owner}/{repo}/pulls/{pull_number}/comments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#list-review-comments-on-a-pull-request — API method documentation
 # operationId: pulls/list-review-comments
-export def "repos-pulls-comments list-review-comments" [
+export def "repos-pulls-comments list-review" [
   owner: string
   repo: string
   pull_number: int
@@ -9679,7 +9690,7 @@ export def "repos-pulls-comments list-review-comments" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/comments") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9690,7 +9701,7 @@ export def "repos-pulls-comments list-review-comments" [
 # POST /repos/{owner}/{repo}/pulls/{pull_number}/comments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#create-a-review-comment-for-a-pull-request — API method documentation
 # operationId: pulls/create-review-comment-alternative
-export def "repos-pulls-comments create-review-comment-alternative" [
+export def "repos-pulls-comments create-review-alternative" [
   owner: string
   repo: string
   pull_number: int
@@ -9702,18 +9713,18 @@ export def "repos-pulls-comments create-review-comment-alternative" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # The text of the comment.
+  body: string # The text of the comment.
   --in-reply-to: int # The comment ID to reply to. **Note**: This must be the ID of a _top-level comment_, not a reply to that comment. Replies to replies are not supported.
 ]: any -> record<_links: record<html: record<href: string>, pull_request: record<href: string>, self: record<href: string>>, author_association: string, body: string, commit_id: string, created_at: string, diff_hunk: string, html_url: string, id: int, in_reply_to_id: int, node_id: string, original_commit_id: string, original_position: int, path: string, position: int, pull_request_review_id: int, pull_request_url: string, updated_at: string, url: string, user: record<avatar_url: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/comments"))
-  let body = {"body": $body_body, "in_reply_to": $in_reply_to} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/comments"))
+  let req_body = {"body": $body, "in_reply_to": $in_reply_to} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a reply for a review comment
@@ -9721,7 +9732,7 @@ export def "repos-pulls-comments create-review-comment-alternative" [
 # POST /repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#create-a-reply-for-a-review-comment — API method documentation
 # operationId: pulls/create-reply-for-review-comment
-export def "repos-pulls-comments-replies create-reply-for-review-comment" [
+export def "repos-pulls-comments-replies create-reply-for-review" [
   owner: string
   repo: string
   pull_number: int
@@ -9734,17 +9745,17 @@ export def "repos-pulls-comments-replies create-reply-for-review-comment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # The text of the review comment.
+  body: string # The text of the review comment.
 ]: any -> record<_links: record<html: record<href: string>, pull_request: record<href: string>, self: record<href: string>>, author_association: string, body: string, body_html: string, body_text: string, commit_id: string, created_at: string, diff_hunk: string, html_url: string, id: int, in_reply_to_id: int, node_id: string, original_commit_id: string, original_position: int, path: string, position: int, pull_request_review_id: int, pull_request_url: string, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number, comment_id: $comment_id} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies"))
-  let body = {"body": $body_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies"))
+  let req_body = {"body": $body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List commits on a pull request
@@ -9752,7 +9763,7 @@ export def "repos-pulls-comments-replies create-reply-for-review-comment" [
 # GET /repos/{owner}/{repo}/pulls/{pull_number}/commits
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#list-commits-on-a-pull-request — API method documentation
 # operationId: pulls/list-commits
-export def "repos-pulls-commits list-commits" [
+export def "repos-pulls-commits list" [
   owner: string
   repo: string
   pull_number: int
@@ -9770,7 +9781,7 @@ export def "repos-pulls-commits list-commits" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/commits") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/commits") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9781,7 +9792,7 @@ export def "repos-pulls-commits list-commits" [
 # GET /repos/{owner}/{repo}/pulls/{pull_number}/files
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#list-pull-requests-files — API method documentation
 # operationId: pulls/list-files
-export def "repos-pulls-files list-files" [
+export def "repos-pulls-files list" [
   owner: string
   repo: string
   pull_number: int
@@ -9799,7 +9810,7 @@ export def "repos-pulls-files list-files" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/files") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/files") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9825,7 +9836,7 @@ export def "repos-pulls-merge check-if-merged" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/merge"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/merge"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9836,7 +9847,7 @@ export def "repos-pulls-merge check-if-merged" [
 # PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#merge-a-pull-request — API method documentation
 # operationId: pulls/merge
-export def "repos-pulls-merge pull-s" [
+export def "repos-pulls-merge update" [
   owner: string
   repo: string
   pull_number: int
@@ -9856,12 +9867,12 @@ export def "repos-pulls-merge pull-s" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/merge"))
-  let body = {"commit_message": $commit_message, "commit_title": $commit_title, "merge_method": $merge_method, "sha": $sha} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/merge"))
+  let req_body = {"commit_message": $commit_message, "commit_title": $commit_title, "merge_method": $merge_method, "sha": $sha} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove requested reviewers from a pull request
@@ -9869,7 +9880,7 @@ export def "repos-pulls-merge pull-s" [
 # DELETE /repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#remove-requested-reviewers-from-a-pull-request — API method documentation
 # operationId: pulls/remove-requested-reviewers
-export def "repos-pulls-requested-reviewers remove-requested-reviewers" [
+export def "repos-pulls-requested-reviewers delete" [
   owner: string
   repo: string
   pull_number: int
@@ -9881,18 +9892,18 @@ export def "repos-pulls-requested-reviewers remove-requested-reviewers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  reviewers: list # An array of user `login`s that will be removed.
-  --team-reviewers: list # An array of team `slug`s that will be removed.
+  reviewers: list<string> # An array of user `login`s that will be removed.
+  --team-reviewers: list<string> # An array of team `slug`s that will be removed.
 ]: any -> record<_links: record<comments: record<href: string>, commits: record<href: string>, html: record<href: string>, issue: record<href: string>, review_comment: record<href: string>, review_comments: record<href: string>, self: record<href: string>, statuses: record<href: string>>, active_lock_reason: string, assignee: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assignees: table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, author_association: string, base: record<label: string, ref: string, repo: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, sha: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>>, body: string, closed_at: string, comments_url: string, commits_url: string, created_at: string, diff_url: string, draft: bool, head: record<label: string, ref: string, repo: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, sha: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>>, html_url: string, id: int, issue_url: string, labels: table<color: string, default: bool, description: string, id: int, name: string, node_id: string, url: string>, locked: bool, merge_commit_sha: string, merged_at: string, milestone: record<closed_at: string, closed_issues: int, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, description: string, due_on: string, html_url: string, id: int, labels_url: string, node_id: string, number: int, open_issues: int, state: string, title: string, updated_at: string, url: string>, node_id: string, number: int, patch_url: string, requested_reviewers: table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, requested_teams: table<description: string, html_url: string, id: int, members_url: string, name: string, node_id: string, parent: record, permission: string, permissions: record, privacy: string, repositories_url: string, slug: string, url: string>, review_comment_url: string, review_comments_url: string, state: string, statuses_url: string, title: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers"))
-  let body = {"reviewers": $reviewers, "team_reviewers": $team_reviewers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers"))
+  let req_body = {"reviewers": $reviewers, "team_reviewers": $team_reviewers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List requested reviewers for a pull request
@@ -9900,7 +9911,7 @@ export def "repos-pulls-requested-reviewers remove-requested-reviewers" [
 # GET /repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#list-requested-reviewers-for-a-pull-request — API method documentation
 # operationId: pulls/list-requested-reviewers
-export def "repos-pulls-requested-reviewers list-requested-reviewers" [
+export def "repos-pulls-requested-reviewers list" [
   owner: string
   repo: string
   pull_number: int
@@ -9918,7 +9929,7 @@ export def "repos-pulls-requested-reviewers list-requested-reviewers" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9929,7 +9940,7 @@ export def "repos-pulls-requested-reviewers list-requested-reviewers" [
 # POST /repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#request-reviewers-for-a-pull-request — API method documentation
 # operationId: pulls/request-reviewers
-export def "repos-pulls-requested-reviewers request-reviewers" [
+export def "repos-pulls-requested-reviewers request" [
   owner: string
   repo: string
   pull_number: int
@@ -9941,18 +9952,18 @@ export def "repos-pulls-requested-reviewers request-reviewers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reviewers: list # An array of user `login`s that will be requested.
-  --team-reviewers: list # An array of team `slug`s that will be requested.
+  --reviewers: list<string> # An array of user `login`s that will be requested.
+  --team-reviewers: list<string> # An array of team `slug`s that will be requested.
 ]: any -> record<_links: record<comments: record<href: string>, commits: record<href: string>, html: record<href: string>, issue: record<href: string>, review_comment: record<href: string>, review_comments: record<href: string>, self: record<href: string>, statuses: record<href: string>>, active_lock_reason: string, assignee: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assignees: table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, author_association: string, base: record<label: string, ref: string, repo: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, sha: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>>, body: string, closed_at: string, comments_url: string, commits_url: string, created_at: string, diff_url: string, draft: bool, head: record<label: string, ref: string, repo: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, sha: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>>, html_url: string, id: int, issue_url: string, labels: table<color: string, default: bool, description: string, id: int, name: string, node_id: string, url: string>, locked: bool, merge_commit_sha: string, merged_at: string, milestone: record<closed_at: string, closed_issues: int, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, description: string, due_on: string, html_url: string, id: int, labels_url: string, node_id: string, number: int, open_issues: int, state: string, title: string, updated_at: string, url: string>, node_id: string, number: int, patch_url: string, requested_reviewers: table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, requested_teams: table<description: string, html_url: string, id: int, members_url: string, name: string, node_id: string, parent: record, permission: string, permissions: record, privacy: string, repositories_url: string, slug: string, url: string>, review_comment_url: string, review_comments_url: string, state: string, statuses_url: string, title: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers"))
-  let body = {"reviewers": $reviewers, "team_reviewers": $team_reviewers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers"))
+  let req_body = {"reviewers": $reviewers, "team_reviewers": $team_reviewers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List reviews for a pull request
@@ -9960,7 +9971,7 @@ export def "repos-pulls-requested-reviewers request-reviewers" [
 # GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#list-reviews-for-a-pull-request — API method documentation
 # operationId: pulls/list-reviews
-export def "repos-pulls-reviews list-reviews" [
+export def "repos-pulls-reviews list" [
   owner: string
   repo: string
   pull_number: int
@@ -9978,7 +9989,7 @@ export def "repos-pulls-reviews list-reviews" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9990,7 +10001,7 @@ export def "repos-pulls-reviews list-reviews" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#create-a-review-for-a-pull-request — API method documentation
 # operationId: pulls/create-review
 # --comments item shape: {body: string, line?: int, path: string, position?: int, side?: string, start_line?: int, start_side?: string}
-export def "repos-pulls-reviews create-review" [
+export def "repos-pulls-reviews create" [
   owner: string
   repo: string
   pull_number: int
@@ -10002,7 +10013,7 @@ export def "repos-pulls-reviews create-review" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # **Required** when using `REQUEST_CHANGES` or `COMMENT` for the `event` parameter. The body text of the pull request review.
+  --body: string # **Required** when using `REQUEST_CHANGES` or `COMMENT` for the `event` parameter. The body text of the pull request review.
   --comments: list # Use the following table to specify the location, destination, and contents of the draft review comment. — item shape: {body: string, line?: int, path: string, position?: int, side?: string, start_line?: int, start_side?: string}
   --commit-id: string # The SHA of the commit that needs a review. Not using the latest commit SHA may render your review comment outdated if a subsequent commit modifies the line you specify as the `position`. Defaults to the most recent commit in the pull request when you do not specify a value.
   --event: string@event-completer # The review action you want to perform. The review actions include: `APPROVE`, `REQUEST_CHANGES`, or `COMMENT`. By leaving this blank, you set the review action state to `PENDING`, which means you will need to [submit the pull request review](https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#submit-a-review-for-a-pull-request) when you are ready.
@@ -10010,12 +10021,12 @@ export def "repos-pulls-reviews create-review" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews"))
-  let body = {"body": $body_body, "comments": $comments, "commit_id": $commit_id, "event": $event} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews"))
+  let req_body = {"body": $body, "comments": $comments, "commit_id": $commit_id, "event": $event} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a pending review for a pull request
@@ -10023,7 +10034,7 @@ export def "repos-pulls-reviews create-review" [
 # DELETE /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#delete-a-pending-review-for-a-pull-request — API method documentation
 # operationId: pulls/delete-pending-review
-export def "repos-pulls-reviews delete-pending-review" [
+export def "repos-pulls-reviews delete-pending" [
   owner: string
   repo: string
   pull_number: int
@@ -10039,7 +10050,7 @@ export def "repos-pulls-reviews delete-pending-review" [
 ]: nothing -> record<_links: record<html: record<href: string>, pull_request: record<href: string>>, author_association: string, body: string, body_html: string, body_text: string, commit_id: string, html_url: string, id: int, node_id: string, pull_request_url: string, state: string, submitted_at: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number, review_id: $review_id} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number), review_id: (encode-path-segment $review_id)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10050,7 +10061,7 @@ export def "repos-pulls-reviews delete-pending-review" [
 # GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#get-a-review-for-a-pull-request — API method documentation
 # operationId: pulls/get-review
-export def "repos-pulls-reviews get-review" [
+export def "repos-pulls-reviews get" [
   owner: string
   repo: string
   pull_number: int
@@ -10066,7 +10077,7 @@ export def "repos-pulls-reviews get-review" [
 ]: nothing -> record<_links: record<html: record<href: string>, pull_request: record<href: string>>, author_association: string, body: string, body_html: string, body_text: string, commit_id: string, html_url: string, id: int, node_id: string, pull_request_url: string, state: string, submitted_at: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number, review_id: $review_id} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number), review_id: (encode-path-segment $review_id)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10077,7 +10088,7 @@ export def "repos-pulls-reviews get-review" [
 # PUT /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#update-a-review-for-a-pull-request — API method documentation
 # operationId: pulls/update-review
-export def "repos-pulls-reviews update-review" [
+export def "repos-pulls-reviews update" [
   owner: string
   repo: string
   pull_number: int
@@ -10090,17 +10101,17 @@ export def "repos-pulls-reviews update-review" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # The body text of the pull request review.
+  body: string # The body text of the pull request review.
 ]: any -> record<_links: record<html: record<href: string>, pull_request: record<href: string>>, author_association: string, body: string, body_html: string, body_text: string, commit_id: string, html_url: string, id: int, node_id: string, pull_request_url: string, state: string, submitted_at: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number, review_id: $review_id} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}"))
-  let body = {"body": $body_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number), review_id: (encode-path-segment $review_id)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}"))
+  let req_body = {"body": $body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List comments for a pull request review
@@ -10108,7 +10119,7 @@ export def "repos-pulls-reviews update-review" [
 # GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/comments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#list-comments-for-a-pull-request-review — API method documentation
 # operationId: pulls/list-comments-for-review
-export def "repos-pulls-reviews-comments list-comments-for-review" [
+export def "repos-pulls-reviews-comments list" [
   owner: string
   repo: string
   pull_number: int
@@ -10127,7 +10138,7 @@ export def "repos-pulls-reviews-comments list-comments-for-review" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number, review_id: $review_id} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/comments") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number), review_id: (encode-path-segment $review_id)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10138,7 +10149,7 @@ export def "repos-pulls-reviews-comments list-comments-for-review" [
 # PUT /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/dismissals
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#dismiss-a-review-for-a-pull-request — API method documentation
 # operationId: pulls/dismiss-review
-export def "repos-pulls-reviews-dismissals pull-s-dismiss" [
+export def "repos-pulls-reviews-dismissals update-dismiss" [
   owner: string
   repo: string
   pull_number: int
@@ -10157,12 +10168,12 @@ export def "repos-pulls-reviews-dismissals pull-s-dismiss" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number, review_id: $review_id} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/dismissals"))
-  let body = {"event": $event, "message": $message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number), review_id: (encode-path-segment $review_id)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/dismissals"))
+  let req_body = {"event": $event, "message": $message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Submit a review for a pull request
@@ -10170,7 +10181,7 @@ export def "repos-pulls-reviews-dismissals pull-s-dismiss" [
 # POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/events
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#submit-a-review-for-a-pull-request — API method documentation
 # operationId: pulls/submit-review
-export def "repos-pulls-reviews-events submit-review" [
+export def "repos-pulls-reviews-events submit" [
   owner: string
   repo: string
   pull_number: int
@@ -10183,18 +10194,18 @@ export def "repos-pulls-reviews-events submit-review" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # The body text of the pull request review
+  --body: string # The body text of the pull request review
   event: string@event-completer # The review action you want to perform. The review actions include: `APPROVE`, `REQUEST_CHANGES`, or `COMMENT`. When you leave this blank, the API returns _HTTP 422 (Unrecognizable entity)_ and sets the review action state to `PENDING`, which means you will need to re-submit the pull request review using a review action.
 ]: any -> record<_links: record<html: record<href: string>, pull_request: record<href: string>>, author_association: string, body: string, body_html: string, body_text: string, commit_id: string, html_url: string, id: int, node_id: string, pull_request_url: string, state: string, submitted_at: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number, review_id: $review_id} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/events"))
-  let body = {"body": $body_body, "event": $event} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number), review_id: (encode-path-segment $review_id)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/events"))
+  let req_body = {"body": $body, "event": $event} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a pull request branch
@@ -10202,7 +10213,7 @@ export def "repos-pulls-reviews-events submit-review" [
 # PUT /repos/{owner}/{repo}/pulls/{pull_number}/update-branch
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/pulls#update-a-pull-request-branch — API method documentation
 # operationId: pulls/update-branch
-export def "repos-pulls-update-branch update-branch" [
+export def "repos-pulls-update-branch update" [
   owner: string
   repo: string
   pull_number: int
@@ -10219,12 +10230,12 @@ export def "repos-pulls-update-branch update-branch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, pull_number: $pull_number} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/update-branch"))
-  let body = {"expected_head_sha": $expected_head_sha} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/update-branch"))
+  let req_body = {"expected_head_sha": $expected_head_sha} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a repository README
@@ -10232,7 +10243,7 @@ export def "repos-pulls-update-branch update-branch" [
 # GET /repos/{owner}/{repo}/readme
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-a-repository-readme — API method documentation
 # operationId: repos/get-readme
-export def "repos-readme get-readme" [
+export def "repos-readme get" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10248,7 +10259,7 @@ export def "repos-readme get-readme" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/readme") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/readme") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10259,7 +10270,7 @@ export def "repos-readme get-readme" [
 # GET /repos/{owner}/{repo}/readme/{dir}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-a-repository-directory-readme — API method documentation
 # operationId: repos/get-readme-in-directory
-export def "repos-readme get-readme-in-directory" [
+export def "repos-readme get-in-directory" [
   owner: string
   repo: string
   dir: string
@@ -10276,7 +10287,7 @@ export def "repos-readme get-readme-in-directory" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, dir: $dir} | format pattern "/repos/{owner}/{repo}/readme/{dir}") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), dir: (encode-path-segment $dir)} | format pattern "/repos/{owner}/{repo}/readme/{dir}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10287,7 +10298,7 @@ export def "repos-readme get-readme-in-directory" [
 # GET /repos/{owner}/{repo}/releases
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-releases — API method documentation
 # operationId: repos/list-releases
-export def "repos-releases list-releases" [
+export def "repos-releases list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10304,7 +10315,7 @@ export def "repos-releases list-releases" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/releases") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/releases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10315,7 +10326,7 @@ export def "repos-releases list-releases" [
 # POST /repos/{owner}/{repo}/releases
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#create-a-release — API method documentation
 # operationId: repos/create-release
-export def "repos-releases create-release" [
+export def "repos-releases create" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10326,7 +10337,7 @@ export def "repos-releases create-release" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # Text describing the contents of the tag.
+  --body: string # Text describing the contents of the tag.
   --draft: oneof<nothing, bool> # `true` to create a draft (unpublished) release, `false` to create a published one. (default: false)
   --name: string # The name of the release.
   --prerelease: oneof<nothing, bool> # `true` to identify the release as a prerelease. `false` to identify the release as a full release. (default: false)
@@ -10336,12 +10347,12 @@ export def "repos-releases create-release" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/releases"))
-  let body = {"body": $body_body, "draft": $draft, "name": $name, "prerelease": $prerelease, "tag_name": $tag_name, "target_commitish": $target_commitish} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/releases"))
+  let req_body = {"body": $body, "draft": $draft, "name": $name, "prerelease": $prerelease, "tag_name": $tag_name, "target_commitish": $target_commitish} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a release asset
@@ -10349,7 +10360,7 @@ export def "repos-releases create-release" [
 # DELETE /repos/{owner}/{repo}/releases/assets/{asset_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#delete-a-release-asset — API method documentation
 # operationId: repos/delete-release-asset
-export def "repos-releases-assets delete-release-asset" [
+export def "repos-releases-assets delete" [
   owner: string
   repo: string
   asset_id: int
@@ -10364,7 +10375,7 @@ export def "repos-releases-assets delete-release-asset" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, asset_id: $asset_id} | format pattern "/repos/{owner}/{repo}/releases/assets/{asset_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), asset_id: (encode-path-segment $asset_id)} | format pattern "/repos/{owner}/{repo}/releases/assets/{asset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10375,7 +10386,7 @@ export def "repos-releases-assets delete-release-asset" [
 # GET /repos/{owner}/{repo}/releases/assets/{asset_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-a-release-asset — API method documentation
 # operationId: repos/get-release-asset
-export def "repos-releases-assets get-release-asset" [
+export def "repos-releases-assets get" [
   owner: string
   repo: string
   asset_id: int
@@ -10390,7 +10401,7 @@ export def "repos-releases-assets get-release-asset" [
 ]: nothing -> record<browser_download_url: string, content_type: string, created_at: string, download_count: int, id: int, label: string, name: string, node_id: string, size: int, state: string, updated_at: string, uploader: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, asset_id: $asset_id} | format pattern "/repos/{owner}/{repo}/releases/assets/{asset_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), asset_id: (encode-path-segment $asset_id)} | format pattern "/repos/{owner}/{repo}/releases/assets/{asset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10401,7 +10412,7 @@ export def "repos-releases-assets get-release-asset" [
 # PATCH /repos/{owner}/{repo}/releases/assets/{asset_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#update-a-release-asset — API method documentation
 # operationId: repos/update-release-asset
-export def "repos-releases-assets update-release-asset" [
+export def "repos-releases-assets update" [
   owner: string
   repo: string
   asset_id: int
@@ -10420,12 +10431,12 @@ export def "repos-releases-assets update-release-asset" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, asset_id: $asset_id} | format pattern "/repos/{owner}/{repo}/releases/assets/{asset_id}"))
-  let body = {"label": $label, "name": $name, "state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), asset_id: (encode-path-segment $asset_id)} | format pattern "/repos/{owner}/{repo}/releases/assets/{asset_id}"))
+  let req_body = {"label": $label, "name": $name, "state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the latest release
@@ -10433,7 +10444,7 @@ export def "repos-releases-assets update-release-asset" [
 # GET /repos/{owner}/{repo}/releases/latest
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-the-latest-release — API method documentation
 # operationId: repos/get-latest-release
-export def "repos-releases-latest get-latest-release" [
+export def "repos-releases-latest get" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10447,7 +10458,7 @@ export def "repos-releases-latest get-latest-release" [
 ]: nothing -> record<assets: table<browser_download_url: string, content_type: string, created_at: string, download_count: int, id: int, label: string, name: string, node_id: string, size: int, state: string, updated_at: string, uploader: record, url: string>, assets_url: string, author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_text: string, created_at: string, draft: bool, html_url: string, id: int, name: string, node_id: string, prerelease: bool, published_at: string, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, tag_name: string, tarball_url: string, target_commitish: string, upload_url: string, url: string, zipball_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/releases/latest"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/releases/latest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10458,7 +10469,7 @@ export def "repos-releases-latest get-latest-release" [
 # GET /repos/{owner}/{repo}/releases/tags/{tag}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-a-release-by-tag-name — API method documentation
 # operationId: repos/get-release-by-tag
-export def "repos-releases-tags get-release-by-tag" [
+export def "repos-releases-tags get" [
   owner: string
   repo: string
   tag: string
@@ -10473,7 +10484,7 @@ export def "repos-releases-tags get-release-by-tag" [
 ]: nothing -> record<assets: table<browser_download_url: string, content_type: string, created_at: string, download_count: int, id: int, label: string, name: string, node_id: string, size: int, state: string, updated_at: string, uploader: record, url: string>, assets_url: string, author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_text: string, created_at: string, draft: bool, html_url: string, id: int, name: string, node_id: string, prerelease: bool, published_at: string, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, tag_name: string, tarball_url: string, target_commitish: string, upload_url: string, url: string, zipball_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, tag: $tag} | format pattern "/repos/{owner}/{repo}/releases/tags/{tag}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), tag: (encode-path-segment $tag)} | format pattern "/repos/{owner}/{repo}/releases/tags/{tag}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10484,7 +10495,7 @@ export def "repos-releases-tags get-release-by-tag" [
 # DELETE /repos/{owner}/{repo}/releases/{release_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#delete-a-release — API method documentation
 # operationId: repos/delete-release
-export def "repos-releases delete-release" [
+export def "repos-releases delete" [
   owner: string
   repo: string
   release_id: int
@@ -10499,7 +10510,7 @@ export def "repos-releases delete-release" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, release_id: $release_id} | format pattern "/repos/{owner}/{repo}/releases/{release_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), release_id: (encode-path-segment $release_id)} | format pattern "/repos/{owner}/{repo}/releases/{release_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10510,7 +10521,7 @@ export def "repos-releases delete-release" [
 # GET /repos/{owner}/{repo}/releases/{release_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-a-release — API method documentation
 # operationId: repos/get-release
-export def "repos-releases get-release" [
+export def "repos-releases get" [
   owner: string
   repo: string
   release_id: int
@@ -10525,7 +10536,7 @@ export def "repos-releases get-release" [
 ]: nothing -> record<assets: table<browser_download_url: string, content_type: string, created_at: string, download_count: int, id: int, label: string, name: string, node_id: string, size: int, state: string, updated_at: string, uploader: record, url: string>, assets_url: string, author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_text: string, created_at: string, draft: bool, html_url: string, id: int, name: string, node_id: string, prerelease: bool, published_at: string, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, tag_name: string, tarball_url: string, target_commitish: string, upload_url: string, url: string, zipball_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, release_id: $release_id} | format pattern "/repos/{owner}/{repo}/releases/{release_id}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), release_id: (encode-path-segment $release_id)} | format pattern "/repos/{owner}/{repo}/releases/{release_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10536,7 +10547,7 @@ export def "repos-releases get-release" [
 # PATCH /repos/{owner}/{repo}/releases/{release_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#update-a-release — API method documentation
 # operationId: repos/update-release
-export def "repos-releases update-release" [
+export def "repos-releases update" [
   owner: string
   repo: string
   release_id: int
@@ -10548,7 +10559,7 @@ export def "repos-releases update-release" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # Text describing the contents of the tag.
+  --body: string # Text describing the contents of the tag.
   --draft: oneof<nothing, bool> # `true` makes the release a draft, and `false` publishes the release.
   --name: string # The name of the release.
   --prerelease: oneof<nothing, bool> # `true` to identify the release as a prerelease, `false` to identify the release as a full release.
@@ -10558,12 +10569,12 @@ export def "repos-releases update-release" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, release_id: $release_id} | format pattern "/repos/{owner}/{repo}/releases/{release_id}"))
-  let body = {"body": $body_body, "draft": $draft, "name": $name, "prerelease": $prerelease, "tag_name": $tag_name, "target_commitish": $target_commitish} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), release_id: (encode-path-segment $release_id)} | format pattern "/repos/{owner}/{repo}/releases/{release_id}"))
+  let req_body = {"body": $body, "draft": $draft, "name": $name, "prerelease": $prerelease, "tag_name": $tag_name, "target_commitish": $target_commitish} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List release assets
@@ -10571,7 +10582,7 @@ export def "repos-releases update-release" [
 # GET /repos/{owner}/{repo}/releases/{release_id}/assets
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-release-assets — API method documentation
 # operationId: repos/list-release-assets
-export def "repos-releases-assets list-release-assets" [
+export def "repos-releases-assets list" [
   owner: string
   repo: string
   release_id: int
@@ -10589,7 +10600,7 @@ export def "repos-releases-assets list-release-assets" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, release_id: $release_id} | format pattern "/repos/{owner}/{repo}/releases/{release_id}/assets") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), release_id: (encode-path-segment $release_id)} | format pattern "/repos/{owner}/{repo}/releases/{release_id}/assets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10600,7 +10611,7 @@ export def "repos-releases-assets list-release-assets" [
 # POST /repos/{owner}/{repo}/releases/{release_id}/assets
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#upload-a-release-asset — API method documentation
 # operationId: repos/upload-release-asset
-export def "repos-releases-assets upload-release-asset" [
+export def "repos-releases-assets upload" [
   owner: string
   repo: string
   release_id: int
@@ -10620,11 +10631,12 @@ export def "repos-releases-assets upload-release-asset" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "{origin}")
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "label" $label "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, release_id: $release_id} | format pattern "/repos/{owner}/{repo}/releases/{release_id}/assets") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), release_id: (encode-path-segment $release_id)} | format pattern "/repos/{owner}/{repo}/releases/{release_id}/assets") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $req_body
 }
 
 # List stargazers
@@ -10632,7 +10644,7 @@ export def "repos-releases-assets upload-release-asset" [
 # GET /repos/{owner}/{repo}/stargazers
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#list-stargazers — API method documentation
 # operationId: activity/list-stargazers-for-repo
-export def "repos-stargazers list-stargazers-for-repo" [
+export def "repos-stargazers list-activity" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10649,7 +10661,7 @@ export def "repos-stargazers list-stargazers-for-repo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/stargazers") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/stargazers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10660,7 +10672,7 @@ export def "repos-stargazers list-stargazers-for-repo" [
 # GET /repos/{owner}/{repo}/stats/code_frequency
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-the-weekly-commit-activity — API method documentation
 # operationId: repos/get-code-frequency-stats
-export def "repos-stats-code-frequency get-code-frequency-stats" [
+export def "repos-stats-code-frequency get" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10674,7 +10686,7 @@ export def "repos-stats-code-frequency get-code-frequency-stats" [
 ]: nothing -> list<list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/stats/code_frequency"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/stats/code_frequency"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10685,7 +10697,7 @@ export def "repos-stats-code-frequency get-code-frequency-stats" [
 # GET /repos/{owner}/{repo}/stats/commit_activity
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-the-last-year-of-commit-activity — API method documentation
 # operationId: repos/get-commit-activity-stats
-export def "repos-stats-commit-activity get-commit-activity-stats" [
+export def "repos-stats-commit-activity get" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10699,7 +10711,7 @@ export def "repos-stats-commit-activity get-commit-activity-stats" [
 ]: nothing -> table<days: list<int>, total: int, week: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/stats/commit_activity"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/stats/commit_activity"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10710,7 +10722,7 @@ export def "repos-stats-commit-activity get-commit-activity-stats" [
 # GET /repos/{owner}/{repo}/stats/contributors
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-all-contributor-commit-activity — API method documentation
 # operationId: repos/get-contributors-stats
-export def "repos-stats-contributors get-contributors-stats" [
+export def "repos-stats-contributors get" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10724,7 +10736,7 @@ export def "repos-stats-contributors get-contributors-stats" [
 ]: nothing -> table<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, total: int, weeks: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/stats/contributors"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/stats/contributors"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10735,7 +10747,7 @@ export def "repos-stats-contributors get-contributors-stats" [
 # GET /repos/{owner}/{repo}/stats/participation
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-the-weekly-commit-count — API method documentation
 # operationId: repos/get-participation-stats
-export def "repos-stats-participation get-participation-stats" [
+export def "repos-stats-participation get" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10749,7 +10761,7 @@ export def "repos-stats-participation get-participation-stats" [
 ]: nothing -> record<all: list<int>, owner: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/stats/participation"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/stats/participation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10760,7 +10772,7 @@ export def "repos-stats-participation get-participation-stats" [
 # GET /repos/{owner}/{repo}/stats/punch_card
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-the-hourly-commit-count-for-each-day — API method documentation
 # operationId: repos/get-punch-card-stats
-export def "repos-stats-punch-card get-punch-card-stats" [
+export def "repos-stats-punch-card get" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10774,7 +10786,7 @@ export def "repos-stats-punch-card get-punch-card-stats" [
 ]: nothing -> list<list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/stats/punch_card"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/stats/punch_card"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10800,17 +10812,17 @@ export def "repos-statuses create-commit-status" [
   --context: string # A string label to differentiate this status from the status of other systems. This field is case-insensitive. (default: default)
   --description: string # A short description of the status.
   state: string@state-completer-3 # The state of the status. Can be one of `error`, `failure`, `pending`, or `success`.
-  --target-url: string # The target URL to associate with this status. This URL will be linked from the GitHub UI to allow users to easily see the source of the status.   For example, if your continuous integration system is posting build status, you would want to provide the deep link for the build output for this specific SHA:   `http://ci.example.com/user/repo/build/sha`
+  --target-url: string # The target URL to associate with this status. This URL will be linked from the GitHub UI to allow users to easily see the source of the status. For example, if your continuous integration system is posting build status, you would want to provide the deep link for the build output for this specific SHA: `http://ci.example.com/user/repo/build/sha`
 ]: any -> record<avatar_url: string, context: string, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, description: string, id: int, node_id: string, state: string, target_url: string, updated_at: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, sha: $sha} | format pattern "/repos/{owner}/{repo}/statuses/{sha}"))
-  let body = {"context": $context, "description": $description, "state": $state, "target_url": $target_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), sha: (encode-path-segment $sha)} | format pattern "/repos/{owner}/{repo}/statuses/{sha}"))
+  let req_body = {"context": $context, "description": $description, "state": $state, "target_url": $target_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List watchers
@@ -10818,7 +10830,7 @@ export def "repos-statuses create-commit-status" [
 # GET /repos/{owner}/{repo}/subscribers
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#list-watchers — API method documentation
 # operationId: activity/list-watchers-for-repo
-export def "repos-subscribers list-watchers-for-repo" [
+export def "repos-subscribers list-activity-watchers" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10835,7 +10847,7 @@ export def "repos-subscribers list-watchers-for-repo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/subscribers") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/subscribers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10846,7 +10858,7 @@ export def "repos-subscribers list-watchers-for-repo" [
 # DELETE /repos/{owner}/{repo}/subscription
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#delete-a-repository-subscription — API method documentation
 # operationId: activity/delete-repo-subscription
-export def "repos-subscription delete-repo-subscription" [
+export def "repos-subscription delete-activity" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10860,7 +10872,7 @@ export def "repos-subscription delete-repo-subscription" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/subscription"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/subscription"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10871,7 +10883,7 @@ export def "repos-subscription delete-repo-subscription" [
 # GET /repos/{owner}/{repo}/subscription
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#get-a-repository-subscription — API method documentation
 # operationId: activity/get-repo-subscription
-export def "repos-subscription get-repo-subscription" [
+export def "repos-subscription get-activity" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10885,7 +10897,7 @@ export def "repos-subscription get-repo-subscription" [
 ]: nothing -> record<created_at: string, ignored: bool, reason: string, repository_url: string, subscribed: bool, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/subscription"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/subscription"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10896,7 +10908,7 @@ export def "repos-subscription get-repo-subscription" [
 # PUT /repos/{owner}/{repo}/subscription
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#set-a-repository-subscription — API method documentation
 # operationId: activity/set-repo-subscription
-export def "repos-subscription activity-set-repo-subscription" [
+export def "repos-subscription update-activity" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10913,12 +10925,12 @@ export def "repos-subscription activity-set-repo-subscription" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/subscription"))
-  let body = {"ignored": $ignored, "subscribed": $subscribed} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/subscription"))
+  let req_body = {"ignored": $ignored, "subscribed": $subscribed} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List repository tags
@@ -10926,7 +10938,7 @@ export def "repos-subscription activity-set-repo-subscription" [
 # GET /repos/{owner}/{repo}/tags
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-repository-tags — API method documentation
 # operationId: repos/list-tags
-export def "repos-tags list-tags" [
+export def "repos-tags list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10943,7 +10955,7 @@ export def "repos-tags list-tags" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/tags") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10954,7 +10966,7 @@ export def "repos-tags list-tags" [
 # GET /repos/{owner}/{repo}/tarball/{ref}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#download-a-repository-archive — API method documentation
 # operationId: repos/download-tarball-archive
-export def "repos-tarball download-tarball-archive" [
+export def "repos-tarball download-archive" [
   owner: string
   repo: string
   ref: string
@@ -10969,7 +10981,7 @@ export def "repos-tarball download-tarball-archive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, ref: $ref} | format pattern "/repos/{owner}/{repo}/tarball/{ref}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/tarball/{ref}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10980,7 +10992,7 @@ export def "repos-tarball download-tarball-archive" [
 # GET /repos/{owner}/{repo}/teams
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-repository-teams — API method documentation
 # operationId: repos/list-teams
-export def "repos-teams list-teams" [
+export def "repos-teams list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10997,7 +11009,7 @@ export def "repos-teams list-teams" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/teams") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/teams") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11008,7 +11020,7 @@ export def "repos-teams list-teams" [
 # GET /repos/{owner}/{repo}/topics
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#get-all-repository-topics — API method documentation
 # operationId: repos/get-all-topics
-export def "repos-topics get-all-topics" [
+export def "repos-topics get-list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11025,7 +11037,7 @@ export def "repos-topics get-all-topics" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/topics") $qp)
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/topics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11036,7 +11048,7 @@ export def "repos-topics get-all-topics" [
 # PUT /repos/{owner}/{repo}/topics
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#replace-all-repository-topics — API method documentation
 # operationId: repos/replace-all-topics
-export def "repos-topics replace-all-topics" [
+export def "repos-topics update-list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11047,17 +11059,17 @@ export def "repos-topics replace-all-topics" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  names: list # An array of topics to add to the repository. Pass one or more topics to _replace_ the set of existing topics. Send an empty array (`[]`) to clear all topics from the repository. **Note:** Topic `names` cannot contain uppercase letters.
+  names: list<string> # An array of topics to add to the repository. Pass one or more topics to _replace_ the set of existing topics. Send an empty array (`[]`) to clear all topics from the repository. **Note:** Topic `names` cannot contain uppercase letters.
 ]: any -> record<names: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/topics"))
-  let body = {"names": $names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/topics"))
+  let req_body = {"names": $names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Transfer a repository
@@ -11065,7 +11077,7 @@ export def "repos-topics replace-all-topics" [
 # POST /repos/{owner}/{repo}/transfer
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#transfer-a-repository — API method documentation
 # operationId: repos/transfer
-export def "repos-transfer post" [
+export def "repos-transfer create" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11077,17 +11089,17 @@ export def "repos-transfer post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   new_owner: string # The username or organization name the repository will be transferred to.
-  --team-ids: list # ID of the team or teams to add to the repository. Teams can only be added to organization-owned repositories.
+  --team-ids: list<int> # ID of the team or teams to add to the repository. Teams can only be added to organization-owned repositories.
 ]: any -> record<allow_forking: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, code_of_conduct: record<body: string, html_url: string, key: string, name: string, url: string>, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<key: string, name: string, node_id: string, spdx_id: string, url: string>, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/transfer"))
-  let body = {"new_owner": $new_owner, "team_ids": $team_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/transfer"))
+  let req_body = {"new_owner": $new_owner, "team_ids": $team_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Download a repository archive (zip)
@@ -11095,7 +11107,7 @@ export def "repos-transfer post" [
 # GET /repos/{owner}/{repo}/zipball/{ref}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#download-a-repository-archive — API method documentation
 # operationId: repos/download-zipball-archive
-export def "repos-zipball download-zipball-archive" [
+export def "repos-zipball download-archive" [
   owner: string
   repo: string
   ref: string
@@ -11110,7 +11122,7 @@ export def "repos-zipball download-zipball-archive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo, ref: $ref} | format pattern "/repos/{owner}/{repo}/zipball/{ref}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/zipball/{ref}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11121,7 +11133,7 @@ export def "repos-zipball download-zipball-archive" [
 # POST /repos/{template_owner}/{template_repo}/generate
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#create-a-repository-using-a-template — API method documentation
 # operationId: repos/create-using-template
-export def "repos-generate create-using-template" [
+export def "repos-generate create" [
   template_owner: string
   template_repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11141,12 +11153,12 @@ export def "repos-generate create-using-template" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({template_owner: $template_owner, template_repo: $template_repo} | format pattern "/repos/{template_owner}/{template_repo}/generate"))
-  let body = {"description": $description, "include_all_branches": $include_all_branches, "name": $name, "owner": $owner, "private": $private} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({template_owner: (encode-path-segment $template_owner), template_repo: (encode-path-segment $template_repo)} | format pattern "/repos/{template_owner}/{template_repo}/generate"))
+  let req_body = {"description": $description, "include_all_branches": $include_all_branches, "name": $name, "owner": $owner, "private": $private} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List public repositories
@@ -11154,7 +11166,7 @@ export def "repos-generate create-using-template" [
 # GET /repositories
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-public-repositories — API method documentation
 # operationId: repos/list-public
-export def "repositories list-public" [
+export def "repositories list-repos-public" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11180,7 +11192,7 @@ export def "repositories list-public" [
 # GET /search/code
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/search#search-code — API method documentation
 # operationId: search/code
-export def "search-code get" [
+export def "search-code list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11209,7 +11221,7 @@ export def "search-code get" [
 # GET /search/commits
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/search#search-commits — API method documentation
 # operationId: search/commits
-export def "search-commits commit-s" [
+export def "search-commits list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11238,7 +11250,7 @@ export def "search-commits commit-s" [
 # GET /search/issues
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/search#search-issues-and-pull-requests — API method documentation
 # operationId: search/issues-and-pull-requests
-export def "search-issues search-issues-and-pull-requests" [
+export def "search-issues pull-and-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11267,7 +11279,7 @@ export def "search-issues search-issues-and-pull-requests" [
 # GET /search/labels
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/search#search-labels — API method documentation
 # operationId: search/labels
-export def "search-labels get" [
+export def "search-labels list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11297,7 +11309,7 @@ export def "search-labels get" [
 # GET /search/repositories
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/search#search-repositories — API method documentation
 # operationId: search/repos
-export def "search-repositories search-repos" [
+export def "search-repositories list-repos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11326,7 +11338,7 @@ export def "search-repositories search-repos" [
 # GET /search/topics
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/search#search-topics — API method documentation
 # operationId: search/topics
-export def "search-topics top-ics" [
+export def "search-topics list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11353,7 +11365,7 @@ export def "search-topics top-ics" [
 # GET /search/users
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/search#search-users — API method documentation
 # operationId: search/users
-export def "search-users get" [
+export def "search-users list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11382,7 +11394,7 @@ export def "search-users get" [
 # GET /setup/api/configcheck
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-the-configuration-status — API method documentation
 # operationId: enterprise-admin/get-configuration-status
-export def "setup-configcheck get-configuration-status" [
+export def "setup-configcheck get-enterprise-admin-configuration-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11405,7 +11417,7 @@ export def "setup-configcheck get-configuration-status" [
 # POST /setup/api/configure
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#start-a-configuration-process — API method documentation
 # operationId: enterprise-admin/start-configuration-process
-export def "setup-configure start-configuration-process" [
+export def "setup-configure start-enterprise-admin-configuration-process" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11428,7 +11440,7 @@ export def "setup-configure start-configuration-process" [
 # GET /setup/api/maintenance
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-the-maintenance-status — API method documentation
 # operationId: enterprise-admin/get-maintenance-status
-export def "setup-maintenance get-maintenance-status" [
+export def "setup-maintenance get-enterprise-admin-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11451,7 +11463,7 @@ export def "setup-maintenance get-maintenance-status" [
 # POST /setup/api/maintenance
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#enable-or-disable-maintenance-mode — API method documentation
 # operationId: enterprise-admin/enable-or-disable-maintenance-mode
-export def "setup-maintenance enable-or-disable-maintenance-mode" [
+export def "setup-maintenance enable-enterprise-admin-or-disable-mode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11460,17 +11472,18 @@ export def "setup-maintenance enable-or-disable-maintenance-mode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  maintenance: string # A JSON string with the attributes `enabled` and `when`.  The possible values for `enabled` are `true` and `false`. When it's `false`, the attribute `when` is ignored and the maintenance mode is turned off. `when` defines the time period when the maintenance was enabled.  The possible values for `when` are `now` or any date parseable by [mojombo/chronic](https://github.com/mojombo/chronic).
+  maintenance: string # A JSON string with the attributes `enabled` and `when`. The possible values for `enabled` are `true` and `false`. When it's `false`, the attribute `when` is ignored and the maintenance mode is turned off. `when` defines the time period when the maintenance was enabled. The possible values for `when` are `now` or any date parseable by [mojombo/chronic](https://github.com/mojombo/chronic).
 ]: any -> record<connection_services: table<name: string, number: int>, scheduled_time: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/api/maintenance")
-  let body = {"maintenance": $maintenance} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"maintenance": $maintenance} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Get settings
@@ -11478,7 +11491,7 @@ export def "setup-maintenance enable-or-disable-maintenance-mode" [
 # GET /setup/api/settings
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-settings — API method documentation
 # operationId: enterprise-admin/get-settings
-export def "setup-settings get-settings" [
+export def "setup-settings get-enterprise-admin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11501,7 +11514,7 @@ export def "setup-settings get-settings" [
 # PUT /setup/api/settings
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#set-settings — API method documentation
 # operationId: enterprise-admin/set-settings
-export def "setup-settings enterprise-admin-set-settings" [
+export def "setup-settings update-enterprise-admin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11516,11 +11529,12 @@ export def "setup-settings enterprise-admin-set-settings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/api/settings")
-  let body = {"settings": $settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"settings": $settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Remove an authorized SSH key
@@ -11528,7 +11542,7 @@ export def "setup-settings enterprise-admin-set-settings" [
 # DELETE /setup/api/settings/authorized-keys
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#remove-an-authorized-ssh-key — API method documentation
 # operationId: enterprise-admin/remove-authorized-ssh-key
-export def "setup-settings-authorized-keys remove-authorized-ssh-key" [
+export def "setup-settings-authorized-keys delete-enterprise-admin-ssh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11543,11 +11557,12 @@ export def "setup-settings-authorized-keys remove-authorized-ssh-key" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/api/settings/authorized-keys")
-  let body = {"authorized_key": $authorized_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"authorized_key": $authorized_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Get all authorized SSH keys
@@ -11555,7 +11570,7 @@ export def "setup-settings-authorized-keys remove-authorized-ssh-key" [
 # GET /setup/api/settings/authorized-keys
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#get-all-authorized-ssh-keys — API method documentation
 # operationId: enterprise-admin/get-all-authorized-ssh-keys
-export def "setup-settings-authorized-keys get-all-authorized-ssh-keys" [
+export def "setup-settings-authorized-keys get-enterprise-admin-list-ssh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11578,7 +11593,7 @@ export def "setup-settings-authorized-keys get-all-authorized-ssh-keys" [
 # POST /setup/api/settings/authorized-keys
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#add-an-authorized-ssh-key — API method documentation
 # operationId: enterprise-admin/add-authorized-ssh-key
-export def "setup-settings-authorized-keys add-authorized-ssh-key" [
+export def "setup-settings-authorized-keys create-enterprise-admin-ssh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11593,11 +11608,12 @@ export def "setup-settings-authorized-keys add-authorized-ssh-key" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/api/settings/authorized-keys")
-  let body = {"authorized_key": $authorized_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"authorized_key": $authorized_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Create a GitHub license
@@ -11605,7 +11621,7 @@ export def "setup-settings-authorized-keys add-authorized-ssh-key" [
 # POST /setup/api/start
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#create-a-github-enterprise-server-license — API method documentation
 # operationId: enterprise-admin/create-enterprise-server-license
-export def "setup-start create-enterprise-server-license" [
+export def "setup-start create-enterprise-admin-enterprise-server-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11622,11 +11638,12 @@ export def "setup-start create-enterprise-server-license" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/api/start")
-  let body = {"license": $license, "password": $password, "settings": $settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"license": $license, "password": $password, "settings": $settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Upgrade a license
@@ -11634,7 +11651,7 @@ export def "setup-start create-enterprise-server-license" [
 # POST /setup/api/upgrade
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#upgrade-a-license — API method documentation
 # operationId: enterprise-admin/upgrade-license
-export def "setup-upgrade enterprise-admin-upgrade-license" [
+export def "setup-upgrade create-enterprise-admin-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11649,11 +11666,12 @@ export def "setup-upgrade enterprise-admin-upgrade-license" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/api/upgrade")
-  let body = {"license": $license} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"license": $license} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a team
@@ -11674,7 +11692,7 @@ export def "teams delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11698,7 +11716,7 @@ export def "teams get" [
 ]: nothing -> record<created_at: string, description: string, html_url: string, id: int, ldap_dn: string, members_count: int, members_url: string, name: string, node_id: string, organization: record<avatar_url: string, billing_email: string, blog: string, collaborators: int, company: string, created_at: string, default_repository_permission: string, description: string, disk_usage: int, email: string, events_url: string, followers: int, following: int, has_organization_projects: bool, has_repository_projects: bool, hooks_url: string, html_url: string, id: int, issues_url: string, location: string, login: string, members_allowed_repository_creation_type: string, members_can_create_pages: bool, members_can_create_private_pages: bool, members_can_create_public_pages: bool, members_can_create_repositories: bool, members_url: string, name: string, node_id: string, owned_private_repos: int, plan: record<filled_seats: int, name: string, private_repos: int, seats: int, space: int>, private_gists: int, public_gists: int, public_members_url: string, public_repos: int, repos_url: string, total_private_repos: int, two_factor_requirement_enabled: bool, type: string, updated_at: string, url: string>, parent: record<description: string, html_url: string, id: int, ldap_dn: string, members_url: string, name: string, node_id: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, permission: string, privacy: string, repos_count: int, repositories_url: string, slug: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11722,18 +11740,18 @@ export def "teams update" [
   --description: string # The description of the team.
   --name: string # The name of the team.
   --parent-team-id: int # The ID of a team to set as the parent team. **Note**: You must pass the `hellcat-preview` media type to use this parameter. (nullable)
-  --permission: string@permission-completer # **Deprecated**. The permission that new repositories will be added to the team with when none is specified. Can be one of:   \* `pull` - team members can pull, but not push to or administer newly-added repositories.   \* `push` - team members can pull and push, but not administer newly-added repositories.   \* `admin` - team members can pull, push and administer newly-added repositories. (default: pull)
-  --privacy: string@privacy-completer # The level of privacy this team should have. Editing teams without specifying this parameter leaves `privacy` intact. The options are:   **For a non-nested team:**   \* `secret` - only visible to organization owners and members of this team.   \* `closed` - visible to all members of this organization.   **For a parent or child team:**   \* `closed` - visible to all members of this organization.
+  --permission: string@permission-completer # **Deprecated**. The permission that new repositories will be added to the team with when none is specified. Can be one of: \* `pull` - team members can pull, but not push to or administer newly-added repositories. \* `push` - team members can pull and push, but not administer newly-added repositories. \* `admin` - team members can pull, push and administer newly-added repositories. (default: pull)
+  --privacy: string@privacy-completer # The level of privacy this team should have. Editing teams without specifying this parameter leaves `privacy` intact. The options are: **For a non-nested team:** \* `secret` - only visible to organization owners and members of this team. \* `closed` - visible to all members of this organization. **For a parent or child team:** \* `closed` - visible to all members of this organization.
 ]: any -> record<created_at: string, description: string, html_url: string, id: int, ldap_dn: string, members_count: int, members_url: string, name: string, node_id: string, organization: record<avatar_url: string, billing_email: string, blog: string, collaborators: int, company: string, created_at: string, default_repository_permission: string, description: string, disk_usage: int, email: string, events_url: string, followers: int, following: int, has_organization_projects: bool, has_repository_projects: bool, hooks_url: string, html_url: string, id: int, issues_url: string, location: string, login: string, members_allowed_repository_creation_type: string, members_can_create_pages: bool, members_can_create_private_pages: bool, members_can_create_public_pages: bool, members_can_create_repositories: bool, members_url: string, name: string, node_id: string, owned_private_repos: int, plan: record<filled_seats: int, name: string, private_repos: int, seats: int, space: int>, private_gists: int, public_gists: int, public_members_url: string, public_repos: int, repos_url: string, total_private_repos: int, two_factor_requirement_enabled: bool, type: string, updated_at: string, url: string>, parent: record<description: string, html_url: string, id: int, ldap_dn: string, members_url: string, name: string, node_id: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, permission: string, privacy: string, repos_count: int, repositories_url: string, slug: string, updated_at: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}"))
-  let body = {"description": $description, "name": $name, "parent_team_id": $parent_team_id, "permission": $permission, "privacy": $privacy} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}"))
+  let req_body = {"description": $description, "name": $name, "parent_team_id": $parent_team_id, "permission": $permission, "privacy": $privacy} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List discussions
@@ -11741,7 +11759,7 @@ export def "teams update" [
 # GET /teams/{team_id}/discussions
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams#list-discussions — API method documentation
 # operationId: teams/list-discussions
-export def "teams-discussions list-discussions" [
+export def "teams-discussions list" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11759,11 +11777,11 @@ export def "teams-discussions list-discussions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/discussions") $qp)
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/discussions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -11772,7 +11790,7 @@ export def "teams-discussions list-discussions" [
 # POST /teams/{team_id}/discussions
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams#create-a-discussion — API method documentation
 # operationId: teams/create-discussion
-export def "teams-discussions create-discussion" [
+export def "teams-discussions create" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11783,21 +11801,21 @@ export def "teams-discussions create-discussion" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # This API is under preview and subject to change.
-  --body-body: string # The discussion post's body text.
+  body: string # The discussion post's body text.
   --private: oneof<nothing, bool> # Private posts are only visible to team members, organization owners, and team maintainers. Public posts are visible to all members of the organization. Set to `true` to create a private post. (default: false)
   title: string # The discussion post's title.
 ]: any -> record<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_version: string, comments_count: int, comments_url: string, created_at: string, html_url: string, last_edited_at: string, node_id: string, number: int, pinned: bool, private: bool, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, team_url: string, title: string, updated_at: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/discussions"))
-  let body = {"body": $body_body, "private": $private, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/discussions"))
+  let req_body = {"body": $body, "private": $private, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a discussion
@@ -11805,7 +11823,7 @@ export def "teams-discussions create-discussion" [
 # DELETE /teams/{team_id}/discussions/{discussion_number}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams#delete-a-discussion — API method documentation
 # operationId: teams/delete-discussion
-export def "teams-discussions delete-discussion" [
+export def "teams-discussions delete" [
   team_id: int
   discussion_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11820,11 +11838,11 @@ export def "teams-discussions delete-discussion" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, discussion_number: $discussion_number} | format pattern "/teams/{team_id}/discussions/{discussion_number}"))
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -11833,7 +11851,7 @@ export def "teams-discussions delete-discussion" [
 # GET /teams/{team_id}/discussions/{discussion_number}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams#get-a-discussion — API method documentation
 # operationId: teams/get-discussion
-export def "teams-discussions get-discussion" [
+export def "teams-discussions get" [
   team_id: int
   discussion_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11848,11 +11866,11 @@ export def "teams-discussions get-discussion" [
 ]: nothing -> record<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_version: string, comments_count: int, comments_url: string, created_at: string, html_url: string, last_edited_at: string, node_id: string, number: int, pinned: bool, private: bool, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, team_url: string, title: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, discussion_number: $discussion_number} | format pattern "/teams/{team_id}/discussions/{discussion_number}"))
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -11861,7 +11879,7 @@ export def "teams-discussions get-discussion" [
 # PATCH /teams/{team_id}/discussions/{discussion_number}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams#update-a-discussion — API method documentation
 # operationId: teams/update-discussion
-export def "teams-discussions update-discussion" [
+export def "teams-discussions update" [
   team_id: int
   discussion_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11873,20 +11891,20 @@ export def "teams-discussions update-discussion" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # This API is under preview and subject to change.
-  --body-body: string # The discussion post's body text.
+  --body: string # The discussion post's body text.
   --title: string # The discussion post's title.
 ]: any -> record<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_version: string, comments_count: int, comments_url: string, created_at: string, html_url: string, last_edited_at: string, node_id: string, number: int, pinned: bool, private: bool, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, team_url: string, title: string, updated_at: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, discussion_number: $discussion_number} | format pattern "/teams/{team_id}/discussions/{discussion_number}"))
-  let body = {"body": $body_body, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}"))
+  let req_body = {"body": $body, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List discussion comments
@@ -11894,7 +11912,7 @@ export def "teams-discussions update-discussion" [
 # GET /teams/{team_id}/discussions/{discussion_number}/comments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams#list-discussion-comments — API method documentation
 # operationId: teams/list-discussion-comments
-export def "teams-discussions-comments list-discussion-comments" [
+export def "teams-discussions-comments list" [
   team_id: int
   discussion_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11913,11 +11931,11 @@ export def "teams-discussions-comments list-discussion-comments" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id: $team_id, discussion_number: $discussion_number} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments") $qp)
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -11926,7 +11944,7 @@ export def "teams-discussions-comments list-discussion-comments" [
 # POST /teams/{team_id}/discussions/{discussion_number}/comments
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams#create-a-discussion-comment — API method documentation
 # operationId: teams/create-discussion-comment
-export def "teams-discussions-comments create-discussion-comment" [
+export def "teams-discussions-comments create" [
   team_id: int
   discussion_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11938,19 +11956,19 @@ export def "teams-discussions-comments create-discussion-comment" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # This API is under preview and subject to change.
-  --body-body: string # The discussion comment's body text.
+  body: string # The discussion comment's body text.
 ]: any -> record<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_version: string, created_at: string, discussion_url: string, html_url: string, last_edited_at: string, node_id: string, number: int, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, discussion_number: $discussion_number} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments"))
-  let body = {"body": $body_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments"))
+  let req_body = {"body": $body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a discussion comment
@@ -11958,7 +11976,7 @@ export def "teams-discussions-comments create-discussion-comment" [
 # DELETE /teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams#delete-a-discussion-comment — API method documentation
 # operationId: teams/delete-discussion-comment
-export def "teams-discussions-comments delete-discussion-comment" [
+export def "teams-discussions-comments delete" [
   team_id: int
   discussion_number: int
   comment_number: int
@@ -11974,11 +11992,11 @@ export def "teams-discussions-comments delete-discussion-comment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, discussion_number: $discussion_number, comment_number: $comment_number} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}"))
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number), comment_number: (encode-path-segment $comment_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -11987,7 +12005,7 @@ export def "teams-discussions-comments delete-discussion-comment" [
 # GET /teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams#get-a-discussion-comment — API method documentation
 # operationId: teams/get-discussion-comment
-export def "teams-discussions-comments get-discussion-comment" [
+export def "teams-discussions-comments get" [
   team_id: int
   discussion_number: int
   comment_number: int
@@ -12003,11 +12021,11 @@ export def "teams-discussions-comments get-discussion-comment" [
 ]: nothing -> record<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_version: string, created_at: string, discussion_url: string, html_url: string, last_edited_at: string, node_id: string, number: int, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, discussion_number: $discussion_number, comment_number: $comment_number} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}"))
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number), comment_number: (encode-path-segment $comment_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -12016,7 +12034,7 @@ export def "teams-discussions-comments get-discussion-comment" [
 # PATCH /teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams#update-a-discussion-comment — API method documentation
 # operationId: teams/update-discussion-comment
-export def "teams-discussions-comments update-discussion-comment" [
+export def "teams-discussions-comments update" [
   team_id: int
   discussion_number: int
   comment_number: int
@@ -12029,19 +12047,19 @@ export def "teams-discussions-comments update-discussion-comment" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # This API is under preview and subject to change.
-  --body-body: string # The discussion comment's body text.
+  body: string # The discussion comment's body text.
 ]: any -> record<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_version: string, created_at: string, discussion_url: string, html_url: string, last_edited_at: string, node_id: string, number: int, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, discussion_number: $discussion_number, comment_number: $comment_number} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}"))
-  let body = {"body": $body_body} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number), comment_number: (encode-path-segment $comment_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}"))
+  let req_body = {"body": $body} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List reactions for a team discussion comment
@@ -12049,7 +12067,7 @@ export def "teams-discussions-comments update-discussion-comment" [
 # GET /teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/reactions/#list-reactions-for-a-team-discussion-comment — API method documentation
 # operationId: reactions/list-for-team-discussion-comment
-export def "teams-discussions-comments-reactions list-for-team-discussion-comment" [
+export def "teams-discussions-comments-reactions list" [
   team_id: int
   discussion_number: int
   comment_number: int
@@ -12069,11 +12087,11 @@ export def "teams-discussions-comments-reactions list-for-team-discussion-commen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id: $team_id, discussion_number: $discussion_number, comment_number: $comment_number} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}/reactions") $qp)
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number), comment_number: (encode-path-segment $comment_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}/reactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -12082,7 +12100,7 @@ export def "teams-discussions-comments-reactions list-for-team-discussion-commen
 # POST /teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/reactions/#create-reaction-for-a-team-discussion-comment — API method documentation
 # operationId: reactions/create-for-team-discussion-comment
-export def "teams-discussions-comments-reactions create-for-team-discussion-comment" [
+export def "teams-discussions-comments-reactions create" [
   team_id: int
   discussion_number: int
   comment_number: int
@@ -12100,14 +12118,14 @@ export def "teams-discussions-comments-reactions create-for-team-discussion-comm
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, discussion_number: $discussion_number, comment_number: $comment_number} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}/reactions"))
-  let body = {"content": $content} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number), comment_number: (encode-path-segment $comment_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}/reactions"))
+  let req_body = {"content": $content} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List reactions for a team discussion
@@ -12115,7 +12133,7 @@ export def "teams-discussions-comments-reactions create-for-team-discussion-comm
 # GET /teams/{team_id}/discussions/{discussion_number}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/reactions/#list-reactions-for-a-team-discussion — API method documentation
 # operationId: reactions/list-for-team-discussion
-export def "teams-discussions-reactions list-for-team-discussion" [
+export def "teams-discussions-reactions list" [
   team_id: int
   discussion_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -12134,11 +12152,11 @@ export def "teams-discussions-reactions list-for-team-discussion" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id: $team_id, discussion_number: $discussion_number} | format pattern "/teams/{team_id}/discussions/{discussion_number}/reactions") $qp)
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}/reactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -12147,7 +12165,7 @@ export def "teams-discussions-reactions list-for-team-discussion" [
 # POST /teams/{team_id}/discussions/{discussion_number}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/reactions/#create-reaction-for-a-team-discussion — API method documentation
 # operationId: reactions/create-for-team-discussion
-export def "teams-discussions-reactions create-for-team-discussion" [
+export def "teams-discussions-reactions create" [
   team_id: int
   discussion_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -12164,14 +12182,14 @@ export def "teams-discussions-reactions create-for-team-discussion" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, discussion_number: $discussion_number} | format pattern "/teams/{team_id}/discussions/{discussion_number}/reactions"))
-  let body = {"content": $content} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}/reactions"))
+  let req_body = {"content": $content} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List team members
@@ -12179,7 +12197,7 @@ export def "teams-discussions-reactions create-for-team-discussion" [
 # GET /teams/{team_id}/members
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams#list-team-members — API method documentation
 # operationId: teams/list-members
-export def "teams-members list-members" [
+export def "teams-members list" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12189,14 +12207,14 @@ export def "teams-members list-members" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --role: string@role-completer-2 # Filters members returned by their role in the team. Can be one of:   \* `member` - normal members of the team.   \* `maintainer` - team maintainers.   \* `all` - all members of the team. (default: all)
+  --role: string@role-completer-2 # Filters members returned by their role in the team. Can be one of: \* `member` - normal members of the team. \* `maintainer` - team maintainers. \* `all` - all members of the team. (default: all)
   --per-page: int # Results per page (max 100) (default: 30)
   --page: int # Page number of the results to fetch. (default: 1)
 ]: nothing -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "role" $role "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/members") $qp)
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12209,7 +12227,7 @@ export def "teams-members list-members" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams#remove-team-member-legacy — API method documentation
 # operationId: teams/remove-member-legacy
 @deprecated
-export def "teams-members remove-member-legacy" [
+export def "teams-members delete-legacy" [
   team_id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12223,7 +12241,7 @@ export def "teams-members remove-member-legacy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, username: $username} | format pattern "/teams/{team_id}/members/{username}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), username: (encode-path-segment $username)} | format pattern "/teams/{team_id}/members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12236,7 +12254,7 @@ export def "teams-members remove-member-legacy" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams#get-team-member-legacy — API method documentation
 # operationId: teams/get-member-legacy
 @deprecated
-export def "teams-members get-member-legacy" [
+export def "teams-members get-legacy" [
   team_id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12250,7 +12268,7 @@ export def "teams-members get-member-legacy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, username: $username} | format pattern "/teams/{team_id}/members/{username}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), username: (encode-path-segment $username)} | format pattern "/teams/{team_id}/members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12263,7 +12281,7 @@ export def "teams-members get-member-legacy" [
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams#add-team-member-legacy — API method documentation
 # operationId: teams/add-member-legacy
 @deprecated
-export def "teams-members add-member-legacy" [
+export def "teams-members create-legacy" [
   team_id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12277,7 +12295,7 @@ export def "teams-members add-member-legacy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, username: $username} | format pattern "/teams/{team_id}/members/{username}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), username: (encode-path-segment $username)} | format pattern "/teams/{team_id}/members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12288,7 +12306,7 @@ export def "teams-members add-member-legacy" [
 # DELETE /teams/{team_id}/memberships/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams#remove-team-membership-for-a-user — API method documentation
 # operationId: teams/remove-membership-for-user
-export def "teams-memberships remove-membership-for-user" [
+export def "teams-memberships delete-for-user" [
   team_id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12302,7 +12320,7 @@ export def "teams-memberships remove-membership-for-user" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, username: $username} | format pattern "/teams/{team_id}/memberships/{username}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), username: (encode-path-segment $username)} | format pattern "/teams/{team_id}/memberships/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12313,7 +12331,7 @@ export def "teams-memberships remove-membership-for-user" [
 # GET /teams/{team_id}/memberships/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams#get-team-membership-for-a-user — API method documentation
 # operationId: teams/get-membership-for-user
-export def "teams-memberships get-membership-for-user" [
+export def "teams-memberships get-for-user" [
   team_id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12327,7 +12345,7 @@ export def "teams-memberships get-membership-for-user" [
 ]: nothing -> record<role: string, state: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, username: $username} | format pattern "/teams/{team_id}/memberships/{username}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), username: (encode-path-segment $username)} | format pattern "/teams/{team_id}/memberships/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12338,7 +12356,7 @@ export def "teams-memberships get-membership-for-user" [
 # PUT /teams/{team_id}/memberships/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams#add-or-update-team-membership-for-a-user — API method documentation
 # operationId: teams/add-or-update-membership-for-user
-export def "teams-memberships add-or-update-membership-for-user" [
+export def "teams-memberships create-or-update-for-user" [
   team_id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12349,17 +12367,17 @@ export def "teams-memberships add-or-update-membership-for-user" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --role: string@role-completer-3 # The role that this user should have in the team. Can be one of:   \* `member` - a normal member of the team.   \* `maintainer` - a team maintainer. Able to add/remove other team members, promote other team members to team maintainer, and edit the team's name and description. (default: member)
+  --role: string@role-completer-3 # The role that this user should have in the team. Can be one of: \* `member` - a normal member of the team. \* `maintainer` - a team maintainer. Able to add/remove other team members, promote other team members to team maintainer, and edit the team's name and description. (default: member)
 ]: any -> record<role: string, state: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, username: $username} | format pattern "/teams/{team_id}/memberships/{username}"))
-  let body = {"role": $role} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), username: (encode-path-segment $username)} | format pattern "/teams/{team_id}/memberships/{username}"))
+  let req_body = {"role": $role} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List team projects
@@ -12367,7 +12385,7 @@ export def "teams-memberships add-or-update-membership-for-user" [
 # GET /teams/{team_id}/projects
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams/#list-team-projects — API method documentation
 # operationId: teams/list-projects
-export def "teams-projects list-projects" [
+export def "teams-projects list" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12384,11 +12402,11 @@ export def "teams-projects list-projects" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/projects") $qp)
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -12397,7 +12415,7 @@ export def "teams-projects list-projects" [
 # DELETE /teams/{team_id}/projects/{project_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams/#remove-a-project-from-a-team — API method documentation
 # operationId: teams/remove-project
-export def "teams-projects remove-project" [
+export def "teams-projects delete" [
   team_id: int
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -12411,7 +12429,7 @@ export def "teams-projects remove-project" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, project_id: $project_id} | format pattern "/teams/{team_id}/projects/{project_id}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), project_id: (encode-path-segment $project_id)} | format pattern "/teams/{team_id}/projects/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12422,7 +12440,7 @@ export def "teams-projects remove-project" [
 # GET /teams/{team_id}/projects/{project_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams/#check-team-permissions-for-a-project — API method documentation
 # operationId: teams/check-permissions-for-project
-export def "teams-projects check-permissions-for-project" [
+export def "teams-projects check-permissions" [
   team_id: int
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -12437,11 +12455,11 @@ export def "teams-projects check-permissions-for-project" [
 ]: nothing -> record<body: string, columns_url: string, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, html_url: string, id: int, name: string, node_id: string, number: int, organization_permission: string, owner_url: string, permissions: record<admin: bool, read: bool, write: bool>, private: bool, state: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, project_id: $project_id} | format pattern "/teams/{team_id}/projects/{project_id}"))
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), project_id: (encode-path-segment $project_id)} | format pattern "/teams/{team_id}/projects/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -12450,7 +12468,7 @@ export def "teams-projects check-permissions-for-project" [
 # PUT /teams/{team_id}/projects/{project_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams/#add-or-update-team-project-permissions — API method documentation
 # operationId: teams/add-or-update-project-permissions
-export def "teams-projects add-or-update-project-permissions" [
+export def "teams-projects create-or-update-permissions" [
   team_id: int
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -12462,19 +12480,19 @@ export def "teams-projects add-or-update-project-permissions" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # This API is under preview and subject to change.
-  --permission: string@permission-completer-1 # The permission to grant to the team for this project. Can be one of:   \* `read` - team members can read, but not write to or administer this project.   \* `write` - team members can read and write, but not administer this project.   \* `admin` - team members can read, write and administer this project.   Default: the team's `permission` attribute will be used to determine what permission to grant the team on this project. Note that, if you choose not to pass any parameters, you'll need to set `Content-Length` to zero when calling out to this endpoint. For more information, see "[HTTP verbs](https://docs.github.com/enterprise-server@2.18/rest/overview/resources-in-the-rest-api#http-verbs)."   **Note**: If you pass the `hellcat-preview` media type, you can promote—but not demote—a `permission` attribute inherited from a parent team.
+  --permission: string@permission-completer-1 # The permission to grant to the team for this project. Can be one of: \* `read` - team members can read, but not write to or administer this project. \* `write` - team members can read and write, but not administer this project. \* `admin` - team members can read, write and administer this project. Default: the team's `permission` attribute will be used to determine what permission to grant the team on this project. Note that, if you choose not to pass any parameters, you'll need to set `Content-Length` to zero when calling out to this endpoint. For more information, see "[HTTP verbs](https://docs.github.com/enterprise-server@2.18/rest/overview/resources-in-the-rest-api#http-verbs)." **Note**: If you pass the `hellcat-preview` media type, you can promote—but not demote—a `permission` attribute inherited from a parent team.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, project_id: $project_id} | format pattern "/teams/{team_id}/projects/{project_id}"))
-  let body = {"permission": $permission} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), project_id: (encode-path-segment $project_id)} | format pattern "/teams/{team_id}/projects/{project_id}"))
+  let req_body = {"permission": $permission} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List team repositories
@@ -12482,7 +12500,7 @@ export def "teams-projects add-or-update-project-permissions" [
 # GET /teams/{team_id}/repos
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams/#list-team-repositories — API method documentation
 # operationId: teams/list-repos
-export def "teams-repos list-repos" [
+export def "teams-repos list" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12498,7 +12516,7 @@ export def "teams-repos list-repos" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/repos") $qp)
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/repos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12509,7 +12527,7 @@ export def "teams-repos list-repos" [
 # DELETE /teams/{team_id}/repos/{owner}/{repo}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams/#remove-a-repository-from-a-team — API method documentation
 # operationId: teams/remove-repo
-export def "teams-repos remove-repo" [
+export def "teams-repos delete" [
   team_id: int
   owner: string
   repo: string
@@ -12524,7 +12542,7 @@ export def "teams-repos remove-repo" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, owner: $owner, repo: $repo} | format pattern "/teams/{team_id}/repos/{owner}/{repo}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/teams/{team_id}/repos/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12535,7 +12553,7 @@ export def "teams-repos remove-repo" [
 # GET /teams/{team_id}/repos/{owner}/{repo}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams/#check-team-permissions-for-a-repository — API method documentation
 # operationId: teams/check-permissions-for-repo
-export def "teams-repos check-permissions-for-repo" [
+export def "teams-repos check-permissions" [
   team_id: int
   owner: string
   repo: string
@@ -12551,7 +12569,7 @@ export def "teams-repos check-permissions-for-repo" [
 ]: nothing -> record<allow_forking: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, code_of_conduct: record<body: string, html_url: string, key: string, name: string, url: string>, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<key: string, name: string, node_id: string, spdx_id: string, url: string>, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, owner: $owner, repo: $repo} | format pattern "/teams/{team_id}/repos/{owner}/{repo}"))
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/teams/{team_id}/repos/{owner}/{repo}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12562,7 +12580,7 @@ export def "teams-repos check-permissions-for-repo" [
 # PUT /teams/{team_id}/repos/{owner}/{repo}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams/#add-or-update-team-repository-permissions — API method documentation
 # operationId: teams/add-or-update-repo-permissions
-export def "teams-repos add-or-update-repo-permissions" [
+export def "teams-repos create-or-update-permissions" [
   team_id: int
   owner: string
   repo: string
@@ -12574,17 +12592,17 @@ export def "teams-repos add-or-update-repo-permissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --permission: string@permission-completer # The permission to grant the team on this repository. Can be one of:   \* `pull` - team members can pull, but not push to or administer this repository.   \* `push` - team members can pull and push, but not administer this repository.   \* `admin` - team members can pull, push and administer this repository.      If no permission is specified, the team's `permission` attribute will be used to determine what permission to grant the team on this repository.   **Note**: If you pass the `hellcat-preview` media type, you can promote—but not demote—a `permission` attribute inherited through a parent team.
+  --permission: string@permission-completer # The permission to grant the team on this repository. Can be one of: \* `pull` - team members can pull, but not push to or administer this repository. \* `push` - team members can pull and push, but not administer this repository. \* `admin` - team members can pull, push and administer this repository. If no permission is specified, the team's `permission` attribute will be used to determine what permission to grant the team on this repository. **Note**: If you pass the `hellcat-preview` media type, you can promote—but not demote—a `permission` attribute inherited through a parent team.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({team_id: $team_id, owner: $owner, repo: $repo} | format pattern "/teams/{team_id}/repos/{owner}/{repo}"))
-  let body = {"permission": $permission} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/teams/{team_id}/repos/{owner}/{repo}"))
+  let req_body = {"permission": $permission} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List child teams
@@ -12608,7 +12626,7 @@ export def "teams-teams list-child" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({team_id: $team_id} | format pattern "/teams/{team_id}/teams") $qp)
+  let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/teams") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12664,11 +12682,11 @@ export def "user update-authenticated" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user")
-  let body = {"bio": $bio, "blog": $blog, "company": $company, "email": $email, "hireable": $hireable, "location": $location, "name": $name, "twitter_username": $twitter_username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"bio": $bio, "blog": $blog, "company": $company, "email": $email, "hireable": $hireable, "location": $location, "name": $name, "twitter_username": $twitter_username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an email address for the authenticated user
@@ -12676,7 +12694,7 @@ export def "user update-authenticated" [
 # DELETE /user/emails
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#delete-an-email-address-for-the-authenticated-user — API method documentation
 # operationId: users/delete-email-for-authenticated
-export def "user-emails delete-email-for-authenticated" [
+export def "user-emails delete-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12685,17 +12703,17 @@ export def "user-emails delete-email-for-authenticated" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --emails: list # Email addresses associated with the GitHub user account.
+  --emails: list<string> # Email addresses associated with the GitHub user account.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/emails")
-  let body = {"emails": $emails} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"emails": $emails} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List email addresses for the authenticated user
@@ -12703,7 +12721,7 @@ export def "user-emails delete-email-for-authenticated" [
 # GET /user/emails
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#list-email-addresses-for-the-authenticated-user — API method documentation
 # operationId: users/list-emails-for-authenticated
-export def "user-emails list-emails-for-authenticated" [
+export def "user-emails list-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12729,7 +12747,7 @@ export def "user-emails list-emails-for-authenticated" [
 # POST /user/emails
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#add-an-email-address-for-the-authenticated-user — API method documentation
 # operationId: users/add-email-for-authenticated
-export def "user-emails add-email-for-authenticated" [
+export def "user-emails create-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12738,17 +12756,17 @@ export def "user-emails add-email-for-authenticated" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --emails: list # Adds one or more email addresses to your GitHub account. Must contain at least one email address. **Note:** Alternatively, you can pass a single email address or an `array` of emails addresses directly, but we recommend that you pass an object using the `emails` key. (e.g. [])
+  --emails: list<string> # Adds one or more email addresses to your GitHub account. Must contain at least one email address. **Note:** Alternatively, you can pass a single email address or an `array` of emails addresses directly, but we recommend that you pass an object using the `emails` key. (e.g. [])
 ]: any -> table<email: string, primary: bool, verified: bool, visibility: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/emails")
-  let body = {"emails": $emails} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"emails": $emails} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List followers of the authenticated user
@@ -12756,7 +12774,7 @@ export def "user-emails add-email-for-authenticated" [
 # GET /user/followers
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#list-followers-of-the-authenticated-user — API method documentation
 # operationId: users/list-followers-for-authenticated-user
-export def "user-followers list-followers-for-authenticated-user" [
+export def "user-followers list-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12808,7 +12826,7 @@ export def "user-following list-followed-by-authenticated" [
 # DELETE /user/following/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#unfollow-a-user — API method documentation
 # operationId: users/unfollow
-export def "user-following users-unfollow" [
+export def "user-following delete-unfollow" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12821,7 +12839,7 @@ export def "user-following users-unfollow" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username} | format pattern "/user/following/{username}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/user/following/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12845,7 +12863,7 @@ export def "user-following check-person-is-followed-by-authenticated" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username} | format pattern "/user/following/{username}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/user/following/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12856,7 +12874,7 @@ export def "user-following check-person-is-followed-by-authenticated" [
 # PUT /user/following/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#follow-a-user — API method documentation
 # operationId: users/follow
-export def "user-following users-follow" [
+export def "user-following update-follow" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12869,7 +12887,7 @@ export def "user-following users-follow" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username} | format pattern "/user/following/{username}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/user/following/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12880,7 +12898,7 @@ export def "user-following users-follow" [
 # GET /user/gpg_keys
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#list-gpg-keys-for-the-authenticated-user — API method documentation
 # operationId: users/list-gpg-keys-for-authenticated
-export def "user-gpg-keys list-gpg-keys-for-authenticated" [
+export def "user-gpg-keys list-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12906,7 +12924,7 @@ export def "user-gpg-keys list-gpg-keys-for-authenticated" [
 # POST /user/gpg_keys
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#create-a-gpg-key-for-the-authenticated-user — API method documentation
 # operationId: users/create-gpg-key-for-authenticated
-export def "user-gpg-keys create-gpg-key-for-authenticated" [
+export def "user-gpg-keys create-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12921,11 +12939,11 @@ export def "user-gpg-keys create-gpg-key-for-authenticated" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/gpg_keys")
-  let body = {"armored_public_key": $armored_public_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"armored_public_key": $armored_public_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a GPG key for the authenticated user
@@ -12933,7 +12951,7 @@ export def "user-gpg-keys create-gpg-key-for-authenticated" [
 # DELETE /user/gpg_keys/{gpg_key_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#delete-a-gpg-key-for-the-authenticated-user — API method documentation
 # operationId: users/delete-gpg-key-for-authenticated
-export def "user-gpg-keys delete-gpg-key-for-authenticated" [
+export def "user-gpg-keys delete-for-authenticated" [
   gpg_key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12946,7 +12964,7 @@ export def "user-gpg-keys delete-gpg-key-for-authenticated" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({gpg_key_id: $gpg_key_id} | format pattern "/user/gpg_keys/{gpg_key_id}"))
+  let full_url = (build-url $base ({gpg_key_id: (encode-path-segment $gpg_key_id)} | format pattern "/user/gpg_keys/{gpg_key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12957,7 +12975,7 @@ export def "user-gpg-keys delete-gpg-key-for-authenticated" [
 # GET /user/gpg_keys/{gpg_key_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#get-a-gpg-key-for-the-authenticated-user — API method documentation
 # operationId: users/get-gpg-key-for-authenticated
-export def "user-gpg-keys get-gpg-key-for-authenticated" [
+export def "user-gpg-keys get-for-authenticated" [
   gpg_key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12970,7 +12988,7 @@ export def "user-gpg-keys get-gpg-key-for-authenticated" [
 ]: nothing -> record<can_certify: bool, can_encrypt_comms: bool, can_encrypt_storage: bool, can_sign: bool, created_at: string, emails: table<email: string, verified: bool>, expires_at: string, id: int, key_id: string, primary_key_id: int, public_key: string, raw_key: string, subkeys: table<can_certify: bool, can_encrypt_comms: bool, can_encrypt_storage: bool, can_sign: bool, created_at: string, emails: list, expires_at: string, id: int, key_id: string, primary_key_id: int, public_key: string, raw_key: string, subkeys: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({gpg_key_id: $gpg_key_id} | format pattern "/user/gpg_keys/{gpg_key_id}"))
+  let full_url = (build-url $base ({gpg_key_id: (encode-path-segment $gpg_key_id)} | format pattern "/user/gpg_keys/{gpg_key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12981,7 +12999,7 @@ export def "user-gpg-keys get-gpg-key-for-authenticated" [
 # GET /user/installations
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/apps#list-app-installations-accessible-to-the-user-access-token — API method documentation
 # operationId: apps/list-installations-for-authenticated-user
-export def "user-installations list-installations-for-authenticated-user" [
+export def "user-installations list-apps-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12998,10 +13016,10 @@ export def "user-installations list-installations-for-authenticated-user" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/installations" $qp)
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -13010,7 +13028,7 @@ export def "user-installations list-installations-for-authenticated-user" [
 # GET /user/installations/{installation_id}/repositories
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/apps#list-repositories-accessible-to-the-user-access-token — API method documentation
 # operationId: apps/list-installation-repos-for-authenticated-user
-export def "user-installations-repositories list-installation-repos-for-authenticated-user" [
+export def "user-installations-repositories list-apps-repos-for-authenticated" [
   installation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13027,11 +13045,11 @@ export def "user-installations-repositories list-installation-repos-for-authenti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({installation_id: $installation_id} | format pattern "/user/installations/{installation_id}/repositories") $qp)
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({installation_id: (encode-path-segment $installation_id)} | format pattern "/user/installations/{installation_id}/repositories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -13040,7 +13058,7 @@ export def "user-installations-repositories list-installation-repos-for-authenti
 # DELETE /user/installations/{installation_id}/repositories/{repository_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/apps#remove-a-repository-from-an-app-installation — API method documentation
 # operationId: apps/remove-repo-from-installation
-export def "user-installations-repositories remove-repo-from-installation" [
+export def "user-installations-repositories delete-apps-repo" [
   installation_id: int
   repository_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -13054,7 +13072,7 @@ export def "user-installations-repositories remove-repo-from-installation" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({installation_id: $installation_id, repository_id: $repository_id} | format pattern "/user/installations/{installation_id}/repositories/{repository_id}"))
+  let full_url = (build-url $base ({installation_id: (encode-path-segment $installation_id), repository_id: (encode-path-segment $repository_id)} | format pattern "/user/installations/{installation_id}/repositories/{repository_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13065,7 +13083,7 @@ export def "user-installations-repositories remove-repo-from-installation" [
 # PUT /user/installations/{installation_id}/repositories/{repository_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/apps#add-a-repository-to-an-app-installation — API method documentation
 # operationId: apps/add-repo-to-installation
-export def "user-installations-repositories add-repo-to-installation" [
+export def "user-installations-repositories create-apps-repo" [
   installation_id: int
   repository_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -13079,7 +13097,7 @@ export def "user-installations-repositories add-repo-to-installation" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({installation_id: $installation_id, repository_id: $repository_id} | format pattern "/user/installations/{installation_id}/repositories/{repository_id}"))
+  let full_url = (build-url $base ({installation_id: (encode-path-segment $installation_id), repository_id: (encode-path-segment $repository_id)} | format pattern "/user/installations/{installation_id}/repositories/{repository_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13090,7 +13108,7 @@ export def "user-installations-repositories add-repo-to-installation" [
 # GET /user/issues
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/issues#list-user-account-issues-assigned-to-the-authenticated-user — API method documentation
 # operationId: issues/list-for-authenticated-user
-export def "user-issues list-for-authenticated-user" [
+export def "user-issues list-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13099,7 +13117,7 @@ export def "user-issues list-for-authenticated-user" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter: string@filter-completer # Indicates which sorts of issues to return. Can be one of:   \* `assigned`: Issues assigned to you   \* `created`: Issues created by you   \* `mentioned`: Issues mentioning you   \* `subscribed`: Issues you're subscribed to updates for   \* `all` or `repos`: All issues the authenticated user can see, regardless of participation or creation (default: assigned)
+  --filter: string@filter-completer # Indicates which sorts of issues to return. Can be one of: \* `assigned`: Issues assigned to you \* `created`: Issues created by you \* `mentioned`: Issues mentioning you \* `subscribed`: Issues you're subscribed to updates for \* `all` or `repos`: All issues the authenticated user can see, regardless of participation or creation (default: assigned)
   --state: string@state-completer # Indicates the state of the issues to return. Can be either `open`, `closed`, or `all`. (default: open)
   --labels: string # A list of comma separated label names. Example: `bug,ui,@high`
   --qp-sort: string@sort-completer-2 # What to sort results by. Can be either `created`, `updated`, `comments`. (default: created)
@@ -13122,7 +13140,7 @@ export def "user-issues list-for-authenticated-user" [
 # GET /user/keys
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#list-public-ssh-keys-for-the-authenticated-user — API method documentation
 # operationId: users/list-public-ssh-keys-for-authenticated
-export def "user-keys list-public-ssh-keys-for-authenticated" [
+export def "user-keys list-public-ssh-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13148,7 +13166,7 @@ export def "user-keys list-public-ssh-keys-for-authenticated" [
 # POST /user/keys
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#create-a-public-ssh-key-for-the-authenticated-user — API method documentation
 # operationId: users/create-public-ssh-key-for-authenticated
-export def "user-keys create-public-ssh-key-for-authenticated" [
+export def "user-keys create-public-ssh-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13164,11 +13182,11 @@ export def "user-keys create-public-ssh-key-for-authenticated" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/keys")
-  let body = {"key": $key, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"key": $key, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a public SSH key for the authenticated user
@@ -13176,7 +13194,7 @@ export def "user-keys create-public-ssh-key-for-authenticated" [
 # DELETE /user/keys/{key_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#delete-a-public-ssh-key-for-the-authenticated-user — API method documentation
 # operationId: users/delete-public-ssh-key-for-authenticated
-export def "user-keys delete-public-ssh-key-for-authenticated" [
+export def "user-keys delete-public-ssh-for-authenticated" [
   key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13189,7 +13207,7 @@ export def "user-keys delete-public-ssh-key-for-authenticated" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key_id: $key_id} | format pattern "/user/keys/{key_id}"))
+  let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/user/keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13200,7 +13218,7 @@ export def "user-keys delete-public-ssh-key-for-authenticated" [
 # GET /user/keys/{key_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#get-a-public-ssh-key-for-the-authenticated-user — API method documentation
 # operationId: users/get-public-ssh-key-for-authenticated
-export def "user-keys get-public-ssh-key-for-authenticated" [
+export def "user-keys get-public-ssh-for-authenticated" [
   key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13213,7 +13231,7 @@ export def "user-keys get-public-ssh-key-for-authenticated" [
 ]: nothing -> record<created_at: string, id: int, key: string, read_only: bool, title: string, url: string, verified: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key_id: $key_id} | format pattern "/user/keys/{key_id}"))
+  let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/user/keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13224,7 +13242,7 @@ export def "user-keys get-public-ssh-key-for-authenticated" [
 # GET /user/memberships/orgs
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#list-organization-memberships-for-the-authenticated-user — API method documentation
 # operationId: orgs/list-memberships-for-authenticated-user
-export def "user-memberships-orgs list-memberships-for-authenticated-user" [
+export def "user-memberships-orgs list-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13251,7 +13269,7 @@ export def "user-memberships-orgs list-memberships-for-authenticated-user" [
 # GET /user/memberships/orgs/{org}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#get-an-organization-membership-for-the-authenticated-user — API method documentation
 # operationId: orgs/get-membership-for-authenticated-user
-export def "user-memberships-orgs get-membership-for-authenticated-user" [
+export def "user-memberships-orgs get-for-authenticated" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13264,7 +13282,7 @@ export def "user-memberships-orgs get-membership-for-authenticated-user" [
 ]: nothing -> record<organization: record<avatar_url: string, description: string, events_url: string, hooks_url: string, id: int, issues_url: string, login: string, members_url: string, node_id: string, public_members_url: string, repos_url: string, url: string>, organization_url: string, permissions: record<can_create_repository: bool>, role: string, state: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org} | format pattern "/user/memberships/orgs/{org}"))
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/user/memberships/orgs/{org}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13275,7 +13293,7 @@ export def "user-memberships-orgs get-membership-for-authenticated-user" [
 # PATCH /user/memberships/orgs/{org}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#update-an-organization-membership-for-the-authenticated-user — API method documentation
 # operationId: orgs/update-membership-for-authenticated-user
-export def "user-memberships-orgs update-membership-for-authenticated-user" [
+export def "user-memberships-orgs update-for-authenticated" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13290,12 +13308,12 @@ export def "user-memberships-orgs update-membership-for-authenticated-user" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({org: $org} | format pattern "/user/memberships/orgs/{org}"))
-  let body = {"state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/user/memberships/orgs/{org}"))
+  let req_body = {"state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List organizations for the authenticated user
@@ -13303,7 +13321,7 @@ export def "user-memberships-orgs update-membership-for-authenticated-user" [
 # GET /user/orgs
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#list-organizations-for-the-authenticated-user — API method documentation
 # operationId: orgs/list-for-authenticated-user
-export def "user-orgs list-for-authenticated-user" [
+export def "user-orgs list-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13329,7 +13347,7 @@ export def "user-orgs list-for-authenticated-user" [
 # POST /user/projects
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#create-a-user-project — API method documentation
 # operationId: projects/create-for-authenticated-user
-export def "user-projects create-for-authenticated-user" [
+export def "user-projects create-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13338,18 +13356,18 @@ export def "user-projects create-for-authenticated-user" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # Body of the project (nullable, e.g. This project represents the sprint of the first week in January)
+  --body: string # Body of the project (nullable, e.g. This project represents the sprint of the first week in January)
   name: string # Name of the project (e.g. Week One Sprint)
 ]: any -> record<body: string, columns_url: string, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, html_url: string, id: int, name: string, node_id: string, number: int, organization_permission: string, owner_url: string, private: bool, state: string, updated_at: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/projects")
-  let body = {"body": $body_body, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"body": $body, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List public email addresses for the authenticated user
@@ -13357,7 +13375,7 @@ export def "user-projects create-for-authenticated-user" [
 # GET /user/public_emails
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#list-public-email-addresses-for-the-authenticated-user — API method documentation
 # operationId: users/list-public-emails-for-authenticated
-export def "user-public-emails list-public-emails-for-authenticated" [
+export def "user-public-emails list-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13383,7 +13401,7 @@ export def "user-public-emails list-public-emails-for-authenticated" [
 # GET /user/repos
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-repositories-for-the-authenticated-user — API method documentation
 # operationId: repos/list-for-authenticated-user
-export def "user-repos list-for-authenticated-user" [
+export def "user-repos list-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13393,8 +13411,8 @@ export def "user-repos list-for-authenticated-user" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --visibility: string@visibility-completer-2 # Can be one of `all`, `public`, or `private`. Note: For GitHub AE, can be one of `all`, `internal`, or `private`. (default: all)
-  --affiliation: string # Comma-separated list of values. Can include:   \* `owner`: Repositories that are owned by the authenticated user.   \* `collaborator`: Repositories that the user has been added to as a collaborator.   \* `organization_member`: Repositories that the user has access to through being a member of an organization. This includes every repository on every team that the user is on. (default: owner,collaborator,organization_member)
-  --type: string@type-completer-2 # Can be one of `all`, `owner`, `public`, `private`, `member`. Note: For GitHub AE, can be one of `all`, `owner`, `internal`, `private`, `member`. Default: `all`      Will cause a `422` error if used in the same request as **visibility** or **affiliation**. Will cause a `422` error if used in the same request as **visibility** or **affiliation**. (default: all)
+  --affiliation: string # Comma-separated list of values. Can include: \* `owner`: Repositories that are owned by the authenticated user. \* `collaborator`: Repositories that the user has been added to as a collaborator. \* `organization_member`: Repositories that the user has access to through being a member of an organization. This includes every repository on every team that the user is on. (default: owner,collaborator,organization_member)
+  --type: string@type-completer-2 # Can be one of `all`, `owner`, `public`, `private`, `member`. Note: For GitHub AE, can be one of `all`, `owner`, `internal`, `private`, `member`. Default: `all` Will cause a `422` error if used in the same request as **visibility** or **affiliation**. Will cause a `422` error if used in the same request as **visibility** or **affiliation**. (default: all)
   --qp-sort: string@sort-completer-3 # Can be one of `created`, `updated`, `pushed`, `full_name`. (default: full_name)
   --direction: string@direction-completer # Can be one of `asc` or `desc`. Default: `asc` when using `full_name`, otherwise `desc`
   --per-page: int # Results per page (max 100) (default: 30)
@@ -13416,7 +13434,7 @@ export def "user-repos list-for-authenticated-user" [
 # POST /user/repos
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#create-a-repository-for-the-authenticated-user — API method documentation
 # operationId: repos/create-for-authenticated-user
-export def "user-repos create-for-authenticated-user" [
+export def "user-repos create-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13447,11 +13465,11 @@ export def "user-repos create-for-authenticated-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/repos")
-  let body = {"allow_merge_commit": $allow_merge_commit, "allow_rebase_merge": $allow_rebase_merge, "allow_squash_merge": $allow_squash_merge, "auto_init": $auto_init, "delete_branch_on_merge": $delete_branch_on_merge, "description": $description, "gitignore_template": $gitignore_template, "has_downloads": $has_downloads, "has_issues": $has_issues, "has_projects": $has_projects, "has_wiki": $has_wiki, "homepage": $homepage, "is_template": $is_template, "license_template": $license_template, "name": $name, "private": $private, "team_id": $team_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"allow_merge_commit": $allow_merge_commit, "allow_rebase_merge": $allow_rebase_merge, "allow_squash_merge": $allow_squash_merge, "auto_init": $auto_init, "delete_branch_on_merge": $delete_branch_on_merge, "description": $description, "gitignore_template": $gitignore_template, "has_downloads": $has_downloads, "has_issues": $has_issues, "has_projects": $has_projects, "has_wiki": $has_wiki, "homepage": $homepage, "is_template": $is_template, "license_template": $license_template, "name": $name, "private": $private, "team_id": $team_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List repository invitations for the authenticated user
@@ -13459,7 +13477,7 @@ export def "user-repos create-for-authenticated-user" [
 # GET /user/repository_invitations
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-repository-invitations-for-the-authenticated-user — API method documentation
 # operationId: repos/list-invitations-for-authenticated-user
-export def "user-repository-invitations list-invitations-for-authenticated-user" [
+export def "user-repository-invitations list-repos-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13485,7 +13503,7 @@ export def "user-repository-invitations list-invitations-for-authenticated-user"
 # DELETE /user/repository_invitations/{invitation_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#decline-a-repository-invitation — API method documentation
 # operationId: repos/decline-invitation
-export def "user-repository-invitations repos-decline-invitation" [
+export def "user-repository-invitations delete-repos-decline" [
   invitation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13498,7 +13516,7 @@ export def "user-repository-invitations repos-decline-invitation" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({invitation_id: $invitation_id} | format pattern "/user/repository_invitations/{invitation_id}"))
+  let full_url = (build-url $base ({invitation_id: (encode-path-segment $invitation_id)} | format pattern "/user/repository_invitations/{invitation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13509,7 +13527,7 @@ export def "user-repository-invitations repos-decline-invitation" [
 # PATCH /user/repository_invitations/{invitation_id}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#accept-a-repository-invitation — API method documentation
 # operationId: repos/accept-invitation
-export def "user-repository-invitations repos-accept-invitation" [
+export def "user-repository-invitations update-repos-accept" [
   invitation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13522,7 +13540,7 @@ export def "user-repository-invitations repos-accept-invitation" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({invitation_id: $invitation_id} | format pattern "/user/repository_invitations/{invitation_id}"))
+  let full_url = (build-url $base ({invitation_id: (encode-path-segment $invitation_id)} | format pattern "/user/repository_invitations/{invitation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13533,7 +13551,7 @@ export def "user-repository-invitations repos-accept-invitation" [
 # GET /user/starred
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#list-repositories-starred-by-the-authenticated-user — API method documentation
 # operationId: activity/list-repos-starred-by-authenticated-user
-export def "user-starred list-repos-starred-by-authenticated-user" [
+export def "user-starred list-activity-repos-by-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13562,7 +13580,7 @@ export def "user-starred list-repos-starred-by-authenticated-user" [
 # DELETE /user/starred/{owner}/{repo}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#unstar-a-repository-for-the-authenticated-user — API method documentation
 # operationId: activity/unstar-repo-for-authenticated-user
-export def "user-starred activity-unstar-repo-for-authenticated-user" [
+export def "user-starred delete-activity-unstar-for-authenticated" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13576,7 +13594,7 @@ export def "user-starred activity-unstar-repo-for-authenticated-user" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/user/starred/{owner}/{repo}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/user/starred/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13587,7 +13605,7 @@ export def "user-starred activity-unstar-repo-for-authenticated-user" [
 # GET /user/starred/{owner}/{repo}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#check-if-a-repository-is-starred-by-the-authenticated-user — API method documentation
 # operationId: activity/check-repo-is-starred-by-authenticated-user
-export def "user-starred check-repo-is-starred-by-authenticated-user" [
+export def "user-starred check-activity-is-by-authenticated" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13601,7 +13619,7 @@ export def "user-starred check-repo-is-starred-by-authenticated-user" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/user/starred/{owner}/{repo}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/user/starred/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13612,7 +13630,7 @@ export def "user-starred check-repo-is-starred-by-authenticated-user" [
 # PUT /user/starred/{owner}/{repo}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#star-a-repository-for-the-authenticated-user — API method documentation
 # operationId: activity/star-repo-for-authenticated-user
-export def "user-starred activity-star-repo-for-authenticated-user" [
+export def "user-starred update-activity-star-for-authenticated" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13626,7 +13644,7 @@ export def "user-starred activity-star-repo-for-authenticated-user" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/user/starred/{owner}/{repo}"))
+  let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/user/starred/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13637,7 +13655,7 @@ export def "user-starred activity-star-repo-for-authenticated-user" [
 # GET /user/subscriptions
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#list-repositories-watched-by-the-authenticated-user — API method documentation
 # operationId: activity/list-watched-repos-for-authenticated-user
-export def "user-subscriptions list-watched-repos-for-authenticated-user" [
+export def "user-subscriptions list-activity-watched-repos-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13663,7 +13681,7 @@ export def "user-subscriptions list-watched-repos-for-authenticated-user" [
 # GET /user/teams
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/teams#list-teams-for-the-authenticated-user — API method documentation
 # operationId: teams/list-for-authenticated-user
-export def "user-teams list-for-authenticated-user" [
+export def "user-teams list-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13715,7 +13733,7 @@ export def "users list" [
 # GET /users/{username}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#get-a-user — API method documentation
 # operationId: users/get-by-username
-export def "users get-by-username" [
+export def "users get" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13728,7 +13746,7 @@ export def "users get-by-username" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13739,7 +13757,7 @@ export def "users get-by-username" [
 # GET /users/{username}/events
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#list-events-for-the-authenticated-user — API method documentation
 # operationId: activity/list-events-for-authenticated-user
-export def "users-events list-events-for-authenticated-user" [
+export def "users-events list-activity-for-authenticated" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13755,7 +13773,7 @@ export def "users-events list-events-for-authenticated-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/events") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13766,7 +13784,7 @@ export def "users-events list-events-for-authenticated-user" [
 # GET /users/{username}/events/orgs/{org}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#list-organization-events-for-the-authenticated-user — API method documentation
 # operationId: activity/list-org-events-for-authenticated-user
-export def "users-events-orgs list-org-events-for-authenticated-user" [
+export def "users-events-orgs list-activity-for-authenticated" [
   username: string
   org: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13783,7 +13801,7 @@ export def "users-events-orgs list-org-events-for-authenticated-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username, org: $org} | format pattern "/users/{username}/events/orgs/{org}") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username), org: (encode-path-segment $org)} | format pattern "/users/{username}/events/orgs/{org}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13794,7 +13812,7 @@ export def "users-events-orgs list-org-events-for-authenticated-user" [
 # GET /users/{username}/events/public
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#list-public-events-for-a-user — API method documentation
 # operationId: activity/list-public-events-for-user
-export def "users-events-public list-public-events-for-user" [
+export def "users-events-public list-activity" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13810,7 +13828,7 @@ export def "users-events-public list-public-events-for-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/events/public") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/events/public") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13821,7 +13839,7 @@ export def "users-events-public list-public-events-for-user" [
 # GET /users/{username}/followers
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#list-followers-of-a-user — API method documentation
 # operationId: users/list-followers-for-user
-export def "users-followers list-followers-for-user" [
+export def "users-followers list" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13837,7 +13855,7 @@ export def "users-followers list-followers-for-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/followers") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/followers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13848,7 +13866,7 @@ export def "users-followers list-followers-for-user" [
 # GET /users/{username}/following
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#list-the-people-a-user-follows — API method documentation
 # operationId: users/list-following-for-user
-export def "users-following list-following-for-user" [
+export def "users-following list" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13864,7 +13882,7 @@ export def "users-following list-following-for-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/following") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/following") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13875,7 +13893,7 @@ export def "users-following list-following-for-user" [
 # GET /users/{username}/following/{target_user}
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#check-if-a-user-follows-another-user — API method documentation
 # operationId: users/check-following-for-user
-export def "users-following check-following-for-user" [
+export def "users-following check" [
   username: string
   target_user: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13889,7 +13907,7 @@ export def "users-following check-following-for-user" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username, target_user: $target_user} | format pattern "/users/{username}/following/{target_user}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), target_user: (encode-path-segment $target_user)} | format pattern "/users/{username}/following/{target_user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13900,7 +13918,7 @@ export def "users-following check-following-for-user" [
 # GET /users/{username}/gists
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/gists#list-gists-for-a-user — API method documentation
 # operationId: gists/list-for-user
-export def "users-gists list-for-user" [
+export def "users-gists list" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13917,7 +13935,7 @@ export def "users-gists list-for-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/gists") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/gists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13928,7 +13946,7 @@ export def "users-gists list-for-user" [
 # GET /users/{username}/gpg_keys
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#list-gpg-keys-for-a-user — API method documentation
 # operationId: users/list-gpg-keys-for-user
-export def "users-gpg-keys list-gpg-keys-for-user" [
+export def "users-gpg-keys list" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13944,7 +13962,7 @@ export def "users-gpg-keys list-gpg-keys-for-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/gpg_keys") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/gpg_keys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13955,7 +13973,7 @@ export def "users-gpg-keys list-gpg-keys-for-user" [
 # GET /users/{username}/hovercard
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#get-contextual-information-for-a-user — API method documentation
 # operationId: users/get-context-for-user
-export def "users-hovercard get-context-for-user" [
+export def "users-hovercard get-context" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13971,7 +13989,7 @@ export def "users-hovercard get-context-for-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "subject_type" $subject_type "scalar") (serialize-qp "subject_id" $subject_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/hovercard") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/hovercard") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13982,7 +14000,7 @@ export def "users-hovercard get-context-for-user" [
 # GET /users/{username}/installation
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/apps#get-a-user-installation-for-the-authenticated-app — API method documentation
 # operationId: apps/get-user-installation
-export def "users-installation get-user-installation" [
+export def "users-installation get-apps" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13996,11 +14014,11 @@ export def "users-installation get-user-installation" [
 ]: nothing -> record<access_tokens_url: string, account: any, app_id: int, app_slug: string, contact_email: string, created_at: string, events: list<string>, html_url: string, id: int, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string, organization_administration: string, pull_requests: string, statuses: string>, repositories_url: string, repository_selection: string, single_file_name: string, suspended_at: string, suspended_by: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, target_id: int, target_type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/installation"))
-  let extra_headers = {"accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/installation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -14009,7 +14027,7 @@ export def "users-installation get-user-installation" [
 # GET /users/{username}/keys
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/users#list-public-keys-for-a-user — API method documentation
 # operationId: users/list-public-keys-for-user
-export def "users-keys list-public-keys-for-user" [
+export def "users-keys list-public" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14025,7 +14043,7 @@ export def "users-keys list-public-keys-for-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/keys") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/keys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14036,7 +14054,7 @@ export def "users-keys list-public-keys-for-user" [
 # GET /users/{username}/orgs
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/orgs#list-organizations-for-a-user — API method documentation
 # operationId: orgs/list-for-user
-export def "users-orgs list-for-user" [
+export def "users-orgs list" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14052,7 +14070,7 @@ export def "users-orgs list-for-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/orgs") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/orgs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14063,7 +14081,7 @@ export def "users-orgs list-for-user" [
 # GET /users/{username}/projects
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/projects#list-user-projects — API method documentation
 # operationId: projects/list-for-user
-export def "users-projects list-for-user" [
+export def "users-projects list" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14080,7 +14098,7 @@ export def "users-projects list-for-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/projects") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14091,7 +14109,7 @@ export def "users-projects list-for-user" [
 # GET /users/{username}/received_events
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#list-events-received-by-the-authenticated-user — API method documentation
 # operationId: activity/list-received-events-for-user
-export def "users-received-events list-received-events-for-user" [
+export def "users-received-events list-activity" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14107,7 +14125,7 @@ export def "users-received-events list-received-events-for-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/received_events") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/received_events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14118,7 +14136,7 @@ export def "users-received-events list-received-events-for-user" [
 # GET /users/{username}/received_events/public
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#list-public-events-received-by-a-user — API method documentation
 # operationId: activity/list-received-public-events-for-user
-export def "users-received-events-public list-received-public-events-for-user" [
+export def "users-received-events-public list-activity" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14134,7 +14152,7 @@ export def "users-received-events-public list-received-public-events-for-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/received_events/public") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/received_events/public") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14145,7 +14163,7 @@ export def "users-received-events-public list-received-public-events-for-user" [
 # GET /users/{username}/repos
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/repos#list-repositories-for-a-user — API method documentation
 # operationId: repos/list-for-user
-export def "users-repos list-for-user" [
+export def "users-repos list" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14164,7 +14182,7 @@ export def "users-repos list-for-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/repos") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/repos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14175,7 +14193,7 @@ export def "users-repos list-for-user" [
 # DELETE /users/{username}/site_admin
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#demote-a-site-administrator — API method documentation
 # operationId: enterprise-admin/demote-site-administrator
-export def "users-site-admin enterprise-admin-demote-site-administrator" [
+export def "users-site-admin delete-enterprise-demote-administrator" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14188,7 +14206,7 @@ export def "users-site-admin enterprise-admin-demote-site-administrator" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/site_admin"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/site_admin"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14199,7 +14217,7 @@ export def "users-site-admin enterprise-admin-demote-site-administrator" [
 # PUT /users/{username}/site_admin
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#promote-a-user-to-be-a-site-administrator — API method documentation
 # operationId: enterprise-admin/promote-user-to-be-site-administrator
-export def "users-site-admin enterprise-admin-promote-user-to-be-site-administrator" [
+export def "users-site-admin update-enterprise-promote-to-be-administrator" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14212,7 +14230,7 @@ export def "users-site-admin enterprise-admin-promote-user-to-be-site-administra
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/site_admin"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/site_admin"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14223,7 +14241,7 @@ export def "users-site-admin enterprise-admin-promote-user-to-be-site-administra
 # GET /users/{username}/starred
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#list-repositories-starred-by-a-user — API method documentation
 # operationId: activity/list-repos-starred-by-user
-export def "users-starred list-repos-starred-by-user" [
+export def "users-starred list-activity-repos" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14241,7 +14259,7 @@ export def "users-starred list-repos-starred-by-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/starred") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/starred") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14252,7 +14270,7 @@ export def "users-starred list-repos-starred-by-user" [
 # GET /users/{username}/subscriptions
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/activity#list-repositories-watched-by-a-user — API method documentation
 # operationId: activity/list-repos-watched-by-user
-export def "users-subscriptions list-repos-watched-by-user" [
+export def "users-subscriptions list-activity-repos-watched" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14268,7 +14286,7 @@ export def "users-subscriptions list-repos-watched-by-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/subscriptions") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/subscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -14279,7 +14297,7 @@ export def "users-subscriptions list-repos-watched-by-user" [
 # DELETE /users/{username}/suspended
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#unsuspend-a-user — API method documentation
 # operationId: enterprise-admin/unsuspend-user
-export def "users-suspended enterprise-admin-unsuspend-user" [
+export def "users-suspended delete-enterprise-admin-unsuspend" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14294,12 +14312,12 @@ export def "users-suspended enterprise-admin-unsuspend-user" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/suspended"))
-  let body = {"reason": $reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/suspended"))
+  let req_body = {"reason": $reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Suspend a user
@@ -14307,7 +14325,7 @@ export def "users-suspended enterprise-admin-unsuspend-user" [
 # PUT /users/{username}/suspended
 # Docs: https://docs.github.com/enterprise-server@2.18/rest/reference/enterprise-admin#suspend-a-user — API method documentation
 # operationId: enterprise-admin/suspend-user
-export def "users-suspended enterprise-admin-suspend-user" [
+export def "users-suspended update-enterprise-admin-suspend" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14322,19 +14340,19 @@ export def "users-suspended enterprise-admin-suspend-user" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/suspended"))
-  let body = {"reason": $reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/suspended"))
+  let req_body = {"reason": $reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the Zen of GitHub
 #
 # GET /zen
 # operationId: meta/get-zen
-export def "zen get-zen" [
+export def "zen get-meta" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

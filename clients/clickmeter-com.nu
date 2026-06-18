@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -157,8 +166,8 @@ export def "account create" [
   --last-name: string
   --phone: string
   --redirect-only: oneof<nothing, bool>
-  --registration-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
-  --timeframe-min-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --registration-date: string # (A date in "YmdHis" format) (e.g. 20120203120530)
+  --timeframe-min-date: string # (A date in "YmdHis" format) (e.g. 20120203120530)
   --timezone: int # format: int32
   --timezonename: string
 ]: any -> record<boGoVal: string, bonusClicks: int, companyName: string, companyRole: string, email: string, firstName: string, lastName: string, phone: string, redirectOnly: bool, registrationDate: string, timeframeMinDate: string, timezone: int, timezonename: string> {
@@ -166,18 +175,18 @@ export def "account create" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account")
-  let body = {"boGoVal": $bo_go_val, "bonusClicks": $bonus_clicks, "companyName": $company_name, "companyRole": $company_role, "email": $email, "firstName": $first_name, "lastName": $last_name, "phone": $phone, "redirectOnly": $redirect_only, "registrationDate": $registration_date, "timeframeMinDate": $timeframe_min_date, "timezone": $timezone, "timezonename": $timezonename} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"boGoVal": $bo_go_val, "bonusClicks": $bonus_clicks, "companyName": $company_name, "companyRole": $company_role, "email": $email, "firstName": $first_name, "lastName": $last_name, "phone": $phone, "redirectOnly": $redirect_only, "registrationDate": $registration_date, "timeframeMinDate": $timeframe_min_date, "timezone": $timezone, "timezonename": $timezonename} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve list of a domains allowed to redirect in DDU mode
 #
 # GET /account/domainwhitelist
 # operationId: Account_GetDomainWhitelist
-export def "account-domainwhitelist get" [
+export def "account-domainwhitelist get-domain-whitelist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +212,7 @@ export def "account-domainwhitelist get" [
 #
 # POST /account/domainwhitelist
 # operationId: Account_PutDomainWhitelist
-export def "account-domainwhitelist update" [
+export def "account-domainwhitelist update-domain-whitelist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,18 +229,18 @@ export def "account-domainwhitelist update" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/domainwhitelist")
-  let body = {"id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an domain entry
 #
 # DELETE /account/domainwhitelist/{whitelistId}
 # operationId: Account_DeleteDomainWhitelist
-export def "account-domainwhitelist delete" [
+export def "account-domainwhitelist delete-domain-whitelist" [
   whitelist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -245,7 +254,7 @@ export def "account-domainwhitelist delete" [
 ]: nothing -> record<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({whitelist_id: $whitelist_id} | format pattern "/account/domainwhitelist/{whitelist_id}"))
+  let full_url = (build-url $base ({whitelist_id: (encode-path-segment $whitelist_id)} | format pattern "/account/domainwhitelist/{whitelist_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -300,7 +309,7 @@ export def "account-guests update" [
   --accept: string@accept-completer # Response content type
   --api-key: string
   --conversion-options: record # shape: {hideComCost?: bool, hideCost?: bool, hideCount?: bool, hideParams?: bool, hideValue?: bool, percentCommission?: int, percentValue?: int}
-  --creation-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --creation-date: string # (A date in "YmdHis" format) (e.g. 20120203120530)
   --current-grant: record # shape: {DatapointType?: string, Entity?: record, EntityName?: string, EntityType?: string, Type?: string}
   --date-format: string
   --decimal-separator: string
@@ -318,7 +327,7 @@ export def "account-guests update" [
   --password: string
   --time-format: string@time-format-completer
   --time-zone: int # format: int32
-  --timeframe-min-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --timeframe-min-date: string # (A date in "YmdHis" format) (e.g. 20120203120530)
   --timezonename: string
   --tl-grants: int # format: int64
   --tp-grants: int # format: int64
@@ -328,11 +337,11 @@ export def "account-guests update" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/guests")
-  let body = {"apiKey": $api_key, "conversionOptions": $conversion_options, "creationDate": $creation_date, "currentGrant": $current_grant, "dateFormat": $date_format, "decimalSeparator": $decimal_separator, "email": $email, "extendedGrants": $extended_grants, "groupGrants": $group_grants, "hitOptions": $hit_options, "id": $id, "key": $key, "language": $language, "loginCount": $login_count, "name": $name, "notes": $notes, "numberGroupSeparator": $number_group_separator, "password": $password, "timeFormat": $time_format, "timeZone": $time_zone, "timeframeMinDate": $timeframe_min_date, "timezonename": $timezonename, "tlGrants": $tl_grants, "tpGrants": $tp_grants, "userName": $user_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiKey": $api_key, "conversionOptions": $conversion_options, "creationDate": $creation_date, "currentGrant": $current_grant, "dateFormat": $date_format, "decimalSeparator": $decimal_separator, "email": $email, "extendedGrants": $extended_grants, "groupGrants": $group_grants, "hitOptions": $hit_options, "id": $id, "key": $key, "language": $language, "loginCount": $login_count, "name": $name, "notes": $notes, "numberGroupSeparator": $number_group_separator, "password": $password, "timeFormat": $time_format, "timeZone": $time_zone, "timeframeMinDate": $timeframe_min_date, "timezonename": $timezonename, "tlGrants": $tl_grants, "tpGrants": $tp_grants, "userName": $user_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve count of guests
@@ -378,7 +387,7 @@ export def "account-guests delete" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({guest_id: $guest_id} | format pattern "/account/guests/{guest_id}"))
+  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id)} | format pattern "/account/guests/{guest_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -402,7 +411,7 @@ export def "account-guests get" [
 ]: nothing -> record<apiKey: string, conversionOptions: record<hideComCost: bool, hideCost: bool, hideCount: bool, hideParams: bool, hideValue: bool, percentCommission: int, percentValue: int>, creationDate: string, currentGrant: record<DatapointType: string, Entity: record<id: int, uri: string>, EntityName: string, EntityType: string, Type: string>, dateFormat: string, decimalSeparator: string, email: string, extendedGrants: record<allowAllGrants: bool, allowGroupCreation: bool>, groupGrants: int, hitOptions: record<hideReferrer: bool>, id: int, key: string, language: string, loginCount: int, name: string, notes: string, numberGroupSeparator: string, password: string, timeFormat: string, timeZone: int, timeframeMinDate: string, timezonename: string, tlGrants: int, tpGrants: int, userName: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({guest_id: $guest_id} | format pattern "/account/guests/{guest_id}"))
+  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id)} | format pattern "/account/guests/{guest_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -429,7 +438,7 @@ export def "account-guests create" [
   --accept: string@accept-completer # Response content type
   --api-key: string
   --conversion-options: record # shape: {hideComCost?: bool, hideCost?: bool, hideCount?: bool, hideParams?: bool, hideValue?: bool, percentCommission?: int, percentValue?: int}
-  --creation-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --creation-date: string # (A date in "YmdHis" format) (e.g. 20120203120530)
   --current-grant: record # shape: {DatapointType?: string, Entity?: record, EntityName?: string, EntityType?: string, Type?: string}
   --date-format: string
   --decimal-separator: string
@@ -447,7 +456,7 @@ export def "account-guests create" [
   --password: string
   --time-format: string@time-format-completer
   --time-zone: int # format: int32
-  --timeframe-min-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --timeframe-min-date: string # (A date in "YmdHis" format) (e.g. 20120203120530)
   --timezonename: string
   --tl-grants: int # format: int64
   --tp-grants: int # format: int64
@@ -456,12 +465,12 @@ export def "account-guests create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({guest_id: $guest_id} | format pattern "/account/guests/{guest_id}"))
-  let body = {"apiKey": $api_key, "conversionOptions": $conversion_options, "creationDate": $creation_date, "currentGrant": $current_grant, "dateFormat": $date_format, "decimalSeparator": $decimal_separator, "email": $email, "extendedGrants": $extended_grants, "groupGrants": $group_grants, "hitOptions": $hit_options, "id": $id, "key": $key, "language": $language, "loginCount": $login_count, "name": $name, "notes": $notes, "numberGroupSeparator": $number_group_separator, "password": $password, "timeFormat": $time_format, "timeZone": $time_zone, "timeframeMinDate": $timeframe_min_date, "timezonename": $timezonename, "tlGrants": $tl_grants, "tpGrants": $tp_grants, "userName": $user_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id)} | format pattern "/account/guests/{guest_id}"))
+  let req_body = {"apiKey": $api_key, "conversionOptions": $conversion_options, "creationDate": $creation_date, "currentGrant": $current_grant, "dateFormat": $date_format, "decimalSeparator": $decimal_separator, "email": $email, "extendedGrants": $extended_grants, "groupGrants": $group_grants, "hitOptions": $hit_options, "id": $id, "key": $key, "language": $language, "loginCount": $login_count, "name": $name, "notes": $notes, "numberGroupSeparator": $number_group_separator, "password": $password, "timeFormat": $time_format, "timeZone": $time_zone, "timeframeMinDate": $timeframe_min_date, "timezonename": $timezonename, "tlGrants": $tl_grants, "tpGrants": $tp_grants, "userName": $user_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve permissions for a guest
@@ -488,7 +497,7 @@ export def "account-guests-permissions get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "entityType" $entity_type "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "entityId" $entity_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({guest_id: $guest_id} | format pattern "/account/guests/{guest_id}/permissions") $qp)
+  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id)} | format pattern "/account/guests/{guest_id}/permissions") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -516,7 +525,7 @@ export def "account-guests-permissions-count get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "entityType" $entity_type "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "entityId" $entity_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({guest_id: $guest_id} | format pattern "/account/guests/{guest_id}/permissions/count") $qp)
+  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id)} | format pattern "/account/guests/{guest_id}/permissions/count") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -525,7 +534,7 @@ export def "account-guests-permissions-count get" [
 # Change the permission on a shared object
 #
 # POST /account/guests/{guestId}/{type}/permissions/patch
-export def "account-guests-permissions-patch post" [
+export def "account-guests-permissions-patch create" [
   guest_id: int
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -544,12 +553,12 @@ export def "account-guests-permissions-patch post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({guest_id: $guest_id, type: $type} | format pattern "/account/guests/{guest_id}/{type}/permissions/patch"))
-  let body = {"Action": $action, "Id": $id, "Verb": $verb} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id), type: (encode-path-segment $type)} | format pattern "/account/guests/{guest_id}/{type}/permissions/patch"))
+  let req_body = {"Action": $action, "Id": $id, "Verb": $verb} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Change the permission on a shared object
@@ -575,19 +584,19 @@ export def "account-guests-permissions-patch update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({guest_id: $guest_id, type: $type} | format pattern "/account/guests/{guest_id}/{type}/permissions/patch"))
-  let body = {"Action": $action, "Id": $id, "Verb": $verb} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({guest_id: (encode-path-segment $guest_id), type: (encode-path-segment $type)} | format pattern "/account/guests/{guest_id}/{type}/permissions/patch"))
+  let req_body = {"Action": $action, "Id": $id, "Verb": $verb} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve list of a ip to exclude from event tracking
 #
 # GET /account/ipblacklist
 # operationId: Account_GetIpBlacklist
-export def "account-ipblacklist get" [
+export def "account-ipblacklist get-ip-blacklist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -613,7 +622,7 @@ export def "account-ipblacklist get" [
 #
 # POST /account/ipblacklist
 # operationId: Account_PutIpBlacklist
-export def "account-ipblacklist update" [
+export def "account-ipblacklist update-ip-blacklist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -630,18 +639,18 @@ export def "account-ipblacklist update" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/ipblacklist")
-  let body = {"id": $id, "ip": $ip} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"id": $id, "ip": $ip} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an ip blacklist entry
 #
 # DELETE /account/ipblacklist/{blacklistId}
 # operationId: Account_DeleteIpBlacklist
-export def "account-ipblacklist delete" [
+export def "account-ipblacklist delete-ip-blacklist" [
   blacklist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -655,7 +664,7 @@ export def "account-ipblacklist delete" [
 ]: nothing -> record<id: string, ip: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({blacklist_id: $blacklist_id} | format pattern "/account/ipblacklist/{blacklist_id}"))
+  let full_url = (build-url $base ({blacklist_id: (encode-path-segment $blacklist_id)} | format pattern "/account/ipblacklist/{blacklist_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -850,7 +859,7 @@ export def "aggregated-summary-groups get" [
 #
 # GET /clickstream
 # operationId: ClickStream_Get
-export def "clickstream get" [
+export def "clickstream get-click-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -920,7 +929,7 @@ export def "conversions update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --code: string
-  --creation-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --creation-date: string # (A date in "YmdHis" format) (e.g. 20120203120530)
   --deleted: oneof<nothing, bool>
   --description: string
   --id: int # format: int64
@@ -932,18 +941,18 @@ export def "conversions update" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conversions")
-  let body = {"code": $code, "creationDate": $creation_date, "deleted": $deleted, "description": $description, "id": $id, "name": $name, "protocol": $protocol, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"code": $code, "creationDate": $creation_date, "deleted": $deleted, "description": $description, "id": $id, "name": $name, "protocol": $protocol, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve statistics about this customer for a timeframe related to a subset of conversions grouped by some temporal entity (day/week/month)
 #
 # GET /conversions/aggregated/list
 # operationId: Conversions_GetStatisticsAllList
-export def "conversions-aggregated-list get-statistics-all" [
+export def "conversions-aggregated-list get-statistics-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1014,7 +1023,7 @@ export def "conversions delete" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}"))
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1037,7 +1046,7 @@ export def "conversions get" [
 ]: nothing -> record<code: string, creationDate: string, deleted: bool, description: string, id: int, name: string, protocol: string, value: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}"))
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1059,7 +1068,7 @@ export def "conversions create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --code: string
-  --creation-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --creation-date: string # (A date in "YmdHis" format) (e.g. 20120203120530)
   --deleted: oneof<nothing, bool>
   --description: string
   --id: int # format: int64
@@ -1070,12 +1079,12 @@ export def "conversions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}"))
-  let body = {"code": $code, "creationDate": $creation_date, "deleted": $deleted, "description": $description, "id": $id, "name": $name, "protocol": $protocol, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}"))
+  let req_body = {"code": $code, "creationDate": $creation_date, "deleted": $deleted, "description": $description, "id": $id, "name": $name, "protocol": $protocol, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve statistics about this conversion for a timeframe
@@ -1103,7 +1112,7 @@ export def "conversions-aggregated get-statistics-single" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "hourly" $hourly "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}/aggregated") $qp)
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/aggregated") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1132,7 +1141,7 @@ export def "conversions-aggregated-list get-statistics" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}/aggregated/list") $qp)
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/aggregated/list") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1165,7 +1174,7 @@ export def "conversions-datapoints get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}/datapoints") $qp)
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/datapoints") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1175,7 +1184,7 @@ export def "conversions-datapoints get" [
 #
 # PUT /conversions/{conversionId}/datapoints/batch/patch
 # --PatchRequests item shape: {Action?: string, Id?: int}
-export def "conversions-datapoints-batch-patch put" [
+export def "conversions-datapoints-batch-patch update" [
   conversion_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1191,12 +1200,12 @@ export def "conversions-datapoints-batch-patch put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}/datapoints/batch/patch"))
-  let body = {"PatchRequests": $patch_requests} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/datapoints/batch/patch"))
+  let req_body = {"PatchRequests": $patch_requests} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a count of datapoints connected to this conversion
@@ -1224,7 +1233,7 @@ export def "conversions-datapoints-count get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}/datapoints/count") $qp)
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/datapoints/count") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1252,12 +1261,12 @@ export def "conversions-datapoints-patch update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}/datapoints/patch"))
-  let body = {"Action": $action, "Id": $id, "ReplaceId": $replace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/datapoints/patch"))
+  let req_body = {"Action": $action, "Id": $id, "ReplaceId": $replace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve the list of events related to this conversion.
@@ -1285,7 +1294,7 @@ export def "conversions-hits get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}/hits") $qp)
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/hits") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1311,19 +1320,19 @@ export def "conversions-notes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({conversion_id: $conversion_id} | format pattern "/conversions/{conversion_id}/notes"))
-  let body = {"Text": $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({conversion_id: (encode-path-segment $conversion_id)} | format pattern "/conversions/{conversion_id}/notes"))
+  let req_body = {"Text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List of all the datapoints associated to the user
 #
 # GET /datapoints
 # operationId: DataPoints_Get
-export def "datapoints list" [
+export def "datapoints get-data-points" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1358,10 +1367,10 @@ export def "datapoints list" [
 #
 # POST /datapoints
 # operationId: DataPoints_Put
-# --tags item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
-# --typeTL shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, pauseAfterDateExpiration?: bool, randomDestinationItems?: list, redirectType?: "PermanentRedirect"|"TemporaryRedirect", referrerClean?: "None"|"Clean"|"Myself", scripts?: list, sequentialDestinationItems?: list, spilloverDestinationItems?: list, uniqueDestinationItem?: record, url?: string, urlAfterClicksExpiration?: string, urlAfterDateExpiration?: string, urlsByLanguage?: list, urlsByNation?: list, weightedDestinationItems?: list}
+# --tags item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
+# --typeTL shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, ... (14 more fields)}
 # --typeTP shape: {parameterNote?: string}
-export def "datapoints update" [
+export def "datapoints update-data-points" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1371,7 +1380,7 @@ export def "datapoints update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --creation-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --creation-date: string # (A date in "YmdHis" format) (e.g. 20120203120530)
   --encode-ip: oneof<nothing, bool>
   --fifth-conversion-id: int # format: int64
   --fifth-conversion-name: string
@@ -1392,13 +1401,13 @@ export def "datapoints update" [
   --second-conversion-id: int # format: int64
   --second-conversion-name: string
   --status: string@status-completer-2
-  --tags: list # item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
+  --tags: list # item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
   --third-conversion-id: int # format: int64
   --third-conversion-name: string
   --title: string
   --tracking-code: string
   --type: string@type-completer-2
-  --type-tl: record # shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, pauseAfterDateExpiration?: bool, randomDestinationItems?: list, redirectType?: "PermanentRedirect"|"TemporaryRedirect", referrerClean?: "None"|"Clean"|"Myself", scripts?: list, sequentialDestinationItems?: list, spilloverDestinationItems?: list, uniqueDestinationItem?: record, url?: string, urlAfterClicksExpiration?: string, urlAfterDateExpiration?: string, urlsByLanguage?: list, urlsByNation?: list, weightedDestinationItems?: list}
+  --type-tl: record # shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, ... (14 more fields)}
   --type-tp: record # shape: {parameterNote?: string}
   --write-permited: oneof<nothing, bool>
 ]: any -> record<id: int, uri: string> {
@@ -1406,18 +1415,18 @@ export def "datapoints update" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/datapoints")
-  let body = {"creationDate": $creation_date, "encodeIp": $encode_ip, "fifthConversionId": $fifth_conversion_id, "fifthConversionName": $fifth_conversion_name, "firstConversionId": $first_conversion_id, "firstConversionName": $first_conversion_name, "fourthConversionId": $fourth_conversion_id, "fourthConversionName": $fourth_conversion_name, "groupId": $group_id, "groupName": $group_name, "id": $id, "isPublic": $is_public, "isSecured": $is_secured, "lightTracking": $light_tracking, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "secondConversionId": $second_conversion_id, "secondConversionName": $second_conversion_name, "status": $status, "tags": $tags, "thirdConversionId": $third_conversion_id, "thirdConversionName": $third_conversion_name, "title": $title, "trackingCode": $tracking_code, "type": $type, "typeTL": $type_tl, "typeTP": $type_tp, "writePermited": $write_permited} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"creationDate": $creation_date, "encodeIp": $encode_ip, "fifthConversionId": $fifth_conversion_id, "fifthConversionName": $fifth_conversion_name, "firstConversionId": $first_conversion_id, "firstConversionName": $first_conversion_name, "fourthConversionId": $fourth_conversion_id, "fourthConversionName": $fourth_conversion_name, "groupId": $group_id, "groupName": $group_name, "id": $id, "isPublic": $is_public, "isSecured": $is_secured, "lightTracking": $light_tracking, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "secondConversionId": $second_conversion_id, "secondConversionName": $second_conversion_name, "status": $status, "tags": $tags, "thirdConversionId": $third_conversion_id, "thirdConversionName": $third_conversion_name, "title": $title, "trackingCode": $tracking_code, "type": $type, "typeTL": $type_tl, "typeTP": $type_tp, "writePermited": $write_permited} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve statistics about this customer for a timeframe by groups
 #
 # GET /datapoints/aggregated
 # operationId: DataPoints_GetStatisticsAggregatedSingle
-export def "datapoints-aggregated get-statistics-aggregated-single" [
+export def "datapoints-aggregated list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1449,7 +1458,7 @@ export def "datapoints-aggregated get-statistics-aggregated-single" [
 #
 # GET /datapoints/aggregated/list
 # operationId: DataPoints_GetStatisticsAllList
-export def "datapoints-aggregated-list get-statistics-all" [
+export def "datapoints-aggregated-list get-data-points-statistics-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1482,7 +1491,7 @@ export def "datapoints-aggregated-list get-statistics-all" [
 # DELETE /datapoints/batch
 # operationId: DataPoints_BatchDelete
 # --Entities item shape: {id?: int, uri?: string}
-export def "datapoints-batch delete" [
+export def "datapoints-batch delete-data-points" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1498,19 +1507,19 @@ export def "datapoints-batch delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/datapoints/batch")
-  let body = {"Entities": $entities} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Entities": $entities} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update multiple datapoints
 #
 # POST /datapoints/batch
 # operationId: DataPoints_BatchPost
-# --List item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, thirdConversionId?: int, thirdConversionName?: string, title?: string, trackingCode?: string, type?: "TrackingLink"|"TrackingPixel", typeTL?: record, typeTP?: record, writePermited?: bool}
-export def "datapoints-batch create" [
+# --List item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, ... (8 more fields)}
+export def "datapoints-batch create-data-points" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1520,25 +1529,25 @@ export def "datapoints-batch create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --list: list # item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, thirdConversionId?: int, thirdConversionName?: string, title?: string, trackingCode?: string, type?: "TrackingLink"|"TrackingPixel", typeTL?: record, typeTP?: record, writePermited?: bool}
+  --list: list # item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, ... (8 more fields)}
 ]: any -> record<entityData: record<creationDate: string, encodeIp: bool, fifthConversionId: int, fifthConversionName: string, firstConversionId: int, firstConversionName: string, fourthConversionId: int, fourthConversionName: string, groupId: int, groupName: string, id: int, isPublic: bool, isSecured: bool, lightTracking: bool, name: string, notes: string, preferred: bool, redirectOnly: bool, secondConversionId: int, secondConversionName: string, status: string, tags: list<record>, thirdConversionId: int, thirdConversionName: string, title: string, trackingCode: string, type: string, typeTL: record<appendQuery: bool, browserDestinationItem: record, destinationMode: string, domainId: int, encodeUrl: bool, expirationClicks: int, expirationDate: string, firstUrl: string, goDomainId: int, hideUrl: bool, hideUrlTitle: string, isABTest: bool, password: string, pauseAfterClicksExpiration: bool, pauseAfterDateExpiration: bool, randomDestinationItems: list, redirectType: string, referrerClean: string, scripts: list, sequentialDestinationItems: list, spilloverDestinationItems: list, uniqueDestinationItem: record, url: string, urlAfterClicksExpiration: string, urlAfterDateExpiration: string, urlsByLanguage: list, urlsByNation: list, weightedDestinationItems: list>, typeTP: record<parameterNote: string>, writePermited: bool>, errors: table<code: record, errorMessage: string, errorValue: record, property: string>, result: record<id: int, uri: string>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/datapoints/batch")
-  let body = {"List": $list} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"List": $list} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create multiple datapoints
 #
 # PUT /datapoints/batch
 # operationId: DataPoints_BatchPut
-# --List item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, thirdConversionId?: int, thirdConversionName?: string, title?: string, trackingCode?: string, type?: "TrackingLink"|"TrackingPixel", typeTL?: record, typeTP?: record, writePermited?: bool}
-export def "datapoints-batch update" [
+# --List item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, ... (8 more fields)}
+export def "datapoints-batch update-data-points" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1548,24 +1557,24 @@ export def "datapoints-batch update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --list: list # item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, thirdConversionId?: int, thirdConversionName?: string, title?: string, trackingCode?: string, type?: "TrackingLink"|"TrackingPixel", typeTL?: record, typeTP?: record, writePermited?: bool}
+  --list: list # item shape: {creationDate?: string, encodeIp?: bool, fifthConversionId?: int, fifthConversionName?: string, firstConversionId?: int, firstConversionName?: string, fourthConversionId?: int, fourthConversionName?: string, groupId?: int, groupName?: string, id?: int, isPublic?: bool, isSecured?: bool, lightTracking?: bool, name?: string, notes?: string, preferred?: bool, redirectOnly?: bool, secondConversionId?: int, secondConversionName?: string, status?: "Active"|"Paused"|"Abuse"|"Deleted", tags?: list, ... (8 more fields)}
 ]: any -> record<entityData: record<creationDate: string, encodeIp: bool, fifthConversionId: int, fifthConversionName: string, firstConversionId: int, firstConversionName: string, fourthConversionId: int, fourthConversionName: string, groupId: int, groupName: string, id: int, isPublic: bool, isSecured: bool, lightTracking: bool, name: string, notes: string, preferred: bool, redirectOnly: bool, secondConversionId: int, secondConversionName: string, status: string, tags: list<record>, thirdConversionId: int, thirdConversionName: string, title: string, trackingCode: string, type: string, typeTL: record<appendQuery: bool, browserDestinationItem: record, destinationMode: string, domainId: int, encodeUrl: bool, expirationClicks: int, expirationDate: string, firstUrl: string, goDomainId: int, hideUrl: bool, hideUrlTitle: string, isABTest: bool, password: string, pauseAfterClicksExpiration: bool, pauseAfterDateExpiration: bool, randomDestinationItems: list, redirectType: string, referrerClean: string, scripts: list, sequentialDestinationItems: list, spilloverDestinationItems: list, uniqueDestinationItem: record, url: string, urlAfterClicksExpiration: string, urlAfterDateExpiration: string, urlsByLanguage: list, urlsByNation: list, weightedDestinationItems: list>, typeTP: record<parameterNote: string>, writePermited: bool>, errors: table<code: record, errorMessage: string, errorValue: record, property: string>, result: record<id: int, uri: string>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/datapoints/batch")
-  let body = {"List": $list} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"List": $list} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Count the datapoints associated to the user
 #
 # GET /datapoints/count
 # operationId: DataPoints_Count
-export def "datapoints-count get" [
+export def "datapoints-count get-data-points" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1596,7 +1605,7 @@ export def "datapoints-count get" [
 #
 # DELETE /datapoints/{id}
 # operationId: DataPoints_Delete
-export def "datapoints delete" [
+export def "datapoints delete-data-points" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1610,7 +1619,7 @@ export def "datapoints delete" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/datapoints/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1633,7 +1642,7 @@ export def "datapoints get" [
 ]: nothing -> record<creationDate: string, encodeIp: bool, fifthConversionId: int, fifthConversionName: string, firstConversionId: int, firstConversionName: string, fourthConversionId: int, fourthConversionName: string, groupId: int, groupName: string, id: int, isPublic: bool, isSecured: bool, lightTracking: bool, name: string, notes: string, preferred: bool, redirectOnly: bool, secondConversionId: int, secondConversionName: string, status: string, tags: table<datapoints: list, groups: list, id: int, name: string>, thirdConversionId: int, thirdConversionName: string, title: string, trackingCode: string, type: string, typeTL: record<appendQuery: bool, browserDestinationItem: record<emailDestinationUrl: string, mobileDestinationUrl: string, spidersDestinationUrl: string>, destinationMode: string, domainId: int, encodeUrl: bool, expirationClicks: int, expirationDate: string, firstUrl: string, goDomainId: int, hideUrl: bool, hideUrlTitle: string, isABTest: bool, password: string, pauseAfterClicksExpiration: bool, pauseAfterDateExpiration: bool, randomDestinationItems: list<record>, redirectType: string, referrerClean: string, scripts: list<record>, sequentialDestinationItems: list<record>, spilloverDestinationItems: list<record>, uniqueDestinationItem: record<firstDestinationUrl: string>, url: string, urlAfterClicksExpiration: string, urlAfterDateExpiration: string, urlsByLanguage: list<record>, urlsByNation: list<record>, weightedDestinationItems: list<record>>, typeTP: record<parameterNote: string>, writePermited: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/datapoints/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1643,10 +1652,10 @@ export def "datapoints get" [
 #
 # POST /datapoints/{id}
 # operationId: DataPoints_Post
-# --tags item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
-# --typeTL shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, pauseAfterDateExpiration?: bool, randomDestinationItems?: list, redirectType?: "PermanentRedirect"|"TemporaryRedirect", referrerClean?: "None"|"Clean"|"Myself", scripts?: list, sequentialDestinationItems?: list, spilloverDestinationItems?: list, uniqueDestinationItem?: record, url?: string, urlAfterClicksExpiration?: string, urlAfterDateExpiration?: string, urlsByLanguage?: list, urlsByNation?: list, weightedDestinationItems?: list}
+# --tags item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
+# --typeTL shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, ... (14 more fields)}
 # --typeTP shape: {parameterNote?: string}
-export def "datapoints create" [
+export def "datapoints create-data-points" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1657,7 +1666,7 @@ export def "datapoints create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --creation-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --creation-date: string # (A date in "YmdHis" format) (e.g. 20120203120530)
   --encode-ip: oneof<nothing, bool>
   --fifth-conversion-id: int # format: int64
   --fifth-conversion-name: string
@@ -1678,32 +1687,32 @@ export def "datapoints create" [
   --second-conversion-id: int # format: int64
   --second-conversion-name: string
   --status: string@status-completer-2
-  --tags: list # item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
+  --tags: list # item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
   --third-conversion-id: int # format: int64
   --third-conversion-name: string
   --title: string
   --tracking-code: string
   --type: string@type-completer-2
-  --type-tl: record # shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, pauseAfterDateExpiration?: bool, randomDestinationItems?: list, redirectType?: "PermanentRedirect"|"TemporaryRedirect", referrerClean?: "None"|"Clean"|"Myself", scripts?: list, sequentialDestinationItems?: list, spilloverDestinationItems?: list, uniqueDestinationItem?: record, url?: string, urlAfterClicksExpiration?: string, urlAfterDateExpiration?: string, urlsByLanguage?: list, urlsByNation?: list, weightedDestinationItems?: list}
+  --type-tl: record # shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, ... (14 more fields)}
   --type-tp: record # shape: {parameterNote?: string}
   --write-permited: oneof<nothing, bool>
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/datapoints/{id}"))
-  let body = {"creationDate": $creation_date, "encodeIp": $encode_ip, "fifthConversionId": $fifth_conversion_id, "fifthConversionName": $fifth_conversion_name, "firstConversionId": $first_conversion_id, "firstConversionName": $first_conversion_name, "fourthConversionId": $fourth_conversion_id, "fourthConversionName": $fourth_conversion_name, "groupId": $group_id, "groupName": $group_name, "id": $body_id, "isPublic": $is_public, "isSecured": $is_secured, "lightTracking": $light_tracking, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "secondConversionId": $second_conversion_id, "secondConversionName": $second_conversion_name, "status": $status, "tags": $tags, "thirdConversionId": $third_conversion_id, "thirdConversionName": $third_conversion_name, "title": $title, "trackingCode": $tracking_code, "type": $type, "typeTL": $type_tl, "typeTP": $type_tp, "writePermited": $write_permited} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}"))
+  let req_body = {"creationDate": $creation_date, "encodeIp": $encode_ip, "fifthConversionId": $fifth_conversion_id, "fifthConversionName": $fifth_conversion_name, "firstConversionId": $first_conversion_id, "firstConversionName": $first_conversion_name, "fourthConversionId": $fourth_conversion_id, "fourthConversionName": $fourth_conversion_name, "groupId": $group_id, "groupName": $group_name, "id": $body_id, "isPublic": $is_public, "isSecured": $is_secured, "lightTracking": $light_tracking, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "secondConversionId": $second_conversion_id, "secondConversionName": $second_conversion_name, "status": $status, "tags": $tags, "thirdConversionId": $third_conversion_id, "thirdConversionName": $third_conversion_name, "title": $title, "trackingCode": $tracking_code, "type": $type, "typeTL": $type_tl, "typeTP": $type_tp, "writePermited": $write_permited} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve statistics about this datapoint for a timeframe
 #
 # GET /datapoints/{id}/aggregated
 # operationId: DataPoints_GetStatisticsSingle
-export def "datapoints-aggregated get-statistics-single" [
+export def "datapoints-aggregated get-data-points-statistics-single" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1722,7 +1731,7 @@ export def "datapoints-aggregated get-statistics-single" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "hourly" $hourly "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/datapoints/{id}/aggregated") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}/aggregated") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1732,7 +1741,7 @@ export def "datapoints-aggregated get-statistics-single" [
 #
 # GET /datapoints/{id}/aggregated/list
 # operationId: DataPoints_GetStatisticsList
-export def "datapoints-aggregated-list get-statistics" [
+export def "datapoints-aggregated-list get-data-points-statistics" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1751,7 +1760,7 @@ export def "datapoints-aggregated-list get-statistics" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/datapoints/{id}/aggregated/list") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}/aggregated/list") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1761,7 +1770,7 @@ export def "datapoints-aggregated-list get-statistics" [
 #
 # PUT /datapoints/{id}/favourite
 # operationId: DataPoints_PatchFavourite
-export def "datapoints-favourite update" [
+export def "datapoints-favourite update-data-points" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1775,7 +1784,7 @@ export def "datapoints-favourite update" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/datapoints/{id}/favourite"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}/favourite"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1785,7 +1794,7 @@ export def "datapoints-favourite update" [
 #
 # GET /datapoints/{id}/hits
 # operationId: DataPoints_GetHits
-export def "datapoints-hits get" [
+export def "datapoints-hits get-data-points" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1806,7 +1815,7 @@ export def "datapoints-hits get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/datapoints/{id}/hits") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}/hits") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1816,7 +1825,7 @@ export def "datapoints-hits get" [
 #
 # PUT /datapoints/{id}/notes
 # operationId: DataPoints_PatchNotes
-export def "datapoints-notes update" [
+export def "datapoints-notes update-data-points" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1832,12 +1841,12 @@ export def "datapoints-notes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/datapoints/{id}/notes"))
-  let body = {"Text": $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/datapoints/{id}/notes"))
+  let req_body = {"Text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a list of domains
@@ -1892,11 +1901,11 @@ export def "domains update" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/domains")
-  let body = {"custom404": $custom404, "customHomepage": $custom_homepage, "id": $id, "name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"custom404": $custom404, "customHomepage": $custom_homepage, "id": $id, "name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve count of domains
@@ -1943,7 +1952,7 @@ export def "domains delete" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/domains/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/domains/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1966,7 +1975,7 @@ export def "domains get" [
 ]: nothing -> record<custom404: string, customHomepage: string, id: int, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/domains/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/domains/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1996,12 +2005,12 @@ export def "domains update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/domains/{id}"))
-  let body = {"custom404": $custom404, "customHomepage": $custom_homepage, "id": $body_id, "name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/domains/{id}"))
+  let req_body = {"custom404": $custom404, "customHomepage": $custom_homepage, "id": $body_id, "name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List of all the groups associated to the user.
@@ -2040,7 +2049,7 @@ export def "groups list" [
 #
 # POST /groups
 # operationId: Groups_Put
-# --tags item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
+# --tags item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
 export def "groups update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2051,7 +2060,7 @@ export def "groups update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --creation-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --creation-date: string # (A date in "YmdHis" format) (e.g. 20120203120530)
   --deleted: oneof<nothing, bool>
   --id: int # format: int64
   --is-public: oneof<nothing, bool>
@@ -2059,25 +2068,25 @@ export def "groups update" [
   --notes: string
   --preferred: oneof<nothing, bool>
   --redirect-only: oneof<nothing, bool>
-  --tags: list # item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
+  --tags: list # item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
   --write-permited: oneof<nothing, bool>
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/groups")
-  let body = {"creationDate": $creation_date, "deleted": $deleted, "id": $id, "isPublic": $is_public, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "tags": $tags, "writePermited": $write_permited} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"creationDate": $creation_date, "deleted": $deleted, "id": $id, "isPublic": $is_public, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "tags": $tags, "writePermited": $write_permited} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve statistics about this customer for a timeframe by groups
 #
 # GET /groups/aggregated
 # operationId: Groups_GetStatisticsAggregatedSingle
-export def "groups-aggregated get-statistics-aggregated-single" [
+export def "groups-aggregated list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2108,7 +2117,7 @@ export def "groups-aggregated get-statistics-aggregated-single" [
 #
 # GET /groups/aggregated/list
 # operationId: Groups_GetStatisticsAllList
-export def "groups-aggregated-list get-statistics-all" [
+export def "groups-aggregated-list get-statistics-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2183,7 +2192,7 @@ export def "groups delete" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2206,7 +2215,7 @@ export def "groups get" [
 ]: nothing -> record<creationDate: string, deleted: bool, id: int, isPublic: bool, name: string, notes: string, preferred: bool, redirectOnly: bool, tags: table<datapoints: list, groups: list, id: int, name: string>, writePermited: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2216,7 +2225,7 @@ export def "groups get" [
 #
 # POST /groups/{id}
 # operationId: Groups_Post
-# --tags item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
+# --tags item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
 export def "groups create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2228,7 +2237,7 @@ export def "groups create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --creation-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --creation-date: string # (A date in "YmdHis" format) (e.g. 20120203120530)
   --deleted: oneof<nothing, bool>
   --body-id: int # format: int64
   --is-public: oneof<nothing, bool>
@@ -2236,18 +2245,18 @@ export def "groups create" [
   --notes: string
   --preferred: oneof<nothing, bool>
   --redirect-only: oneof<nothing, bool>
-  --tags: list # item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
+  --tags: list # item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
   --write-permited: oneof<nothing, bool>
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}"))
-  let body = {"creationDate": $creation_date, "deleted": $deleted, "id": $body_id, "isPublic": $is_public, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "tags": $tags, "writePermited": $write_permited} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}"))
+  let req_body = {"creationDate": $creation_date, "deleted": $deleted, "id": $body_id, "isPublic": $is_public, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "tags": $tags, "writePermited": $write_permited} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve statistics about this group for a timeframe
@@ -2273,7 +2282,7 @@ export def "groups-aggregated get-statistics-single" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "hourly" $hourly "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}/aggregated") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/aggregated") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2302,7 +2311,7 @@ export def "groups-aggregated-list get-statistics" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}/aggregated/list") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/aggregated/list") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2339,7 +2348,7 @@ export def "groups-aggregated-summary get-datapoints" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "favourite" $favourite "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "textSearch" $text_search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}/aggregated/summary") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/aggregated/summary") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2375,7 +2384,7 @@ export def "groups-datapoints get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}/datapoints") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/datapoints") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2385,8 +2394,8 @@ export def "groups-datapoints get" [
 #
 # POST /groups/{id}/datapoints
 # operationId: Groups_PutDatapoint
-# --tags item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
-# --typeTL shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, pauseAfterDateExpiration?: bool, randomDestinationItems?: list, redirectType?: "PermanentRedirect"|"TemporaryRedirect", referrerClean?: "None"|"Clean"|"Myself", scripts?: list, sequentialDestinationItems?: list, spilloverDestinationItems?: list, uniqueDestinationItem?: record, url?: string, urlAfterClicksExpiration?: string, urlAfterDateExpiration?: string, urlsByLanguage?: list, urlsByNation?: list, weightedDestinationItems?: list}
+# --tags item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
+# --typeTL shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, ... (14 more fields)}
 # --typeTP shape: {parameterNote?: string}
 export def "groups-datapoints update" [
   id: int
@@ -2399,7 +2408,7 @@ export def "groups-datapoints update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --creation-date: string #  (A date in "YmdHis" format) (e.g. 20120203120530)
+  --creation-date: string # (A date in "YmdHis" format) (e.g. 20120203120530)
   --encode-ip: oneof<nothing, bool>
   --fifth-conversion-id: int # format: int64
   --fifth-conversion-name: string
@@ -2420,25 +2429,25 @@ export def "groups-datapoints update" [
   --second-conversion-id: int # format: int64
   --second-conversion-name: string
   --status: string@status-completer-2
-  --tags: list # item shape: {datapoints?: list, groups?: list, id?: int, name?: string}
+  --tags: list # item shape: {datapoints?: list<int>, groups?: list<int>, id?: int, name?: string}
   --third-conversion-id: int # format: int64
   --third-conversion-name: string
   --title: string
   --tracking-code: string
   --type: string@type-completer-2
-  --type-tl: record # shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, pauseAfterDateExpiration?: bool, randomDestinationItems?: list, redirectType?: "PermanentRedirect"|"TemporaryRedirect", referrerClean?: "None"|"Clean"|"Myself", scripts?: list, sequentialDestinationItems?: list, spilloverDestinationItems?: list, uniqueDestinationItem?: record, url?: string, urlAfterClicksExpiration?: string, urlAfterDateExpiration?: string, urlsByLanguage?: list, urlsByNation?: list, weightedDestinationItems?: list}
+  --type-tl: record # shape: {appendQuery?: bool, browserDestinationItem?: record, destinationMode?: "Simple"|"RandomDestination"|"DestinationByLanguage"|"SpilloverDestination"|"DynamicUrl"|"BrowserDestination"|"DestinationByNation"|"UniqueDestination"|"SequentialDestination"|"WeightedDestination", domainId?: int, encodeUrl?: bool, expirationClicks?: int, expirationDate?: string, firstUrl?: string, goDomainId?: int, hideUrl?: bool, hideUrlTitle?: string, isABTest?: bool, password?: string, pauseAfterClicksExpiration?: bool, ... (14 more fields)}
   --type-tp: record # shape: {parameterNote?: string}
   --write-permited: oneof<nothing, bool>
 ]: any -> record<id: int, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}/datapoints"))
-  let body = {"creationDate": $creation_date, "encodeIp": $encode_ip, "fifthConversionId": $fifth_conversion_id, "fifthConversionName": $fifth_conversion_name, "firstConversionId": $first_conversion_id, "firstConversionName": $first_conversion_name, "fourthConversionId": $fourth_conversion_id, "fourthConversionName": $fourth_conversion_name, "groupId": $group_id, "groupName": $group_name, "id": $body_id, "isPublic": $is_public, "isSecured": $is_secured, "lightTracking": $light_tracking, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "secondConversionId": $second_conversion_id, "secondConversionName": $second_conversion_name, "status": $status, "tags": $tags, "thirdConversionId": $third_conversion_id, "thirdConversionName": $third_conversion_name, "title": $title, "trackingCode": $tracking_code, "type": $type, "typeTL": $type_tl, "typeTP": $type_tp, "writePermited": $write_permited} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/datapoints"))
+  let req_body = {"creationDate": $creation_date, "encodeIp": $encode_ip, "fifthConversionId": $fifth_conversion_id, "fifthConversionName": $fifth_conversion_name, "firstConversionId": $first_conversion_id, "firstConversionName": $first_conversion_name, "fourthConversionId": $fourth_conversion_id, "fourthConversionName": $fourth_conversion_name, "groupId": $group_id, "groupName": $group_name, "id": $body_id, "isPublic": $is_public, "isSecured": $is_secured, "lightTracking": $light_tracking, "name": $name, "notes": $notes, "preferred": $preferred, "redirectOnly": $redirect_only, "secondConversionId": $second_conversion_id, "secondConversionName": $second_conversion_name, "status": $status, "tags": $tags, "thirdConversionId": $third_conversion_id, "thirdConversionName": $third_conversion_name, "title": $title, "trackingCode": $tracking_code, "type": $type, "typeTL": $type_tl, "typeTP": $type_tp, "writePermited": $write_permited} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Count the datapoints associated to the user in this group.
@@ -2467,7 +2476,7 @@ export def "groups-datapoints-count get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}/datapoints/count") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/datapoints/count") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2491,7 +2500,7 @@ export def "groups-favourite update" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}/favourite"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/favourite"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2522,7 +2531,7 @@ export def "groups-hits get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fromDay" $from_day "scalar") (serialize-qp "toDay" $to_day "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}/hits") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/hits") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2548,12 +2557,12 @@ export def "groups-notes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/groups/{id}/notes"))
-  let body = {"Text": $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}/notes"))
+  let req_body = {"Text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve the list of events related to this account.
@@ -2680,11 +2689,11 @@ export def "retargeting update" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/retargeting")
-  let body = {"id": $id, "name": $name, "script": $script} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"id": $id, "name": $name, "script": $script} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve count of retargeting scripts
@@ -2728,7 +2737,7 @@ export def "retargeting delete" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/retargeting/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/retargeting/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2751,7 +2760,7 @@ export def "retargeting get" [
 ]: nothing -> record<id: int, name: string, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/retargeting/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/retargeting/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2779,12 +2788,12 @@ export def "retargeting create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/retargeting/{id}"))
-  let body = {"id": $body_id, "name": $name, "script": $script} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/retargeting/{id}"))
+  let req_body = {"id": $body_id, "name": $name, "script": $script} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List of all the datapoints associated to the retargeting script.
@@ -2816,7 +2825,7 @@ export def "retargeting-datapoints get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/retargeting/{id}/datapoints") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/retargeting/{id}/datapoints") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2847,7 +2856,7 @@ export def "retargeting-datapoints-count get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "onlyFavorites" $only_favorites "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/retargeting/{id}/datapoints/count") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/retargeting/{id}/datapoints/count") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2897,8 +2906,8 @@ export def "tags update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --datapoints: list
-  --groups: list
+  --datapoints: list<int>
+  --groups: list<int>
   --id: int # format: int64
   --name: string
 ]: any -> record<id: int, uri: string> {
@@ -2906,11 +2915,11 @@ export def "tags update" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tags")
-  let body = {"datapoints": $datapoints, "groups": $groups, "id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"datapoints": $datapoints, "groups": $groups, "id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List of all the groups associated to the user filtered by this tag.
@@ -2959,7 +2968,7 @@ export def "tags delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2982,7 +2991,7 @@ export def "tags get" [
 ]: nothing -> record<datapoints: list<int>, groups: list<int>, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3006,7 +3015,7 @@ export def "tags-datapoints delete-related" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}/datapoints"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/datapoints"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3038,7 +3047,7 @@ export def "tags-datapoints get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}/datapoints") $qp)
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/datapoints") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3068,7 +3077,7 @@ export def "tags-datapoints-count get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}/datapoints/count") $qp)
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/datapoints/count") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3078,7 +3087,7 @@ export def "tags-datapoints-count get" [
 #
 # PUT /tags/{tagId}/datapoints/patch
 # operationId: Tags_PatchDataPoint
-export def "tags-datapoints-patch update" [
+export def "tags-datapoints-patch update-data-point" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3095,12 +3104,12 @@ export def "tags-datapoints-patch update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}/datapoints/patch"))
-  let body = {"Action": $action, "Id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/datapoints/patch"))
+  let req_body = {"Action": $action, "Id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete the association of this tag with all groups
@@ -3121,7 +3130,7 @@ export def "tags-groups delete-related" [
 ]: nothing -> record<id: int, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}/groups"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/groups"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3152,7 +3161,7 @@ export def "tags-groups get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}/groups") $qp)
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/groups") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3181,7 +3190,7 @@ export def "tags-groups-count get" [
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "textSearch" $text_search "scalar") (serialize-qp "createdAfter" $created_after "scalar") (serialize-qp "createdBefore" $created_before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}/groups/count") $qp)
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/groups/count") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3208,12 +3217,12 @@ export def "tags-groups-patch update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}/groups/patch"))
-  let body = {"Action": $action, "Id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/groups/patch"))
+  let req_body = {"Action": $action, "Id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Fast patch a tag name
@@ -3236,10 +3245,10 @@ export def "tags-name update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-clickmeter-authkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/tags/{tag_id}/name"))
-  let body = {"Text": $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/tags/{tag_id}/name"))
+  let req_body = {"Text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

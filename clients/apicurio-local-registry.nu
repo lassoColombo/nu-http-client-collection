@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -146,7 +155,7 @@ export def "admin-config-properties list" [
 #
 # DELETE /admin/config/properties/{propertyName}
 # operationId: resetConfigProperty
-export def "admin-config-properties reset-config-property" [
+export def "admin-config-properties reset-property" [
   property_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,7 +168,7 @@ export def "admin-config-properties reset-config-property" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({property_name: $property_name} | format pattern "/admin/config/properties/{property_name}"))
+  let full_url = (build-url $base ({property_name: (encode-path-segment $property_name)} | format pattern "/admin/config/properties/{property_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,7 +178,7 @@ export def "admin-config-properties reset-config-property" [
 #
 # GET /admin/config/properties/{propertyName}
 # operationId: getConfigProperty
-export def "admin-config-properties get-config-property" [
+export def "admin-config-properties get-property" [
   property_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -182,7 +191,7 @@ export def "admin-config-properties get-config-property" [
 ]: nothing -> record<description: string, label: string, name: string, type: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({property_name: $property_name} | format pattern "/admin/config/properties/{property_name}"))
+  let full_url = (build-url $base ({property_name: (encode-path-segment $property_name)} | format pattern "/admin/config/properties/{property_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -192,7 +201,7 @@ export def "admin-config-properties get-config-property" [
 #
 # PUT /admin/config/properties/{propertyName}
 # operationId: updateConfigProperty
-export def "admin-config-properties update-config-property" [
+export def "admin-config-properties update-property" [
   property_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -207,12 +216,12 @@ export def "admin-config-properties update-config-property" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({property_name: $property_name} | format pattern "/admin/config/properties/{property_name}"))
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({property_name: (encode-path-segment $property_name)} | format pattern "/admin/config/properties/{property_name}"))
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Export registry data
@@ -229,7 +238,7 @@ export def "admin-export export-data" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --for-browser: oneof<nothing, bool> # Indicates if the operation is done for a browser.  If true, the response will be a JSON payload with a property called `href`.  This `href` will be a single-use, naked download link suitable for use by a web browser to download the content.
+  --for-browser: oneof<nothing, bool> # Indicates if the operation is done for a browser. If true, the response will be a JSON payload with a property called `href`. This `href` will be a single-use, naked download link suitable for use by a web browser to download the content.
 ]: nothing -> record<downloadId: string, href: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -261,12 +270,13 @@ export def "admin-import import-data" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/import")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Registry-Preserve-GlobalId": $x_registry_preserve_global_id, "X-Registry-Preserve-ContentId": $x_registry_preserve_content_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/zip" $body
+  let extra_headers = {"X-Registry-Preserve-GlobalId": $x_registry_preserve_global_id, "X-Registry-Preserve-ContentId": $x_registry_preserve_content_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/zip" $req_body
 }
 
 # List logging configurations
@@ -308,7 +318,7 @@ export def "admin-loggers delete-log-configuration" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({logger: $logger} | format pattern "/admin/loggers/{logger}"))
+  let full_url = (build-url $base ({logger: (encode-path-segment $logger)} | format pattern "/admin/loggers/{logger}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -331,7 +341,7 @@ export def "admin-loggers get-log-configuration" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({logger: $logger} | format pattern "/admin/loggers/{logger}"))
+  let full_url = (build-url $base ({logger: (encode-path-segment $logger)} | format pattern "/admin/loggers/{logger}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -341,7 +351,7 @@ export def "admin-loggers get-log-configuration" [
 #
 # PUT /admin/loggers/{logger}
 # operationId: setLogConfiguration
-export def "admin-loggers setLogConfiguration" [
+export def "admin-loggers update-log-configuration" [
   logger: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -356,12 +366,12 @@ export def "admin-loggers setLogConfiguration" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({logger: $logger} | format pattern "/admin/loggers/{logger}"))
-  let body = {"level": $level} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({logger: (encode-path-segment $logger)} | format pattern "/admin/loggers/{logger}"))
+  let req_body = {"level": $level} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all role mappings
@@ -407,11 +417,11 @@ export def "admin-role-mappings create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/roleMappings")
-  let body = {"principalId": $principal_id, "principalName": $principal_name, "role": $role} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"principalId": $principal_id, "principalName": $principal_name, "role": $role} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a role mapping
@@ -431,7 +441,7 @@ export def "admin-role-mappings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({principal_id: $principal_id} | format pattern "/admin/roleMappings/{principal_id}"))
+  let full_url = (build-url $base ({principal_id: (encode-path-segment $principal_id)} | format pattern "/admin/roleMappings/{principal_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -454,7 +464,7 @@ export def "admin-role-mappings get" [
 ]: nothing -> record<principalId: string, principalName: string, role: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({principal_id: $principal_id} | format pattern "/admin/roleMappings/{principal_id}"))
+  let full_url = (build-url $base ({principal_id: (encode-path-segment $principal_id)} | format pattern "/admin/roleMappings/{principal_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -479,19 +489,19 @@ export def "admin-role-mappings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({principal_id: $principal_id} | format pattern "/admin/roleMappings/{principal_id}"))
-  let body = {"role": $role} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({principal_id: (encode-path-segment $principal_id)} | format pattern "/admin/roleMappings/{principal_id}"))
+  let req_body = {"role": $role} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete all global rules
 #
 # DELETE /admin/rules
 # operationId: deleteAllGlobalRules
-export def "admin-rules delete-all-global" [
+export def "admin-rules delete-list-global" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -551,11 +561,11 @@ export def "admin-rules create-global" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/rules")
-  let body = {"config": $config, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"config": $config, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete global rule
@@ -575,7 +585,7 @@ export def "admin-rules delete-global" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({rule: $rule} | format pattern "/admin/rules/{rule}"))
+  let full_url = (build-url $base ({rule: (encode-path-segment $rule)} | format pattern "/admin/rules/{rule}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -598,7 +608,7 @@ export def "admin-rules get-global-config" [
 ]: nothing -> record<config: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({rule: $rule} | format pattern "/admin/rules/{rule}"))
+  let full_url = (build-url $base ({rule: (encode-path-segment $rule)} | format pattern "/admin/rules/{rule}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -624,12 +634,12 @@ export def "admin-rules update-global-config" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({rule: $rule} | format pattern "/admin/rules/{rule}"))
-  let body = {"config": $config, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({rule: (encode-path-segment $rule)} | format pattern "/admin/rules/{rule}"))
+  let req_body = {"config": $config, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List groups
@@ -645,10 +655,10 @@ export def "groups list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --limit: int # The number of groups to return.  Defaults to 20.
-  --offset: int # The number of groups to skip before starting the result set.  Defaults to 0.
+  --limit: int # The number of groups to return. Defaults to 20.
+  --offset: int # The number of groups to skip before starting the result set. Defaults to 0.
   --order: string@order-completer # Sort order, ascending (`asc`) or descending (`desc`).
-  --orderby: string@orderby-completer # The field to sort by.  Can be one of:  * `name` * `createdOn`
+  --orderby: string@orderby-completer # The field to sort by. Can be one of: * `name` * `createdOn`
 ]: nothing -> record<count: int, groups: table<createdBy: string, createdOn: string, description: string, id: string, modifiedBy: string, modifiedOn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -680,11 +690,11 @@ export def "groups create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/groups")
-  let body = {"description": $description, "id": $id, "properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "id": $id, "properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a group by the specified ID.
@@ -704,7 +714,7 @@ export def "groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -727,7 +737,7 @@ export def "groups get" [
 ]: nothing -> record<createdBy: string, createdOn: string, description: string, id: string, modifiedBy: string, modifiedOn: string, properties: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -737,7 +747,7 @@ export def "groups get" [
 #
 # DELETE /groups/{groupId}/artifacts
 # operationId: deleteArtifactsInGroup
-export def "groups-artifacts delete-artifacts-in" [
+export def "groups-artifacts delete-by-groupId" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -750,7 +760,7 @@ export def "groups-artifacts delete-artifacts-in" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}/artifacts"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}/artifacts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -760,7 +770,7 @@ export def "groups-artifacts delete-artifacts-in" [
 #
 # GET /groups/{groupId}/artifacts
 # operationId: listArtifactsInGroup
-export def "groups-artifacts list-artifacts-in" [
+export def "groups-artifacts list" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -770,15 +780,15 @@ export def "groups-artifacts list-artifacts-in" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --limit: int # The number of artifacts to return.  Defaults to 20.
-  --offset: int # The number of artifacts to skip before starting the result set.  Defaults to 0.
+  --limit: int # The number of artifacts to return. Defaults to 20.
+  --offset: int # The number of artifacts to skip before starting the result set. Defaults to 0.
   --order: string@order-completer # Sort order, ascending (`asc`) or descending (`desc`).
-  --orderby: string@orderby-completer # The field to sort by.  Can be one of:  * `name` * `createdOn`
+  --orderby: string@orderby-completer # The field to sort by. Can be one of: * `name` * `createdOn`
 ]: nothing -> record<artifacts: table<createdBy: string, createdOn: string, description: string, groupId: string, id: string, labels: list, modifiedBy: string, modifiedOn: string, name: string, state: string, type: string>, count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "orderby" $orderby "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}/artifacts") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}/artifacts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -799,10 +809,10 @@ export def "groups-artifacts create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-exists: string@if-exists-completer # Set this option to instruct the server on what to do if the artifact already exists.
-  --canonical: oneof<nothing, bool> # Used only when the `ifExists` query parameter is set to `RETURN_OR_UPDATE`, this parameter can be set to `true` to indicate that the server should "canonicalize" the content when searching for a matching version.  The canonicalization algorithm is unique to each artifact type, but typically involves removing extra whitespace and formatting the content in a consistent manner.
-  --x-registry-artifact-type: string # Specifies the type of the artifact being added. Possible values include:  * Avro (`AVRO`) * Protobuf (`PROTOBUF`) * JSON Schema (`JSON`) * Kafka Connect (`KCONNECT`) * OpenAPI (`OPENAPI`) * AsyncAPI (`ASYNCAPI`) * GraphQL (`GRAPHQL`) * Web Services Description Language (`WSDL`) * XML Schema (`XSD`) (e.g. AVRO)
+  --canonical: oneof<nothing, bool> # Used only when the `ifExists` query parameter is set to `RETURN_OR_UPDATE`, this parameter can be set to `true` to indicate that the server should "canonicalize" the content when searching for a matching version. The canonicalization algorithm is unique to each artifact type, but typically involves removing extra whitespace and formatting the content in a consistent manner.
+  --x-registry-artifact-type: string # Specifies the type of the artifact being added. Possible values include: * Avro (`AVRO`) * Protobuf (`PROTOBUF`) * JSON Schema (`JSON`) * Kafka Connect (`KCONNECT`) * OpenAPI (`OPENAPI`) * AsyncAPI (`ASYNCAPI`) * GraphQL (`GRAPHQL`) * Web Services Description Language (`WSDL`) * XML Schema (`XSD`) (e.g. AVRO)
   --x-registry-artifact-id: string # A client-provided, globally unique identifier for the new artifact.
-  --x-registry-version: string # Specifies the version number of this initial version of the artifact content.  This would typically be a simple integer or a SemVer value.  If not provided, the server will assign a version number automatically (starting with version `1`). (e.g. "3.1.6")
+  --x-registry-version: string # Specifies the version number of this initial version of the artifact content. This would typically be a simple integer or a SemVer value. If not provided, the server will assign a version number automatically (starting with version `1`). (e.g. "3.1.6")
   --x-registry-description: string # Specifies the description of artifact being added. Description must be ASCII-only string. If this is not provided, the server will extract the description from the artifact content. (e.g. "Artifact description")
   --x-registry-description-encoded: string # Specifies the description of artifact being added. Value of this must be Base64 encoded string. If this is not provided, the server will extract the description from the artifact content. (e.g. "QXJ0aWZhY3QgZGVzY3JpcHRpb24K")
   --x-registry-name: string # Specifies the name of artifact being added. Name must be ASCII-only string. If this is not provided, the server will extract the name from the artifact content. (e.g. "Artifact name")
@@ -815,20 +825,21 @@ export def "groups-artifacts create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ifExists" $if_exists "scalar") (serialize-qp "canonical" $canonical "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/groups/{group_id}/artifacts") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Registry-ArtifactType": $x_registry_artifact_type, "X-Registry-ArtifactId": $x_registry_artifact_id, "X-Registry-Version": $x_registry_version, "X-Registry-Description": $x_registry_description, "X-Registry-Description-Encoded": $x_registry_description_encoded, "X-Registry-Name": $x_registry_name, "X-Registry-Name-Encoded": $x_registry_name_encoded, "X-Registry-Content-Hash": $x_registry_content_hash, "X-Registry-Hash-Algorithm": $x_registry_hash_algorithm} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}/artifacts") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
+  let extra_headers = {"X-Registry-ArtifactType": $x_registry_artifact_type, "X-Registry-ArtifactId": $x_registry_artifact_id, "X-Registry-Version": $x_registry_version, "X-Registry-Description": $x_registry_description, "X-Registry-Description-Encoded": $x_registry_description_encoded, "X-Registry-Name": $x_registry_name, "X-Registry-Name-Encoded": $x_registry_name_encoded, "X-Registry-Content-Hash": $x_registry_content_hash, "X-Registry-Hash-Algorithm": $x_registry_hash_algorithm} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $req_body
 }
 
 # Delete artifact
 #
 # DELETE /groups/{groupId}/artifacts/{artifactId}
 # operationId: deleteArtifact
-export def "groups-artifacts delete" [
+export def "groups-artifacts delete-by-groupId-artifactId" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -842,7 +853,7 @@ export def "groups-artifacts delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id} | format pattern "/groups/{group_id}/artifacts/{artifact_id}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -868,7 +879,7 @@ export def "groups-artifacts get-latest" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dereference" $dereference "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id} | format pattern "/groups/{group_id}/artifacts/{artifact_id}") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -889,7 +900,7 @@ export def "groups-artifacts update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-registry-version: string # Specifies the version number of this new version of the artifact content.  This would typically be a simple integer or a SemVer value.  If not provided, the server will assign a version number automatically. (e.g. "3.1.6")
+  --x-registry-version: string # Specifies the version number of this new version of the artifact content. This would typically be a simple integer or a SemVer value. If not provided, the server will assign a version number automatically. (e.g. "3.1.6")
   --x-registry-name: string # Specifies the artifact name of this new version of the artifact content. Name must be ASCII-only string. If this is not provided, the server will extract the name from the artifact content. (e.g. "Artifact name")
   --x-registry-name-encoded: string # Specifies the artifact name of this new version of the artifact content. Value of this must be Base64 encoded string. If this is not provided, the server will extract the name from the artifact content. (e.g. "QXJ0aWZhY3QgbmFtZQo=")
   --x-registry-description: string # Specifies the artifact description of this new version of the artifact content. Description must be ASCII-only string. If this is not provided, the server will extract the description from the artifact content. (e.g. "Artifact description")
@@ -899,20 +910,21 @@ export def "groups-artifacts update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id} | format pattern "/groups/{group_id}/artifacts/{artifact_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Registry-Version": $x_registry_version, "X-Registry-Name": $x_registry_name, "X-Registry-Name-Encoded": $x_registry_name_encoded, "X-Registry-Description": $x_registry_description, "X-Registry-Description-Encoded": $x_registry_description_encoded} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
+  let extra_headers = {"X-Registry-Version": $x_registry_version, "X-Registry-Name": $x_registry_name, "X-Registry-Name-Encoded": $x_registry_name_encoded, "X-Registry-Description": $x_registry_description, "X-Registry-Description-Encoded": $x_registry_description_encoded} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $req_body
 }
 
 # Get artifact metadata
 #
 # GET /groups/{groupId}/artifacts/{artifactId}/meta
 # operationId: getArtifactMetaData
-export def "groups-artifacts-meta get-artifact-meta-data" [
+export def "groups-artifacts-meta get-data" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -926,7 +938,7 @@ export def "groups-artifacts-meta get-artifact-meta-data" [
 ]: nothing -> record<contentId: int, createdBy: string, createdOn: string, description: string, globalId: int, groupId: string, id: string, labels: list<string>, modifiedBy: string, modifiedOn: string, name: string, properties: record, references: table<artifactId: string, groupId: string, name: string, version: string>, state: string, type: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/meta"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/meta"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -936,7 +948,7 @@ export def "groups-artifacts-meta get-artifact-meta-data" [
 #
 # POST /groups/{groupId}/artifacts/{artifactId}/meta
 # operationId: getArtifactVersionMetaDataByContent
-export def "groups-artifacts-meta get-artifact-version-meta-data" [
+export def "groups-artifacts-meta get-version-data-by-content" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -947,25 +959,26 @@ export def "groups-artifacts-meta get-artifact-version-meta-data" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --canonical: oneof<nothing, bool> # Parameter that can be set to `true` to indicate that the server should "canonicalize" the content when searching for a matching version.  Canonicalization is unique to each artifact type, but typically involves removing any extra whitespace and formatting the content in a consistent manner.
+  --canonical: oneof<nothing, bool> # Parameter that can be set to `true` to indicate that the server should "canonicalize" the content when searching for a matching version. Canonicalization is unique to each artifact type, but typically involves removing any extra whitespace and formatting the content in a consistent manner.
   --body: record
 ]: any -> record<contentId: int, createdBy: string, createdOn: string, description: string, globalId: int, groupId: string, id: string, labels: list<string>, name: string, properties: record, state: string, type: string, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "canonical" $canonical "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/meta") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/meta") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $req_body
 }
 
 # Update artifact metadata
 #
 # PUT /groups/{groupId}/artifacts/{artifactId}/meta
 # operationId: updateArtifactMetaData
-export def "groups-artifacts-meta update-artifact-meta-data" [
+export def "groups-artifacts-meta update-data" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -977,19 +990,19 @@ export def "groups-artifacts-meta update-artifact-meta-data" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
-  --labels: list
+  --labels: list<string>
   --name: string
   --properties: record # User-defined name-value pairs. Name and value must be strings.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/meta"))
-  let body = {"description": $description, "labels": $labels, "name": $name, "properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/meta"))
+  let req_body = {"description": $description, "labels": $labels, "name": $name, "properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get artifact owner
@@ -1010,7 +1023,7 @@ export def "groups-artifacts-owner get" [
 ]: nothing -> record<owner: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/owner"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/owner"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1036,12 +1049,12 @@ export def "groups-artifacts-owner update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/owner"))
-  let body = {"owner": $owner} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/owner"))
+  let req_body = {"owner": $owner} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete artifact rules
@@ -1062,7 +1075,7 @@ export def "groups-artifacts-rules delete-by-groupId-artifactId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/rules"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/rules"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1086,7 +1099,7 @@ export def "groups-artifacts-rules list" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/rules"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/rules"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1113,12 +1126,12 @@ export def "groups-artifacts-rules create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/rules"))
-  let body = {"config": $config, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/rules"))
+  let req_body = {"config": $config, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete artifact rule
@@ -1140,7 +1153,7 @@ export def "groups-artifacts-rules delete-by-groupId-artifactId-rule" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id, rule: $rule} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/rules/{rule}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id), rule: (encode-path-segment $rule)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/rules/{rule}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1150,7 +1163,7 @@ export def "groups-artifacts-rules delete-by-groupId-artifactId-rule" [
 #
 # GET /groups/{groupId}/artifacts/{artifactId}/rules/{rule}
 # operationId: getArtifactRuleConfig
-export def "groups-artifacts-rules get-artifact-config" [
+export def "groups-artifacts-rules get-config" [
   group_id: string
   artifact_id: string
   rule: string
@@ -1165,7 +1178,7 @@ export def "groups-artifacts-rules get-artifact-config" [
 ]: nothing -> record<config: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id, rule: $rule} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/rules/{rule}"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id), rule: (encode-path-segment $rule)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/rules/{rule}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1175,7 +1188,7 @@ export def "groups-artifacts-rules get-artifact-config" [
 #
 # PUT /groups/{groupId}/artifacts/{artifactId}/rules/{rule}
 # operationId: updateArtifactRuleConfig
-export def "groups-artifacts-rules update-artifact-config" [
+export def "groups-artifacts-rules update-config" [
   group_id: string
   artifact_id: string
   rule: string
@@ -1193,12 +1206,12 @@ export def "groups-artifacts-rules update-artifact-config" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id, rule: $rule} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/rules/{rule}"))
-  let body = {"config": $config, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id), rule: (encode-path-segment $rule)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/rules/{rule}"))
+  let req_body = {"config": $config, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update artifact state
@@ -1216,24 +1229,24 @@ export def "groups-artifacts-state update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  state: string@state-completer # Describes the state of an artifact or artifact version.  The following states are possible:  * ENABLED * DISABLED * DEPRECATED
+  state: string@state-completer # Describes the state of an artifact or artifact version. The following states are possible: * ENABLED * DISABLED * DEPRECATED
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/state"))
-  let body = {"state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/state"))
+  let req_body = {"state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Test update artifact
 #
 # PUT /groups/{groupId}/artifacts/{artifactId}/test
 # operationId: testUpdateArtifact
-export def "groups-artifacts-test test-update" [
+export def "groups-artifacts-test update" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1249,11 +1262,12 @@ export def "groups-artifacts-test test-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/test"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/test"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $req_body
 }
 
 # List artifact versions
@@ -1271,13 +1285,13 @@ export def "groups-artifacts-versions list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --offset: int # The number of versions to skip before starting to collect the result set.  Defaults to 0.
-  --limit: int # The number of versions to return.  Defaults to 20.
+  --offset: int # The number of versions to skip before starting to collect the result set. Defaults to 0.
+  --limit: int # The number of versions to return. Defaults to 20.
 ]: nothing -> record<count: int, versions: table<contentId: int, createdBy: string, createdOn: string, description: string, globalId: int, labels: list, name: string, properties: record, references: list, state: string, type: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/versions") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1298,7 +1312,7 @@ export def "groups-artifacts-versions create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-registry-version: string # Specifies the version number of this new version of the artifact content.  This would typically be a simple integer or a SemVer value.  It must be unique within the artifact.  If this is not provided, the server will generate a new, unique version number for this new updated content. (e.g. "3.1.6")
+  --x-registry-version: string # Specifies the version number of this new version of the artifact content. This would typically be a simple integer or a SemVer value. It must be unique within the artifact. If this is not provided, the server will generate a new, unique version number for this new updated content. (e.g. "3.1.6")
   --x-registry-name: string # Specifies the artifact name of this new version of the artifact content. Name must be ASCII-only string. If this is not provided, the server will extract the name from the artifact content. (e.g. "Artifact name")
   --x-registry-description: string # Specifies the artifact description of this new version of the artifact content. Description must be ASCII-only string. If this is not provided, the server will extract the description from the artifact content. (e.g. "Artifact description")
   --x-registry-description-encoded: string # Specifies the artifact description of this new version of the artifact content. Value of this must be Base64 encoded string. If this is not provided, the server will extract the description from the artifact content. (e.g. "QXJ0aWZhY3QgZGVzY3JpcHRpb24K")
@@ -1308,13 +1322,14 @@ export def "groups-artifacts-versions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/versions"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Registry-Version": $x_registry_version, "X-Registry-Name": $x_registry_name, "X-Registry-Description": $x_registry_description, "X-Registry-Description-Encoded": $x_registry_description_encoded, "X-Registry-Name-Encoded": $x_registry_name_encoded} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/versions"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
+  let extra_headers = {"X-Registry-Version": $x_registry_version, "X-Registry-Name": $x_registry_name, "X-Registry-Description": $x_registry_description, "X-Registry-Description-Encoded": $x_registry_description_encoded, "X-Registry-Name-Encoded": $x_registry_name_encoded} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $req_body
 }
 
 # Get artifact version
@@ -1338,7 +1353,7 @@ export def "groups-artifacts-versions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dereference" $dereference "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id, version: $version} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/versions/{version}") $qp)
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id), version: (encode-path-segment $version)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/versions/{version}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1348,7 +1363,7 @@ export def "groups-artifacts-versions get" [
 #
 # DELETE /groups/{groupId}/artifacts/{artifactId}/versions/{version}/meta
 # operationId: deleteArtifactVersionMetaData
-export def "groups-artifacts-versions-meta delete-artifact-meta-data" [
+export def "groups-artifacts-versions-meta delete-data" [
   group_id: string
   artifact_id: string
   version: string
@@ -1363,7 +1378,7 @@ export def "groups-artifacts-versions-meta delete-artifact-meta-data" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id, version: $version} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/versions/{version}/meta"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id), version: (encode-path-segment $version)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/versions/{version}/meta"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1373,7 +1388,7 @@ export def "groups-artifacts-versions-meta delete-artifact-meta-data" [
 #
 # GET /groups/{groupId}/artifacts/{artifactId}/versions/{version}/meta
 # operationId: getArtifactVersionMetaData
-export def "groups-artifacts-versions-meta get-artifact-meta-data" [
+export def "groups-artifacts-versions-meta get-data" [
   group_id: string
   artifact_id: string
   version: string
@@ -1388,7 +1403,7 @@ export def "groups-artifacts-versions-meta get-artifact-meta-data" [
 ]: nothing -> record<contentId: int, createdBy: string, createdOn: string, description: string, globalId: int, groupId: string, id: string, labels: list<string>, name: string, properties: record, state: string, type: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id, version: $version} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/versions/{version}/meta"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id), version: (encode-path-segment $version)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/versions/{version}/meta"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1398,7 +1413,7 @@ export def "groups-artifacts-versions-meta get-artifact-meta-data" [
 #
 # PUT /groups/{groupId}/artifacts/{artifactId}/versions/{version}/meta
 # operationId: updateArtifactVersionMetaData
-export def "groups-artifacts-versions-meta update-artifact-meta-data" [
+export def "groups-artifacts-versions-meta update-data" [
   group_id: string
   artifact_id: string
   version: string
@@ -1411,19 +1426,19 @@ export def "groups-artifacts-versions-meta update-artifact-meta-data" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
-  --labels: list
+  --labels: list<string>
   --name: string
   --properties: record # User-defined name-value pairs. Name and value must be strings.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id, version: $version} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/versions/{version}/meta"))
-  let body = {"description": $description, "labels": $labels, "name": $name, "properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id), version: (encode-path-segment $version)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/versions/{version}/meta"))
+  let req_body = {"description": $description, "labels": $labels, "name": $name, "properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get artifact version
@@ -1445,7 +1460,7 @@ export def "groups-artifacts-versions-references get" [
 ]: nothing -> table<artifactId: string, groupId: string, name: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id, version: $version} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/versions/{version}/references"))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id), version: (encode-path-segment $version)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/versions/{version}/references"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1467,24 +1482,24 @@ export def "groups-artifacts-versions-state update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  state: string@state-completer # Describes the state of an artifact or artifact version.  The following states are possible:  * ENABLED * DISABLED * DEPRECATED
+  state: string@state-completer # Describes the state of an artifact or artifact version. The following states are possible: * ENABLED * DISABLED * DEPRECATED
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id, artifact_id: $artifact_id, version: $version} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/versions/{version}/state"))
-  let body = {"state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), artifact_id: (encode-path-segment $artifact_id), version: (encode-path-segment $version)} | format pattern "/groups/{group_id}/artifacts/{artifact_id}/versions/{version}/state"))
+  let req_body = {"state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get artifact content by SHA-256 hash
 #
 # GET /ids/contentHashes/{contentHash}/
 # operationId: getContentByHash
-export def "ids-content-hashes get" [
+export def "ids-content-hashes get-by-hash" [
   content_hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1497,7 +1512,7 @@ export def "ids-content-hashes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({content_hash: $content_hash} | format pattern "/ids/contentHashes/{content_hash}/"))
+  let full_url = (build-url $base ({content_hash: (encode-path-segment $content_hash)} | format pattern "/ids/contentHashes/{content_hash}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1507,7 +1522,7 @@ export def "ids-content-hashes get" [
 #
 # GET /ids/contentHashes/{contentHash}/references
 # operationId: referencesByContentHash
-export def "ids-content-hashes-references referencesByContentHash" [
+export def "ids-content-hashes-references get-by-hash" [
   content_hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1520,7 +1535,7 @@ export def "ids-content-hashes-references referencesByContentHash" [
 ]: nothing -> table<artifactId: string, groupId: string, name: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({content_hash: $content_hash} | format pattern "/ids/contentHashes/{content_hash}/references"))
+  let full_url = (build-url $base ({content_hash: (encode-path-segment $content_hash)} | format pattern "/ids/contentHashes/{content_hash}/references"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1543,7 +1558,7 @@ export def "ids-content-ids get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({content_id: $content_id} | format pattern "/ids/contentIds/{content_id}/"))
+  let full_url = (build-url $base ({content_id: (encode-path-segment $content_id)} | format pattern "/ids/contentIds/{content_id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1553,7 +1568,7 @@ export def "ids-content-ids get" [
 #
 # GET /ids/contentIds/{contentId}/references
 # operationId: referencesByContentId
-export def "ids-content-ids-references referencesByContentId" [
+export def "ids-content-ids-references get" [
   content_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1566,7 +1581,7 @@ export def "ids-content-ids-references referencesByContentId" [
 ]: nothing -> table<artifactId: string, groupId: string, name: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({content_id: $content_id} | format pattern "/ids/contentIds/{content_id}/references"))
+  let full_url = (build-url $base ({content_id: (encode-path-segment $content_id)} | format pattern "/ids/contentIds/{content_id}/references"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1591,7 +1606,7 @@ export def "ids-global-ids get-content" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dereference" $dereference "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({global_id: $global_id} | format pattern "/ids/globalIds/{global_id}") $qp)
+  let full_url = (build-url $base ({global_id: (encode-path-segment $global_id)} | format pattern "/ids/globalIds/{global_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1601,7 +1616,7 @@ export def "ids-global-ids get-content" [
 #
 # GET /ids/globalIds/{globalId}/references
 # operationId: referencesByGlobalId
-export def "ids-global-ids-references referencesByGlobalId" [
+export def "ids-global-ids-references get" [
   global_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1614,7 +1629,7 @@ export def "ids-global-ids-references referencesByGlobalId" [
 ]: nothing -> table<artifactId: string, groupId: string, name: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({global_id: $global_id} | format pattern "/ids/globalIds/{global_id}/references"))
+  let full_url = (build-url $base ({global_id: (encode-path-segment $global_id)} | format pattern "/ids/globalIds/{global_id}/references"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1634,12 +1649,12 @@ export def "search-artifacts list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Filter by artifact name.
-  --offset: int # The number of artifacts to skip before starting to collect the result set.  Defaults to 0. (default: 0)
-  --limit: int # The number of artifacts to return.  Defaults to 20. (default: 20)
+  --offset: int # The number of artifacts to skip before starting to collect the result set. Defaults to 0. (default: 0)
+  --limit: int # The number of artifacts to return. Defaults to 20. (default: 20)
   --order: string@order-completer # Sort order, ascending (`asc`) or descending (`desc`).
-  --orderby: string@orderby-completer # The field to sort by.  Can be one of:  * `name` * `createdOn`
-  --labels: list # Filter by label.  Include one or more label to only return artifacts containing all of the specified labels.
-  --properties: list # Filter by one or more name/value property.  Separate each name/value pair using a colon.  For example `properties=foo:bar` will return only artifacts with a custom property named `foo` and value `bar`.
+  --orderby: string@orderby-completer # The field to sort by. Can be one of: * `name` * `createdOn`
+  --labels: list<string> # Filter by label. Include one or more label to only return artifacts containing all of the specified labels.
+  --properties: list<string> # Filter by one or more name/value property. Separate each name/value pair using a colon. For example `properties=foo:bar` will return only artifacts with a custom property named `foo` and value `bar`.
   --description: string # Filter by description.
   --group: string # Filter by artifact group.
   --global-id: int # Filter by globalId. (format: int64)
@@ -1658,7 +1673,7 @@ export def "search-artifacts list" [
 #
 # POST /search/artifacts
 # operationId: searchArtifactsByContent
-export def "search-artifacts list-1" [
+export def "search-artifacts list-by-content" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1667,12 +1682,12 @@ export def "search-artifacts list-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --canonical: oneof<nothing, bool> # Parameter that can be set to `true` to indicate that the server should "canonicalize" the content when searching for matching artifacts.  Canonicalization is unique to each artifact type, but typically involves removing any extra whitespace and formatting the content in a consistent manner.  Must be used along with the `artifactType` query parameter.
-  --artifact-type: string # Indicates the type of artifact represented by the content being used for the search.  This is only needed when using the `canonical` query parameter, so that the server knows how to canonicalize the content prior to searching for matching artifacts. (e.g. AVRO)
-  --offset: int # The number of artifacts to skip before starting to collect the result set.  Defaults to 0. (default: 0)
-  --limit: int # The number of artifacts to return.  Defaults to 20. (default: 20)
+  --canonical: oneof<nothing, bool> # Parameter that can be set to `true` to indicate that the server should "canonicalize" the content when searching for matching artifacts. Canonicalization is unique to each artifact type, but typically involves removing any extra whitespace and formatting the content in a consistent manner. Must be used along with the `artifactType` query parameter.
+  --artifact-type: string # Indicates the type of artifact represented by the content being used for the search. This is only needed when using the `canonical` query parameter, so that the server knows how to canonicalize the content prior to searching for matching artifacts. (e.g. AVRO)
+  --offset: int # The number of artifacts to skip before starting to collect the result set. Defaults to 0. (default: 0)
+  --limit: int # The number of artifacts to return. Defaults to 20. (default: 20)
   --order: string@order-completer # Sort order, ascending (`asc`) or descending (`desc`).
-  --orderby: string@orderby-completer # The field to sort by.  Can be one of:  * `name` * `createdOn`
+  --orderby: string@orderby-completer # The field to sort by. Can be one of: * `name` * `createdOn`
   --body: record
 ]: any -> record<artifacts: table<createdBy: string, createdOn: string, description: string, groupId: string, id: string, labels: list, modifiedBy: string, modifiedOn: string, name: string, state: string, type: string>, count: int> {
   let input = $in
@@ -1680,10 +1695,11 @@ export def "search-artifacts list-1" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "canonical" $canonical "scalar") (serialize-qp "artifactType" $artifact_type "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "orderby" $orderby "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/artifacts" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $req_body
 }
 
 # Get system information
@@ -1734,7 +1750,7 @@ export def "system-limits get-resource" [
 #
 # GET /users/me
 # operationId: getCurrentUserInfo
-export def "users-me get-current-user-info" [
+export def "users-me get-get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -97,7 +106,7 @@ def rating-completer [] { ["dislike" "like" "none"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "youtube-abuse-reports youtubeabuseReportsinsert" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "youtube-abuse-reports create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +133,7 @@ export def commands []: nothing -> table {
 # --abuseTypes item shape: {id?: string}
 # --relatedEntities item shape: {entity?: record}
 # --subject shape: {id?: string, typeId?: string, url?: string}
-export def "youtube-abuse-reports youtubeabuseReportsinsert" [
+export def "youtube-abuse-reports create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -144,7 +153,7 @@ export def "youtube-abuse-reports youtubeabuseReportsinsert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include.
+  --part: list<string> # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include.
   --abuse-types: list # item shape: {id?: string}
   --description: string
   --related-entities: list # item shape: {entity?: record}
@@ -155,18 +164,18 @@ export def "youtube-abuse-reports youtubeabuseReportsinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/abuseReports" $qp)
-  let body = {"abuseTypes": $abuse_types, "description": $description, "relatedEntities": $related_entities, "subject": $subject} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"abuseTypes": $abuse_types, "description": $description, "relatedEntities": $related_entities, "subject": $subject} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a list of resources, possibly filtered.
 #
 # GET /youtube/v3/activities
 # operationId: youtube.activities.list
-export def "youtube-activities youtubeactivitieslist" [
+export def "youtube-activities list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +195,7 @@ export def "youtube-activities youtubeactivitieslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies a comma-separated list of one or more activity resource properties that the API response will include. If the parameter identifies a property that contains child properties, the child properties will be included in the response. For example, in an activity resource, the snippet property contains other properties that identify the type of activity, a display title for the activity, and so forth. If you set *part=snippet*, the API response will also contain all of those nested properties.
+  --part: list<string> # The *part* parameter specifies a comma-separated list of one or more activity resource properties that the API response will include. If the parameter identifies a property that contains child properties, the child properties will be included in the response. For example, in an activity resource, the snippet property contains other properties that identify the type of activity, a display title for the activity, and so forth. If you set *part=snippet*, the API response will also contain all of those nested properties.
   --channel-id: string
   --home: oneof<nothing, bool>
   --max-results: int # The *maxResults* parameter specifies the maximum number of items that should be returned in the result set.
@@ -209,7 +218,7 @@ export def "youtube-activities youtubeactivitieslist" [
 #
 # DELETE /youtube/v3/captions
 # operationId: youtube.captions.delete
-export def "youtube-captions youtubecaptionsdelete" [
+export def "youtube-captions delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +255,7 @@ export def "youtube-captions youtubecaptionsdelete" [
 #
 # GET /youtube/v3/captions
 # operationId: youtube.captions.list
-export def "youtube-captions youtubecaptionslist" [
+export def "youtube-captions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,9 +275,9 @@ export def "youtube-captions youtubecaptionslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies a comma-separated list of one or more caption resource parts that the API response will include. The part names that you can include in the parameter value are id and snippet.
+  --part: list<string> # The *part* parameter specifies a comma-separated list of one or more caption resource parts that the API response will include. The part names that you can include in the parameter value are id and snippet.
   --video-id: string # Returns the captions for the specified video.
-  --id: list # Returns the captions with the given IDs for Stubby or Apiary.
+  --id: list<string> # Returns the captions with the given IDs for Stubby or Apiary.
   --on-behalf-of: string # ID of the Google+ Page for the channel that the request is on behalf of.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The actual CMS account that the user authenticates with must be linked to the specified YouTube content owner.
 ]: nothing -> record<etag: string, eventId: string, items: table<etag: string, id: string, kind: string, snippet: record>, kind: string, visitorId: string> {
@@ -285,7 +294,7 @@ export def "youtube-captions youtubecaptionslist" [
 #
 # POST /youtube/v3/captions
 # operationId: youtube.captions.insert
-export def "youtube-captions youtubecaptionsinsert" [
+export def "youtube-captions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,7 +314,7 @@ export def "youtube-captions youtubecaptionsinsert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies the caption resource parts that the API response will include. Set the parameter value to snippet.
+  --part: list<string> # The *part* parameter specifies the caption resource parts that the API response will include. Set the parameter value to snippet.
   --on-behalf-of: string # ID of the Google+ Page for the channel that the request is be on behalf of
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The actual CMS account that the user authenticates with must be linked to the specified YouTube content owner.
   --sync: oneof<nothing, bool> # Extra parameter to allow automatically syncing the uploaded caption/transcript with the audio.
@@ -316,17 +325,18 @@ export def "youtube-captions youtubecaptionsinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOf" $on_behalf_of "scalar") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar") (serialize-qp "sync" $sync "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/captions" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # Updates an existing resource.
 #
 # PUT /youtube/v3/captions
 # operationId: youtube.captions.update
-export def "youtube-captions youtubecaptionsupdate" [
+export def "youtube-captions update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,7 +356,7 @@ export def "youtube-captions youtubecaptionsupdate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies a comma-separated list of one or more caption resource parts that the API response will include. The part names that you can include in the parameter value are id and snippet.
+  --part: list<string> # The *part* parameter specifies a comma-separated list of one or more caption resource parts that the API response will include. The part names that you can include in the parameter value are id and snippet.
   --on-behalf-of: string # ID of the Google+ Page for the channel that the request is on behalf of.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The actual CMS account that the user authenticates with must be linked to the specified YouTube content owner.
   --sync: oneof<nothing, bool> # Extra parameter to allow automatically syncing the uploaded caption/transcript with the audio.
@@ -357,17 +367,18 @@ export def "youtube-captions youtubecaptionsupdate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOf" $on_behalf_of "scalar") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar") (serialize-qp "sync" $sync "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/captions" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # Downloads a caption track.
 #
 # GET /youtube/v3/captions/{id}
 # operationId: youtube.captions.download
-export def "youtube-captions youtubecaptionsdownload" [
+export def "youtube-captions download" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -396,7 +407,7 @@ export def "youtube-captions youtubecaptionsdownload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "onBehalfOf" $on_behalf_of "scalar") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar") (serialize-qp "tfmt" $tfmt "scalar") (serialize-qp "tlang" $tlang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/youtube/v3/captions/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/youtube/v3/captions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -406,7 +417,7 @@ export def "youtube-captions youtubecaptionsdownload" [
 #
 # POST /youtube/v3/channelBanners/insert
 # operationId: youtube.channelBanners.insert
-export def "youtube-channel-banners-insert youtubechannelBannersinsert" [
+export def "youtube-channel-banners-insert create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -436,17 +447,18 @@ export def "youtube-channel-banners-insert youtubechannelBannersinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "channelId" $channel_id "scalar") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $on_behalf_of_content_owner_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/channelBanners/insert" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # Deletes a resource.
 #
 # DELETE /youtube/v3/channelSections
 # operationId: youtube.channelSections.delete
-export def "youtube-channel-sections youtubechannelSectionsdelete" [
+export def "youtube-channel-sections delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,7 +494,7 @@ export def "youtube-channel-sections youtubechannelSectionsdelete" [
 #
 # GET /youtube/v3/channelSections
 # operationId: youtube.channelSections.list
-export def "youtube-channel-sections youtubechannelSectionslist" [
+export def "youtube-channel-sections list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,10 +514,10 @@ export def "youtube-channel-sections youtubechannelSectionslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies a comma-separated list of one or more channelSection resource properties that the API response will include. The part names that you can include in the parameter value are id, snippet, and contentDetails. If the parameter identifies a property that contains child properties, the child properties will be included in the response. For example, in a channelSection resource, the snippet property contains other properties, such as a display title for the channelSection. If you set *part=snippet*, the API response will also contain all of those nested properties.
+  --part: list<string> # The *part* parameter specifies a comma-separated list of one or more channelSection resource properties that the API response will include. The part names that you can include in the parameter value are id, snippet, and contentDetails. If the parameter identifies a property that contains child properties, the child properties will be included in the response. For example, in a channelSection resource, the snippet property contains other properties, such as a display title for the channelSection. If you set *part=snippet*, the API response will also contain all of those nested properties.
   --channel-id: string # Return the ChannelSections owned by the specified channel ID.
   --hl: string # Return content in specified language
-  --id: list # Return the ChannelSections with the given IDs for Stubby or Apiary.
+  --id: list<string> # Return the ChannelSections with the given IDs for Stubby or Apiary.
   --mine: oneof<nothing, bool> # Return the ChannelSections owned by the authenticated user.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
 ]: nothing -> record<etag: string, eventId: string, items: table<contentDetails: record, etag: string, id: string, kind: string, localizations: record, snippet: record, targeting: record>, kind: string, visitorId: string> {
@@ -522,10 +534,10 @@ export def "youtube-channel-sections youtubechannelSectionslist" [
 #
 # POST /youtube/v3/channelSections
 # operationId: youtube.channelSections.insert
-# --contentDetails shape: {channels?: list, playlists?: list}
+# --contentDetails shape: {channels?: list<string>, playlists?: list<string>}
 # --snippet shape: {channelId?: string, defaultLanguage?: string, localized?: record, position?: int, style?: "channelsectionStyleUnspecified"|"horizontalRow"|"verticalList", title?: string, type?: "channelsectionTypeUndefined"|"singlePlaylist"|"multiplePlaylists"|"popularUploads"|"recentUploads"|"likes"|"allPlaylists"|"likedPlaylists"|"recentPosts"|"recentActivity"|"liveEvents"|"upcomingEvents"|"completedEvents"|"multipleChannels"|"postedVideos"|"postedPlaylists"|"subscriptions"}
-# --targeting shape: {countries?: list, languages?: list, regions?: list}
-export def "youtube-channel-sections youtubechannelSectionsinsert" [
+# --targeting shape: {countries?: list<string>, languages?: list<string>, regions?: list<string>}
+export def "youtube-channel-sections create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -545,37 +557,37 @@ export def "youtube-channel-sections youtubechannelSectionsinsert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. The part names that you can include in the parameter value are snippet and contentDetails.
+  --part: list<string> # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. The part names that you can include in the parameter value are snippet and contentDetails.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
   --on-behalf-of-content-owner-channel: string # This parameter can only be used in a properly authorized request. *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwnerChannel* parameter specifies the YouTube channel ID of the channel to which a video is being added. This parameter is required when a request specifies a value for the onBehalfOfContentOwner parameter, and it can only be used in conjunction with that parameter. In addition, the request must be authorized using a CMS account that is linked to the content owner that the onBehalfOfContentOwner parameter specifies. Finally, the channel that the onBehalfOfContentOwnerChannel parameter value specifies must be linked to the content owner that the onBehalfOfContentOwner parameter specifies. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and perform actions on behalf of the channel specified in the parameter value, without having to provide authentication credentials for each separate channel.
-  --content-details: record # Details about a channelsection, including playlists and channels. — shape: {channels?: list, playlists?: list}
+  --content-details: record # Details about a channelsection, including playlists and channels. — shape: {channels?: list<string>, playlists?: list<string>}
   --etag: string # Etag of this resource.
   --id: string # The ID that YouTube uses to uniquely identify the channel section.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "youtube#channelSection". (default: youtube#channelSection)
   --localizations: record # Localizations for different languages
   --snippet: record # Basic details about a channel section, including title, style and position. — shape: {channelId?: string, defaultLanguage?: string, localized?: record, position?: int, style?: "channelsectionStyleUnspecified"|"horizontalRow"|"verticalList", title?: string, type?: "channelsectionTypeUndefined"|"singlePlaylist"|"multiplePlaylists"|"popularUploads"|"recentUploads"|"likes"|"allPlaylists"|"likedPlaylists"|"recentPosts"|"recentActivity"|"liveEvents"|"upcomingEvents"|"completedEvents"|"multipleChannels"|"postedVideos"|"postedPlaylists"|"subscriptions"}
-  --targeting: record # ChannelSection targeting setting. — shape: {countries?: list, languages?: list, regions?: list}
+  --targeting: record # ChannelSection targeting setting. — shape: {countries?: list<string>, languages?: list<string>, regions?: list<string>}
 ]: any -> record<contentDetails: record<channels: list<string>, playlists: list<string>>, etag: string, id: string, kind: string, localizations: record, snippet: record<channelId: string, defaultLanguage: string, localized: record<title: string>, position: int, style: string, title: string, type: string>, targeting: record<countries: list<string>, languages: list<string>, regions: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $on_behalf_of_content_owner_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/channelSections" $qp)
-  let body = {"contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "localizations": $localizations, "snippet": $snippet, "targeting": $targeting} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "localizations": $localizations, "snippet": $snippet, "targeting": $targeting} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing resource.
 #
 # PUT /youtube/v3/channelSections
 # operationId: youtube.channelSections.update
-# --contentDetails shape: {channels?: list, playlists?: list}
+# --contentDetails shape: {channels?: list<string>, playlists?: list<string>}
 # --snippet shape: {channelId?: string, defaultLanguage?: string, localized?: record, position?: int, style?: "channelsectionStyleUnspecified"|"horizontalRow"|"verticalList", title?: string, type?: "channelsectionTypeUndefined"|"singlePlaylist"|"multiplePlaylists"|"popularUploads"|"recentUploads"|"likes"|"allPlaylists"|"likedPlaylists"|"recentPosts"|"recentActivity"|"liveEvents"|"upcomingEvents"|"completedEvents"|"multipleChannels"|"postedVideos"|"postedPlaylists"|"subscriptions"}
-# --targeting shape: {countries?: list, languages?: list, regions?: list}
-export def "youtube-channel-sections youtubechannelSectionsupdate" [
+# --targeting shape: {countries?: list<string>, languages?: list<string>, regions?: list<string>}
+export def "youtube-channel-sections update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -595,33 +607,33 @@ export def "youtube-channel-sections youtubechannelSectionsupdate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. The part names that you can include in the parameter value are snippet and contentDetails.
+  --part: list<string> # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. The part names that you can include in the parameter value are snippet and contentDetails.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
-  --content-details: record # Details about a channelsection, including playlists and channels. — shape: {channels?: list, playlists?: list}
+  --content-details: record # Details about a channelsection, including playlists and channels. — shape: {channels?: list<string>, playlists?: list<string>}
   --etag: string # Etag of this resource.
   --id: string # The ID that YouTube uses to uniquely identify the channel section.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "youtube#channelSection". (default: youtube#channelSection)
   --localizations: record # Localizations for different languages
   --snippet: record # Basic details about a channel section, including title, style and position. — shape: {channelId?: string, defaultLanguage?: string, localized?: record, position?: int, style?: "channelsectionStyleUnspecified"|"horizontalRow"|"verticalList", title?: string, type?: "channelsectionTypeUndefined"|"singlePlaylist"|"multiplePlaylists"|"popularUploads"|"recentUploads"|"likes"|"allPlaylists"|"likedPlaylists"|"recentPosts"|"recentActivity"|"liveEvents"|"upcomingEvents"|"completedEvents"|"multipleChannels"|"postedVideos"|"postedPlaylists"|"subscriptions"}
-  --targeting: record # ChannelSection targeting setting. — shape: {countries?: list, languages?: list, regions?: list}
+  --targeting: record # ChannelSection targeting setting. — shape: {countries?: list<string>, languages?: list<string>, regions?: list<string>}
 ]: any -> record<contentDetails: record<channels: list<string>, playlists: list<string>>, etag: string, id: string, kind: string, localizations: record, snippet: record<channelId: string, defaultLanguage: string, localized: record<title: string>, position: int, style: string, title: string, type: string>, targeting: record<countries: list<string>, languages: list<string>, regions: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/channelSections" $qp)
-  let body = {"contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "localizations": $localizations, "snippet": $snippet, "targeting": $targeting} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "localizations": $localizations, "snippet": $snippet, "targeting": $targeting} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a list of resources, possibly filtered.
 #
 # GET /youtube/v3/channels
 # operationId: youtube.channels.list
-export def "youtube-channels youtubechannelslist" [
+export def "youtube-channels list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,11 +653,11 @@ export def "youtube-channels youtubechannelslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies a comma-separated list of one or more channel resource properties that the API response will include. If the parameter identifies a property that contains child properties, the child properties will be included in the response. For example, in a channel resource, the contentDetails property contains other properties, such as the uploads properties. As such, if you set *part=contentDetails*, the API response will also contain all of those nested properties.
+  --part: list<string> # The *part* parameter specifies a comma-separated list of one or more channel resource properties that the API response will include. If the parameter identifies a property that contains child properties, the child properties will be included in the response. For example, in a channel resource, the contentDetails property contains other properties, such as the uploads properties. As such, if you set *part=contentDetails*, the API response will also contain all of those nested properties.
   --category-id: string # Return the channels within the specified guide category ID.
   --for-username: string # Return the channel associated with a YouTube username.
   --hl: string # Stands for "host language". Specifies the localization language of the metadata to be filled into snippet.localized. The field is filled with the default metadata if there is no localization in the specified language. The parameter value must be a language code included in the list returned by the i18nLanguages.list method (e.g. en_US, es_MX).
-  --id: list # Return the channels with the specified IDs.
+  --id: list<string> # Return the channels with the specified IDs.
   --managed-by-me: oneof<nothing, bool> # Return the channels managed by the authenticated user.
   --max-results: int # The *maxResults* parameter specifies the maximum number of items that should be returned in the result set.
   --mine: oneof<nothing, bool> # Return the ids of channels owned by the authenticated user.
@@ -674,8 +686,8 @@ export def "youtube-channels youtubechannelslist" [
 # --snippet shape: {country?: string, customUrl?: string, defaultLanguage?: string, description?: string, localized?: record, publishedAt?: string, thumbnails?: record, title?: string}
 # --statistics shape: {commentCount?: string, hiddenSubscriberCount?: bool, subscriberCount?: string, videoCount?: string, viewCount?: string}
 # --status shape: {isLinked?: bool, longUploadsStatus?: "longUploadsUnspecified"|"allowed"|"eligible"|"disallowed", madeForKids?: bool, privacyStatus?: "public"|"unlisted"|"private", selfDeclaredMadeForKids?: bool}
-# --topicDetails shape: {topicCategories?: list, topicIds?: list}
-export def "youtube-channels youtubechannelsupdate" [
+# --topicDetails shape: {topicCategories?: list<string>, topicIds?: list<string>}
+export def "youtube-channels update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -695,7 +707,7 @@ export def "youtube-channels youtubechannelsupdate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. The API currently only allows the parameter value to be set to either brandingSettings or invideoPromotion. (You cannot update both of those parts with a single request.) Note that this method overrides the existing values for all of the mutable properties that are contained in any parts that the parameter value specifies.
+  --part: list<string> # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. The API currently only allows the parameter value to be set to either brandingSettings or invideoPromotion. (You cannot update both of those parts with a single request.) Note that this method overrides the existing values for all of the mutable properties that are contained in any parts that the parameter value specifies.
   --on-behalf-of-content-owner: string # The *onBehalfOfContentOwner* parameter indicates that the authenticated user is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The actual CMS account that the user authenticates with needs to be linked to the specified YouTube content owner.
   --audit-details: record # The auditDetails object encapsulates channel data that is relevant for YouTube Partners during the audit process. — shape: {communityGuidelinesGoodStanding?: bool, contentIdClaimsGoodStanding?: bool, copyrightStrikesGoodStanding?: bool}
   --branding-settings: record # Branding properties of a YouTube channel. — shape: {channel?: record, hints?: list, image?: record, watch?: record}
@@ -709,25 +721,25 @@ export def "youtube-channels youtubechannelsupdate" [
   --snippet: record # Basic details about a channel, including title, description and thumbnails. — shape: {country?: string, customUrl?: string, defaultLanguage?: string, description?: string, localized?: record, publishedAt?: string, thumbnails?: record, title?: string}
   --statistics: record # Statistics about a channel: number of subscribers, number of videos in the channel, etc. — shape: {commentCount?: string, hiddenSubscriberCount?: bool, subscriberCount?: string, videoCount?: string, viewCount?: string}
   --status: record # JSON template for the status part of a channel. — shape: {isLinked?: bool, longUploadsStatus?: "longUploadsUnspecified"|"allowed"|"eligible"|"disallowed", madeForKids?: bool, privacyStatus?: "public"|"unlisted"|"private", selfDeclaredMadeForKids?: bool}
-  --topic-details: record # Freebase topic information related to the channel. — shape: {topicCategories?: list, topicIds?: list}
+  --topic-details: record # Freebase topic information related to the channel. — shape: {topicCategories?: list<string>, topicIds?: list<string>}
 ]: any -> record<auditDetails: record<communityGuidelinesGoodStanding: bool, contentIdClaimsGoodStanding: bool, copyrightStrikesGoodStanding: bool>, brandingSettings: record<channel: record<country: string, defaultLanguage: string, defaultTab: string, description: string, featuredChannelsTitle: string, featuredChannelsUrls: list, keywords: string, moderateComments: bool, profileColor: string, showBrowseView: bool, showRelatedChannels: bool, title: string, trackingAnalyticsAccountId: string, unsubscribedTrailer: string>, hints: list<record>, image: record<backgroundImageUrl: record, bannerExternalUrl: string, bannerImageUrl: string, bannerMobileExtraHdImageUrl: string, bannerMobileHdImageUrl: string, bannerMobileImageUrl: string, bannerMobileLowImageUrl: string, bannerMobileMediumHdImageUrl: string, bannerTabletExtraHdImageUrl: string, bannerTabletHdImageUrl: string, bannerTabletImageUrl: string, bannerTabletLowImageUrl: string, bannerTvHighImageUrl: string, bannerTvImageUrl: string, bannerTvLowImageUrl: string, bannerTvMediumImageUrl: string, largeBrandedBannerImageImapScript: record, largeBrandedBannerImageUrl: record, smallBrandedBannerImageImapScript: record, smallBrandedBannerImageUrl: record, trackingImageUrl: string, watchIconImageUrl: string>, watch: record<backgroundColor: string, featuredPlaylistId: string, textColor: string>>, contentDetails: record<relatedPlaylists: record<favorites: string, likes: string, uploads: string, watchHistory: string, watchLater: string>>, contentOwnerDetails: record<contentOwner: string, timeLinked: string>, conversionPings: record<pings: list<record>>, etag: string, id: string, kind: string, localizations: record, snippet: record<country: string, customUrl: string, defaultLanguage: string, description: string, localized: record<description: string, title: string>, publishedAt: string, thumbnails: record<high: record, maxres: record, medium: record, standard: record>, title: string>, statistics: record<commentCount: string, hiddenSubscriberCount: bool, subscriberCount: string, videoCount: string, viewCount: string>, status: record<isLinked: bool, longUploadsStatus: string, madeForKids: bool, privacyStatus: string, selfDeclaredMadeForKids: bool>, topicDetails: record<topicCategories: list<string>, topicIds: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/channels" $qp)
-  let body = {"auditDetails": $audit_details, "brandingSettings": $branding_settings, "contentDetails": $content_details, "contentOwnerDetails": $content_owner_details, "conversionPings": $conversion_pings, "etag": $etag, "id": $id, "kind": $kind, "localizations": $localizations, "snippet": $snippet, "statistics": $statistics, "status": $status, "topicDetails": $topic_details} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"auditDetails": $audit_details, "brandingSettings": $branding_settings, "contentDetails": $content_details, "contentOwnerDetails": $content_owner_details, "conversionPings": $conversion_pings, "etag": $etag, "id": $id, "kind": $kind, "localizations": $localizations, "snippet": $snippet, "statistics": $statistics, "status": $status, "topicDetails": $topic_details} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a list of resources, possibly filtered.
 #
 # GET /youtube/v3/commentThreads
 # operationId: youtube.commentThreads.list
-export def "youtube-comment-threads youtubecommentThreadslist" [
+export def "youtube-comment-threads list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -747,10 +759,10 @@ export def "youtube-comment-threads youtubecommentThreadslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies a comma-separated list of one or more commentThread resource properties that the API response will include.
+  --part: list<string> # The *part* parameter specifies a comma-separated list of one or more commentThread resource properties that the API response will include.
   --all-threads-related-to-channel-id: string # Returns the comment threads of all videos of the channel and the channel comments as well.
   --channel-id: string # Returns the comment threads for all the channel comments (ie does not include comments left on videos).
-  --id: list # Returns the comment threads with the given IDs for Stubby or Apiary.
+  --id: list<string> # Returns the comment threads with the given IDs for Stubby or Apiary.
   --max-results: int # The *maxResults* parameter specifies the maximum number of items that should be returned in the result set.
   --moderation-status: string@moderation-status-completer # Limits the returned comment threads to those with the specified moderation status. Not compatible with the 'id' filter. Valid values: published, heldForReview, likelySpam.
   --order: string@order-completer
@@ -774,7 +786,7 @@ export def "youtube-comment-threads youtubecommentThreadslist" [
 # operationId: youtube.commentThreads.insert
 # --replies shape: {comments?: list}
 # --snippet shape: {canReply?: bool, channelId?: string, isPublic?: bool, topLevelComment?: record, totalReplyCount?: int, videoId?: string}
-export def "youtube-comment-threads youtubecommentThreadsinsert" [
+export def "youtube-comment-threads create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -794,7 +806,7 @@ export def "youtube-comment-threads youtubecommentThreadsinsert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter identifies the properties that the API response will include. Set the parameter value to snippet. The snippet part has a quota cost of 2 units.
+  --part: list<string> # The *part* parameter identifies the properties that the API response will include. Set the parameter value to snippet. The snippet part has a quota cost of 2 units.
   --etag: string # Etag of this resource.
   --id: string # The ID that YouTube uses to uniquely identify the comment thread.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "youtube#commentThread". (default: youtube#commentThread)
@@ -806,11 +818,11 @@ export def "youtube-comment-threads youtubecommentThreadsinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/commentThreads" $qp)
-  let body = {"etag": $etag, "id": $id, "kind": $kind, "replies": $replies, "snippet": $snippet} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"etag": $etag, "id": $id, "kind": $kind, "replies": $replies, "snippet": $snippet} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing resource.
@@ -819,7 +831,7 @@ export def "youtube-comment-threads youtubecommentThreadsinsert" [
 # operationId: youtube.youtube.v3.updateCommentThreads
 # --replies shape: {comments?: list}
 # --snippet shape: {canReply?: bool, channelId?: string, isPublic?: bool, topLevelComment?: record, totalReplyCount?: int, videoId?: string}
-export def "youtube-comment-threads youtubeyoutubev3updateCommentThreads" [
+export def "youtube-comment-threads update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -839,7 +851,7 @@ export def "youtube-comment-threads youtubeyoutubev3updateCommentThreads" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies a comma-separated list of commentThread resource properties that the API response will include. You must at least include the snippet part in the parameter value since that part contains all of the properties that the API request can update.
+  --part: list<string> # The *part* parameter specifies a comma-separated list of commentThread resource properties that the API response will include. You must at least include the snippet part in the parameter value since that part contains all of the properties that the API request can update.
   --etag: string # Etag of this resource.
   --id: string # The ID that YouTube uses to uniquely identify the comment thread.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "youtube#commentThread". (default: youtube#commentThread)
@@ -851,18 +863,18 @@ export def "youtube-comment-threads youtubeyoutubev3updateCommentThreads" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/commentThreads" $qp)
-  let body = {"etag": $etag, "id": $id, "kind": $kind, "replies": $replies, "snippet": $snippet} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"etag": $etag, "id": $id, "kind": $kind, "replies": $replies, "snippet": $snippet} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a resource.
 #
 # DELETE /youtube/v3/comments
 # operationId: youtube.comments.delete
-export def "youtube-comments youtubecommentsdelete" [
+export def "youtube-comments delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -897,7 +909,7 @@ export def "youtube-comments youtubecommentsdelete" [
 #
 # GET /youtube/v3/comments
 # operationId: youtube.comments.list
-export def "youtube-comments youtubecommentslist" [
+export def "youtube-comments list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -917,8 +929,8 @@ export def "youtube-comments youtubecommentslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies a comma-separated list of one or more comment resource properties that the API response will include.
-  --id: list # Returns the comments with the given IDs for One Platform.
+  --part: list<string> # The *part* parameter specifies a comma-separated list of one or more comment resource properties that the API response will include.
+  --id: list<string> # Returns the comments with the given IDs for One Platform.
   --max-results: int # The *maxResults* parameter specifies the maximum number of items that should be returned in the result set.
   --page-token: string # The *pageToken* parameter identifies a specific page in the result set that should be returned. In an API response, the nextPageToken and prevPageToken properties identify other pages that could be retrieved.
   --parent-id: string # Returns replies to the specified comment. Note, currently YouTube features only one level of replies (ie replies to top level comments). However replies to replies may be supported in the future.
@@ -938,7 +950,7 @@ export def "youtube-comments youtubecommentslist" [
 # POST /youtube/v3/comments
 # operationId: youtube.comments.insert
 # --snippet shape: {authorChannelId?: record, authorChannelUrl?: string, authorDisplayName?: string, authorProfileImageUrl?: string, canRate?: bool, channelId?: string, likeCount?: int, moderationStatus?: "published"|"heldForReview"|"likelySpam"|"rejected", parentId?: string, publishedAt?: string, textDisplay?: string, textOriginal?: string, updatedAt?: string, videoId?: string, viewerRating?: "none"|"like"|"dislike"}
-export def "youtube-comments youtubecommentsinsert" [
+export def "youtube-comments create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -958,7 +970,7 @@ export def "youtube-comments youtubecommentsinsert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter identifies the properties that the API response will include. Set the parameter value to snippet. The snippet part has a quota cost of 2 units.
+  --part: list<string> # The *part* parameter identifies the properties that the API response will include. Set the parameter value to snippet. The snippet part has a quota cost of 2 units.
   --etag: string # Etag of this resource.
   --id: string # The ID that YouTube uses to uniquely identify the comment.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "youtube#comment". (default: youtube#comment)
@@ -969,11 +981,11 @@ export def "youtube-comments youtubecommentsinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/comments" $qp)
-  let body = {"etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing resource.
@@ -981,7 +993,7 @@ export def "youtube-comments youtubecommentsinsert" [
 # PUT /youtube/v3/comments
 # operationId: youtube.comments.update
 # --snippet shape: {authorChannelId?: record, authorChannelUrl?: string, authorDisplayName?: string, authorProfileImageUrl?: string, canRate?: bool, channelId?: string, likeCount?: int, moderationStatus?: "published"|"heldForReview"|"likelySpam"|"rejected", parentId?: string, publishedAt?: string, textDisplay?: string, textOriginal?: string, updatedAt?: string, videoId?: string, viewerRating?: "none"|"like"|"dislike"}
-export def "youtube-comments youtubecommentsupdate" [
+export def "youtube-comments update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1001,7 +1013,7 @@ export def "youtube-comments youtubecommentsupdate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter identifies the properties that the API response will include. You must at least include the snippet part in the parameter value since that part contains all of the properties that the API request can update.
+  --part: list<string> # The *part* parameter identifies the properties that the API response will include. You must at least include the snippet part in the parameter value since that part contains all of the properties that the API request can update.
   --etag: string # Etag of this resource.
   --id: string # The ID that YouTube uses to uniquely identify the comment.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "youtube#comment". (default: youtube#comment)
@@ -1012,18 +1024,18 @@ export def "youtube-comments youtubecommentsupdate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/comments" $qp)
-  let body = {"etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Expresses the caller's opinion that one or more comments should be flagged as spam.
 #
 # POST /youtube/v3/comments/markAsSpam
 # operationId: youtube.comments.markAsSpam
-export def "youtube-comments-mark-as-spam youtubecommentsmarkAsSpam" [
+export def "youtube-comments-mark-as-spam create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1043,7 +1055,7 @@ export def "youtube-comments-mark-as-spam youtubecommentsmarkAsSpam" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --id: list # Flags the comments with the given IDs as spam in the caller's opinion.
+  --id: list<string> # Flags the comments with the given IDs as spam in the caller's opinion.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1058,7 +1070,7 @@ export def "youtube-comments-mark-as-spam youtubecommentsmarkAsSpam" [
 #
 # POST /youtube/v3/comments/setModerationStatus
 # operationId: youtube.comments.setModerationStatus
-export def "youtube-comments-set-moderation-status youtubecommentssetModerationStatus" [
+export def "youtube-comments-set-moderation-status update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1078,7 +1090,7 @@ export def "youtube-comments-set-moderation-status youtubecommentssetModerationS
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --id: list # Modifies the moderation status of the comments with the given IDs
+  --id: list<string> # Modifies the moderation status of the comments with the given IDs
   --moderation-status: string@moderation-status-completer # Specifies the requested moderation status. Note, comments can be in statuses, which are not available through this call. For example, this call does not allow to mark a comment as 'likely spam'. Valid values: MODERATION_STATUS_PUBLISHED, MODERATION_STATUS_HELD_FOR_REVIEW, MODERATION_STATUS_REJECTED.
   --ban-author: oneof<nothing, bool> # If set to true the author of the comment gets added to the ban list. This means all future comments of the author will autmomatically be rejected. Only valid in combination with STATUS_REJECTED.
 ]: nothing -> any {
@@ -1095,7 +1107,7 @@ export def "youtube-comments-set-moderation-status youtubecommentssetModerationS
 #
 # GET /youtube/v3/i18nLanguages
 # operationId: youtube.i18nLanguages.list
-export def "youtube-i18n-languages youtubei18nLanguageslist" [
+export def "youtube-i18n-languages list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1115,7 +1127,7 @@ export def "youtube-i18n-languages youtubei18nLanguageslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies the i18nLanguage resource properties that the API response will include. Set the parameter value to snippet.
+  --part: list<string> # The *part* parameter specifies the i18nLanguage resource properties that the API response will include. Set the parameter value to snippet.
   --hl: string
 ]: nothing -> record<etag: string, eventId: string, items: table<etag: string, id: string, kind: string, snippet: record>, kind: string, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1131,7 +1143,7 @@ export def "youtube-i18n-languages youtubei18nLanguageslist" [
 #
 # GET /youtube/v3/i18nRegions
 # operationId: youtube.i18nRegions.list
-export def "youtube-i18n-regions youtubei18nRegionslist" [
+export def "youtube-i18n-regions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1151,7 +1163,7 @@ export def "youtube-i18n-regions youtubei18nRegionslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies the i18nRegion resource properties that the API response will include. Set the parameter value to snippet.
+  --part: list<string> # The *part* parameter specifies the i18nRegion resource properties that the API response will include. Set the parameter value to snippet.
   --hl: string
 ]: nothing -> record<etag: string, eventId: string, items: table<etag: string, id: string, kind: string, snippet: record>, kind: string, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1167,7 +1179,7 @@ export def "youtube-i18n-regions youtubei18nRegionslist" [
 #
 # DELETE /youtube/v3/liveBroadcasts
 # operationId: youtube.liveBroadcasts.delete
-export def "youtube-live-broadcasts youtubeliveBroadcastsdelete" [
+export def "youtube-live-broadcasts delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1204,7 +1216,7 @@ export def "youtube-live-broadcasts youtubeliveBroadcastsdelete" [
 #
 # GET /youtube/v3/liveBroadcasts
 # operationId: youtube.liveBroadcasts.list
-export def "youtube-live-broadcasts youtubeliveBroadcastslist" [
+export def "youtube-live-broadcasts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1224,10 +1236,10 @@ export def "youtube-live-broadcasts youtubeliveBroadcastslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies a comma-separated list of one or more liveBroadcast resource properties that the API response will include. The part names that you can include in the parameter value are id, snippet, contentDetails, status and statistics.
+  --part: list<string> # The *part* parameter specifies a comma-separated list of one or more liveBroadcast resource properties that the API response will include. The part names that you can include in the parameter value are id, snippet, contentDetails, status and statistics.
   --broadcast-status: string@broadcast-status-completer # Return broadcasts with a certain status, e.g. active broadcasts.
   --broadcast-type: string@broadcast-type-completer # Return only broadcasts with the selected type.
-  --id: list # Return broadcasts with the given ids from Stubby or Apiary.
+  --id: list<string> # Return broadcasts with the given ids from Stubby or Apiary.
   --max-results: int # The *maxResults* parameter specifies the maximum number of items that should be returned in the result set.
   --mine: oneof<nothing, bool>
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
@@ -1247,11 +1259,11 @@ export def "youtube-live-broadcasts youtubeliveBroadcastslist" [
 #
 # POST /youtube/v3/liveBroadcasts
 # operationId: youtube.liveBroadcasts.insert
-# --contentDetails shape: {boundStreamId?: string, boundStreamLastUpdateTimeMs?: string, closedCaptionsType?: "closedCaptionsTypeUnspecified"|"closedCaptionsDisabled"|"closedCaptionsHttpPost"|"closedCaptionsEmbedded", enableAutoStart?: bool, enableAutoStop?: bool, enableClosedCaptions?: bool, enableContentEncryption?: bool, enableDvr?: bool, enableEmbed?: bool, enableLowLatency?: bool, latencyPreference?: "latencyPreferenceUnspecified"|"normal"|"low"|"ultraLow", mesh?: string, monitorStream?: record, projection?: "projectionUnspecified"|"rectangular"|"360"|"mesh", recordFromStart?: bool, startWithSlate?: bool, stereoLayout?: "stereoLayoutUnspecified"|"mono"|"leftRight"|"topBottom"}
+# --contentDetails shape: {boundStreamId?: string, boundStreamLastUpdateTimeMs?: string, closedCaptionsType?: "closedCaptionsTypeUnspecified"|"closedCaptionsDisabled"|"closedCaptionsHttpPost"|"closedCaptionsEmbedded", enableAutoStart?: bool, enableAutoStop?: bool, enableClosedCaptions?: bool, enableContentEncryption?: bool, enableDvr?: bool, enableEmbed?: bool, enableLowLatency?: bool, latencyPreference?: "latencyPreferenceUnspecified"|"normal"|"low"|"ultraLow", mesh?: string, monitorStream?: record, ... (4 more fields)}
 # --snippet shape: {actualEndTime?: string, actualStartTime?: string, channelId?: string, description?: string, isDefaultBroadcast?: bool, liveChatId?: string, publishedAt?: string, scheduledEndTime?: string, scheduledStartTime?: string, thumbnails?: record, title?: string}
 # --statistics shape: {concurrentViewers?: string}
 # --status shape: {lifeCycleStatus?: "lifeCycleStatusUnspecified"|"created"|"ready"|"testing"|"live"|"complete"|"revoked"|"testStarting"|"liveStarting", liveBroadcastPriority?: "liveBroadcastPriorityUnspecified"|"low"|"normal"|"high", madeForKids?: bool, privacyStatus?: "public"|"unlisted"|"private", recordingStatus?: "liveBroadcastRecordingStatusUnspecified"|"notRecording"|"recording"|"recorded", selfDeclaredMadeForKids?: bool}
-export def "youtube-live-broadcasts youtubeliveBroadcastsinsert" [
+export def "youtube-live-broadcasts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1271,10 +1283,10 @@ export def "youtube-live-broadcasts youtubeliveBroadcastsinsert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. The part properties that you can include in the parameter value are id, snippet, contentDetails, and status.
+  --part: list<string> # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. The part properties that you can include in the parameter value are id, snippet, contentDetails, and status.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
   --on-behalf-of-content-owner-channel: string # This parameter can only be used in a properly authorized request. *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwnerChannel* parameter specifies the YouTube channel ID of the channel to which a video is being added. This parameter is required when a request specifies a value for the onBehalfOfContentOwner parameter, and it can only be used in conjunction with that parameter. In addition, the request must be authorized using a CMS account that is linked to the content owner that the onBehalfOfContentOwner parameter specifies. Finally, the channel that the onBehalfOfContentOwnerChannel parameter value specifies must be linked to the content owner that the onBehalfOfContentOwner parameter specifies. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and perform actions on behalf of the channel specified in the parameter value, without having to provide authentication credentials for each separate channel.
-  --content-details: record # Detailed settings of a broadcast. — shape: {boundStreamId?: string, boundStreamLastUpdateTimeMs?: string, closedCaptionsType?: "closedCaptionsTypeUnspecified"|"closedCaptionsDisabled"|"closedCaptionsHttpPost"|"closedCaptionsEmbedded", enableAutoStart?: bool, enableAutoStop?: bool, enableClosedCaptions?: bool, enableContentEncryption?: bool, enableDvr?: bool, enableEmbed?: bool, enableLowLatency?: bool, latencyPreference?: "latencyPreferenceUnspecified"|"normal"|"low"|"ultraLow", mesh?: string, monitorStream?: record, projection?: "projectionUnspecified"|"rectangular"|"360"|"mesh", recordFromStart?: bool, startWithSlate?: bool, stereoLayout?: "stereoLayoutUnspecified"|"mono"|"leftRight"|"topBottom"}
+  --content-details: record # Detailed settings of a broadcast. — shape: {boundStreamId?: string, boundStreamLastUpdateTimeMs?: string, closedCaptionsType?: "closedCaptionsTypeUnspecified"|"closedCaptionsDisabled"|"closedCaptionsHttpPost"|"closedCaptionsEmbedded", enableAutoStart?: bool, enableAutoStop?: bool, enableClosedCaptions?: bool, enableContentEncryption?: bool, enableDvr?: bool, enableEmbed?: bool, enableLowLatency?: bool, latencyPreference?: "latencyPreferenceUnspecified"|"normal"|"low"|"ultraLow", mesh?: string, monitorStream?: record, ... (4 more fields)}
   --etag: string # Etag of this resource.
   --id: string # The ID that YouTube assigns to uniquely identify the broadcast.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "youtube#liveBroadcast". (default: youtube#liveBroadcast)
@@ -1287,22 +1299,22 @@ export def "youtube-live-broadcasts youtubeliveBroadcastsinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $on_behalf_of_content_owner_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveBroadcasts" $qp)
-  let body = {"contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet, "statistics": $statistics, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet, "statistics": $statistics, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing broadcast for the authenticated user.
 #
 # PUT /youtube/v3/liveBroadcasts
 # operationId: youtube.liveBroadcasts.update
-# --contentDetails shape: {boundStreamId?: string, boundStreamLastUpdateTimeMs?: string, closedCaptionsType?: "closedCaptionsTypeUnspecified"|"closedCaptionsDisabled"|"closedCaptionsHttpPost"|"closedCaptionsEmbedded", enableAutoStart?: bool, enableAutoStop?: bool, enableClosedCaptions?: bool, enableContentEncryption?: bool, enableDvr?: bool, enableEmbed?: bool, enableLowLatency?: bool, latencyPreference?: "latencyPreferenceUnspecified"|"normal"|"low"|"ultraLow", mesh?: string, monitorStream?: record, projection?: "projectionUnspecified"|"rectangular"|"360"|"mesh", recordFromStart?: bool, startWithSlate?: bool, stereoLayout?: "stereoLayoutUnspecified"|"mono"|"leftRight"|"topBottom"}
+# --contentDetails shape: {boundStreamId?: string, boundStreamLastUpdateTimeMs?: string, closedCaptionsType?: "closedCaptionsTypeUnspecified"|"closedCaptionsDisabled"|"closedCaptionsHttpPost"|"closedCaptionsEmbedded", enableAutoStart?: bool, enableAutoStop?: bool, enableClosedCaptions?: bool, enableContentEncryption?: bool, enableDvr?: bool, enableEmbed?: bool, enableLowLatency?: bool, latencyPreference?: "latencyPreferenceUnspecified"|"normal"|"low"|"ultraLow", mesh?: string, monitorStream?: record, ... (4 more fields)}
 # --snippet shape: {actualEndTime?: string, actualStartTime?: string, channelId?: string, description?: string, isDefaultBroadcast?: bool, liveChatId?: string, publishedAt?: string, scheduledEndTime?: string, scheduledStartTime?: string, thumbnails?: record, title?: string}
 # --statistics shape: {concurrentViewers?: string}
 # --status shape: {lifeCycleStatus?: "lifeCycleStatusUnspecified"|"created"|"ready"|"testing"|"live"|"complete"|"revoked"|"testStarting"|"liveStarting", liveBroadcastPriority?: "liveBroadcastPriorityUnspecified"|"low"|"normal"|"high", madeForKids?: bool, privacyStatus?: "public"|"unlisted"|"private", recordingStatus?: "liveBroadcastRecordingStatusUnspecified"|"notRecording"|"recording"|"recorded", selfDeclaredMadeForKids?: bool}
-export def "youtube-live-broadcasts youtubeliveBroadcastsupdate" [
+export def "youtube-live-broadcasts update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1322,10 +1334,10 @@ export def "youtube-live-broadcasts youtubeliveBroadcastsupdate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. The part properties that you can include in the parameter value are id, snippet, contentDetails, and status. Note that this method will override the existing values for all of the mutable properties that are contained in any parts that the parameter value specifies. For example, a broadcast's privacy status is defined in the status part. As such, if your request is updating a private or unlisted broadcast, and the request's part parameter value includes the status part, the broadcast's privacy setting will be updated to whatever value the request body specifies. If the request body does not specify a value, the existing privacy setting will be removed and the broadcast will revert to the default privacy setting.
+  --part: list<string> # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. The part properties that you can include in the parameter value are id, snippet, contentDetails, and status. Note that this method will override the existing values for all of the mutable properties that are contained in any parts that the parameter value specifies. For example, a broadcast's privacy status is defined in the status part. As such, if your request is updating a private or unlisted broadcast, and the request's part parameter value includes the status part, the broadcast's privacy setting will be updated to whatever value the request body specifies. If the request body does not specify a value, the existing privacy setting will be removed and the broadcast will revert to the default privacy setting.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
   --on-behalf-of-content-owner-channel: string # This parameter can only be used in a properly authorized request. *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwnerChannel* parameter specifies the YouTube channel ID of the channel to which a video is being added. This parameter is required when a request specifies a value for the onBehalfOfContentOwner parameter, and it can only be used in conjunction with that parameter. In addition, the request must be authorized using a CMS account that is linked to the content owner that the onBehalfOfContentOwner parameter specifies. Finally, the channel that the onBehalfOfContentOwnerChannel parameter value specifies must be linked to the content owner that the onBehalfOfContentOwner parameter specifies. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and perform actions on behalf of the channel specified in the parameter value, without having to provide authentication credentials for each separate channel.
-  --content-details: record # Detailed settings of a broadcast. — shape: {boundStreamId?: string, boundStreamLastUpdateTimeMs?: string, closedCaptionsType?: "closedCaptionsTypeUnspecified"|"closedCaptionsDisabled"|"closedCaptionsHttpPost"|"closedCaptionsEmbedded", enableAutoStart?: bool, enableAutoStop?: bool, enableClosedCaptions?: bool, enableContentEncryption?: bool, enableDvr?: bool, enableEmbed?: bool, enableLowLatency?: bool, latencyPreference?: "latencyPreferenceUnspecified"|"normal"|"low"|"ultraLow", mesh?: string, monitorStream?: record, projection?: "projectionUnspecified"|"rectangular"|"360"|"mesh", recordFromStart?: bool, startWithSlate?: bool, stereoLayout?: "stereoLayoutUnspecified"|"mono"|"leftRight"|"topBottom"}
+  --content-details: record # Detailed settings of a broadcast. — shape: {boundStreamId?: string, boundStreamLastUpdateTimeMs?: string, closedCaptionsType?: "closedCaptionsTypeUnspecified"|"closedCaptionsDisabled"|"closedCaptionsHttpPost"|"closedCaptionsEmbedded", enableAutoStart?: bool, enableAutoStop?: bool, enableClosedCaptions?: bool, enableContentEncryption?: bool, enableDvr?: bool, enableEmbed?: bool, enableLowLatency?: bool, latencyPreference?: "latencyPreferenceUnspecified"|"normal"|"low"|"ultraLow", mesh?: string, monitorStream?: record, ... (4 more fields)}
   --etag: string # Etag of this resource.
   --id: string # The ID that YouTube assigns to uniquely identify the broadcast.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "youtube#liveBroadcast". (default: youtube#liveBroadcast)
@@ -1338,18 +1350,18 @@ export def "youtube-live-broadcasts youtubeliveBroadcastsupdate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $on_behalf_of_content_owner_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveBroadcasts" $qp)
-  let body = {"contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet, "statistics": $statistics, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet, "statistics": $statistics, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Bind a broadcast to a stream.
 #
 # POST /youtube/v3/liveBroadcasts/bind
 # operationId: youtube.liveBroadcasts.bind
-export def "youtube-live-broadcasts-bind youtubeliveBroadcastsbind" [
+export def "youtube-live-broadcasts-bind create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1370,7 +1382,7 @@ export def "youtube-live-broadcasts-bind youtubeliveBroadcastsbind" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --id: string # Broadcast to bind to the stream
-  --part: list # The *part* parameter specifies a comma-separated list of one or more liveBroadcast resource properties that the API response will include. The part names that you can include in the parameter value are id, snippet, contentDetails, and status.
+  --part: list<string> # The *part* parameter specifies a comma-separated list of one or more liveBroadcast resource properties that the API response will include. The part names that you can include in the parameter value are id, snippet, contentDetails, and status.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
   --on-behalf-of-content-owner-channel: string # This parameter can only be used in a properly authorized request. *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwnerChannel* parameter specifies the YouTube channel ID of the channel to which a video is being added. This parameter is required when a request specifies a value for the onBehalfOfContentOwner parameter, and it can only be used in conjunction with that parameter. In addition, the request must be authorized using a CMS account that is linked to the content owner that the onBehalfOfContentOwner parameter specifies. Finally, the channel that the onBehalfOfContentOwnerChannel parameter value specifies must be linked to the content owner that the onBehalfOfContentOwner parameter specifies. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and perform actions on behalf of the channel specified in the parameter value, without having to provide authentication credentials for each separate channel.
   --stream-id: string # Stream to bind, if not set unbind the current one.
@@ -1388,7 +1400,7 @@ export def "youtube-live-broadcasts-bind youtubeliveBroadcastsbind" [
 #
 # POST /youtube/v3/liveBroadcasts/cuepoint
 # operationId: youtube.liveBroadcasts.insertCuepoint
-export def "youtube-live-broadcasts-cuepoint youtubeliveBroadcastsinsertCuepoint" [
+export def "youtube-live-broadcasts-cuepoint create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1411,7 +1423,7 @@ export def "youtube-live-broadcasts-cuepoint youtubeliveBroadcastsinsertCuepoint
   --id: string # Broadcast to insert ads to, or equivalently `external_video_id` for internal use.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
   --on-behalf-of-content-owner-channel: string # This parameter can only be used in a properly authorized request. *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwnerChannel* parameter specifies the YouTube channel ID of the channel to which a video is being added. This parameter is required when a request specifies a value for the onBehalfOfContentOwner parameter, and it can only be used in conjunction with that parameter. In addition, the request must be authorized using a CMS account that is linked to the content owner that the onBehalfOfContentOwner parameter specifies. Finally, the channel that the onBehalfOfContentOwnerChannel parameter value specifies must be linked to the content owner that the onBehalfOfContentOwner parameter specifies. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and perform actions on behalf of the channel specified in the parameter value, without having to provide authentication credentials for each separate channel.
-  --part: list # The *part* parameter specifies a comma-separated list of one or more liveBroadcast resource properties that the API response will include. The part names that you can include in the parameter value are id, snippet, contentDetails, and status.
+  --part: list<string> # The *part* parameter specifies a comma-separated list of one or more liveBroadcast resource properties that the API response will include. The part names that you can include in the parameter value are id, snippet, contentDetails, and status.
   --cue-type: string@cue-type-completer
   --duration-secs: int # The duration of this cuepoint. (format: uint32)
   --etag: string
@@ -1424,18 +1436,18 @@ export def "youtube-live-broadcasts-cuepoint youtubeliveBroadcastsinsertCuepoint
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $on_behalf_of_content_owner_channel "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveBroadcasts/cuepoint" $qp)
-  let body = {"cueType": $cue_type, "durationSecs": $duration_secs, "etag": $etag, "id": $id, "insertionOffsetTimeMs": $insertion_offset_time_ms, "walltimeMs": $walltime_ms} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"cueType": $cue_type, "durationSecs": $duration_secs, "etag": $etag, "id": $id, "insertionOffsetTimeMs": $insertion_offset_time_ms, "walltimeMs": $walltime_ms} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Transition a broadcast to a given status.
 #
 # POST /youtube/v3/liveBroadcasts/transition
 # operationId: youtube.liveBroadcasts.transition
-export def "youtube-live-broadcasts-transition youtubeliveBroadcaststransition" [
+export def "youtube-live-broadcasts-transition create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1457,7 +1469,7 @@ export def "youtube-live-broadcasts-transition youtubeliveBroadcaststransition" 
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --broadcast-status: string@broadcast-status-completer-1 # The status to which the broadcast is going to transition.
   --id: string # Broadcast to transition.
-  --part: list # The *part* parameter specifies a comma-separated list of one or more liveBroadcast resource properties that the API response will include. The part names that you can include in the parameter value are id, snippet, contentDetails, and status.
+  --part: list<string> # The *part* parameter specifies a comma-separated list of one or more liveBroadcast resource properties that the API response will include. The part names that you can include in the parameter value are id, snippet, contentDetails, and status.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
   --on-behalf-of-content-owner-channel: string # This parameter can only be used in a properly authorized request. *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwnerChannel* parameter specifies the YouTube channel ID of the channel to which a video is being added. This parameter is required when a request specifies a value for the onBehalfOfContentOwner parameter, and it can only be used in conjunction with that parameter. In addition, the request must be authorized using a CMS account that is linked to the content owner that the onBehalfOfContentOwner parameter specifies. Finally, the channel that the onBehalfOfContentOwnerChannel parameter value specifies must be linked to the content owner that the onBehalfOfContentOwner parameter specifies. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and perform actions on behalf of the channel specified in the parameter value, without having to provide authentication credentials for each separate channel.
 ]: nothing -> record<contentDetails: record<boundStreamId: string, boundStreamLastUpdateTimeMs: string, closedCaptionsType: string, enableAutoStart: bool, enableAutoStop: bool, enableClosedCaptions: bool, enableContentEncryption: bool, enableDvr: bool, enableEmbed: bool, enableLowLatency: bool, latencyPreference: string, mesh: string, monitorStream: record<broadcastStreamDelayMs: int, embedHtml: string, enableMonitorStream: bool>, projection: string, recordFromStart: bool, startWithSlate: bool, stereoLayout: string>, etag: string, id: string, kind: string, snippet: record<actualEndTime: string, actualStartTime: string, channelId: string, description: string, isDefaultBroadcast: bool, liveChatId: string, publishedAt: string, scheduledEndTime: string, scheduledStartTime: string, thumbnails: record<high: record, maxres: record, medium: record, standard: record>, title: string>, statistics: record<concurrentViewers: string>, status: record<lifeCycleStatus: string, liveBroadcastPriority: string, madeForKids: bool, privacyStatus: string, recordingStatus: string, selfDeclaredMadeForKids: bool>> {
@@ -1474,7 +1486,7 @@ export def "youtube-live-broadcasts-transition youtubeliveBroadcaststransition" 
 #
 # DELETE /youtube/v3/liveChat/bans
 # operationId: youtube.liveChatBans.delete
-export def "youtube-live-chat-bans youtubeliveChatBansdelete" [
+export def "youtube-live-chat-bans delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1510,7 +1522,7 @@ export def "youtube-live-chat-bans youtubeliveChatBansdelete" [
 # POST /youtube/v3/liveChat/bans
 # operationId: youtube.liveChatBans.insert
 # --snippet shape: {banDurationSeconds?: string, bannedUserDetails?: record, liveChatId?: string, type?: "liveChatBanTypeUnspecified"|"permanent"|"temporary"}
-export def "youtube-live-chat-bans youtubeliveChatBansinsert" [
+export def "youtube-live-chat-bans create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1530,7 +1542,7 @@ export def "youtube-live-chat-bans youtubeliveChatBansinsert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response returns. Set the parameter value to snippet.
+  --part: list<string> # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response returns. Set the parameter value to snippet.
   --etag: string # Etag of this resource.
   --id: string # The ID that YouTube assigns to uniquely identify the ban.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string `"youtube#liveChatBan"`. (default: youtube#liveChatBan)
@@ -1541,18 +1553,18 @@ export def "youtube-live-chat-bans youtubeliveChatBansinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveChat/bans" $qp)
-  let body = {"etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a chat message.
 #
 # DELETE /youtube/v3/liveChat/messages
 # operationId: youtube.liveChatMessages.delete
-export def "youtube-live-chat-messages youtubeliveChatMessagesdelete" [
+export def "youtube-live-chat-messages delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1587,7 +1599,7 @@ export def "youtube-live-chat-messages youtubeliveChatMessagesdelete" [
 #
 # GET /youtube/v3/liveChat/messages
 # operationId: youtube.liveChatMessages.list
-export def "youtube-live-chat-messages youtubeliveChatMessageslist" [
+export def "youtube-live-chat-messages list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1608,7 +1620,7 @@ export def "youtube-live-chat-messages youtubeliveChatMessageslist" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --live-chat-id: string # The id of the live chat for which comments should be returned.
-  --part: list # The *part* parameter specifies the liveChatComment resource parts that the API response will include. Supported values are id and snippet.
+  --part: list<string> # The *part* parameter specifies the liveChatComment resource parts that the API response will include. Supported values are id and snippet.
   --hl: string # Specifies the localization language in which the system messages should be returned.
   --max-results: int # The *maxResults* parameter specifies the maximum number of items that should be returned in the result set.
   --page-token: string # The *pageToken* parameter identifies a specific page in the result set that should be returned. In an API response, the nextPageToken property identify other pages that could be retrieved.
@@ -1628,8 +1640,8 @@ export def "youtube-live-chat-messages youtubeliveChatMessageslist" [
 # POST /youtube/v3/liveChat/messages
 # operationId: youtube.liveChatMessages.insert
 # --authorDetails shape: {channelId?: string, channelUrl?: string, displayName?: string, isChatModerator?: bool, isChatOwner?: bool, isChatSponsor?: bool, isVerified?: bool, profileImageUrl?: string}
-# --snippet shape: {authorChannelId?: string, displayMessage?: string, fanFundingEventDetails?: record, giftMembershipReceivedDetails?: record, hasDisplayContent?: bool, liveChatId?: string, memberMilestoneChatDetails?: record, membershipGiftingDetails?: record, messageDeletedDetails?: record, messageRetractedDetails?: record, newSponsorDetails?: record, publishedAt?: string, superChatDetails?: record, superStickerDetails?: record, textMessageDetails?: record, type?: "invalidType"|"textMessageEvent"|"tombstone"|"fanFundingEvent"|"chatEndedEvent"|"sponsorOnlyModeStartedEvent"|"sponsorOnlyModeEndedEvent"|"newSponsorEvent"|"memberMilestoneChatEvent"|"membershipGiftingEvent"|"giftMembershipReceivedEvent"|"messageDeletedEvent"|"messageRetractedEvent"|"userBannedEvent"|"superChatEvent"|"superStickerEvent", userBannedDetails?: record}
-export def "youtube-live-chat-messages youtubeliveChatMessagesinsert" [
+# --snippet shape: {authorChannelId?: string, displayMessage?: string, fanFundingEventDetails?: record, giftMembershipReceivedDetails?: record, hasDisplayContent?: bool, liveChatId?: string, memberMilestoneChatDetails?: record, membershipGiftingDetails?: record, messageDeletedDetails?: record, messageRetractedDetails?: record, newSponsorDetails?: record, publishedAt?: string, superChatDetails?: record, superStickerDetails?: record, textMessageDetails?: record, ... (2 more fields)}
+export def "youtube-live-chat-messages create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1649,30 +1661,30 @@ export def "youtube-live-chat-messages youtubeliveChatMessagesinsert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter serves two purposes. It identifies the properties that the write operation will set as well as the properties that the API response will include. Set the parameter value to snippet.
+  --part: list<string> # The *part* parameter serves two purposes. It identifies the properties that the write operation will set as well as the properties that the API response will include. Set the parameter value to snippet.
   --author-details: record # shape: {channelId?: string, channelUrl?: string, displayName?: string, isChatModerator?: bool, isChatOwner?: bool, isChatSponsor?: bool, isVerified?: bool, profileImageUrl?: string}
   --etag: string # Etag of this resource.
   --id: string # The ID that YouTube assigns to uniquely identify the message.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "youtube#liveChatMessage". (default: youtube#liveChatMessage)
-  --snippet: record # Next ID: 33 — shape: {authorChannelId?: string, displayMessage?: string, fanFundingEventDetails?: record, giftMembershipReceivedDetails?: record, hasDisplayContent?: bool, liveChatId?: string, memberMilestoneChatDetails?: record, membershipGiftingDetails?: record, messageDeletedDetails?: record, messageRetractedDetails?: record, newSponsorDetails?: record, publishedAt?: string, superChatDetails?: record, superStickerDetails?: record, textMessageDetails?: record, type?: "invalidType"|"textMessageEvent"|"tombstone"|"fanFundingEvent"|"chatEndedEvent"|"sponsorOnlyModeStartedEvent"|"sponsorOnlyModeEndedEvent"|"newSponsorEvent"|"memberMilestoneChatEvent"|"membershipGiftingEvent"|"giftMembershipReceivedEvent"|"messageDeletedEvent"|"messageRetractedEvent"|"userBannedEvent"|"superChatEvent"|"superStickerEvent", userBannedDetails?: record}
+  --snippet: record # Next ID: 33 — shape: {authorChannelId?: string, displayMessage?: string, fanFundingEventDetails?: record, giftMembershipReceivedDetails?: record, hasDisplayContent?: bool, liveChatId?: string, memberMilestoneChatDetails?: record, membershipGiftingDetails?: record, messageDeletedDetails?: record, messageRetractedDetails?: record, newSponsorDetails?: record, publishedAt?: string, superChatDetails?: record, superStickerDetails?: record, textMessageDetails?: record, ... (2 more fields)}
 ]: any -> record<authorDetails: record<channelId: string, channelUrl: string, displayName: string, isChatModerator: bool, isChatOwner: bool, isChatSponsor: bool, isVerified: bool, profileImageUrl: string>, etag: string, id: string, kind: string, snippet: record<authorChannelId: string, displayMessage: string, fanFundingEventDetails: record<amountDisplayString: string, amountMicros: string, currency: string, userComment: string>, giftMembershipReceivedDetails: record<associatedMembershipGiftingMessageId: string, gifterChannelId: string, memberLevelName: string>, hasDisplayContent: bool, liveChatId: string, memberMilestoneChatDetails: record<memberLevelName: string, memberMonth: int, userComment: string>, membershipGiftingDetails: record<giftMembershipsCount: int, giftMembershipsLevelName: string>, messageDeletedDetails: record<deletedMessageId: string>, messageRetractedDetails: record<retractedMessageId: string>, newSponsorDetails: record<isUpgrade: bool, memberLevelName: string>, publishedAt: string, superChatDetails: record<amountDisplayString: string, amountMicros: string, currency: string, tier: int, userComment: string>, superStickerDetails: record<amountDisplayString: string, amountMicros: string, currency: string, superStickerMetadata: record, tier: int>, textMessageDetails: record<messageText: string>, type: string, userBannedDetails: record<banDurationSeconds: string, banType: string, bannedUserDetails: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveChat/messages" $qp)
-  let body = {"authorDetails": $author_details, "etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"authorDetails": $author_details, "etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a chat moderator.
 #
 # DELETE /youtube/v3/liveChat/moderators
 # operationId: youtube.liveChatModerators.delete
-export def "youtube-live-chat-moderators youtubeliveChatModeratorsdelete" [
+export def "youtube-live-chat-moderators delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1707,7 +1719,7 @@ export def "youtube-live-chat-moderators youtubeliveChatModeratorsdelete" [
 #
 # GET /youtube/v3/liveChat/moderators
 # operationId: youtube.liveChatModerators.list
-export def "youtube-live-chat-moderators youtubeliveChatModeratorslist" [
+export def "youtube-live-chat-moderators list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1728,7 +1740,7 @@ export def "youtube-live-chat-moderators youtubeliveChatModeratorslist" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --live-chat-id: string # The id of the live chat for which moderators should be returned.
-  --part: list # The *part* parameter specifies the liveChatModerator resource parts that the API response will include. Supported values are id and snippet.
+  --part: list<string> # The *part* parameter specifies the liveChatModerator resource parts that the API response will include. Supported values are id and snippet.
   --max-results: int # The *maxResults* parameter specifies the maximum number of items that should be returned in the result set.
   --page-token: string # The *pageToken* parameter identifies a specific page in the result set that should be returned. In an API response, the nextPageToken and prevPageToken properties identify other pages that could be retrieved.
 ]: nothing -> record<etag: string, eventId: string, items: table<etag: string, id: string, kind: string, snippet: record>, kind: string, nextPageToken: string, pageInfo: record<resultsPerPage: int, totalResults: int>, prevPageToken: string, tokenPagination: record, visitorId: string> {
@@ -1746,7 +1758,7 @@ export def "youtube-live-chat-moderators youtubeliveChatModeratorslist" [
 # POST /youtube/v3/liveChat/moderators
 # operationId: youtube.liveChatModerators.insert
 # --snippet shape: {liveChatId?: string, moderatorDetails?: record}
-export def "youtube-live-chat-moderators youtubeliveChatModeratorsinsert" [
+export def "youtube-live-chat-moderators create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1766,7 +1778,7 @@ export def "youtube-live-chat-moderators youtubeliveChatModeratorsinsert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response returns. Set the parameter value to snippet.
+  --part: list<string> # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response returns. Set the parameter value to snippet.
   --etag: string # Etag of this resource.
   --id: string # The ID that YouTube assigns to uniquely identify the moderator.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "youtube#liveChatModerator". (default: youtube#liveChatModerator)
@@ -1777,18 +1789,18 @@ export def "youtube-live-chat-moderators youtubeliveChatModeratorsinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveChat/moderators" $qp)
-  let body = {"etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an existing stream for the authenticated user.
 #
 # DELETE /youtube/v3/liveStreams
 # operationId: youtube.liveStreams.delete
-export def "youtube-live-streams youtubeliveStreamsdelete" [
+export def "youtube-live-streams delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1825,7 +1837,7 @@ export def "youtube-live-streams youtubeliveStreamsdelete" [
 #
 # GET /youtube/v3/liveStreams
 # operationId: youtube.liveStreams.list
-export def "youtube-live-streams youtubeliveStreamslist" [
+export def "youtube-live-streams list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1845,8 +1857,8 @@ export def "youtube-live-streams youtubeliveStreamslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies a comma-separated list of one or more liveStream resource properties that the API response will include. The part names that you can include in the parameter value are id, snippet, cdn, and status.
-  --id: list # Return LiveStreams with the given ids from Stubby or Apiary.
+  --part: list<string> # The *part* parameter specifies a comma-separated list of one or more liveStream resource properties that the API response will include. The part names that you can include in the parameter value are id, snippet, cdn, and status.
+  --id: list<string> # Return LiveStreams with the given ids from Stubby or Apiary.
   --max-results: int # The *maxResults* parameter specifies the maximum number of items that should be returned in the result set.
   --mine: oneof<nothing, bool>
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
@@ -1870,7 +1882,7 @@ export def "youtube-live-streams youtubeliveStreamslist" [
 # --contentDetails shape: {closedCaptionsIngestionUrl?: string, isReusable?: bool}
 # --snippet shape: {channelId?: string, description?: string, isDefaultStream?: bool, publishedAt?: string, title?: string}
 # --status shape: {healthStatus?: record, streamStatus?: "created"|"ready"|"active"|"inactive"|"error"}
-export def "youtube-live-streams youtubeliveStreamsinsert" [
+export def "youtube-live-streams create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1890,7 +1902,7 @@ export def "youtube-live-streams youtubeliveStreamsinsert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. The part properties that you can include in the parameter value are id, snippet, cdn, content_details, and status.
+  --part: list<string> # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. The part properties that you can include in the parameter value are id, snippet, cdn, content_details, and status.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
   --on-behalf-of-content-owner-channel: string # This parameter can only be used in a properly authorized request. *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwnerChannel* parameter specifies the YouTube channel ID of the channel to which a video is being added. This parameter is required when a request specifies a value for the onBehalfOfContentOwner parameter, and it can only be used in conjunction with that parameter. In addition, the request must be authorized using a CMS account that is linked to the content owner that the onBehalfOfContentOwner parameter specifies. Finally, the channel that the onBehalfOfContentOwnerChannel parameter value specifies must be linked to the content owner that the onBehalfOfContentOwner parameter specifies. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and perform actions on behalf of the channel specified in the parameter value, without having to provide authentication credentials for each separate channel.
   --cdn: record # Brief description of the live stream cdn settings. — shape: {format?: string, frameRate?: "30fps"|"60fps"|"variable", ingestionInfo?: record, ingestionType?: "rtmp"|"dash"|"webrtc"|"hls", resolution?: "240p"|"360p"|"480p"|"720p"|"1080p"|"1440p"|"2160p"|"variable"}
@@ -1906,11 +1918,11 @@ export def "youtube-live-streams youtubeliveStreamsinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $on_behalf_of_content_owner_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveStreams" $qp)
-  let body = {"cdn": $cdn, "contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"cdn": $cdn, "contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing stream for the authenticated user.
@@ -1921,7 +1933,7 @@ export def "youtube-live-streams youtubeliveStreamsinsert" [
 # --contentDetails shape: {closedCaptionsIngestionUrl?: string, isReusable?: bool}
 # --snippet shape: {channelId?: string, description?: string, isDefaultStream?: bool, publishedAt?: string, title?: string}
 # --status shape: {healthStatus?: record, streamStatus?: "created"|"ready"|"active"|"inactive"|"error"}
-export def "youtube-live-streams youtubeliveStreamsupdate" [
+export def "youtube-live-streams update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1941,7 +1953,7 @@ export def "youtube-live-streams youtubeliveStreamsupdate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. The part properties that you can include in the parameter value are id, snippet, cdn, and status. Note that this method will override the existing values for all of the mutable properties that are contained in any parts that the parameter value specifies. If the request body does not specify a value for a mutable property, the existing value for that property will be removed.
+  --part: list<string> # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. The part properties that you can include in the parameter value are id, snippet, cdn, and status. Note that this method will override the existing values for all of the mutable properties that are contained in any parts that the parameter value specifies. If the request body does not specify a value for a mutable property, the existing value for that property will be removed.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
   --on-behalf-of-content-owner-channel: string # This parameter can only be used in a properly authorized request. *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwnerChannel* parameter specifies the YouTube channel ID of the channel to which a video is being added. This parameter is required when a request specifies a value for the onBehalfOfContentOwner parameter, and it can only be used in conjunction with that parameter. In addition, the request must be authorized using a CMS account that is linked to the content owner that the onBehalfOfContentOwner parameter specifies. Finally, the channel that the onBehalfOfContentOwnerChannel parameter value specifies must be linked to the content owner that the onBehalfOfContentOwner parameter specifies. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and perform actions on behalf of the channel specified in the parameter value, without having to provide authentication credentials for each separate channel.
   --cdn: record # Brief description of the live stream cdn settings. — shape: {format?: string, frameRate?: "30fps"|"60fps"|"variable", ingestionInfo?: record, ingestionType?: "rtmp"|"dash"|"webrtc"|"hls", resolution?: "240p"|"360p"|"480p"|"720p"|"1080p"|"1440p"|"2160p"|"variable"}
@@ -1957,18 +1969,18 @@ export def "youtube-live-streams youtubeliveStreamsupdate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $on_behalf_of_content_owner_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/liveStreams" $qp)
-  let body = {"cdn": $cdn, "contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"cdn": $cdn, "contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a list of members that match the request criteria for a channel.
 #
 # GET /youtube/v3/members
 # operationId: youtube.members.list
-export def "youtube-members youtubememberslist" [
+export def "youtube-members list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1988,7 +2000,7 @@ export def "youtube-members youtubememberslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies the member resource parts that the API response will include. Set the parameter value to snippet.
+  --part: list<string> # The *part* parameter specifies the member resource parts that the API response will include. Set the parameter value to snippet.
   --filter-by-member-channel-id: string # Comma separated list of channel IDs. Only data about members that are part of this list will be included in the response.
   --has-access-to-level: string # Filter members in the results set to the ones that have access to a level.
   --max-results: int # The *maxResults* parameter specifies the maximum number of items that should be returned in the result set.
@@ -2008,7 +2020,7 @@ export def "youtube-members youtubememberslist" [
 #
 # GET /youtube/v3/membershipsLevels
 # operationId: youtube.membershipsLevels.list
-export def "youtube-memberships-levels youtubemembershipsLevelslist" [
+export def "youtube-memberships-levels list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2028,7 +2040,7 @@ export def "youtube-memberships-levels youtubemembershipsLevelslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies the membershipsLevel resource parts that the API response will include. Supported values are id and snippet.
+  --part: list<string> # The *part* parameter specifies the membershipsLevel resource parts that the API response will include. Supported values are id and snippet.
 ]: nothing -> record<etag: string, eventId: string, items: table<etag: string, id: string, kind: string, snippet: record>, kind: string, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2043,7 +2055,7 @@ export def "youtube-memberships-levels youtubemembershipsLevelslist" [
 #
 # DELETE /youtube/v3/playlistItems
 # operationId: youtube.playlistItems.delete
-export def "youtube-playlist-items youtubeplaylistItemsdelete" [
+export def "youtube-playlist-items delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2079,7 +2091,7 @@ export def "youtube-playlist-items youtubeplaylistItemsdelete" [
 #
 # GET /youtube/v3/playlistItems
 # operationId: youtube.playlistItems.list
-export def "youtube-playlist-items youtubeplaylistItemslist" [
+export def "youtube-playlist-items list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2099,8 +2111,8 @@ export def "youtube-playlist-items youtubeplaylistItemslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies a comma-separated list of one or more playlistItem resource properties that the API response will include. If the parameter identifies a property that contains child properties, the child properties will be included in the response. For example, in a playlistItem resource, the snippet property contains numerous fields, including the title, description, position, and resourceId properties. As such, if you set *part=snippet*, the API response will contain all of those properties.
-  --id: list
+  --part: list<string> # The *part* parameter specifies a comma-separated list of one or more playlistItem resource properties that the API response will include. If the parameter identifies a property that contains child properties, the child properties will be included in the response. For example, in a playlistItem resource, the snippet property contains numerous fields, including the title, description, position, and resourceId properties. As such, if you set *part=snippet*, the API response will contain all of those properties.
+  --id: list<string>
   --max-results: int # The *maxResults* parameter specifies the maximum number of items that should be returned in the result set.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
   --page-token: string # The *pageToken* parameter identifies a specific page in the result set that should be returned. In an API response, the nextPageToken and prevPageToken properties identify other pages that could be retrieved.
@@ -2123,7 +2135,7 @@ export def "youtube-playlist-items youtubeplaylistItemslist" [
 # --contentDetails shape: {endAt?: string, note?: string, startAt?: string, videoId?: string, videoPublishedAt?: string}
 # --snippet shape: {channelId?: string, channelTitle?: string, description?: string, playlistId?: string, position?: int, publishedAt?: string, resourceId?: record, thumbnails?: record, title?: string, videoOwnerChannelId?: string, videoOwnerChannelTitle?: string}
 # --status shape: {privacyStatus?: "public"|"unlisted"|"private"}
-export def "youtube-playlist-items youtubeplaylistItemsinsert" [
+export def "youtube-playlist-items create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2143,7 +2155,7 @@ export def "youtube-playlist-items youtubeplaylistItemsinsert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include.
+  --part: list<string> # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
   --content-details: record # shape: {endAt?: string, note?: string, startAt?: string, videoId?: string, videoPublishedAt?: string}
   --etag: string # Etag of this resource.
@@ -2157,11 +2169,11 @@ export def "youtube-playlist-items youtubeplaylistItemsinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/playlistItems" $qp)
-  let body = {"contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing resource.
@@ -2171,7 +2183,7 @@ export def "youtube-playlist-items youtubeplaylistItemsinsert" [
 # --contentDetails shape: {endAt?: string, note?: string, startAt?: string, videoId?: string, videoPublishedAt?: string}
 # --snippet shape: {channelId?: string, channelTitle?: string, description?: string, playlistId?: string, position?: int, publishedAt?: string, resourceId?: record, thumbnails?: record, title?: string, videoOwnerChannelId?: string, videoOwnerChannelTitle?: string}
 # --status shape: {privacyStatus?: "public"|"unlisted"|"private"}
-export def "youtube-playlist-items youtubeplaylistItemsupdate" [
+export def "youtube-playlist-items update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2191,7 +2203,7 @@ export def "youtube-playlist-items youtubeplaylistItemsupdate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. Note that this method will override the existing values for all of the mutable properties that are contained in any parts that the parameter value specifies. For example, a playlist item can specify a start time and end time, which identify the times portion of the video that should play when users watch the video in the playlist. If your request is updating a playlist item that sets these values, and the request's part parameter value includes the contentDetails part, the playlist item's start and end times will be updated to whatever value the request body specifies. If the request body does not specify values, the existing start and end times will be removed and replaced with the default settings.
+  --part: list<string> # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. Note that this method will override the existing values for all of the mutable properties that are contained in any parts that the parameter value specifies. For example, a playlist item can specify a start time and end time, which identify the times portion of the video that should play when users watch the video in the playlist. If your request is updating a playlist item that sets these values, and the request's part parameter value includes the contentDetails part, the playlist item's start and end times will be updated to whatever value the request body specifies. If the request body does not specify values, the existing start and end times will be removed and replaced with the default settings.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
   --content-details: record # shape: {endAt?: string, note?: string, startAt?: string, videoId?: string, videoPublishedAt?: string}
   --etag: string # Etag of this resource.
@@ -2205,18 +2217,18 @@ export def "youtube-playlist-items youtubeplaylistItemsupdate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/playlistItems" $qp)
-  let body = {"contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a resource.
 #
 # DELETE /youtube/v3/playlists
 # operationId: youtube.playlists.delete
-export def "youtube-playlists youtubeplaylistsdelete" [
+export def "youtube-playlists delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2252,7 +2264,7 @@ export def "youtube-playlists youtubeplaylistsdelete" [
 #
 # GET /youtube/v3/playlists
 # operationId: youtube.playlists.list
-export def "youtube-playlists youtubeplaylistslist" [
+export def "youtube-playlists list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2272,10 +2284,10 @@ export def "youtube-playlists youtubeplaylistslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies a comma-separated list of one or more playlist resource properties that the API response will include. If the parameter identifies a property that contains child properties, the child properties will be included in the response. For example, in a playlist resource, the snippet property contains properties like author, title, description, tags, and timeCreated. As such, if you set *part=snippet*, the API response will contain all of those properties.
+  --part: list<string> # The *part* parameter specifies a comma-separated list of one or more playlist resource properties that the API response will include. If the parameter identifies a property that contains child properties, the child properties will be included in the response. For example, in a playlist resource, the snippet property contains properties like author, title, description, tags, and timeCreated. As such, if you set *part=snippet*, the API response will contain all of those properties.
   --channel-id: string # Return the playlists owned by the specified channel ID.
   --hl: string # Return content in specified language
-  --id: list # Return the playlists with the given IDs for Stubby or Apiary.
+  --id: list<string> # Return the playlists with the given IDs for Stubby or Apiary.
   --max-results: int # The *maxResults* parameter specifies the maximum number of items that should be returned in the result set.
   --mine: oneof<nothing, bool> # Return the playlists owned by the authenticated user.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
@@ -2297,9 +2309,9 @@ export def "youtube-playlists youtubeplaylistslist" [
 # operationId: youtube.playlists.insert
 # --contentDetails shape: {itemCount?: int}
 # --player shape: {embedHtml?: string}
-# --snippet shape: {channelId?: string, channelTitle?: string, defaultLanguage?: string, description?: string, localized?: record, publishedAt?: string, tags?: list, thumbnailVideoId?: string, thumbnails?: record, title?: string}
+# --snippet shape: {channelId?: string, channelTitle?: string, defaultLanguage?: string, description?: string, localized?: record, publishedAt?: string, tags?: list<string>, thumbnailVideoId?: string, thumbnails?: record, title?: string}
 # --status shape: {privacyStatus?: "public"|"unlisted"|"private"}
-export def "youtube-playlists youtubeplaylistsinsert" [
+export def "youtube-playlists create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2319,7 +2331,7 @@ export def "youtube-playlists youtubeplaylistsinsert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include.
+  --part: list<string> # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
   --on-behalf-of-content-owner-channel: string # This parameter can only be used in a properly authorized request. *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwnerChannel* parameter specifies the YouTube channel ID of the channel to which a video is being added. This parameter is required when a request specifies a value for the onBehalfOfContentOwner parameter, and it can only be used in conjunction with that parameter. In addition, the request must be authorized using a CMS account that is linked to the content owner that the onBehalfOfContentOwner parameter specifies. Finally, the channel that the onBehalfOfContentOwnerChannel parameter value specifies must be linked to the content owner that the onBehalfOfContentOwner parameter specifies. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and perform actions on behalf of the channel specified in the parameter value, without having to provide authentication credentials for each separate channel.
   --content-details: record # shape: {itemCount?: int}
@@ -2328,7 +2340,7 @@ export def "youtube-playlists youtubeplaylistsinsert" [
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "youtube#playlist". (default: youtube#playlist)
   --localizations: record # Localizations for different languages
   --player: record # shape: {embedHtml?: string}
-  --snippet: record # Basic details about a playlist, including title, description and thumbnails. — shape: {channelId?: string, channelTitle?: string, defaultLanguage?: string, description?: string, localized?: record, publishedAt?: string, tags?: list, thumbnailVideoId?: string, thumbnails?: record, title?: string}
+  --snippet: record # Basic details about a playlist, including title, description and thumbnails. — shape: {channelId?: string, channelTitle?: string, defaultLanguage?: string, description?: string, localized?: record, publishedAt?: string, tags?: list<string>, thumbnailVideoId?: string, thumbnails?: record, title?: string}
   --status: record # shape: {privacyStatus?: "public"|"unlisted"|"private"}
 ]: any -> record<contentDetails: record<itemCount: int>, etag: string, id: string, kind: string, localizations: record, player: record<embedHtml: string>, snippet: record<channelId: string, channelTitle: string, defaultLanguage: string, description: string, localized: record<description: string, title: string>, publishedAt: string, tags: list<string>, thumbnailVideoId: string, thumbnails: record<high: record, maxres: record, medium: record, standard: record>, title: string>, status: record<privacyStatus: string>> {
   let input = $in
@@ -2336,11 +2348,11 @@ export def "youtube-playlists youtubeplaylistsinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $on_behalf_of_content_owner_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/playlists" $qp)
-  let body = {"contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "localizations": $localizations, "player": $player, "snippet": $snippet, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "localizations": $localizations, "player": $player, "snippet": $snippet, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing resource.
@@ -2349,9 +2361,9 @@ export def "youtube-playlists youtubeplaylistsinsert" [
 # operationId: youtube.playlists.update
 # --contentDetails shape: {itemCount?: int}
 # --player shape: {embedHtml?: string}
-# --snippet shape: {channelId?: string, channelTitle?: string, defaultLanguage?: string, description?: string, localized?: record, publishedAt?: string, tags?: list, thumbnailVideoId?: string, thumbnails?: record, title?: string}
+# --snippet shape: {channelId?: string, channelTitle?: string, defaultLanguage?: string, description?: string, localized?: record, publishedAt?: string, tags?: list<string>, thumbnailVideoId?: string, thumbnails?: record, title?: string}
 # --status shape: {privacyStatus?: "public"|"unlisted"|"private"}
-export def "youtube-playlists youtubeplaylistsupdate" [
+export def "youtube-playlists update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2371,7 +2383,7 @@ export def "youtube-playlists youtubeplaylistsupdate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. Note that this method will override the existing values for mutable properties that are contained in any parts that the request body specifies. For example, a playlist's description is contained in the snippet part, which must be included in the request body. If the request does not specify a value for the snippet.description property, the playlist's existing description will be deleted.
+  --part: list<string> # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. Note that this method will override the existing values for mutable properties that are contained in any parts that the request body specifies. For example, a playlist's description is contained in the snippet part, which must be included in the request body. If the request does not specify a value for the snippet.description property, the playlist's existing description will be deleted.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
   --content-details: record # shape: {itemCount?: int}
   --etag: string # Etag of this resource.
@@ -2379,7 +2391,7 @@ export def "youtube-playlists youtubeplaylistsupdate" [
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "youtube#playlist". (default: youtube#playlist)
   --localizations: record # Localizations for different languages
   --player: record # shape: {embedHtml?: string}
-  --snippet: record # Basic details about a playlist, including title, description and thumbnails. — shape: {channelId?: string, channelTitle?: string, defaultLanguage?: string, description?: string, localized?: record, publishedAt?: string, tags?: list, thumbnailVideoId?: string, thumbnails?: record, title?: string}
+  --snippet: record # Basic details about a playlist, including title, description and thumbnails. — shape: {channelId?: string, channelTitle?: string, defaultLanguage?: string, description?: string, localized?: record, publishedAt?: string, tags?: list<string>, thumbnailVideoId?: string, thumbnails?: record, title?: string}
   --status: record # shape: {privacyStatus?: "public"|"unlisted"|"private"}
 ]: any -> record<contentDetails: record<itemCount: int>, etag: string, id: string, kind: string, localizations: record, player: record<embedHtml: string>, snippet: record<channelId: string, channelTitle: string, defaultLanguage: string, description: string, localized: record<description: string, title: string>, publishedAt: string, tags: list<string>, thumbnailVideoId: string, thumbnails: record<high: record, maxres: record, medium: record, standard: record>, title: string>, status: record<privacyStatus: string>> {
   let input = $in
@@ -2387,18 +2399,18 @@ export def "youtube-playlists youtubeplaylistsupdate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/playlists" $qp)
-  let body = {"contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "localizations": $localizations, "player": $player, "snippet": $snippet, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "localizations": $localizations, "player": $player, "snippet": $snippet, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a list of search resources
 #
 # GET /youtube/v3/search
 # operationId: youtube.search.list
-export def "youtube-search youtubesearchlist" [
+export def "youtube-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2418,7 +2430,7 @@ export def "youtube-search youtubesearchlist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies a comma-separated list of one or more search resource properties that the API response will include. Set the parameter value to snippet.
+  --part: list<string> # The *part* parameter specifies a comma-separated list of one or more search resource properties that the API response will include. Set the parameter value to snippet.
   --channel-id: string # Filter on resources belonging to this channelId.
   --channel-type: string@channel-type-completer # Add a filter on the channel search.
   --event-type: string@event-type-completer # Filter on the livestream status of the videos.
@@ -2439,7 +2451,7 @@ export def "youtube-search youtubesearchlist" [
   --relevance-language: string # Return results relevant to this language.
   --safe-search: string@safe-search-completer # Indicates whether the search results should include restricted content as well as standard content.
   --topic-id: string # Restrict results to a particular topic.
-  --type: list # Restrict results to a particular set of resource types from One Platform.
+  --type: list<string> # Restrict results to a particular set of resource types from One Platform.
   --video-caption: string@video-caption-completer # Filter on the presence of captions on the videos.
   --video-category-id: string # Filter on videos in a specific category.
   --video-definition: string@video-definition-completer # Filter on the definition of the videos.
@@ -2463,7 +2475,7 @@ export def "youtube-search youtubesearchlist" [
 #
 # DELETE /youtube/v3/subscriptions
 # operationId: youtube.subscriptions.delete
-export def "youtube-subscriptions youtubesubscriptionsdelete" [
+export def "youtube-subscriptions delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2498,7 +2510,7 @@ export def "youtube-subscriptions youtubesubscriptionsdelete" [
 #
 # GET /youtube/v3/subscriptions
 # operationId: youtube.subscriptions.list
-export def "youtube-subscriptions youtubesubscriptionslist" [
+export def "youtube-subscriptions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2518,10 +2530,10 @@ export def "youtube-subscriptions youtubesubscriptionslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies a comma-separated list of one or more subscription resource properties that the API response will include. If the parameter identifies a property that contains child properties, the child properties will be included in the response. For example, in a subscription resource, the snippet property contains other properties, such as a display title for the subscription. If you set *part=snippet*, the API response will also contain all of those nested properties.
+  --part: list<string> # The *part* parameter specifies a comma-separated list of one or more subscription resource properties that the API response will include. If the parameter identifies a property that contains child properties, the child properties will be included in the response. For example, in a subscription resource, the snippet property contains other properties, such as a display title for the subscription. If you set *part=snippet*, the API response will also contain all of those nested properties.
   --channel-id: string # Return the subscriptions of the given channel owner.
   --for-channel-id: string # Return the subscriptions to the subset of these channels that the authenticated user is subscribed to.
-  --id: list # Return the subscriptions with the given IDs for Stubby or Apiary.
+  --id: list<string> # Return the subscriptions with the given IDs for Stubby or Apiary.
   --max-results: int # The *maxResults* parameter specifies the maximum number of items that should be returned in the result set.
   --mine: oneof<nothing, bool> # Flag for returning the subscriptions of the authenticated user.
   --my-recent-subscribers: oneof<nothing, bool>
@@ -2547,7 +2559,7 @@ export def "youtube-subscriptions youtubesubscriptionslist" [
 # --contentDetails shape: {activityType?: "subscriptionActivityTypeUnspecified"|"all"|"uploads", newItemCount?: int, totalItemCount?: int}
 # --snippet shape: {channelId?: string, channelTitle?: string, description?: string, publishedAt?: string, resourceId?: record, thumbnails?: record, title?: string}
 # --subscriberSnippet shape: {channelId?: string, description?: string, thumbnails?: record, title?: string}
-export def "youtube-subscriptions youtubesubscriptionsinsert" [
+export def "youtube-subscriptions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2567,7 +2579,7 @@ export def "youtube-subscriptions youtubesubscriptionsinsert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include.
+  --part: list<string> # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include.
   --content-details: record # Details about the content to witch a subscription refers. — shape: {activityType?: "subscriptionActivityTypeUnspecified"|"all"|"uploads", newItemCount?: int, totalItemCount?: int}
   --etag: string # Etag of this resource.
   --id: string # The ID that YouTube uses to uniquely identify the subscription.
@@ -2580,18 +2592,18 @@ export def "youtube-subscriptions youtubesubscriptionsinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/subscriptions" $qp)
-  let body = {"contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet, "subscriberSnippet": $subscriber_snippet} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contentDetails": $content_details, "etag": $etag, "id": $id, "kind": $kind, "snippet": $snippet, "subscriberSnippet": $subscriber_snippet} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a list of resources, possibly filtered.
 #
 # GET /youtube/v3/superChatEvents
 # operationId: youtube.superChatEvents.list
-export def "youtube-super-chat-events youtubesuperChatEventslist" [
+export def "youtube-super-chat-events list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2611,7 +2623,7 @@ export def "youtube-super-chat-events youtubesuperChatEventslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies the superChatEvent resource parts that the API response will include. This parameter is currently not supported.
+  --part: list<string> # The *part* parameter specifies the superChatEvent resource parts that the API response will include. This parameter is currently not supported.
   --hl: string # Return rendered funding amounts in specified language.
   --max-results: int # The *maxResults* parameter specifies the maximum number of items that should be returned in the result set.
   --page-token: string # The *pageToken* parameter identifies a specific page in the result set that should be returned. In an API response, the nextPageToken and prevPageToken properties identify other pages that could be retrieved.
@@ -2629,7 +2641,7 @@ export def "youtube-super-chat-events youtubesuperChatEventslist" [
 #
 # POST /youtube/v3/tests
 # operationId: youtube.tests.insert
-export def "youtube-tests youtubetestsinsert" [
+export def "youtube-tests create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2649,7 +2661,7 @@ export def "youtube-tests youtubetestsinsert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list
+  --part: list<string>
   --external-channel-id: string
   --featured-part: oneof<nothing, bool>
   --gaia: string # format: int64
@@ -2661,18 +2673,18 @@ export def "youtube-tests youtubetestsinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi") (serialize-qp "externalChannelId" $external_channel_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/tests" $qp)
-  let body = {"featuredPart": $featured_part, "gaia": $gaia, "id": $id, "snippet": $snippet} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"featuredPart": $featured_part, "gaia": $gaia, "id": $id, "snippet": $snippet} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a resource.
 #
 # DELETE /youtube/v3/thirdPartyLinks
 # operationId: youtube.thirdPartyLinks.delete
-export def "youtube-third-party-links youtubethirdPartyLinksdelete" [
+export def "youtube-third-party-links delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2695,7 +2707,7 @@ export def "youtube-third-party-links youtubethirdPartyLinksdelete" [
   --linking-token: string # Delete the partner links with the given linking token.
   --type: string@type-completer # Type of the link to be deleted.
   --external-channel-id: string # Channel ID to which changes should be applied, for delegation.
-  --part: list # Do not use. Required for compatibility.
+  --part: list<string> # Do not use. Required for compatibility.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2710,7 +2722,7 @@ export def "youtube-third-party-links youtubethirdPartyLinksdelete" [
 #
 # GET /youtube/v3/thirdPartyLinks
 # operationId: youtube.thirdPartyLinks.list
-export def "youtube-third-party-links youtubethirdPartyLinkslist" [
+export def "youtube-third-party-links list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2730,7 +2742,7 @@ export def "youtube-third-party-links youtubethirdPartyLinkslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies the thirdPartyLink resource parts that the API response will include. Supported values are linkingToken, status, and snippet.
+  --part: list<string> # The *part* parameter specifies the thirdPartyLink resource parts that the API response will include. Supported values are linkingToken, status, and snippet.
   --external-channel-id: string # Channel ID to which changes should be applied, for delegation.
   --linking-token: string # Get a third party link with the given linking token.
   --type: string@type-completer # Get a third party link of the given type.
@@ -2750,7 +2762,7 @@ export def "youtube-third-party-links youtubethirdPartyLinkslist" [
 # operationId: youtube.thirdPartyLinks.insert
 # --snippet shape: {channelToStoreLink?: record, type?: "linkUnspecified"|"channelToStoreLink"}
 # --status shape: {linkStatus?: "unknown"|"failed"|"pending"|"linked"}
-export def "youtube-third-party-links youtubethirdPartyLinksinsert" [
+export def "youtube-third-party-links create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2770,7 +2782,7 @@ export def "youtube-third-party-links youtubethirdPartyLinksinsert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies the thirdPartyLink resource parts that the API request and response will include. Supported values are linkingToken, status, and snippet.
+  --part: list<string> # The *part* parameter specifies the thirdPartyLink resource parts that the API request and response will include. Supported values are linkingToken, status, and snippet.
   --external-channel-id: string # Channel ID to which changes should be applied, for delegation.
   --etag: string # Etag of this resource
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "youtube#thirdPartyLink". (default: youtube#thirdPartyLink)
@@ -2783,11 +2795,11 @@ export def "youtube-third-party-links youtubethirdPartyLinksinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi") (serialize-qp "externalChannelId" $external_channel_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/thirdPartyLinks" $qp)
-  let body = {"etag": $etag, "kind": $kind, "linkingToken": $linking_token, "snippet": $snippet, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"etag": $etag, "kind": $kind, "linkingToken": $linking_token, "snippet": $snippet, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates an existing resource.
@@ -2796,7 +2808,7 @@ export def "youtube-third-party-links youtubethirdPartyLinksinsert" [
 # operationId: youtube.thirdPartyLinks.update
 # --snippet shape: {channelToStoreLink?: record, type?: "linkUnspecified"|"channelToStoreLink"}
 # --status shape: {linkStatus?: "unknown"|"failed"|"pending"|"linked"}
-export def "youtube-third-party-links youtubethirdPartyLinksupdate" [
+export def "youtube-third-party-links update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2816,7 +2828,7 @@ export def "youtube-third-party-links youtubethirdPartyLinksupdate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies the thirdPartyLink resource parts that the API request and response will include. Supported values are linkingToken, status, and snippet.
+  --part: list<string> # The *part* parameter specifies the thirdPartyLink resource parts that the API request and response will include. Supported values are linkingToken, status, and snippet.
   --external-channel-id: string # Channel ID to which changes should be applied, for delegation.
   --etag: string # Etag of this resource
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "youtube#thirdPartyLink". (default: youtube#thirdPartyLink)
@@ -2829,18 +2841,18 @@ export def "youtube-third-party-links youtubethirdPartyLinksupdate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi") (serialize-qp "externalChannelId" $external_channel_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/thirdPartyLinks" $qp)
-  let body = {"etag": $etag, "kind": $kind, "linkingToken": $linking_token, "snippet": $snippet, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"etag": $etag, "kind": $kind, "linkingToken": $linking_token, "snippet": $snippet, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # As this is not an insert in a strict sense (it supports uploading/setting of a thumbnail for multiple videos, which doesn't result in creation of a single resource), I use a custom verb here.
 #
 # POST /youtube/v3/thumbnails/set
 # operationId: youtube.thumbnails.set
-export def "youtube-thumbnails-set youtubethumbnailsset" [
+export def "youtube-thumbnails-set update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2876,7 +2888,7 @@ export def "youtube-thumbnails-set youtubethumbnailsset" [
 #
 # GET /youtube/v3/videoAbuseReportReasons
 # operationId: youtube.videoAbuseReportReasons.list
-export def "youtube-video-abuse-report-reasons youtubevideoAbuseReportReasonslist" [
+export def "youtube-video-abuse-report-reasons list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2896,7 +2908,7 @@ export def "youtube-video-abuse-report-reasons youtubevideoAbuseReportReasonslis
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies the videoCategory resource parts that the API response will include. Supported values are id and snippet.
+  --part: list<string> # The *part* parameter specifies the videoCategory resource parts that the API response will include. Supported values are id and snippet.
   --hl: string
 ]: nothing -> record<etag: string, eventId: string, items: table<etag: string, id: string, kind: string, snippet: record>, kind: string, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2912,7 +2924,7 @@ export def "youtube-video-abuse-report-reasons youtubevideoAbuseReportReasonslis
 #
 # GET /youtube/v3/videoCategories
 # operationId: youtube.videoCategories.list
-export def "youtube-video-categories youtubevideoCategorieslist" [
+export def "youtube-video-categories list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2932,9 +2944,9 @@ export def "youtube-video-categories youtubevideoCategorieslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies the videoCategory resource properties that the API response will include. Set the parameter value to snippet.
+  --part: list<string> # The *part* parameter specifies the videoCategory resource properties that the API response will include. Set the parameter value to snippet.
   --hl: string
-  --id: list # Returns the video categories with the given IDs for Stubby or Apiary.
+  --id: list<string> # Returns the video categories with the given IDs for Stubby or Apiary.
   --region-code: string
 ]: nothing -> record<etag: string, eventId: string, items: table<etag: string, id: string, kind: string, snippet: record>, kind: string, nextPageToken: string, pageInfo: record<resultsPerPage: int, totalResults: int>, prevPageToken: string, tokenPagination: record, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2950,7 +2962,7 @@ export def "youtube-video-categories youtubevideoCategorieslist" [
 #
 # DELETE /youtube/v3/videos
 # operationId: youtube.videos.delete
-export def "youtube-videos youtubevideosdelete" [
+export def "youtube-videos delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2986,7 +2998,7 @@ export def "youtube-videos youtubevideosdelete" [
 #
 # GET /youtube/v3/videos
 # operationId: youtube.videos.list
-export def "youtube-videos youtubevideoslist" [
+export def "youtube-videos list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3006,10 +3018,10 @@ export def "youtube-videos youtubevideoslist" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter specifies a comma-separated list of one or more video resource properties that the API response will include. If the parameter identifies a property that contains child properties, the child properties will be included in the response. For example, in a video resource, the snippet property contains the channelId, title, description, tags, and categoryId properties. As such, if you set *part=snippet*, the API response will contain all of those properties.
+  --part: list<string> # The *part* parameter specifies a comma-separated list of one or more video resource properties that the API response will include. If the parameter identifies a property that contains child properties, the child properties will be included in the response. For example, in a video resource, the snippet property contains the channelId, title, description, tags, and categoryId properties. As such, if you set *part=snippet*, the API response will contain all of those properties.
   --chart: string@chart-completer # Return the videos that are in the specified chart.
   --hl: string # Stands for "host language". Specifies the localization language of the metadata to be filled into snippet.localized. The field is filled with the default metadata if there is no localization in the specified language. The parameter value must be a language code included in the list returned by the i18nLanguages.list method (e.g. en_US, es_MX).
-  --id: list # Return videos with the given ids.
+  --id: list<string> # Return videos with the given ids.
   --locale: string
   --max-height: int
   --max-results: int # The *maxResults* parameter specifies the maximum number of items that should be returned in the result set. *Note:* This parameter is supported for use in conjunction with the myRating and chart parameters, but it is not supported for use in conjunction with the id parameter.
@@ -3033,7 +3045,7 @@ export def "youtube-videos youtubevideoslist" [
 #
 # POST /youtube/v3/videos
 # operationId: youtube.videos.insert
-export def "youtube-videos youtubevideosinsert" [
+export def "youtube-videos create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3053,7 +3065,7 @@ export def "youtube-videos youtubevideosinsert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. Note that not all parts contain properties that can be set when inserting or updating a video. For example, the statistics object encapsulates statistics that YouTube calculates for a video and does not contain values that you can set or modify. If the parameter value specifies a part that does not contain mutable values, that part will still be included in the API response.
+  --part: list<string> # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. Note that not all parts contain properties that can be set when inserting or updating a video. For example, the statistics object encapsulates statistics that YouTube calculates for a video and does not contain values that you can set or modify. If the parameter value specifies a part that does not contain mutable values, that part will still be included in the API response.
   --auto-levels: oneof<nothing, bool> # Should auto-levels be applied to the upload.
   --notify-subscribers: oneof<nothing, bool> # Notify the channel subscribers about the new video. As default, the notification is enabled.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
@@ -3066,10 +3078,11 @@ export def "youtube-videos youtubevideosinsert" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi") (serialize-qp "autoLevels" $auto_levels "scalar") (serialize-qp "notifySubscribers" $notify_subscribers "scalar") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar") (serialize-qp "onBehalfOfContentOwnerChannel" $on_behalf_of_content_owner_channel "scalar") (serialize-qp "stabilize" $stabilize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/videos" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # Updates an existing resource.
@@ -3084,12 +3097,12 @@ export def "youtube-videos youtubevideosinsert" [
 # --player shape: {embedHeight?: string, embedHtml?: string, embedWidth?: string}
 # --processingDetails shape: {editorSuggestionsAvailability?: string, fileDetailsAvailability?: string, processingFailureReason?: "uploadFailed"|"transcodeFailed"|"streamingFailed"|"other", processingIssuesAvailability?: string, processingProgress?: record, processingStatus?: "processing"|"succeeded"|"failed"|"terminated", tagSuggestionsAvailability?: string, thumbnailsAvailability?: string}
 # --recordingDetails shape: {location?: record, locationDescription?: string, recordingDate?: string}
-# --snippet shape: {categoryId?: string, channelId?: string, channelTitle?: string, defaultAudioLanguage?: string, defaultLanguage?: string, description?: string, liveBroadcastContent?: "none"|"upcoming"|"live"|"completed", localized?: record, publishedAt?: string, tags?: list, thumbnails?: record, title?: string}
+# --snippet shape: {categoryId?: string, channelId?: string, channelTitle?: string, defaultAudioLanguage?: string, defaultLanguage?: string, description?: string, liveBroadcastContent?: "none"|"upcoming"|"live"|"completed", localized?: record, publishedAt?: string, tags?: list<string>, thumbnails?: record, title?: string}
 # --statistics shape: {commentCount?: string, dislikeCount?: string, favoriteCount?: string, likeCount?: string, viewCount?: string}
-# --status shape: {embeddable?: bool, failureReason?: "conversion"|"invalidFile"|"emptyFile"|"tooSmall"|"codec"|"uploadAborted", license?: "youtube"|"creativeCommon", madeForKids?: bool, privacyStatus?: "public"|"unlisted"|"private", publicStatsViewable?: bool, publishAt?: string, rejectionReason?: "copyright"|"inappropriate"|"duplicate"|"termsOfUse"|"uploaderAccountSuspended"|"length"|"claim"|"uploaderAccountClosed"|"trademark"|"legal", selfDeclaredMadeForKids?: bool, uploadStatus?: "uploaded"|"processed"|"failed"|"rejected"|"deleted"}
-# --suggestions shape: {editorSuggestions?: list, processingErrors?: list, processingHints?: list, processingWarnings?: list, tagSuggestions?: list}
-# --topicDetails shape: {relevantTopicIds?: list, topicCategories?: list, topicIds?: list}
-export def "youtube-videos youtubevideosupdate" [
+# --status shape: {embeddable?: bool, failureReason?: "conversion"|"invalidFile"|"emptyFile"|"tooSmall"|"codec"|"uploadAborted", license?: "youtube"|"creativeCommon", madeForKids?: bool, privacyStatus?: "public"|"unlisted"|"private", publicStatsViewable?: bool, publishAt?: string, rejectionReason?: "copyright"|"inappropriate"|"duplicate"|"termsOfUse"|"uploaderAccountSuspended"|"length"|"claim"|"uploaderAccountClosed"|"trademark"|"legal", selfDeclaredMadeForKids?: bool, ... (1 more fields)}
+# --suggestions shape: {editorSuggestions?: list<string>, processingErrors?: list<string>, processingHints?: list<string>, processingWarnings?: list<string>, tagSuggestions?: list}
+# --topicDetails shape: {relevantTopicIds?: list<string>, topicCategories?: list<string>, topicIds?: list<string>}
+export def "youtube-videos update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3109,7 +3122,7 @@ export def "youtube-videos youtubevideosupdate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --part: list # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. Note that this method will override the existing values for all of the mutable properties that are contained in any parts that the parameter value specifies. For example, a video's privacy setting is contained in the status part. As such, if your request is updating a private video, and the request's part parameter value includes the status part, the video's privacy setting will be updated to whatever value the request body specifies. If the request body does not specify a value, the existing privacy setting will be removed and the video will revert to the default privacy setting. In addition, not all parts contain properties that can be set when inserting or updating a video. For example, the statistics object encapsulates statistics that YouTube calculates for a video and does not contain values that you can set or modify. If the parameter value specifies a part that does not contain mutable values, that part will still be included in the API response.
+  --part: list<string> # The *part* parameter serves two purposes in this operation. It identifies the properties that the write operation will set as well as the properties that the API response will include. Note that this method will override the existing values for all of the mutable properties that are contained in any parts that the parameter value specifies. For example, a video's privacy setting is contained in the status part. As such, if your request is updating a private video, and the request's part parameter value includes the status part, the video's privacy setting will be updated to whatever value the request body specifies. If the request body does not specify a value, the existing privacy setting will be removed and the video will revert to the default privacy setting. In addition, not all parts contain properties that can be set when inserting or updating a video. For example, the statistics object encapsulates statistics that YouTube calculates for a video and does not contain values that you can set or modify. If the parameter value specifies a part that does not contain mutable values, that part will still be included in the API response.
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The actual CMS account that the user authenticates with must be linked to the specified YouTube content owner.
   --age-gating: record # shape: {alcoholContent?: bool, restricted?: bool, videoGameRating?: "anyone"|"m15Plus"|"m16Plus"|"m17Plus"}
   --content-details: record # Details about the content of a YouTube Video. — shape: {caption?: "true"|"false", contentRating?: record, countryRestriction?: record, definition?: "sd"|"hd", dimension?: string, duration?: string, hasCustomThumbnail?: bool, licensedContent?: bool, projection?: "rectangular"|"360", regionRestriction?: record}
@@ -3124,29 +3137,29 @@ export def "youtube-videos youtubevideosupdate" [
   --processing-details: record # Describes processing status and progress and availability of some other Video resource parts. — shape: {editorSuggestionsAvailability?: string, fileDetailsAvailability?: string, processingFailureReason?: "uploadFailed"|"transcodeFailed"|"streamingFailed"|"other", processingIssuesAvailability?: string, processingProgress?: record, processingStatus?: "processing"|"succeeded"|"failed"|"terminated", tagSuggestionsAvailability?: string, thumbnailsAvailability?: string}
   --project-details: record # DEPRECATED. b/157517979: This part was never populated after it was added. However, it sees non-zero traffic because there is generated client code in the wild that refers to it [1]. We keep this field and do NOT remove it because otherwise V3 would return an error when this part gets requested [2]. [1] https://developers.google.com/resources/api-libraries/documentation/youtube/v3/csharp/latest/classGoogle_1_1Apis_1_1YouTube_1_1v3_1_1Data_1_1VideoProjectDetails.html [2] http://google3/video/youtube/src/python/servers/data_api/common.py?l=1565-1569&rcl=344141677
   --recording-details: record # Recording information associated with the video. — shape: {location?: record, locationDescription?: string, recordingDate?: string}
-  --snippet: record # Basic details about a video, including title, description, uploader, thumbnails and category. — shape: {categoryId?: string, channelId?: string, channelTitle?: string, defaultAudioLanguage?: string, defaultLanguage?: string, description?: string, liveBroadcastContent?: "none"|"upcoming"|"live"|"completed", localized?: record, publishedAt?: string, tags?: list, thumbnails?: record, title?: string}
+  --snippet: record # Basic details about a video, including title, description, uploader, thumbnails and category. — shape: {categoryId?: string, channelId?: string, channelTitle?: string, defaultAudioLanguage?: string, defaultLanguage?: string, description?: string, liveBroadcastContent?: "none"|"upcoming"|"live"|"completed", localized?: record, publishedAt?: string, tags?: list<string>, thumbnails?: record, title?: string}
   --statistics: record # Statistics about the video, such as the number of times the video was viewed or liked. — shape: {commentCount?: string, dislikeCount?: string, favoriteCount?: string, likeCount?: string, viewCount?: string}
-  --status: record # Basic details about a video category, such as its localized title. Next Id: 18 — shape: {embeddable?: bool, failureReason?: "conversion"|"invalidFile"|"emptyFile"|"tooSmall"|"codec"|"uploadAborted", license?: "youtube"|"creativeCommon", madeForKids?: bool, privacyStatus?: "public"|"unlisted"|"private", publicStatsViewable?: bool, publishAt?: string, rejectionReason?: "copyright"|"inappropriate"|"duplicate"|"termsOfUse"|"uploaderAccountSuspended"|"length"|"claim"|"uploaderAccountClosed"|"trademark"|"legal", selfDeclaredMadeForKids?: bool, uploadStatus?: "uploaded"|"processed"|"failed"|"rejected"|"deleted"}
-  --suggestions: record # Specifies suggestions on how to improve video content, including encoding hints, tag suggestions, and editor suggestions. — shape: {editorSuggestions?: list, processingErrors?: list, processingHints?: list, processingWarnings?: list, tagSuggestions?: list}
-  --topic-details: record # Freebase topic information related to the video. — shape: {relevantTopicIds?: list, topicCategories?: list, topicIds?: list}
+  --status: record # Basic details about a video category, such as its localized title. Next Id: 18 — shape: {embeddable?: bool, failureReason?: "conversion"|"invalidFile"|"emptyFile"|"tooSmall"|"codec"|"uploadAborted", license?: "youtube"|"creativeCommon", madeForKids?: bool, privacyStatus?: "public"|"unlisted"|"private", publicStatsViewable?: bool, publishAt?: string, rejectionReason?: "copyright"|"inappropriate"|"duplicate"|"termsOfUse"|"uploaderAccountSuspended"|"length"|"claim"|"uploaderAccountClosed"|"trademark"|"legal", selfDeclaredMadeForKids?: bool, ... (1 more fields)}
+  --suggestions: record # Specifies suggestions on how to improve video content, including encoding hints, tag suggestions, and editor suggestions. — shape: {editorSuggestions?: list<string>, processingErrors?: list<string>, processingHints?: list<string>, processingWarnings?: list<string>, tagSuggestions?: list}
+  --topic-details: record # Freebase topic information related to the video. — shape: {relevantTopicIds?: list<string>, topicCategories?: list<string>, topicIds?: list<string>}
 ]: any -> record<ageGating: record<alcoholContent: bool, restricted: bool, videoGameRating: string>, contentDetails: record<caption: string, contentRating: record<acbRating: string, agcomRating: string, anatelRating: string, bbfcRating: string, bfvcRating: string, bmukkRating: string, catvRating: string, catvfrRating: string, cbfcRating: string, cccRating: string, cceRating: string, chfilmRating: string, chvrsRating: string, cicfRating: string, cnaRating: string, cncRating: string, csaRating: string, cscfRating: string, czfilmRating: string, djctqRating: string, djctqRatingReasons: list, ecbmctRating: string, eefilmRating: string, egfilmRating: string, eirinRating: string, fcbmRating: string, fcoRating: string, fmocRating: string, fpbRating: string, fpbRatingReasons: list, fskRating: string, grfilmRating: string, icaaRating: string, ifcoRating: string, ilfilmRating: string, incaaRating: string, kfcbRating: string, kijkwijzerRating: string, kmrbRating: string, lsfRating: string, mccaaRating: string, mccypRating: string, mcstRating: string, mdaRating: string, medietilsynetRating: string, mekuRating: string, menaMpaaRating: string, mibacRating: string, mocRating: string, moctwRating: string, mpaaRating: string, mpaatRating: string, mtrcbRating: string, nbcRating: string, nbcplRating: string, nfrcRating: string, nfvcbRating: string, nkclvRating: string, nmcRating: string, oflcRating: string, pefilmRating: string, rcnofRating: string, resorteviolenciaRating: string, rtcRating: string, rteRating: string, russiaRating: string, skfilmRating: string, smaisRating: string, smsaRating: string, tvpgRating: string, ytRating: string>, countryRestriction: record<allowed: bool, exception: list>, definition: string, dimension: string, duration: string, hasCustomThumbnail: bool, licensedContent: bool, projection: string, regionRestriction: record<allowed: list, blocked: list>>, etag: string, fileDetails: record<audioStreams: list<record>, bitrateBps: string, container: string, creationTime: string, durationMs: string, fileName: string, fileSize: string, fileType: string, videoStreams: list<record>>, id: string, kind: string, liveStreamingDetails: record<activeLiveChatId: string, actualEndTime: string, actualStartTime: string, concurrentViewers: string, scheduledEndTime: string, scheduledStartTime: string>, localizations: record, monetizationDetails: record<access: record<allowed: bool, exception: list>>, player: record<embedHeight: string, embedHtml: string, embedWidth: string>, processingDetails: record<editorSuggestionsAvailability: string, fileDetailsAvailability: string, processingFailureReason: string, processingIssuesAvailability: string, processingProgress: record<partsProcessed: string, partsTotal: string, timeLeftMs: string>, processingStatus: string, tagSuggestionsAvailability: string, thumbnailsAvailability: string>, projectDetails: record, recordingDetails: record<location: record<altitude: float, latitude: float, longitude: float>, locationDescription: string, recordingDate: string>, snippet: record<categoryId: string, channelId: string, channelTitle: string, defaultAudioLanguage: string, defaultLanguage: string, description: string, liveBroadcastContent: string, localized: record<description: string, title: string>, publishedAt: string, tags: list<string>, thumbnails: record<high: record, maxres: record, medium: record, standard: record>, title: string>, statistics: record<commentCount: string, dislikeCount: string, favoriteCount: string, likeCount: string, viewCount: string>, status: record<embeddable: bool, failureReason: string, license: string, madeForKids: bool, privacyStatus: string, publicStatsViewable: bool, publishAt: string, rejectionReason: string, selfDeclaredMadeForKids: bool, uploadStatus: string>, suggestions: record<editorSuggestions: list<string>, processingErrors: list<string>, processingHints: list<string>, processingWarnings: list<string>, tagSuggestions: list<record>>, topicDetails: record<relevantTopicIds: list<string>, topicCategories: list<string>, topicIds: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "part" $part "multi") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/videos" $qp)
-  let body = {"ageGating": $age_gating, "contentDetails": $content_details, "etag": $etag, "fileDetails": $file_details, "id": $id, "kind": $kind, "liveStreamingDetails": $live_streaming_details, "localizations": $localizations, "monetizationDetails": $monetization_details, "player": $player, "processingDetails": $processing_details, "projectDetails": $project_details, "recordingDetails": $recording_details, "snippet": $snippet, "statistics": $statistics, "status": $status, "suggestions": $suggestions, "topicDetails": $topic_details} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ageGating": $age_gating, "contentDetails": $content_details, "etag": $etag, "fileDetails": $file_details, "id": $id, "kind": $kind, "liveStreamingDetails": $live_streaming_details, "localizations": $localizations, "monetizationDetails": $monetization_details, "player": $player, "processingDetails": $processing_details, "projectDetails": $project_details, "recordingDetails": $recording_details, "snippet": $snippet, "statistics": $statistics, "status": $status, "suggestions": $suggestions, "topicDetails": $topic_details} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves the ratings that the authorized user gave to a list of specified videos.
 #
 # GET /youtube/v3/videos/getRating
 # operationId: youtube.videos.getRating
-export def "youtube-videos-get-rating youtubevideosgetRating" [
+export def "youtube-videos-get-rating get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3166,7 +3179,7 @@ export def "youtube-videos-get-rating youtubevideosgetRating" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --id: list
+  --id: list<string>
   --on-behalf-of-content-owner: string # *Note:* This parameter is intended exclusively for YouTube content partners. The *onBehalfOfContentOwner* parameter indicates that the request's authorization credentials identify a YouTube CMS user who is acting on behalf of the content owner specified in the parameter value. This parameter is intended for YouTube content partners that own and manage many different YouTube channels. It allows content owners to authenticate once and get access to all their video and channel data, without having to provide authentication credentials for each individual channel. The CMS account that the user authenticates with must be linked to the specified YouTube content owner.
 ]: nothing -> record<etag: string, eventId: string, items: table<rating: string, videoId: string>, kind: string, visitorId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3182,7 +3195,7 @@ export def "youtube-videos-get-rating youtubevideosgetRating" [
 #
 # POST /youtube/v3/videos/rate
 # operationId: youtube.videos.rate
-export def "youtube-videos-rate youtubevideosrate" [
+export def "youtube-videos-rate create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3218,7 +3231,7 @@ export def "youtube-videos-rate youtubevideosrate" [
 #
 # POST /youtube/v3/videos/reportAbuse
 # operationId: youtube.videos.reportAbuse
-export def "youtube-videos-report-abuse youtubevideosreportAbuse" [
+export def "youtube-videos-report-abuse create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3250,18 +3263,18 @@ export def "youtube-videos-report-abuse youtubevideosreportAbuse" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/videos/reportAbuse" $qp)
-  let body = {"comments": $comments, "language": $language, "reasonId": $reason_id, "secondaryReasonId": $secondary_reason_id, "videoId": $video_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"comments": $comments, "language": $language, "reasonId": $reason_id, "secondaryReasonId": $secondary_reason_id, "videoId": $video_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Allows upload of watermark image and setting it for a channel.
 #
 # POST /youtube/v3/watermarks/set
 # operationId: youtube.watermarks.set
-export def "youtube-watermarks-set youtubewatermarksset" [
+export def "youtube-watermarks-set update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3290,17 +3303,18 @@ export def "youtube-watermarks-set youtubewatermarksset" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "channelId" $channel_id "scalar") (serialize-qp "onBehalfOfContentOwner" $on_behalf_of_content_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/youtube/v3/watermarks/set" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # Allows removal of channel watermark.
 #
 # POST /youtube/v3/watermarks/unset
 # operationId: youtube.watermarks.unset
-export def "youtube-watermarks-unset youtubewatermarksunset" [
+export def "youtube-watermarks-unset create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

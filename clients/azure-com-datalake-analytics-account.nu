@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -140,7 +149,7 @@ export def "subscriptions-providers-microsoft-data-lake-analytics-accounts list"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataLakeAnalytics/accounts") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataLakeAnalytics/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -166,7 +175,7 @@ export def "subscriptions-providers-microsoft-data-lake-analytics-locations-capa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataLakeAnalytics/locations/{location}/capability") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataLakeAnalytics/locations/{location}/capability") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,7 +185,7 @@ export def "subscriptions-providers-microsoft-data-lake-analytics-locations-capa
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DataLakeAnalytics/locations/{location}/checkNameAvailability
 # operationId: Accounts_CheckNameAvailability
-export def "subscriptions-providers-microsoft-data-lake-analytics-locations-check-name-availability check" [
+export def "subscriptions-providers-microsoft-data-lake-analytics-locations-check-name-availability check-accounts" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -195,19 +204,19 @@ export def "subscriptions-providers-microsoft-data-lake-analytics-locations-chec
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataLakeAnalytics/locations/{location}/checkNameAvailability") $qp)
-  let body = {"name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataLakeAnalytics/locations/{location}/checkNameAvailability") $qp)
+  let req_body = {"name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the first page of Data Lake Analytics accounts, if any, within a specific resource group. This includes a link to the next page, if any.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts
 # operationId: Accounts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -229,7 +238,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -256,7 +265,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -283,7 +292,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -293,7 +302,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}
 # operationId: Accounts_Update
-# --properties shape: {computePolicies?: list, dataLakeStoreAccounts?: list, firewallAllowAzureIps?: "Enabled"|"Disabled", firewallRules?: list, firewallState?: "Enabled"|"Disabled", maxDegreeOfParallelism?: int, maxDegreeOfParallelismPerJob?: int, maxJobCount?: int, minPriorityPerJob?: int, newTier?: "Consumption"|"Commitment_100AUHours"|"Commitment_500AUHours"|"Commitment_1000AUHours"|"Commitment_5000AUHours"|"Commitment_10000AUHours"|"Commitment_50000AUHours"|"Commitment_100000AUHours"|"Commitment_500000AUHours", queryStoreRetention?: int, storageAccounts?: list}
+# --properties shape: {computePolicies?: list, dataLakeStoreAccounts?: list, firewallAllowAzureIps?: "Enabled"|"Disabled", firewallRules?: list, firewallState?: "Enabled"|"Disabled", maxDegreeOfParallelism?: int, maxDegreeOfParallelismPerJob?: int, maxJobCount?: int, minPriorityPerJob?: int, newTier?: "Consumption"|"Commitment_100AUHours"|"Commitment_500AUHours"|"Commitment_1000AUHours"|"Commitment_5000AUHours"|"Commitment_10000AUHours"|"Commitment_50000AUHours"|"Commitment_100000AUHours"|"Commitment_500000AUHours", ... (2 more fields)}
 export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts update" [
   subscription_id: string
   resource_group_name: string
@@ -307,26 +316,26 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --properties: any # The properties to update that are associated with an underlying Data Lake Analytics account. — shape: {computePolicies?: list, dataLakeStoreAccounts?: list, firewallAllowAzureIps?: "Enabled"|"Disabled", firewallRules?: list, firewallState?: "Enabled"|"Disabled", maxDegreeOfParallelism?: int, maxDegreeOfParallelismPerJob?: int, maxJobCount?: int, minPriorityPerJob?: int, newTier?: "Consumption"|"Commitment_100AUHours"|"Commitment_500AUHours"|"Commitment_1000AUHours"|"Commitment_5000AUHours"|"Commitment_10000AUHours"|"Commitment_50000AUHours"|"Commitment_100000AUHours"|"Commitment_500000AUHours", queryStoreRetention?: int, storageAccounts?: list}
+  --properties: any # The properties to update that are associated with an underlying Data Lake Analytics account. — shape: {computePolicies?: list, dataLakeStoreAccounts?: list, firewallAllowAzureIps?: "Enabled"|"Disabled", firewallRules?: list, firewallState?: "Enabled"|"Disabled", maxDegreeOfParallelism?: int, maxDegreeOfParallelismPerJob?: int, maxJobCount?: int, minPriorityPerJob?: int, newTier?: "Consumption"|"Commitment_100AUHours"|"Commitment_500AUHours"|"Commitment_1000AUHours"|"Commitment_5000AUHours"|"Commitment_10000AUHours"|"Commitment_50000AUHours"|"Commitment_100000AUHours"|"Commitment_500000AUHours", ... (2 more fields)}
   --tags: record # The resource tags.
 ]: any -> record<properties: record<computePolicies: list<record>, currentTier: string, dataLakeStoreAccounts: list<record>, defaultDataLakeStoreAccount: string, firewallAllowAzureIps: string, firewallRules: list<record>, firewallState: string, maxDegreeOfParallelism: int, maxDegreeOfParallelismPerJob: int, maxJobCount: int, minPriorityPerJob: int, newTier: string, queryStoreRetention: int, storageAccounts: list<record>, systemMaxDegreeOfParallelism: int, systemMaxJobCount: int, accountId: string, creationTime: string, endpoint: string, lastModifiedTime: string, provisioningState: string, state: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates the specified Data Lake Analytics account. This supplies the user with computation services for Data Lake Analytics workloads.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}
 # operationId: Accounts_Create
-# --properties shape: {computePolicies?: list, dataLakeStoreAccounts: list, defaultDataLakeStoreAccount: string, firewallAllowAzureIps?: "Enabled"|"Disabled", firewallRules?: list, firewallState?: "Enabled"|"Disabled", maxDegreeOfParallelism?: int, maxDegreeOfParallelismPerJob?: int, maxJobCount?: int, minPriorityPerJob?: int, newTier?: "Consumption"|"Commitment_100AUHours"|"Commitment_500AUHours"|"Commitment_1000AUHours"|"Commitment_5000AUHours"|"Commitment_10000AUHours"|"Commitment_50000AUHours"|"Commitment_100000AUHours"|"Commitment_500000AUHours", queryStoreRetention?: int, storageAccounts?: list}
+# --properties shape: {computePolicies?: list, dataLakeStoreAccounts: list, defaultDataLakeStoreAccount: string, firewallAllowAzureIps?: "Enabled"|"Disabled", firewallRules?: list, firewallState?: "Enabled"|"Disabled", maxDegreeOfParallelism?: int, maxDegreeOfParallelismPerJob?: int, maxJobCount?: int, minPriorityPerJob?: int, ... (3 more fields)}
 export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts create" [
   subscription_id: string
   resource_group_name: string
@@ -341,26 +350,26 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   location: string # The resource location.
-  properties: any # shape: {computePolicies?: list, dataLakeStoreAccounts: list, defaultDataLakeStoreAccount: string, firewallAllowAzureIps?: "Enabled"|"Disabled", firewallRules?: list, firewallState?: "Enabled"|"Disabled", maxDegreeOfParallelism?: int, maxDegreeOfParallelismPerJob?: int, maxJobCount?: int, minPriorityPerJob?: int, newTier?: "Consumption"|"Commitment_100AUHours"|"Commitment_500AUHours"|"Commitment_1000AUHours"|"Commitment_5000AUHours"|"Commitment_10000AUHours"|"Commitment_50000AUHours"|"Commitment_100000AUHours"|"Commitment_500000AUHours", queryStoreRetention?: int, storageAccounts?: list}
+  properties: any # shape: {computePolicies?: list, dataLakeStoreAccounts: list, defaultDataLakeStoreAccount: string, firewallAllowAzureIps?: "Enabled"|"Disabled", firewallRules?: list, firewallState?: "Enabled"|"Disabled", maxDegreeOfParallelism?: int, maxDegreeOfParallelismPerJob?: int, maxJobCount?: int, minPriorityPerJob?: int, ... (3 more fields)}
   --tags: record # The resource tags.
 ]: any -> record<properties: record<computePolicies: list<record>, currentTier: string, dataLakeStoreAccounts: list<record>, defaultDataLakeStoreAccount: string, firewallAllowAzureIps: string, firewallRules: list<record>, firewallState: string, maxDegreeOfParallelism: int, maxDegreeOfParallelismPerJob: int, maxJobCount: int, minPriorityPerJob: int, newTier: string, queryStoreRetention: int, storageAccounts: list<record>, systemMaxDegreeOfParallelism: int, systemMaxJobCount: int, accountId: string, creationTime: string, endpoint: string, lastModifiedTime: string, provisioningState: string, state: string>, id: string, location: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}") $qp)
-  let body = {"location": $location, "properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}") $qp)
+  let req_body = {"location": $location, "properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the Data Lake Analytics compute policies within the specified Data Lake Analytics account. An account supports, at most, 50 policies
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/computePolicies
 # operationId: ComputePolicies_ListByAccount
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-compute-policies list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-compute-policies list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -377,7 +386,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/computePolicies") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/computePolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -405,7 +414,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, compute_policy_name: $compute_policy_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/computePolicies/{compute_policy_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), compute_policy_name: (encode-path-segment $compute_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/computePolicies/{compute_policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -433,7 +442,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, compute_policy_name: $compute_policy_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/computePolicies/{compute_policy_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), compute_policy_name: (encode-path-segment $compute_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/computePolicies/{compute_policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -464,12 +473,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, compute_policy_name: $compute_policy_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/computePolicies/{compute_policy_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), compute_policy_name: (encode-path-segment $compute_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/computePolicies/{compute_policy_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates or updates the specified compute policy. During update, the compute policy with the specified name will be replaced with this new compute policy. An account supports, at most, 50 policies
@@ -497,19 +506,19 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, compute_policy_name: $compute_policy_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/computePolicies/{compute_policy_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), compute_policy_name: (encode-path-segment $compute_policy_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/computePolicies/{compute_policy_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the first page of Data Lake Store accounts linked to the specified Data Lake Analytics account. The response includes a link to the next page, if any.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/dataLakeStoreAccounts
 # operationId: DataLakeStoreAccounts_ListByAccount
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-data-lake-store-accounts list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-data-lake-store-accounts list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -532,7 +541,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/dataLakeStoreAccounts") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/dataLakeStoreAccounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -560,7 +569,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, data_lake_store_account_name: $data_lake_store_account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/dataLakeStoreAccounts/{data_lake_store_account_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), data_lake_store_account_name: (encode-path-segment $data_lake_store_account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/dataLakeStoreAccounts/{data_lake_store_account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -588,7 +597,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, data_lake_store_account_name: $data_lake_store_account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/dataLakeStoreAccounts/{data_lake_store_account_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), data_lake_store_account_name: (encode-path-segment $data_lake_store_account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/dataLakeStoreAccounts/{data_lake_store_account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -619,19 +628,19 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, data_lake_store_account_name: $data_lake_store_account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/dataLakeStoreAccounts/{data_lake_store_account_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), data_lake_store_account_name: (encode-path-segment $data_lake_store_account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/dataLakeStoreAccounts/{data_lake_store_account_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the Data Lake Analytics firewall rules within the specified Data Lake Analytics account.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/firewallRules
 # operationId: FirewallRules_ListByAccount
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-firewall-rules list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-firewall-rules list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -648,7 +657,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/firewallRules") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/firewallRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -676,7 +685,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, firewall_rule_name: $firewall_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/firewallRules/{firewall_rule_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), firewall_rule_name: (encode-path-segment $firewall_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/firewallRules/{firewall_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -704,7 +713,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, firewall_rule_name: $firewall_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/firewallRules/{firewall_rule_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), firewall_rule_name: (encode-path-segment $firewall_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/firewallRules/{firewall_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -735,12 +744,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, firewall_rule_name: $firewall_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/firewallRules/{firewall_rule_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), firewall_rule_name: (encode-path-segment $firewall_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/firewallRules/{firewall_rule_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates or updates the specified firewall rule. During update, the firewall rule with the specified name will be replaced with this new firewall rule.
@@ -768,19 +777,19 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, firewall_rule_name: $firewall_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/firewallRules/{firewall_rule_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), firewall_rule_name: (encode-path-segment $firewall_rule_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/firewallRules/{firewall_rule_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the first page of Azure Storage accounts, if any, linked to the specified Data Lake Analytics account. The response includes a link to the next page, if any.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataLakeAnalytics/accounts/{accountName}/storageAccounts
 # operationId: StorageAccounts_ListByAccount
-export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-storage-accounts list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytics-accounts-storage-accounts list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -803,7 +812,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/storageAccounts") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/storageAccounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -831,7 +840,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, storage_account_name: $storage_account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/storageAccounts/{storage_account_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/storageAccounts/{storage_account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -859,7 +868,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, storage_account_name: $storage_account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/storageAccounts/{storage_account_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/storageAccounts/{storage_account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -890,12 +899,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, storage_account_name: $storage_account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/storageAccounts/{storage_account_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/storageAccounts/{storage_account_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the specified Data Lake Analytics account to add an Azure Storage account.
@@ -923,12 +932,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, storage_account_name: $storage_account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/storageAccounts/{storage_account_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/storageAccounts/{storage_account_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the Azure Storage containers, if any, associated with the specified Data Lake Analytics and Azure Storage account combination. The response includes a link to the next page of results, if any.
@@ -953,7 +962,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, storage_account_name: $storage_account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/storageAccounts/{storage_account_name}/containers") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), storage_account_name: (encode-path-segment $storage_account_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/storageAccounts/{storage_account_name}/containers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -982,7 +991,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, storage_account_name: $storage_account_name, container_name: $container_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/storageAccounts/{storage_account_name}/containers/{container_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), storage_account_name: (encode-path-segment $storage_account_name), container_name: (encode-path-segment $container_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/storageAccounts/{storage_account_name}/containers/{container_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1011,7 +1020,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-lake-analytic
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, storage_account_name: $storage_account_name, container_name: $container_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/storageAccounts/{storage_account_name}/containers/{container_name}/listSasTokens") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), account_name: (encode-path-segment $account_name), storage_account_name: (encode-path-segment $storage_account_name), container_name: (encode-path-segment $container_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataLakeAnalytics/accounts/{account_name}/storageAccounts/{storage_account_name}/containers/{container_name}/listSasTokens") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

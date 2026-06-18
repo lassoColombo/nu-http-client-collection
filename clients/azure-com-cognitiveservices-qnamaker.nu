@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -181,7 +190,7 @@ export def "endpoint-settings update" [
 #
 # GET /endpointkeys
 # operationId: EndpointKeys_GetKeys
-export def "endpointkeys get-keys" [
+export def "endpointkeys get-endpoint-keys-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +212,7 @@ export def "endpointkeys get-keys" [
 #
 # PATCH /endpointkeys/{keyType}
 # operationId: EndpointKeys_RefreshKeys
-export def "endpointkeys refresh-keys" [
+export def "endpointkeys refresh-endpoint-keys-keys" [
   key_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -216,7 +225,7 @@ export def "endpointkeys refresh-keys" [
 ]: nothing -> record<installedVersion: string, language: string, lastStableVersion: string, primaryEndpointKey: string, secondaryEndpointKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key_type: $key_type} | format pattern "/endpointkeys/{key_type}"))
+  let full_url = (build-url $base ({key_type: (encode-path-segment $key_type)} | format pattern "/endpointkeys/{key_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -226,7 +235,7 @@ export def "endpointkeys refresh-keys" [
 #
 # GET /knowledgebases
 # operationId: Knowledgebase_ListAll
-export def "knowledgebases list-all" [
+export def "knowledgebases list-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,7 +292,7 @@ export def "knowledgebases delete" [
 ]: nothing -> record<error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({kb_id: $kb_id} | format pattern "/knowledgebases/{kb_id}"))
+  let full_url = (build-url $base ({kb_id: (encode-path-segment $kb_id)} | format pattern "/knowledgebases/{kb_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -306,7 +315,7 @@ export def "knowledgebases get-details" [
 ]: nothing -> record<hostName: string, id: string, lastAccessedTimestamp: string, lastChangedTimestamp: string, lastPublishedTimestamp: string, name: string, sources: list<string>, urls: list<string>, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({kb_id: $kb_id} | format pattern "/knowledgebases/{kb_id}"))
+  let full_url = (build-url $base ({kb_id: (encode-path-segment $kb_id)} | format pattern "/knowledgebases/{kb_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -329,7 +338,7 @@ export def "knowledgebases update-by-kbId" [
 ]: nothing -> record<createdTimestamp: string, errorResponse: record<error: record<code: string, details: list, innerError: record, message: string, target: string>>, lastActionTimestamp: string, operationId: string, operationState: string, resourceLocation: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({kb_id: $kb_id} | format pattern "/knowledgebases/{kb_id}"))
+  let full_url = (build-url $base ({kb_id: (encode-path-segment $kb_id)} | format pattern "/knowledgebases/{kb_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -352,7 +361,7 @@ export def "knowledgebases publish" [
 ]: nothing -> record<error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({kb_id: $kb_id} | format pattern "/knowledgebases/{kb_id}"))
+  let full_url = (build-url $base ({kb_id: (encode-path-segment $kb_id)} | format pattern "/knowledgebases/{kb_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -375,7 +384,7 @@ export def "knowledgebases update-by-kbId-1" [
 ]: nothing -> record<error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({kb_id: $kb_id} | format pattern "/knowledgebases/{kb_id}"))
+  let full_url = (build-url $base ({kb_id: (encode-path-segment $kb_id)} | format pattern "/knowledgebases/{kb_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -399,7 +408,7 @@ export def "knowledgebases-qna download" [
 ]: nothing -> record<qnaDocuments: table<answer: string, context: record, id: int, metadata: list, questions: list, source: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({kb_id: $kb_id, environment: $environment} | format pattern "/knowledgebases/{kb_id}/{environment}/qna"))
+  let full_url = (build-url $base ({kb_id: (encode-path-segment $kb_id), environment: (encode-path-segment $environment)} | format pattern "/knowledgebases/{kb_id}/{environment}/qna"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -422,7 +431,7 @@ export def "operations get-details" [
 ]: nothing -> record<createdTimestamp: string, errorResponse: record<error: record<code: string, details: list, innerError: record, message: string, target: string>>, lastActionTimestamp: string, operationId: string, operationState: string, resourceLocation: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({operation_id: $operation_id} | format pattern "/operations/{operation_id}"))
+  let full_url = (build-url $base ({operation_id: (encode-path-segment $operation_id)} | format pattern "/operations/{operation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

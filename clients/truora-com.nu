@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -82,7 +91,7 @@ def subscriber-type-completer [] { ["email" "web"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "behavior reportBehavior" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "behavior create-report" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -106,7 +115,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/behavior
 # operationId: reportBehavior
-export def "behavior reportBehavior" [
+export def "behavior create-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,11 +139,12 @@ export def "behavior reportBehavior" [
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/behavior")
-  let body = {"birth_date": $birth_date, "country": $country, "document_id": $document_id, "document_type": $document_type, "email": $email, "feedback_date": $feedback_date, "first_name": $first_name, "last_name": $last_name, "phone_number": $phone_number, "reason": $reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"birth_date": $birth_date, "country": $country, "document_id": $document_id, "document_type": $document_type, "email": $email, "feedback_date": $feedback_date, "first_name": $first_name, "last_name": $last_name, "phone_number": $phone_number, "reason": $reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List Checks
@@ -201,7 +211,7 @@ export def "checks create" [
   --ptp: string # ID for Venezuelans working in Peru
   --region: string@region-completer # Region where the background is to be checked in addition to the region where the person is from. By default, background checks in Brazil are performed in the region where the person is from. Required for Brazil only. Allowed values are: DF: Distrito Federal, AC: Acre, AL: Alagoas, AP: Amapá, AM: Amazonas, BA: Bahía, CE: Ceará, ES: Espírito Santo, GO: Goiás, MA: Maranhão, MT: Mato Grosso, MS: Mato Grosso do Sul, MG: Minas Gerais, PA: Pará, PB: Paraíba, PR: Paraná, PE: Pernambuco, PI: Piauí, RJ: Río de Janeiro, RN: Río Grande do Norte, RS: Río Grande do Sul, RO: Rondônia, RR: Roraima, SC: Santa Catarina, SP: São Paulo, SE: Sergipe, TO : Tocantins.
   --report-id: string # Report ID the background check will be inserted into
-  --state-id: string #  Used for the RG (Registro Geral) identification in Brazil. This identification has different formats according to the state that issues the document. It can have numbers and letters but other characters (- * , . ) are omitted, Required in order to get complete background checks in Brazil
+  --state-id: string # Used for the RG (Registro Geral) identification in Brazil. This identification has different formats according to the state that issues the document. It can have numbers and letters but other characters (- * , . ) are omitted, Required in order to get complete background checks in Brazil
   --tax-id: string # Company ID used for tax payments
   type: string@type-completer # Background check type
   --user-authorized: oneof<nothing, bool> # Indicates whether the person subject to the validation authorized the validation. Must be true in order to proceed [Required for API key V1 or later]
@@ -213,20 +223,21 @@ export def "checks create" [
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/checks")
-  let body = {"birth_certificate": $birth_certificate, "company_name": $company_name, "country": $country, "date_of_birth": $date_of_birth, "diplomatic_id": $diplomatic_id, "driver_license": $driver_license, "escrow": $escrow, "first_name": $first_name, "force_creation": $force_creation, "foreign_id": $foreign_id, "issue_date": $issue_date, "last_name": $last_name, "license_plate": $license_plate, "national_id": $national_id, "native_country": $native_country, "owner_document_id": $owner_document_id, "owner_document_type": $owner_document_type, "passport": $passport, "payment_date": $payment_date, "pep": $pep, "phone_number": $phone_number, "professional_card": $professional_card, "ptp": $ptp, "region": $region, "report_id": $report_id, "state_id": $state_id, "tax_id": $tax_id, "type": $type, "user_authorized": $user_authorized, "vehicle_id": $vehicle_id, "verification_code": $verification_code, "watch": $watch} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Truora-Priority": $truora_priority} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"birth_certificate": $birth_certificate, "company_name": $company_name, "country": $country, "date_of_birth": $date_of_birth, "diplomatic_id": $diplomatic_id, "driver_license": $driver_license, "escrow": $escrow, "first_name": $first_name, "force_creation": $force_creation, "foreign_id": $foreign_id, "issue_date": $issue_date, "last_name": $last_name, "license_plate": $license_plate, "national_id": $national_id, "native_country": $native_country, "owner_document_id": $owner_document_id, "owner_document_type": $owner_document_type, "passport": $passport, "payment_date": $payment_date, "pep": $pep, "phone_number": $phone_number, "professional_card": $professional_card, "ptp": $ptp, "region": $region, "report_id": $report_id, "state_id": $state_id, "tax_id": $tax_id, "type": $type, "user_authorized": $user_authorized, "vehicle_id": $vehicle_id, "verification_code": $verification_code, "watch": $watch} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Truora-Priority": $truora_priority} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Get Health Dashboard
 #
 # GET /v1/checks/health
 # operationId: GetHealthDashboard
-export def "checks-health get-health-dashboard" [
+export def "checks-health get-dashboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +276,7 @@ export def "checks get" [
 ]: nothing -> record<check: record<birth_certificate: string, check_id: string, company_summary: record<names_found: list>, country: string, creation_date: string, date_of_birth: string, diplomatic_id: string, driver_license: string, first_name: string, foreign_id: string, homonym_probability: float, homonym_score: float, homonym_scores: list<record>, id_score: float, issue_date: string, last_name: string, license_plate: string, national_id: string, native_country: string, owner_document_id: string, owner_document_type: string, passport: string, payment_date: string, pep: string, phone_number: string, professional_card: string, ptp: string, region: string, report_id: string, score: float, scores: list<record>, status: string, statuses: list<record>, summary: record<date_of_birth: string, death_date: string, drivers_license: string, gender: string, identity_status: string, names_found: list, nss: string, rfc: string>, tax_id: string, type: any, update_date: string, vehicle_id: string, vehicle_summary: record<capacity: int, color: string, license_plate: string, manufacturer: string, model: string, number_of_doors: int, obligatory_insurance_expiration_date: string, obligatory_insurance_status: string, service_type: string, vehicle_category: string, vehicle_id: string, vehicle_type: string, year: int>, wrong_inputs: list<record>>, details: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({check_id: $check_id} | format pattern "/v1/checks/{check_id}"))
+  let full_url = (build-url $base ({check_id: (encode-path-segment $check_id)} | format pattern "/v1/checks/{check_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -291,7 +302,7 @@ export def "checks-details list" [
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_key" $start_key "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({check_id: $check_id} | format pattern "/v1/checks/{check_id}/details") $qp)
+  let full_url = (build-url $base ({check_id: (encode-path-segment $check_id)} | format pattern "/v1/checks/{check_id}/details") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -316,7 +327,7 @@ export def "checks-pdf get" [
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({check_id: $check_id} | format pattern "/v1/checks/{check_id}/pdf") $qp)
+  let full_url = (build-url $base ({check_id: (encode-path-segment $check_id)} | format pattern "/v1/checks/{check_id}/pdf") $qp)
   let accept_val = "PDF"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -339,7 +350,7 @@ export def "checks-pdf create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({check_id: $check_id} | format pattern "/v1/checks/{check_id}/pdf"))
+  let full_url = (build-url $base ({check_id: (encode-path-segment $check_id)} | format pattern "/v1/checks/{check_id}/pdf"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -427,11 +438,12 @@ export def "config create-score" [
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/config")
-  let body = {"country": $country, "dataset_affiliations_and_insurances": $dataset_affiliations_and_insurances, "dataset_alert_in_media": $dataset_alert_in_media, "dataset_business_background": $dataset_business_background, "dataset_criminal_record": $dataset_criminal_record, "dataset_driving_licenses": $dataset_driving_licenses, "dataset_international_background": $dataset_international_background, "dataset_legal_background": $dataset_legal_background, "dataset_personal_identity": $dataset_personal_identity, "dataset_professional_background": $dataset_professional_background, "dataset_taxes_and_finances": $dataset_taxes_and_finances, "dataset_traffic_fines": $dataset_traffic_fines, "dataset_vehicle_information": $dataset_vehicle_information, "dataset_vehicle_permits": $dataset_vehicle_permits, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"country": $country, "dataset_affiliations_and_insurances": $dataset_affiliations_and_insurances, "dataset_alert_in_media": $dataset_alert_in_media, "dataset_business_background": $dataset_business_background, "dataset_criminal_record": $dataset_criminal_record, "dataset_driving_licenses": $dataset_driving_licenses, "dataset_international_background": $dataset_international_background, "dataset_legal_background": $dataset_legal_background, "dataset_personal_identity": $dataset_personal_identity, "dataset_professional_background": $dataset_professional_background, "dataset_taxes_and_finances": $dataset_taxes_and_finances, "dataset_traffic_fines": $dataset_traffic_fines, "dataset_vehicle_information": $dataset_vehicle_information, "dataset_vehicle_permits": $dataset_vehicle_permits, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Update Custom Type
@@ -467,11 +479,12 @@ export def "config update-custom-type" [
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/config")
-  let body = {"country": $country, "dataset_affiliations_and_insurances": $dataset_affiliations_and_insurances, "dataset_alert_in_media": $dataset_alert_in_media, "dataset_business_background": $dataset_business_background, "dataset_criminal_record": $dataset_criminal_record, "dataset_driving_licenses": $dataset_driving_licenses, "dataset_international_background": $dataset_international_background, "dataset_legal_background": $dataset_legal_background, "dataset_personal_identity": $dataset_personal_identity, "dataset_professional_background": $dataset_professional_background, "dataset_taxes_and_finances": $dataset_taxes_and_finances, "dataset_traffic_fines": $dataset_traffic_fines, "dataset_vehicle_information": $dataset_vehicle_information, "dataset_vehicle_permits": $dataset_vehicle_permits, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"country": $country, "dataset_affiliations_and_insurances": $dataset_affiliations_and_insurances, "dataset_alert_in_media": $dataset_alert_in_media, "dataset_business_background": $dataset_business_background, "dataset_criminal_record": $dataset_criminal_record, "dataset_driving_licenses": $dataset_driving_licenses, "dataset_international_background": $dataset_international_background, "dataset_legal_background": $dataset_legal_background, "dataset_personal_identity": $dataset_personal_identity, "dataset_professional_background": $dataset_professional_background, "dataset_taxes_and_finances": $dataset_taxes_and_finances, "dataset_traffic_fines": $dataset_traffic_fines, "dataset_vehicle_information": $dataset_vehicle_information, "dataset_vehicle_permits": $dataset_vehicle_permits, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Lists all continuous checks
@@ -517,11 +530,12 @@ export def "continuous-checks create" [
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/continuous-checks")
-  let body = {"check_id": $check_id, "frequency": $frequency, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"check_id": $check_id, "frequency": $frequency, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Lists history associated with a Check. It can be paginated
@@ -541,7 +555,7 @@ export def "continuous-checks get" [
 ]: nothing -> record<ContinuousCheckID: string, ContinuousCheckStatus: string, CreationDate: string, Enabled: bool, Frequency: string, History: record<changes: list<record>, check_id: string, continuous_check_id: string, creation_date: string, previous_check_id: string>, LastCheckID: string, NextRunDate: string, OriginalCheck: record<birth_certificate: string, check_id: string, company_summary: record<names_found: list>, country: string, creation_date: string, date_of_birth: string, diplomatic_id: string, driver_license: string, first_name: string, foreign_id: string, homonym_probability: float, homonym_score: float, homonym_scores: list<record>, id_score: float, issue_date: string, last_name: string, license_plate: string, national_id: string, native_country: string, owner_document_id: string, owner_document_type: string, passport: string, payment_date: string, pep: string, phone_number: string, professional_card: string, ptp: string, region: string, report_id: string, score: float, scores: list<record>, status: string, statuses: list<record>, summary: record<date_of_birth: string, death_date: string, drivers_license: string, gender: string, identity_status: string, names_found: list, nss: string, rfc: string>, tax_id: string, type: any, update_date: string, vehicle_id: string, vehicle_summary: record<capacity: int, color: string, license_plate: string, manufacturer: string, model: string, number_of_doors: int, obligatory_insurance_expiration_date: string, obligatory_insurance_status: string, service_type: string, vehicle_category: string, vehicle_id: string, vehicle_type: string, year: int>, wrong_inputs: list<record>>, UpdateDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({continuous_check_id: $continuous_check_id} | format pattern "/v1/continuous-checks/{continuous_check_id}"))
+  let full_url = (build-url $base ({continuous_check_id: (encode-path-segment $continuous_check_id)} | format pattern "/v1/continuous-checks/{continuous_check_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -567,12 +581,13 @@ export def "continuous-checks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({continuous_check_id: $continuous_check_id} | format pattern "/v1/continuous-checks/{continuous_check_id}"))
-  let body = {"frequency": $frequency, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({continuous_check_id: (encode-path-segment $continuous_check_id)} | format pattern "/v1/continuous-checks/{continuous_check_id}"))
+  let req_body = {"frequency": $frequency, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Lists background check logs. It can be paginated
@@ -591,7 +606,7 @@ export def "continuous-checks-history get" [
 ]: nothing -> record<history: table<dataset_score_changes: float, score_changes: list>, next: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({continuous_check_id: $continuous_check_id} | format pattern "/v1/continuous-checks/{continuous_check_id}/history"))
+  let full_url = (build-url $base ({continuous_check_id: (encode-path-segment $continuous_check_id)} | format pattern "/v1/continuous-checks/{continuous_check_id}/history"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -632,7 +647,7 @@ export def "hooks create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --actions: list # Actions you want to be notified. Possible inputs are created, started, and finished or any combination of those three
+  --actions: list<string> # Actions you want to be notified. Possible inputs are created, started, and finished or any combination of those three
   event_type: string@event-type-completer # The entity events the client wants to subscribe
   --status: string@status-completer # indicates whether the hook is active or not. enabled by default
   --subscriber-address: string # Email address where the notification is to be sent. Required if subscriber_type was set to email
@@ -645,18 +660,19 @@ export def "hooks create" [
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hooks")
-  let body = {"actions": $actions, "event_type": $event_type, "status": $status, "subscriber_address": $subscriber_address, "subscriber_language": $subscriber_language, "subscriber_name": $subscriber_name, "subscriber_type": $subscriber_type, "subscriber_url": $subscriber_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"actions": $actions, "event_type": $event_type, "status": $status, "subscriber_address": $subscriber_address, "subscriber_language": $subscriber_language, "subscriber_name": $subscriber_name, "subscriber_type": $subscriber_type, "subscriber_url": $subscriber_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Deletes hook
 #
 # DELETE /v1/hooks/{hook_id}
 # operationId: deletHook
-export def "hooks deletHook" [
+export def "hooks delete-delet" [
   hook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -669,7 +685,7 @@ export def "hooks deletHook" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({hook_id: $hook_id} | format pattern "/v1/hooks/{hook_id}"))
+  let full_url = (build-url $base ({hook_id: (encode-path-segment $hook_id)} | format pattern "/v1/hooks/{hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -689,7 +705,7 @@ export def "hooks update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --actions: list # Actions you want to be notified. Possible inputs are created, started, and finished or any combination of those three
+  --actions: list<string> # Actions you want to be notified. Possible inputs are created, started, and finished or any combination of those three
   event_type: string@event-type-completer # The entity events the client wants to subscribe
   --status: string@status-completer # indicates whether the hook is active or not. enabled by default
   --subscriber-address: string # Email address where the notification is to be sent. Required if subscriber_type was set to email
@@ -701,12 +717,13 @@ export def "hooks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({hook_id: $hook_id} | format pattern "/v1/hooks/{hook_id}"))
-  let body = {"actions": $actions, "event_type": $event_type, "status": $status, "subscriber_address": $subscriber_address, "subscriber_language": $subscriber_language, "subscriber_name": $subscriber_name, "subscriber_type": $subscriber_type, "subscriber_url": $subscriber_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({hook_id: (encode-path-segment $hook_id)} | format pattern "/v1/hooks/{hook_id}"))
+  let req_body = {"actions": $actions, "event_type": $event_type, "status": $status, "subscriber_address": $subscriber_address, "subscriber_language": $subscriber_language, "subscriber_name": $subscriber_name, "subscriber_type": $subscriber_type, "subscriber_url": $subscriber_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/x-www-form-urlencoded"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List Reports
@@ -753,11 +770,12 @@ export def "reports create" [
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/reports")
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Get Report
@@ -777,7 +795,7 @@ export def "reports get" [
 ]: nothing -> record<checks: string, report: record<created_by: string, created_checks_count: int, creation_date: string, has_data: bool, id: string, invalid_checks_count: int, name: string, size: int, update_date: string>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({report_id: $report_id} | format pattern "/v1/reports/{report_id}"))
+  let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/v1/reports/{report_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -787,7 +805,7 @@ export def "reports get" [
 #
 # POST /v1/reports/{report_id}/upload
 # operationId: batchUpload
-export def "reports-upload batchUpload" [
+export def "reports-upload upload-batch" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -797,15 +815,16 @@ export def "reports-upload batchUpload" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  file: list # Uploaded file name
+  file: list<string> # Uploaded file name
 ]: any -> record<checks: string, report: record<created_by: string, created_checks_count: int, creation_date: string, has_data: bool, id: string, invalid_checks_count: int, name: string, size: int, update_date: string>, self: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({report_id: $report_id} | format pattern "/v1/reports/{report_id}/upload"))
-  let body = {"file": $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/v1/reports/{report_id}/upload"))
+  let req_body = {"file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }

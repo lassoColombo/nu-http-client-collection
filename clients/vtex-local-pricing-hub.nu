@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "pricing-hub-prices post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "pricing-hub-prices create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +102,8 @@ export def commands []: nothing -> table {
 # Get Prices
 #
 # POST /api/pricing-hub/prices
-# --items item shape: {brandId: string, categoriesIds: list, index: int, priceTableIds: list, quantity: int, sellerId: string, skuId: string}
-export def "pricing-hub-prices post" [
+# --items item shape: {brandId: string, categoriesIds: list<string>, index: int, priceTableIds: list<string>, quantity: int, sellerId: string, skuId: string}
+export def "pricing-hub-prices create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -113,7 +122,7 @@ export def "pricing-hub-prices post" [
   --utm-medium: string # Medium that indicates what type of traffic the customer originated from, represented by the `utm_medium` value in the URL that led to the order. If there is no value, use `null` (default: social)
   --utm-source: string # Traffic source, indicates where the traffic originated from according to the `utm_source` value in the URL that led to the order. If there is no value, use `null` (default: facebook)
   email: string # The customer's email address. If there is no value, use an empty string (default: customer@email.com)
-  items: list # The list of items that are to be priced by Pricing Hub — item shape: {brandId: string, categoriesIds: list, index: int, priceTableIds: list, quantity: int, sellerId: string, skuId: string}
+  items: list # The list of items that are to be priced by Pricing Hub — item shape: {brandId: string, categoriesIds: list<string>, index: int, priceTableIds: list<string>, quantity: int, sellerId: string, skuId: string}
   sales_channel: string # Represents Checkout's sales channel (default: 1)
 ]: any -> record<items: table<costPrice: float, index: int, listPrice: float, price: float, priceTable: string, priceValidUntil: string, skuId: string>> {
   let input = $in
@@ -121,20 +130,22 @@ export def "pricing-hub-prices post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/pricing-hub/prices" $qp)
-  let body = {"UtmCampaign": $utm_campaign, "UtmInternalCampaign": $utm_internal_campaign, "UtmMedium": $utm_medium, "UtmSource": $utm_source, "email": $email, "items": $items, "salesChannel": $sales_channel} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"UtmCampaign": $utm_campaign, "UtmInternalCampaign": $utm_internal_campaign, "UtmMedium": $utm_medium, "UtmSource": $utm_source, "email": $email, "items": $items, "salesChannel": $sales_channel} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Configure External Price Source
 #
 # PUT /config
 # operationId: ConfigExternalPriceSource
-export def "config put" [
+export def "config update-external-price-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,11 +167,13 @@ export def "config put" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/config" $qp)
-  let body = {"active": $active, "appName": $app_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"active": $active, "appName": $app_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }

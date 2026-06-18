@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def kind-completer [] { ["ATTESTATION" "BUILD" "DEPLOYMENT" "DISCOVERY" "IMAGE" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 containeranalysisprojectsoccurrencesdelete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: containeranalysis.projects.occurrences.delete
-export def "v1beta1 containeranalysisprojectsoccurrencesdelete" [
+export def "v1beta1 delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -122,7 +131,7 @@ export def "v1beta1 containeranalysisprojectsoccurrencesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -132,7 +141,7 @@ export def "v1beta1 containeranalysisprojectsoccurrencesdelete" [
 #
 # GET /v1beta1/{name}
 # operationId: containeranalysis.projects.occurrences.get
-export def "v1beta1 containeranalysisprojectsoccurrencesget" [
+export def "v1beta1 get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,7 +166,7 @@ export def "v1beta1 containeranalysisprojectsoccurrencesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,13 +185,13 @@ export def "v1beta1 containeranalysisprojectsoccurrencesget" [
 # --installation shape: {installation?: record}
 # --intoto shape: {signatures?: list, signed?: record}
 # --resource shape: {contentHash?: record, name?: string, uri?: string}
-# --sbom shape: {createTime?: string, creatorComment?: string, creators?: list, documentComment?: string, externalDocumentRefs?: list, id?: string, licenseListVersion?: string, namespace?: string, title?: string}
+# --sbom shape: {createTime?: string, creatorComment?: string, creators?: list<string>, documentComment?: string, externalDocumentRefs?: list<string>, id?: string, licenseListVersion?: string, namespace?: string, title?: string}
 # --sbomReference shape: {payload?: record, payloadType?: string, signatures?: list}
-# --spdxFile shape: {attributions?: list, comment?: string, contributors?: list, copyright?: string, filesLicenseInfo?: list, id?: string, licenseConcluded?: record, notice?: string}
+# --spdxFile shape: {attributions?: list<string>, comment?: string, contributors?: list<string>, copyright?: string, filesLicenseInfo?: list<string>, id?: string, licenseConcluded?: record, notice?: string}
 # --spdxPackage shape: {comment?: string, filename?: string, id?: string, licenseConcluded?: record, sourceInfo?: string}
 # --spdxRelationship shape: {comment?: string, source?: string, target?: string}
 # --vulnerability shape: {cvssScore?: float, cvssV2?: record, cvssV3?: record, cvssVersion?: "CVSS_VERSION_UNSPECIFIED"|"CVSS_VERSION_2"|"CVSS_VERSION_3", effectiveSeverity?: "SEVERITY_UNSPECIFIED"|"MINIMAL"|"LOW"|"MEDIUM"|"HIGH"|"CRITICAL", longDescription?: string, packageIssue?: list, relatedUrls?: list, severity?: "SEVERITY_UNSPECIFIED"|"MINIMAL"|"LOW"|"MEDIUM"|"HIGH"|"CRITICAL", shortDescription?: string, type?: string, vexAssessment?: record}
-export def "v1beta1 containeranalysisprojectsoccurrencespatch" [
+export def "v1beta1 update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -218,9 +227,9 @@ export def "v1beta1 containeranalysisprojectsoccurrencespatch" [
   --note-name: string # Required. Immutable. The analysis note associated with this occurrence, in the form of `projects/[PROVIDER_ID]/notes/[NOTE_ID]`. This field can be used as a filter in list requests.
   --remediation: string # A description of actions that can be taken to remedy the note.
   --resource: record # An entity that can have metadata. For example, a Docker image. — shape: {contentHash?: record, name?: string, uri?: string}
-  --sbom: record # DocumentOccurrence represents an SPDX Document Creation Information section: https://spdx.github.io/spdx-spec/v2.3/document-creation-information/ — shape: {createTime?: string, creatorComment?: string, creators?: list, documentComment?: string, externalDocumentRefs?: list, id?: string, licenseListVersion?: string, namespace?: string, title?: string}
+  --sbom: record # DocumentOccurrence represents an SPDX Document Creation Information section: https://spdx.github.io/spdx-spec/v2.3/document-creation-information/ — shape: {createTime?: string, creatorComment?: string, creators?: list<string>, documentComment?: string, externalDocumentRefs?: list<string>, id?: string, licenseListVersion?: string, namespace?: string, title?: string}
   --sbom-reference: record # The occurrence representing an SBOM reference as applied to a specific resource. The occurrence follows the DSSE specification. See https://github.com/secure-systems-lab/dsse/blob/master/envelope.md for more details. — shape: {payload?: record, payloadType?: string, signatures?: list}
-  --spdx-file: record # FileOccurrence represents an SPDX File Information section: https://spdx.github.io/spdx-spec/4-file-information/ — shape: {attributions?: list, comment?: string, contributors?: list, copyright?: string, filesLicenseInfo?: list, id?: string, licenseConcluded?: record, notice?: string}
+  --spdx-file: record # FileOccurrence represents an SPDX File Information section: https://spdx.github.io/spdx-spec/4-file-information/ — shape: {attributions?: list<string>, comment?: string, contributors?: list<string>, copyright?: string, filesLicenseInfo?: list<string>, id?: string, licenseConcluded?: record, notice?: string}
   --spdx-package: record # PackageInfoOccurrence represents an SPDX Package Information section: https://spdx.github.io/spdx-spec/3-package-information/ — shape: {comment?: string, filename?: string, id?: string, licenseConcluded?: record, sourceInfo?: string}
   --spdx-relationship: record # RelationshipOccurrence represents an SPDX Relationship section: https://spdx.github.io/spdx-spec/7-relationships-between-SPDX-elements/ — shape: {comment?: string, source?: string, target?: string}
   --update-time: string # Output only. The time this occurrence was last updated. (format: google-datetime)
@@ -230,19 +239,19 @@ export def "v1beta1 containeranalysisprojectsoccurrencespatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
-  let body = {"attestation": $attestation, "build": $build, "createTime": $create_time, "deployment": $deployment, "derivedImage": $derived_image, "discovered": $discovered, "envelope": $envelope, "installation": $installation, "intoto": $intoto, "kind": $kind, "name": $body_name, "noteName": $note_name, "remediation": $remediation, "resource": $resource, "sbom": $sbom, "sbomReference": $sbom_reference, "spdxFile": $spdx_file, "spdxPackage": $spdx_package, "spdxRelationship": $spdx_relationship, "updateTime": $update_time, "vulnerability": $vulnerability} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
+  let req_body = {"attestation": $attestation, "build": $build, "createTime": $create_time, "deployment": $deployment, "derivedImage": $derived_image, "discovered": $discovered, "envelope": $envelope, "installation": $installation, "intoto": $intoto, "kind": $kind, "name": $body_name, "noteName": $note_name, "remediation": $remediation, "resource": $resource, "sbom": $sbom, "sbomReference": $sbom_reference, "spdxFile": $spdx_file, "spdxPackage": $spdx_package, "spdxRelationship": $spdx_relationship, "updateTime": $update_time, "vulnerability": $vulnerability} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the note attached to the specified occurrence. Consumer projects can use this method to get a note that belongs to a provider project.
 #
 # GET /v1beta1/{name}/notes
 # operationId: containeranalysis.projects.occurrences.getNotes
-export def "v1beta1-notes containeranalysisprojectsoccurrencesgetNotes" [
+export def "v1beta1-notes get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -267,7 +276,7 @@ export def "v1beta1-notes containeranalysisprojectsoccurrencesgetNotes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}/notes") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}/notes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -277,7 +286,7 @@ export def "v1beta1-notes containeranalysisprojectsoccurrencesgetNotes" [
 #
 # GET /v1beta1/{name}/occurrences
 # operationId: containeranalysis.projects.notes.occurrences.list
-export def "v1beta1-occurrences containeranalysisprojectsnotesoccurrenceslist" [
+export def "v1beta1-occurrences list-by-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -305,7 +314,7 @@ export def "v1beta1-occurrences containeranalysisprojectsnotesoccurrenceslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}/occurrences") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}/occurrences") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -315,7 +324,7 @@ export def "v1beta1-occurrences containeranalysisprojectsnotesoccurrenceslist" [
 #
 # GET /v1beta1/{parent}/notes
 # operationId: containeranalysis.projects.notes.list
-export def "v1beta1-notes containeranalysisprojectsnoteslist" [
+export def "v1beta1-notes list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -343,7 +352,7 @@ export def "v1beta1-notes containeranalysisprojectsnoteslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/notes") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/notes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -356,19 +365,19 @@ export def "v1beta1-notes containeranalysisprojectsnoteslist" [
 # --attestationAuthority shape: {hint?: record}
 # --baseImage shape: {fingerprint?: record, resourceUrl?: string}
 # --build shape: {builderVersion?: string, signature?: record}
-# --deployable shape: {resourceUri?: list}
+# --deployable shape: {resourceUri?: list<string>}
 # --discovery shape: {analysisKind?: "NOTE_KIND_UNSPECIFIED"|"VULNERABILITY"|"BUILD"|"IMAGE"|"PACKAGE"|"DEPLOYMENT"|"DISCOVERY"|"ATTESTATION"|"INTOTO"|"SBOM"|"SPDX_PACKAGE"|"SPDX_FILE"|"SPDX_RELATIONSHIP"|"VULNERABILITY_ASSESSMENT"|"SBOM_REFERENCE"}
-# --intoto shape: {expectedCommand?: list, expectedMaterials?: list, expectedProducts?: list, signingKeys?: list, stepName?: string, threshold?: string}
+# --intoto shape: {expectedCommand?: list<string>, expectedMaterials?: list, expectedProducts?: list, signingKeys?: list, stepName?: string, threshold?: string}
 # --package shape: {architecture?: "ARCHITECTURE_UNSPECIFIED"|"X86"|"X64", cpeUri?: string, description?: string, digest?: list, distribution?: list, license?: record, maintainer?: string, name?: string, packageType?: string, url?: string, version?: record}
 # --relatedUrl item shape: {label?: string, url?: string}
 # --sbom shape: {dataLicence?: string, spdxVersion?: string}
 # --sbomReference shape: {format?: string, version?: string}
-# --spdxFile shape: {checksum?: list, fileType?: "FILE_TYPE_UNSPECIFIED"|"SOURCE"|"BINARY"|"ARCHIVE"|"APPLICATION"|"AUDIO"|"IMAGE"|"TEXT"|"VIDEO"|"DOCUMENTATION"|"SPDX"|"OTHER", title?: string}
-# --spdxPackage shape: {analyzed?: bool, attribution?: string, checksum?: string, copyright?: string, detailedDescription?: string, downloadLocation?: string, externalRefs?: list, filesLicenseInfo?: list, homePage?: string, licenseDeclared?: record, originator?: string, packageType?: string, summaryDescription?: string, supplier?: string, title?: string, verificationCode?: string, version?: string}
+# --spdxFile shape: {checksum?: list<string>, fileType?: "FILE_TYPE_UNSPECIFIED"|"SOURCE"|"BINARY"|"ARCHIVE"|"APPLICATION"|"AUDIO"|"IMAGE"|"TEXT"|"VIDEO"|"DOCUMENTATION"|"SPDX"|"OTHER", title?: string}
+# --spdxPackage shape: {analyzed?: bool, attribution?: string, checksum?: string, copyright?: string, detailedDescription?: string, downloadLocation?: string, externalRefs?: list, filesLicenseInfo?: list<string>, homePage?: string, licenseDeclared?: record, originator?: string, packageType?: string, summaryDescription?: string, supplier?: string, title?: string, verificationCode?: string, version?: string}
 # --spdxRelationship shape: {type?: "RELATIONSHIP_TYPE_UNSPECIFIED"|"DESCRIBES"|"DESCRIBED_BY"|"CONTAINS"|"CONTAINED_BY"|"DEPENDS_ON"|"DEPENDENCY_OF"|"DEPENDENCY_MANIFEST_OF"|"BUILD_DEPENDENCY_OF"|"DEV_DEPENDENCY_OF"|"OPTIONAL_DEPENDENCY_OF"|"PROVIDED_DEPENDENCY_OF"|"TEST_DEPENDENCY_OF"|"RUNTIME_DEPENDENCY_OF"|"EXAMPLE_OF"|"GENERATES"|"GENERATED_FROM"|"ANCESTOR_OF"|"DESCENDANT_OF"|"VARIANT_OF"|"DISTRIBUTION_ARTIFACT"|"PATCH_FOR"|"PATCH_APPLIED"|"COPY_OF"|"FILE_ADDED"|"FILE_DELETED"|"FILE_MODIFIED"|"EXPANDED_FROM_ARCHIVE"|"DYNAMIC_LINK"|"STATIC_LINK"|"DATA_FILE_OF"|"TEST_CASE_OF"|"BUILD_TOOL_OF"|"DEV_TOOL_OF"|"TEST_OF"|"TEST_TOOL_OF"|"DOCUMENTATION_OF"|"OPTIONAL_COMPONENT_OF"|"METAFILE_OF"|"PACKAGE_OF"|"AMENDS"|"PREREQUISITE_FOR"|"HAS_PREREQUISITE"|"OTHER"}
-# --vulnerability shape: {cvssScore?: float, cvssV2?: record, cvssV3?: record, cvssVersion?: "CVSS_VERSION_UNSPECIFIED"|"CVSS_VERSION_2"|"CVSS_VERSION_3", cwe?: list, details?: list, severity?: "SEVERITY_UNSPECIFIED"|"MINIMAL"|"LOW"|"MEDIUM"|"HIGH"|"CRITICAL", sourceUpdateTime?: string, windowsDetails?: list}
+# --vulnerability shape: {cvssScore?: float, cvssV2?: record, cvssV3?: record, cvssVersion?: "CVSS_VERSION_UNSPECIFIED"|"CVSS_VERSION_2"|"CVSS_VERSION_3", cwe?: list<string>, details?: list, severity?: "SEVERITY_UNSPECIFIED"|"MINIMAL"|"LOW"|"MEDIUM"|"HIGH"|"CRITICAL", sourceUpdateTime?: string, windowsDetails?: list}
 # --vulnerabilityAssessment shape: {assessment?: record, languageCode?: string, longDescription?: string, product?: record, publisher?: record, shortDescription?: string, title?: string}
-export def "v1beta1-notes containeranalysisprojectsnotescreate" [
+export def "v1beta1-notes create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -394,43 +403,43 @@ export def "v1beta1-notes containeranalysisprojectsnotescreate" [
   --base-image: record # Basis describes the base image portion (Note) of the DockerImage relationship. Linked occurrences are derived from this or an equivalent image via: FROM Or an equivalent reference, e.g. a tag of the resource_url. — shape: {fingerprint?: record, resourceUrl?: string}
   --build: record # Note holding the version of the provider's builder and the signature of the provenance message in the build details occurrence. — shape: {builderVersion?: string, signature?: record}
   --create-time: string # Output only. The time this note was created. This field can be used as a filter in list requests. (format: google-datetime)
-  --deployable: record # An artifact that can be deployed in some runtime. — shape: {resourceUri?: list}
+  --deployable: record # An artifact that can be deployed in some runtime. — shape: {resourceUri?: list<string>}
   --discovery: record # A note that indicates a type of analysis a provider would perform. This note exists in a provider's project. A `Discovery` occurrence is created in a consumer's project at the start of analysis. — shape: {analysisKind?: "NOTE_KIND_UNSPECIFIED"|"VULNERABILITY"|"BUILD"|"IMAGE"|"PACKAGE"|"DEPLOYMENT"|"DISCOVERY"|"ATTESTATION"|"INTOTO"|"SBOM"|"SPDX_PACKAGE"|"SPDX_FILE"|"SPDX_RELATIONSHIP"|"VULNERABILITY_ASSESSMENT"|"SBOM_REFERENCE"}
   --expiration-time: string # Time of expiration for this note. Empty if note does not expire. (format: google-datetime)
-  --intoto: record # This contains the fields corresponding to the definition of a software supply chain step in an in-toto layout. This information goes into a Grafeas note. — shape: {expectedCommand?: list, expectedMaterials?: list, expectedProducts?: list, signingKeys?: list, stepName?: string, threshold?: string}
+  --intoto: record # This contains the fields corresponding to the definition of a software supply chain step in an in-toto layout. This information goes into a Grafeas note. — shape: {expectedCommand?: list<string>, expectedMaterials?: list, expectedProducts?: list, signingKeys?: list, stepName?: string, threshold?: string}
   --kind: string@kind-completer # Output only. The type of analysis. This field can be used as a filter in list requests.
   --long-description: string # A detailed description of this note.
   --name: string # Output only. The name of the note in the form of `projects/[PROVIDER_ID]/notes/[NOTE_ID]`.
   --package: record # Package represents a particular package version. — shape: {architecture?: "ARCHITECTURE_UNSPECIFIED"|"X86"|"X64", cpeUri?: string, description?: string, digest?: list, distribution?: list, license?: record, maintainer?: string, name?: string, packageType?: string, url?: string, version?: record}
-  --related-note-names: list # Other notes related to this note.
+  --related-note-names: list<string> # Other notes related to this note.
   --related-url: list # URLs associated with this note. — item shape: {label?: string, url?: string}
   --sbom: record # DocumentNote represents an SPDX Document Creation Information section: https://spdx.github.io/spdx-spec/v2.3/document-creation-information/ — shape: {dataLicence?: string, spdxVersion?: string}
   --sbom-reference: record # The note representing an SBOM reference. — shape: {format?: string, version?: string}
   --short-description: string # A one sentence description of this note.
-  --spdx-file: record # FileNote represents an SPDX File Information section: https://spdx.github.io/spdx-spec/4-file-information/ — shape: {checksum?: list, fileType?: "FILE_TYPE_UNSPECIFIED"|"SOURCE"|"BINARY"|"ARCHIVE"|"APPLICATION"|"AUDIO"|"IMAGE"|"TEXT"|"VIDEO"|"DOCUMENTATION"|"SPDX"|"OTHER", title?: string}
-  --spdx-package: record # PackageInfoNote represents an SPDX Package Information section: https://spdx.github.io/spdx-spec/3-package-information/ — shape: {analyzed?: bool, attribution?: string, checksum?: string, copyright?: string, detailedDescription?: string, downloadLocation?: string, externalRefs?: list, filesLicenseInfo?: list, homePage?: string, licenseDeclared?: record, originator?: string, packageType?: string, summaryDescription?: string, supplier?: string, title?: string, verificationCode?: string, version?: string}
+  --spdx-file: record # FileNote represents an SPDX File Information section: https://spdx.github.io/spdx-spec/4-file-information/ — shape: {checksum?: list<string>, fileType?: "FILE_TYPE_UNSPECIFIED"|"SOURCE"|"BINARY"|"ARCHIVE"|"APPLICATION"|"AUDIO"|"IMAGE"|"TEXT"|"VIDEO"|"DOCUMENTATION"|"SPDX"|"OTHER", title?: string}
+  --spdx-package: record # PackageInfoNote represents an SPDX Package Information section: https://spdx.github.io/spdx-spec/3-package-information/ — shape: {analyzed?: bool, attribution?: string, checksum?: string, copyright?: string, detailedDescription?: string, downloadLocation?: string, externalRefs?: list, filesLicenseInfo?: list<string>, homePage?: string, licenseDeclared?: record, originator?: string, packageType?: string, summaryDescription?: string, supplier?: string, title?: string, verificationCode?: string, version?: string}
   --spdx-relationship: record # RelationshipNote represents an SPDX Relationship section: https://spdx.github.io/spdx-spec/7-relationships-between-SPDX-elements/ — shape: {type?: "RELATIONSHIP_TYPE_UNSPECIFIED"|"DESCRIBES"|"DESCRIBED_BY"|"CONTAINS"|"CONTAINED_BY"|"DEPENDS_ON"|"DEPENDENCY_OF"|"DEPENDENCY_MANIFEST_OF"|"BUILD_DEPENDENCY_OF"|"DEV_DEPENDENCY_OF"|"OPTIONAL_DEPENDENCY_OF"|"PROVIDED_DEPENDENCY_OF"|"TEST_DEPENDENCY_OF"|"RUNTIME_DEPENDENCY_OF"|"EXAMPLE_OF"|"GENERATES"|"GENERATED_FROM"|"ANCESTOR_OF"|"DESCENDANT_OF"|"VARIANT_OF"|"DISTRIBUTION_ARTIFACT"|"PATCH_FOR"|"PATCH_APPLIED"|"COPY_OF"|"FILE_ADDED"|"FILE_DELETED"|"FILE_MODIFIED"|"EXPANDED_FROM_ARCHIVE"|"DYNAMIC_LINK"|"STATIC_LINK"|"DATA_FILE_OF"|"TEST_CASE_OF"|"BUILD_TOOL_OF"|"DEV_TOOL_OF"|"TEST_OF"|"TEST_TOOL_OF"|"DOCUMENTATION_OF"|"OPTIONAL_COMPONENT_OF"|"METAFILE_OF"|"PACKAGE_OF"|"AMENDS"|"PREREQUISITE_FOR"|"HAS_PREREQUISITE"|"OTHER"}
   --update-time: string # Output only. The time this note was last updated. This field can be used as a filter in list requests. (format: google-datetime)
-  --vulnerability: record # Vulnerability provides metadata about a security vulnerability in a Note. — shape: {cvssScore?: float, cvssV2?: record, cvssV3?: record, cvssVersion?: "CVSS_VERSION_UNSPECIFIED"|"CVSS_VERSION_2"|"CVSS_VERSION_3", cwe?: list, details?: list, severity?: "SEVERITY_UNSPECIFIED"|"MINIMAL"|"LOW"|"MEDIUM"|"HIGH"|"CRITICAL", sourceUpdateTime?: string, windowsDetails?: list}
+  --vulnerability: record # Vulnerability provides metadata about a security vulnerability in a Note. — shape: {cvssScore?: float, cvssV2?: record, cvssV3?: record, cvssVersion?: "CVSS_VERSION_UNSPECIFIED"|"CVSS_VERSION_2"|"CVSS_VERSION_3", cwe?: list<string>, details?: list, severity?: "SEVERITY_UNSPECIFIED"|"MINIMAL"|"LOW"|"MEDIUM"|"HIGH"|"CRITICAL", sourceUpdateTime?: string, windowsDetails?: list}
   --vulnerability-assessment: record # A single VulnerabilityAssessmentNote represents one particular product's vulnerability assessment for one CVE. — shape: {assessment?: record, languageCode?: string, longDescription?: string, product?: record, publisher?: record, shortDescription?: string, title?: string}
 ]: any -> record<attestationAuthority: record<hint: record<humanReadableName: string>>, baseImage: record<fingerprint: record<v1Name: string, v2Blob: list, v2Name: string>, resourceUrl: string>, build: record<builderVersion: string, signature: record<keyId: string, keyType: string, publicKey: string, signature: string>>, createTime: string, deployable: record<resourceUri: list<string>>, discovery: record<analysisKind: string>, expirationTime: string, intoto: record<expectedCommand: list<string>, expectedMaterials: list<record>, expectedProducts: list<record>, signingKeys: list<record>, stepName: string, threshold: string>, kind: string, longDescription: string, name: string, package: record<architecture: string, cpeUri: string, description: string, digest: list<record>, distribution: list<record>, license: record<comments: string, expression: string>, maintainer: string, name: string, packageType: string, url: string, version: record<epoch: int, inclusive: bool, kind: string, name: string, revision: string>>, relatedNoteNames: list<string>, relatedUrl: table<label: string, url: string>, sbom: record<dataLicence: string, spdxVersion: string>, sbomReference: record<format: string, version: string>, shortDescription: string, spdxFile: record<checksum: list<string>, fileType: string, title: string>, spdxPackage: record<analyzed: bool, attribution: string, checksum: string, copyright: string, detailedDescription: string, downloadLocation: string, externalRefs: list<record>, filesLicenseInfo: list<string>, homePage: string, licenseDeclared: record<comments: string, expression: string>, originator: string, packageType: string, summaryDescription: string, supplier: string, title: string, verificationCode: string, version: string>, spdxRelationship: record<type: string>, updateTime: string, vulnerability: record<cvssScore: float, cvssV2: record<attackComplexity: string, attackVector: string, authentication: string, availabilityImpact: string, baseScore: float, confidentialityImpact: string, exploitabilityScore: float, impactScore: float, integrityImpact: string, privilegesRequired: string, scope: string, userInteraction: string>, cvssV3: record<attackComplexity: string, attackVector: string, availabilityImpact: string, baseScore: float, confidentialityImpact: string, exploitabilityScore: float, impactScore: float, integrityImpact: string, privilegesRequired: string, scope: string, userInteraction: string>, cvssVersion: string, cwe: list<string>, details: list<record>, severity: string, sourceUpdateTime: string, windowsDetails: list<record>>, vulnerabilityAssessment: record<assessment: record<cve: string, impacts: list, justification: record, longDescription: string, relatedUris: list, remediations: list, shortDescription: string, state: string>, languageCode: string, longDescription: string, product: record<genericUri: string, id: string, name: string>, publisher: record<issuingAuthority: string, name: string, publisherNamespace: string>, shortDescription: string, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "noteId" $note_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/notes") $qp)
-  let body = {"attestationAuthority": $attestation_authority, "baseImage": $base_image, "build": $build, "createTime": $create_time, "deployable": $deployable, "discovery": $discovery, "expirationTime": $expiration_time, "intoto": $intoto, "kind": $kind, "longDescription": $long_description, "name": $name, "package": $package, "relatedNoteNames": $related_note_names, "relatedUrl": $related_url, "sbom": $sbom, "sbomReference": $sbom_reference, "shortDescription": $short_description, "spdxFile": $spdx_file, "spdxPackage": $spdx_package, "spdxRelationship": $spdx_relationship, "updateTime": $update_time, "vulnerability": $vulnerability, "vulnerabilityAssessment": $vulnerability_assessment} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/notes") $qp)
+  let req_body = {"attestationAuthority": $attestation_authority, "baseImage": $base_image, "build": $build, "createTime": $create_time, "deployable": $deployable, "discovery": $discovery, "expirationTime": $expiration_time, "intoto": $intoto, "kind": $kind, "longDescription": $long_description, "name": $name, "package": $package, "relatedNoteNames": $related_note_names, "relatedUrl": $related_url, "sbom": $sbom, "sbomReference": $sbom_reference, "shortDescription": $short_description, "spdxFile": $spdx_file, "spdxPackage": $spdx_package, "spdxRelationship": $spdx_relationship, "updateTime": $update_time, "vulnerability": $vulnerability, "vulnerabilityAssessment": $vulnerability_assessment} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates new notes in batch.
 #
 # POST /v1beta1/{parent}/notes:batchCreate
 # operationId: containeranalysis.projects.notes.batchCreate
-export def "v1beta1-notes-batch-create containeranalysisprojectsnotesbatchCreate" [
+export def "v1beta1-notes-batch-create create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -457,19 +466,19 @@ export def "v1beta1-notes-batch-create containeranalysisprojectsnotesbatchCreate
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/notes:batchCreate") $qp)
-  let body = {"notes": $notes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/notes:batchCreate") $qp)
+  let req_body = {"notes": $notes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists occurrences for the specified project.
 #
 # GET /v1beta1/{parent}/occurrences
 # operationId: containeranalysis.projects.occurrences.list
-export def "v1beta1-occurrences containeranalysisprojectsoccurrenceslist" [
+export def "v1beta1-occurrences list-by-parent" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -497,7 +506,7 @@ export def "v1beta1-occurrences containeranalysisprojectsoccurrenceslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/occurrences") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/occurrences") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -516,13 +525,13 @@ export def "v1beta1-occurrences containeranalysisprojectsoccurrenceslist" [
 # --installation shape: {installation?: record}
 # --intoto shape: {signatures?: list, signed?: record}
 # --resource shape: {contentHash?: record, name?: string, uri?: string}
-# --sbom shape: {createTime?: string, creatorComment?: string, creators?: list, documentComment?: string, externalDocumentRefs?: list, id?: string, licenseListVersion?: string, namespace?: string, title?: string}
+# --sbom shape: {createTime?: string, creatorComment?: string, creators?: list<string>, documentComment?: string, externalDocumentRefs?: list<string>, id?: string, licenseListVersion?: string, namespace?: string, title?: string}
 # --sbomReference shape: {payload?: record, payloadType?: string, signatures?: list}
-# --spdxFile shape: {attributions?: list, comment?: string, contributors?: list, copyright?: string, filesLicenseInfo?: list, id?: string, licenseConcluded?: record, notice?: string}
+# --spdxFile shape: {attributions?: list<string>, comment?: string, contributors?: list<string>, copyright?: string, filesLicenseInfo?: list<string>, id?: string, licenseConcluded?: record, notice?: string}
 # --spdxPackage shape: {comment?: string, filename?: string, id?: string, licenseConcluded?: record, sourceInfo?: string}
 # --spdxRelationship shape: {comment?: string, source?: string, target?: string}
 # --vulnerability shape: {cvssScore?: float, cvssV2?: record, cvssV3?: record, cvssVersion?: "CVSS_VERSION_UNSPECIFIED"|"CVSS_VERSION_2"|"CVSS_VERSION_3", effectiveSeverity?: "SEVERITY_UNSPECIFIED"|"MINIMAL"|"LOW"|"MEDIUM"|"HIGH"|"CRITICAL", longDescription?: string, packageIssue?: list, relatedUrls?: list, severity?: "SEVERITY_UNSPECIFIED"|"MINIMAL"|"LOW"|"MEDIUM"|"HIGH"|"CRITICAL", shortDescription?: string, type?: string, vexAssessment?: record}
-export def "v1beta1-occurrences containeranalysisprojectsoccurrencescreate" [
+export def "v1beta1-occurrences create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -557,9 +566,9 @@ export def "v1beta1-occurrences containeranalysisprojectsoccurrencescreate" [
   --note-name: string # Required. Immutable. The analysis note associated with this occurrence, in the form of `projects/[PROVIDER_ID]/notes/[NOTE_ID]`. This field can be used as a filter in list requests.
   --remediation: string # A description of actions that can be taken to remedy the note.
   --resource: record # An entity that can have metadata. For example, a Docker image. — shape: {contentHash?: record, name?: string, uri?: string}
-  --sbom: record # DocumentOccurrence represents an SPDX Document Creation Information section: https://spdx.github.io/spdx-spec/v2.3/document-creation-information/ — shape: {createTime?: string, creatorComment?: string, creators?: list, documentComment?: string, externalDocumentRefs?: list, id?: string, licenseListVersion?: string, namespace?: string, title?: string}
+  --sbom: record # DocumentOccurrence represents an SPDX Document Creation Information section: https://spdx.github.io/spdx-spec/v2.3/document-creation-information/ — shape: {createTime?: string, creatorComment?: string, creators?: list<string>, documentComment?: string, externalDocumentRefs?: list<string>, id?: string, licenseListVersion?: string, namespace?: string, title?: string}
   --sbom-reference: record # The occurrence representing an SBOM reference as applied to a specific resource. The occurrence follows the DSSE specification. See https://github.com/secure-systems-lab/dsse/blob/master/envelope.md for more details. — shape: {payload?: record, payloadType?: string, signatures?: list}
-  --spdx-file: record # FileOccurrence represents an SPDX File Information section: https://spdx.github.io/spdx-spec/4-file-information/ — shape: {attributions?: list, comment?: string, contributors?: list, copyright?: string, filesLicenseInfo?: list, id?: string, licenseConcluded?: record, notice?: string}
+  --spdx-file: record # FileOccurrence represents an SPDX File Information section: https://spdx.github.io/spdx-spec/4-file-information/ — shape: {attributions?: list<string>, comment?: string, contributors?: list<string>, copyright?: string, filesLicenseInfo?: list<string>, id?: string, licenseConcluded?: record, notice?: string}
   --spdx-package: record # PackageInfoOccurrence represents an SPDX Package Information section: https://spdx.github.io/spdx-spec/3-package-information/ — shape: {comment?: string, filename?: string, id?: string, licenseConcluded?: record, sourceInfo?: string}
   --spdx-relationship: record # RelationshipOccurrence represents an SPDX Relationship section: https://spdx.github.io/spdx-spec/7-relationships-between-SPDX-elements/ — shape: {comment?: string, source?: string, target?: string}
   --update-time: string # Output only. The time this occurrence was last updated. (format: google-datetime)
@@ -569,20 +578,20 @@ export def "v1beta1-occurrences containeranalysisprojectsoccurrencescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/occurrences") $qp)
-  let body = {"attestation": $attestation, "build": $build, "createTime": $create_time, "deployment": $deployment, "derivedImage": $derived_image, "discovered": $discovered, "envelope": $envelope, "installation": $installation, "intoto": $intoto, "kind": $kind, "name": $name, "noteName": $note_name, "remediation": $remediation, "resource": $resource, "sbom": $sbom, "sbomReference": $sbom_reference, "spdxFile": $spdx_file, "spdxPackage": $spdx_package, "spdxRelationship": $spdx_relationship, "updateTime": $update_time, "vulnerability": $vulnerability} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/occurrences") $qp)
+  let req_body = {"attestation": $attestation, "build": $build, "createTime": $create_time, "deployment": $deployment, "derivedImage": $derived_image, "discovered": $discovered, "envelope": $envelope, "installation": $installation, "intoto": $intoto, "kind": $kind, "name": $name, "noteName": $note_name, "remediation": $remediation, "resource": $resource, "sbom": $sbom, "sbomReference": $sbom_reference, "spdxFile": $spdx_file, "spdxPackage": $spdx_package, "spdxRelationship": $spdx_relationship, "updateTime": $update_time, "vulnerability": $vulnerability} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates new occurrences in batch.
 #
 # POST /v1beta1/{parent}/occurrences:batchCreate
 # operationId: containeranalysis.projects.occurrences.batchCreate
-# --occurrences item shape: {attestation?: record, build?: record, createTime?: string, deployment?: record, derivedImage?: record, discovered?: record, envelope?: record, installation?: record, intoto?: record, kind?: "NOTE_KIND_UNSPECIFIED"|"VULNERABILITY"|"BUILD"|"IMAGE"|"PACKAGE"|"DEPLOYMENT"|"DISCOVERY"|"ATTESTATION"|"INTOTO"|"SBOM"|"SPDX_PACKAGE"|"SPDX_FILE"|"SPDX_RELATIONSHIP"|"VULNERABILITY_ASSESSMENT"|"SBOM_REFERENCE", name?: string, noteName?: string, remediation?: string, resource?: record, sbom?: record, sbomReference?: record, spdxFile?: record, spdxPackage?: record, spdxRelationship?: record, updateTime?: string, vulnerability?: record}
-export def "v1beta1-occurrences-batch-create containeranalysisprojectsoccurrencesbatchCreate" [
+# --occurrences item shape: {attestation?: record, build?: record, createTime?: string, deployment?: record, derivedImage?: record, discovered?: record, envelope?: record, installation?: record, intoto?: record, kind?: "NOTE_KIND_UNSPECIFIED"|"VULNERABILITY"|"BUILD"|"IMAGE"|"PACKAGE"|"DEPLOYMENT"|"DISCOVERY"|"ATTESTATION"|"INTOTO"|"SBOM"|"SPDX_PACKAGE"|"SPDX_FILE"|"SPDX_RELATIONSHIP"|"VULNERABILITY_ASSESSMENT"|"SBOM_REFERENCE", name?: string, noteName?: string, remediation?: string, resource?: record, sbom?: record, ... (6 more fields)}
+export def "v1beta1-occurrences-batch-create create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -603,25 +612,25 @@ export def "v1beta1-occurrences-batch-create containeranalysisprojectsoccurrence
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --occurrences: list # Required. The occurrences to create. Max allowed length is 1000. — item shape: {attestation?: record, build?: record, createTime?: string, deployment?: record, derivedImage?: record, discovered?: record, envelope?: record, installation?: record, intoto?: record, kind?: "NOTE_KIND_UNSPECIFIED"|"VULNERABILITY"|"BUILD"|"IMAGE"|"PACKAGE"|"DEPLOYMENT"|"DISCOVERY"|"ATTESTATION"|"INTOTO"|"SBOM"|"SPDX_PACKAGE"|"SPDX_FILE"|"SPDX_RELATIONSHIP"|"VULNERABILITY_ASSESSMENT"|"SBOM_REFERENCE", name?: string, noteName?: string, remediation?: string, resource?: record, sbom?: record, sbomReference?: record, spdxFile?: record, spdxPackage?: record, spdxRelationship?: record, updateTime?: string, vulnerability?: record}
+  --occurrences: list # Required. The occurrences to create. Max allowed length is 1000. — item shape: {attestation?: record, build?: record, createTime?: string, deployment?: record, derivedImage?: record, discovered?: record, envelope?: record, installation?: record, intoto?: record, kind?: "NOTE_KIND_UNSPECIFIED"|"VULNERABILITY"|"BUILD"|"IMAGE"|"PACKAGE"|"DEPLOYMENT"|"DISCOVERY"|"ATTESTATION"|"INTOTO"|"SBOM"|"SPDX_PACKAGE"|"SPDX_FILE"|"SPDX_RELATIONSHIP"|"VULNERABILITY_ASSESSMENT"|"SBOM_REFERENCE", name?: string, noteName?: string, remediation?: string, resource?: record, sbom?: record, ... (6 more fields)}
 ]: any -> record<occurrences: table<attestation: record, build: record, createTime: string, deployment: record, derivedImage: record, discovered: record, envelope: record, installation: record, intoto: record, kind: string, name: string, noteName: string, remediation: string, resource: record, sbom: record, sbomReference: record, spdxFile: record, spdxPackage: record, spdxRelationship: record, updateTime: string, vulnerability: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/occurrences:batchCreate") $qp)
-  let body = {"occurrences": $occurrences} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/occurrences:batchCreate") $qp)
+  let req_body = {"occurrences": $occurrences} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a summary of the number and severity of occurrences.
 #
 # GET /v1beta1/{parent}/occurrences:vulnerabilitySummary
 # operationId: containeranalysis.projects.occurrences.getVulnerabilitySummary
-export def "v1beta1-occurrences-vulnerability-summary containeranalysisprojectsoccurrencesgetVulnerabilitySummary" [
+export def "v1beta1-occurrences-vulnerability-summary get" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -647,7 +656,7 @@ export def "v1beta1-occurrences-vulnerability-summary containeranalysisprojectso
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta1/{parent}/occurrences:vulnerabilitySummary") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/occurrences:vulnerabilitySummary") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -658,7 +667,7 @@ export def "v1beta1-occurrences-vulnerability-summary containeranalysisprojectso
 # POST /v1beta1/{resource}:getIamPolicy
 # operationId: containeranalysis.projects.occurrences.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "v1beta1 containeranalysisprojectsoccurrencesgetIamPolicy" [
+export def "v1beta1 get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -685,12 +694,12 @@ export def "v1beta1 containeranalysisprojectsoccurrencesgetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1beta1/{resource}:getIamPolicy") $qp)
-  let body = {"options": $options} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1beta1/{resource}:getIamPolicy") $qp)
+  let req_body = {"options": $options} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sets the access control policy on the specified note or occurrence. Requires `containeranalysis.notes.setIamPolicy` or `containeranalysis.occurrences.setIamPolicy` permission if the resource is a note or an occurrence, respectively. The resource takes the format `projects/[PROJECT_ID]/notes/[NOTE_ID]` for notes and `projects/[PROJECT_ID]/occurrences/[OCCURRENCE_ID]` for occurrences.
@@ -698,7 +707,7 @@ export def "v1beta1 containeranalysisprojectsoccurrencesgetIamPolicy" [
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: containeranalysis.projects.occurrences.setIamPolicy
 # --policy shape: {bindings?: list, etag?: string, version?: int}
-export def "v1beta1 containeranalysisprojectsoccurrencessetIamPolicy" [
+export def "v1beta1 update-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -725,19 +734,19 @@ export def "v1beta1 containeranalysisprojectsoccurrencessetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1beta1/{resource}:setIamPolicy") $qp)
-  let body = {"policy": $policy} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1beta1/{resource}:setIamPolicy") $qp)
+  let req_body = {"policy": $policy} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the permissions that a caller has on the specified note or occurrence. Requires list permission on the project (for example, `containeranalysis.notes.list`). The resource takes the format `projects/[PROJECT_ID]/notes/[NOTE_ID]` for notes and `projects/[PROJECT_ID]/occurrences/[OCCURRENCE_ID]` for occurrences.
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: containeranalysis.projects.occurrences.testIamPermissions
-export def "v1beta1 containeranalysisprojectsoccurrencestestIamPermissions" [
+export def "v1beta1 test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -758,16 +767,16 @@ export def "v1beta1 containeranalysisprojectsoccurrencestestIamPermissions" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --permissions: list # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
+  --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1beta1/{resource}:testIamPermissions") $qp)
-  let body = {"permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1beta1/{resource}:testIamPermissions") $qp)
+  let req_body = {"permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

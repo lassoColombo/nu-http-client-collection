@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://flex-api.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def channel-type-completer [] { ["custom" "facebook" "line" "sms" "web" "whatsapp"] }
@@ -147,11 +157,12 @@ export def "channels create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Channels")
-  let body = {"ChatFriendlyName": $chat_friendly_name, "ChatUniqueName": $chat_unique_name, "ChatUserFriendlyName": $chat_user_friendly_name, "FlexFlowSid": $flex_flow_sid, "Identity": $identity, "LongLived": $long_lived, "PreEngagementData": $pre_engagement_data, "Target": $target, "TaskAttributes": $task_attributes, "TaskSid": $task_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ChatFriendlyName": $chat_friendly_name, "ChatUniqueName": $chat_unique_name, "ChatUserFriendlyName": $chat_user_friendly_name, "FlexFlowSid": $flex_flow_sid, "Identity": $identity, "LongLived": $long_lived, "PreEngagementData": $pre_engagement_data, "Target": $target, "TaskAttributes": $task_attributes, "TaskSid": $task_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Channels/{Sid}
@@ -170,7 +181,7 @@ export def "channels delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Channels/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Channels/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -192,7 +203,7 @@ export def "channels get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, flex_flow_sid: string, sid: string, task_sid: string, url: string, user_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Channels/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Channels/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -281,11 +292,12 @@ export def "flex-flows create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/FlexFlows")
-  let body = {"ChannelType": $channel_type, "ChatServiceSid": $chat_service_sid, "ContactIdentity": $contact_identity, "Enabled": $enabled, "FriendlyName": $friendly_name, "Integration.Channel": $integration_channel, "Integration.CreationOnMessage": $integration_creation_on_message, "Integration.FlowSid": $integration_flow_sid, "Integration.Priority": $integration_priority, "Integration.RetryCount": $integration_retry_count, "Integration.Timeout": $integration_timeout, "Integration.Url": $integration_url, "Integration.WorkflowSid": $integration_workflow_sid, "Integration.WorkspaceSid": $integration_workspace_sid, "IntegrationType": $integration_type, "JanitorEnabled": $janitor_enabled, "LongLived": $long_lived} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ChannelType": $channel_type, "ChatServiceSid": $chat_service_sid, "ContactIdentity": $contact_identity, "Enabled": $enabled, "FriendlyName": $friendly_name, "Integration.Channel": $integration_channel, "Integration.CreationOnMessage": $integration_creation_on_message, "Integration.FlowSid": $integration_flow_sid, "Integration.Priority": $integration_priority, "Integration.RetryCount": $integration_retry_count, "Integration.Timeout": $integration_timeout, "Integration.Url": $integration_url, "Integration.WorkflowSid": $integration_workflow_sid, "Integration.WorkspaceSid": $integration_workspace_sid, "IntegrationType": $integration_type, "JanitorEnabled": $janitor_enabled, "LongLived": $long_lived} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/FlexFlows/{Sid}
@@ -304,7 +316,7 @@ export def "flex-flows delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/FlexFlows/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/FlexFlows/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -326,7 +338,7 @@ export def "flex-flows get" [
 ]: nothing -> record<account_sid: string, channel_type: string, chat_service_sid: string, contact_identity: string, date_created: string, date_updated: string, enabled: bool, friendly_name: string, integration: any, integration_type: string, janitor_enabled: bool, long_lived: bool, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/FlexFlows/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/FlexFlows/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -366,12 +378,13 @@ export def "flex-flows update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/FlexFlows/{sid}"))
-  let body = {"ChannelType": $channel_type, "ChatServiceSid": $chat_service_sid, "ContactIdentity": $contact_identity, "Enabled": $enabled, "FriendlyName": $friendly_name, "Integration.Channel": $integration_channel, "Integration.CreationOnMessage": $integration_creation_on_message, "Integration.FlowSid": $integration_flow_sid, "Integration.Priority": $integration_priority, "Integration.RetryCount": $integration_retry_count, "Integration.Timeout": $integration_timeout, "Integration.Url": $integration_url, "Integration.WorkflowSid": $integration_workflow_sid, "Integration.WorkspaceSid": $integration_workspace_sid, "IntegrationType": $integration_type, "JanitorEnabled": $janitor_enabled, "LongLived": $long_lived} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/FlexFlows/{sid}"))
+  let req_body = {"ChannelType": $channel_type, "ChatServiceSid": $chat_service_sid, "ContactIdentity": $contact_identity, "Enabled": $enabled, "FriendlyName": $friendly_name, "Integration.Channel": $integration_channel, "Integration.CreationOnMessage": $integration_creation_on_message, "Integration.FlowSid": $integration_flow_sid, "Integration.Priority": $integration_priority, "Integration.RetryCount": $integration_retry_count, "Integration.Timeout": $integration_timeout, "Integration.Url": $integration_url, "Integration.WorkflowSid": $integration_workflow_sid, "Integration.WorkspaceSid": $integration_workspace_sid, "IntegrationType": $integration_type, "JanitorEnabled": $janitor_enabled, "LongLived": $long_lived} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # To get conversation with segment id
@@ -397,10 +410,10 @@ export def "insights-conversations list" [
   let base = ($base_url | default "https://flex-api.twilio.com")
   let qp = [(serialize-qp "SegmentId" $segment_id "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Insights/Conversations" $qp)
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -427,10 +440,10 @@ export def "insights-qm-assessments list" [
   let base = ($base_url | default "https://flex-api.twilio.com")
   let qp = [(serialize-qp "SegmentId" $segment_id "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Insights/QM/Assessments" $qp)
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -451,7 +464,7 @@ export def "insights-qm-assessments create" [
   agent_id: string # The id of the Agent
   answer_id: string # The id of the answer selected by user
   answer_text: string # The answer text selected by user
-  category_id: string # The id of the category 
+  category_id: string # The id of the category
   category_name: string # The name of the category
   metric_id: string # The question Id selected for assessment
   metric_name: string # The question name of the assessment
@@ -465,13 +478,14 @@ export def "insights-qm-assessments create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Insights/QM/Assessments")
-  let body = {"AgentId": $agent_id, "AnswerId": $answer_id, "AnswerText": $answer_text, "CategoryId": $category_id, "CategoryName": $category_name, "MetricId": $metric_id, "MetricName": $metric_name, "Offset": $offset, "QuestionnaireId": $questionnaire_id, "SegmentId": $segment_id, "UserEmail": $user_email, "UserName": $user_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"AgentId": $agent_id, "AnswerId": $answer_id, "AnswerText": $answer_text, "CategoryId": $category_id, "CategoryName": $category_name, "MetricId": $metric_id, "MetricName": $metric_name, "Offset": $offset, "QuestionnaireId": $questionnaire_id, "SegmentId": $segment_id, "UserEmail": $user_email, "UserName": $user_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # To create a comment assessment for a conversation
@@ -498,10 +512,10 @@ export def "insights-qm-assessments-comments list" [
   let base = ($base_url | default "https://flex-api.twilio.com")
   let qp = [(serialize-qp "SegmentId" $segment_id "scalar") (serialize-qp "AgentId" $agent_id "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Insights/QM/Assessments/Comments" $qp)
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -532,13 +546,14 @@ export def "insights-qm-assessments-comments create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Insights/QM/Assessments/Comments")
-  let body = {"AgentId": $agent_id, "CategoryId": $category_id, "CategoryName": $category_name, "Comment": $comment, "Offset": $offset, "SegmentId": $segment_id, "UserEmail": $user_email, "UserName": $user_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"AgentId": $agent_id, "CategoryId": $category_id, "CategoryName": $category_name, "Comment": $comment, "Offset": $offset, "SegmentId": $segment_id, "UserEmail": $user_email, "UserName": $user_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Update a specific Assessment assessed earlier
@@ -563,21 +578,22 @@ export def "insights-qm-assessments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({assessment_id: $assessment_id} | format pattern "/v1/Insights/QM/Assessments/{assessment_id}"))
-  let body = {"AnswerId": $answer_id, "AnswerText": $answer_text, "Offset": $offset} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({assessment_id: (encode-path-segment $assessment_id)} | format pattern "/v1/Insights/QM/Assessments/{assessment_id}"))
+  let req_body = {"AnswerId": $answer_id, "AnswerText": $answer_text, "Offset": $offset} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # To get all the categories
 #
 # GET /v1/Insights/QM/Categories
 # operationId: ListInsightsQuestionnairesCategory
-export def "insights-qm-categories list-insights-questionnaires-category" [
+export def "insights-qm-categories list-questionnaires-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -595,10 +611,10 @@ export def "insights-qm-categories list-insights-questionnaires-category" [
   let base = ($base_url | default "https://flex-api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Insights/QM/Categories" $qp)
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -606,7 +622,7 @@ export def "insights-qm-categories list-insights-questionnaires-category" [
 #
 # POST /v1/Insights/QM/Categories
 # operationId: CreateInsightsQuestionnairesCategory
-export def "insights-qm-categories create-insights-questionnaires-category" [
+export def "insights-qm-categories create-questionnaires-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -622,19 +638,20 @@ export def "insights-qm-categories create-insights-questionnaires-category" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Insights/QM/Categories")
-  let body = {"Name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Insights/QM/Categories/{CategoryId}
 #
 # operationId: DeleteInsightsQuestionnairesCategory
-export def "insights-qm-categories delete-insights-questionnaires-category" [
+export def "insights-qm-categories delete-questionnaires-category" [
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -648,11 +665,11 @@ export def "insights-qm-categories delete-insights-questionnaires-category" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({category_id: $category_id} | format pattern "/v1/Insights/QM/Categories/{category_id}"))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/v1/Insights/QM/Categories/{category_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -660,7 +677,7 @@ export def "insights-qm-categories delete-insights-questionnaires-category" [
 #
 # POST /v1/Insights/QM/Categories/{CategoryId}
 # operationId: UpdateInsightsQuestionnairesCategory
-export def "insights-qm-categories update-insights-questionnaires-category" [
+export def "insights-qm-categories update-questionnaires-category" [
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -676,14 +693,15 @@ export def "insights-qm-categories update-insights-questionnaires-category" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({category_id: $category_id} | format pattern "/v1/Insights/QM/Categories/{category_id}"))
-  let body = {"Name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/v1/Insights/QM/Categories/{category_id}"))
+  let req_body = {"Name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # To get all questionnaires with questions
@@ -709,10 +727,10 @@ export def "insights-qm-questionnaires list" [
   let base = ($base_url | default "https://flex-api.twilio.com")
   let qp = [(serialize-qp "IncludeInactive" $include_inactive "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Insights/QM/Questionnaires" $qp)
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -733,19 +751,20 @@ export def "insights-qm-questionnaires create" [
   --active: oneof<nothing, bool> # The flag to enable or disable questionnaire
   --description: string # The description of this questionnaire
   name: string # The name of this questionnaire
-  --question-ids: list # The list of questions ids under a questionnaire
+  --question-ids: list<string> # The list of questions ids under a questionnaire
 ]: any -> record<account_sid: string, active: bool, description: string, id: string, name: string, questions: list<any>, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Insights/QM/Questionnaires")
-  let body = {"Active": $active, "Description": $description, "Name": $name, "QuestionIds": $question_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Active": $active, "Description": $description, "Name": $name, "QuestionIds": $question_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # To delete the questionnaire
@@ -766,11 +785,11 @@ export def "insights-qm-questionnaires delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/Insights/QM/Questionnaires/{id}"))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/Insights/QM/Questionnaires/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -792,11 +811,11 @@ export def "insights-qm-questionnaires get" [
 ]: nothing -> record<account_sid: string, active: bool, description: string, id: string, name: string, questions: list<any>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/Insights/QM/Questionnaires/{id}"))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/Insights/QM/Questionnaires/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -818,26 +837,27 @@ export def "insights-qm-questionnaires update" [
   --active: oneof<nothing, bool> # The flag to enable or disable questionnaire
   --description: string # The description of this questionnaire
   --name: string # The name of this questionnaire
-  --question-ids: list # The list of questions ids under a questionnaire
+  --question-ids: list<string> # The list of questions ids under a questionnaire
 ]: any -> record<account_sid: string, active: bool, description: string, id: string, name: string, questions: list<any>, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/Insights/QM/Questionnaires/{id}"))
-  let body = {"Active": $active, "Description": $description, "Name": $name, "QuestionIds": $question_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/Insights/QM/Questionnaires/{id}"))
+  let req_body = {"Active": $active, "Description": $description, "Name": $name, "QuestionIds": $question_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # To get all the question for the given categories
 #
 # GET /v1/Insights/QM/Questions
 # operationId: ListInsightsQuestionnairesQuestion
-export def "insights-qm-questions list-insights-questionnaires" [
+export def "insights-qm-questions list-questionnaires" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -846,7 +866,7 @@ export def "insights-qm-questions list-insights-questionnaires" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --category-id: list # The list of category IDs
+  --category-id: list<string> # The list of category IDs
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
@@ -856,10 +876,10 @@ export def "insights-qm-questions list-insights-questionnaires" [
   let base = ($base_url | default "https://flex-api.twilio.com")
   let qp = [(serialize-qp "CategoryId" $category_id "multi") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Insights/QM/Questions" $qp)
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -867,7 +887,7 @@ export def "insights-qm-questions list-insights-questionnaires" [
 #
 # POST /v1/Insights/QM/Questions
 # operationId: CreateInsightsQuestionnairesQuestion
-export def "insights-qm-questions create-insights-questionnaires" [
+export def "insights-qm-questions create-questionnaires" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -887,19 +907,20 @@ export def "insights-qm-questions create-insights-questionnaires" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Insights/QM/Questions")
-  let body = {"AllowNa": $allow_na, "AnswerSetId": $answer_set_id, "CategoryId": $category_id, "Description": $description, "Question": $question} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"AllowNa": $allow_na, "AnswerSetId": $answer_set_id, "CategoryId": $category_id, "Description": $description, "Question": $question} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Insights/QM/Questions/{QuestionId}
 #
 # operationId: DeleteInsightsQuestionnairesQuestion
-export def "insights-qm-questions delete-insights-questionnaires" [
+export def "insights-qm-questions delete-questionnaires" [
   question_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -913,11 +934,11 @@ export def "insights-qm-questions delete-insights-questionnaires" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({question_id: $question_id} | format pattern "/v1/Insights/QM/Questions/{question_id}"))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({question_id: (encode-path-segment $question_id)} | format pattern "/v1/Insights/QM/Questions/{question_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -925,7 +946,7 @@ export def "insights-qm-questions delete-insights-questionnaires" [
 #
 # POST /v1/Insights/QM/Questions/{QuestionId}
 # operationId: UpdateInsightsQuestionnairesQuestion
-export def "insights-qm-questions update-insights-questionnaires" [
+export def "insights-qm-questions update-questionnaires" [
   question_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -945,21 +966,22 @@ export def "insights-qm-questions update-insights-questionnaires" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({question_id: $question_id} | format pattern "/v1/Insights/QM/Questions/{question_id}"))
-  let body = {"AllowNa": $allow_na, "AnswerSetId": $answer_set_id, "CategoryId": $category_id, "Description": $description, "Question": $question} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({question_id: (encode-path-segment $question_id)} | format pattern "/v1/Insights/QM/Questions/{question_id}"))
+  let req_body = {"AllowNa": $allow_na, "AnswerSetId": $answer_set_id, "CategoryId": $category_id, "Description": $description, "Question": $question} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # To get the Answer Set Settings for an Account
 #
 # GET /v1/Insights/QM/Settings/AnswerSets
 # operationId: FetchInsightsSettingsAnswersets
-export def "insights-qm-settings-answer-sets get-insights-settings-answersets" [
+export def "insights-qm-settings-answer-sets get-answersets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -973,10 +995,10 @@ export def "insights-qm-settings-answer-sets get-insights-settings-answersets" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Insights/QM/Settings/AnswerSets")
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -998,10 +1020,10 @@ export def "insights-qm-settings-comment-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Insights/QM/Settings/CommentTags")
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1018,7 +1040,7 @@ export def "insights-segments list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reservation-id: list # The list of reservation Ids
+  --reservation-id: list<string> # The list of reservation Ids
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
@@ -1028,10 +1050,10 @@ export def "insights-segments list" [
   let base = ($base_url | default "https://flex-api.twilio.com")
   let qp = [(serialize-qp "ReservationId" $reservation_id "multi") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Insights/Segments" $qp)
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1053,11 +1075,11 @@ export def "insights-segments get" [
 ]: nothing -> record<account_id: string, agent_id: string, agent_link: string, agent_name: string, agent_phone: string, agent_team_name: string, agent_team_name_in_hierarchy: string, assessment_percentage: any, assessment_type: any, customer_link: string, customer_name: string, customer_phone: string, date: string, external_contact: string, external_id: string, external_segment_link: string, external_segment_link_id: string, media: any, queue: string, segment_id: string, segment_recording_offset: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({segment_id: $segment_id} | format pattern "/v1/Insights/Segments/{segment_id}"))
-  let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({segment_id: (encode-path-segment $segment_id)} | format pattern "/v1/Insights/Segments/{segment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Token": $hdr_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1079,10 +1101,10 @@ export def "insights-session create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Insights/Session")
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1104,10 +1126,10 @@ export def "insights-user-roles get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Insights/UserRoles")
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1131,11 +1153,12 @@ export def "interactions create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Interactions")
-  let body = {"Channel": $channel, "Routing": $routing} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Channel": $channel, "Routing": $routing} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List all Channels for an Interaction.
@@ -1159,7 +1182,7 @@ export def "interactions-channels list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({interaction_sid: $interaction_sid} | format pattern "/v1/Interactions/{interaction_sid}/Channels") $qp)
+  let full_url = (build-url $base ({interaction_sid: (encode-path-segment $interaction_sid)} | format pattern "/v1/Interactions/{interaction_sid}/Channels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1187,7 +1210,7 @@ export def "interactions-channels-invites list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({interaction_sid: $interaction_sid, channel_sid: $channel_sid} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{channel_sid}/Invites") $qp)
+  let full_url = (build-url $base ({interaction_sid: (encode-path-segment $interaction_sid), channel_sid: (encode-path-segment $channel_sid)} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{channel_sid}/Invites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1213,12 +1236,13 @@ export def "interactions-channels-invites create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({interaction_sid: $interaction_sid, channel_sid: $channel_sid} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{channel_sid}/Invites"))
-  let body = {"Routing": $routing} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({interaction_sid: (encode-path-segment $interaction_sid), channel_sid: (encode-path-segment $channel_sid)} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{channel_sid}/Invites"))
+  let req_body = {"Routing": $routing} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List all Participants for a Channel.
@@ -1243,7 +1267,7 @@ export def "interactions-channels-participants list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({interaction_sid: $interaction_sid, channel_sid: $channel_sid} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{channel_sid}/Participants") $qp)
+  let full_url = (build-url $base ({interaction_sid: (encode-path-segment $interaction_sid), channel_sid: (encode-path-segment $channel_sid)} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{channel_sid}/Participants") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1270,12 +1294,13 @@ export def "interactions-channels-participants create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({interaction_sid: $interaction_sid, channel_sid: $channel_sid} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{channel_sid}/Participants"))
-  let body = {"MediaProperties": $media_properties, "Type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({interaction_sid: (encode-path-segment $interaction_sid), channel_sid: (encode-path-segment $channel_sid)} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{channel_sid}/Participants"))
+  let req_body = {"MediaProperties": $media_properties, "Type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Update an existing Channel Participant.
@@ -1299,12 +1324,13 @@ export def "interactions-channels-participants update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({interaction_sid: $interaction_sid, channel_sid: $channel_sid, sid: $sid} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{channel_sid}/Participants/{sid}"))
-  let body = {"Status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({interaction_sid: (encode-path-segment $interaction_sid), channel_sid: (encode-path-segment $channel_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{channel_sid}/Participants/{sid}"))
+  let req_body = {"Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetch a Channel for an Interaction.
@@ -1325,7 +1351,7 @@ export def "interactions-channels get" [
 ]: nothing -> record<error_code: int, error_message: string, interaction_sid: string, links: record, sid: string, status: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({interaction_sid: $interaction_sid, sid: $sid} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{sid}"))
+  let full_url = (build-url $base ({interaction_sid: (encode-path-segment $interaction_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1352,12 +1378,13 @@ export def "interactions-channels update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({interaction_sid: $interaction_sid, sid: $sid} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{sid}"))
-  let body = {"Routing": $routing, "Status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({interaction_sid: (encode-path-segment $interaction_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{sid}"))
+  let req_body = {"Routing": $routing, "Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Interactions/{Sid}
@@ -1376,7 +1403,7 @@ export def "interactions get" [
 ]: nothing -> record<channel: any, links: record, routing: any, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Interactions/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Interactions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1430,11 +1457,12 @@ export def "web-channels create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/WebChannels")
-  let body = {"ChatFriendlyName": $chat_friendly_name, "ChatUniqueName": $chat_unique_name, "CustomerFriendlyName": $customer_friendly_name, "FlexFlowSid": $flex_flow_sid, "Identity": $identity, "PreEngagementData": $pre_engagement_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ChatFriendlyName": $chat_friendly_name, "ChatUniqueName": $chat_unique_name, "CustomerFriendlyName": $customer_friendly_name, "FlexFlowSid": $flex_flow_sid, "Identity": $identity, "PreEngagementData": $pre_engagement_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/WebChannels/{Sid}
@@ -1453,7 +1481,7 @@ export def "web-channels delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/WebChannels/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/WebChannels/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1475,7 +1503,7 @@ export def "web-channels get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, flex_flow_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/WebChannels/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/WebChannels/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1500,10 +1528,11 @@ export def "web-channels update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/WebChannels/{sid}"))
-  let body = {"ChatStatus": $chat_status, "PostEngagementData": $post_engagement_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/WebChannels/{sid}"))
+  let req_body = {"ChatStatus": $chat_status, "PostEngagementData": $post_engagement_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }

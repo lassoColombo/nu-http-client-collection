@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://preview.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def status-completer [] { ["canceled" "failed" "opened" "signed" "signing"] }
@@ -146,11 +156,12 @@ export def "deployed-devices-fleets create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let full_url = (build-url $base "/DeployedDevices/Fleets")
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Certificate credentials belonging to the Fleet.
@@ -175,7 +186,7 @@ export def "deployed-devices-fleets-certificates list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "DeviceSid" $device_sid "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Certificates") $qp)
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Certificates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -202,12 +213,13 @@ export def "deployed-devices-fleets-certificates create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Certificates"))
-  let body = {"CertificateData": $certificate_data, "DeviceSid": $device_sid, "FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Certificates"))
+  let req_body = {"CertificateData": $certificate_data, "DeviceSid": $device_sid, "FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Unregister a specific Certificate credential from the Fleet, effectively disallowing any inbound client connections that are presenting it.
@@ -228,7 +240,7 @@ export def "deployed-devices-fleets-certificates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid, sid: $sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Certificates/{sid}"))
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid), sid: (encode-path-segment $sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Certificates/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -252,7 +264,7 @@ export def "deployed-devices-fleets-certificates get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, device_sid: string, fleet_sid: string, friendly_name: string, sid: string, thumbprint: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid, sid: $sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Certificates/{sid}"))
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid), sid: (encode-path-segment $sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Certificates/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -279,12 +291,13 @@ export def "deployed-devices-fleets-certificates update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid, sid: $sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Certificates/{sid}"))
-  let body = {"DeviceSid": $device_sid, "FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid), sid: (encode-path-segment $sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Certificates/{sid}"))
+  let req_body = {"DeviceSid": $device_sid, "FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Deployments belonging to the Fleet.
@@ -308,7 +321,7 @@ export def "deployed-devices-fleets-deployments list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Deployments") $qp)
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -334,12 +347,13 @@ export def "deployed-devices-fleets-deployments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Deployments"))
-  let body = {"FriendlyName": $friendly_name, "SyncServiceSid": $sync_service_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Deployments"))
+  let req_body = {"FriendlyName": $friendly_name, "SyncServiceSid": $sync_service_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific Deployment from the Fleet, leaving associated devices effectively undeployed.
@@ -360,7 +374,7 @@ export def "deployed-devices-fleets-deployments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid, sid: $sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Deployments/{sid}"))
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid), sid: (encode-path-segment $sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Deployments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -384,7 +398,7 @@ export def "deployed-devices-fleets-deployments get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, fleet_sid: string, friendly_name: string, sid: string, sync_service_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid, sid: $sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Deployments/{sid}"))
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid), sid: (encode-path-segment $sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Deployments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -411,12 +425,13 @@ export def "deployed-devices-fleets-deployments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid, sid: $sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Deployments/{sid}"))
-  let body = {"FriendlyName": $friendly_name, "SyncServiceSid": $sync_service_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid), sid: (encode-path-segment $sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Deployments/{sid}"))
+  let req_body = {"FriendlyName": $friendly_name, "SyncServiceSid": $sync_service_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Devices belonging to the Fleet.
@@ -441,7 +456,7 @@ export def "deployed-devices-fleets-devices list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "DeploymentSid" $deployment_sid "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Devices") $qp)
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Devices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -470,12 +485,13 @@ export def "deployed-devices-fleets-devices create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Devices"))
-  let body = {"DeploymentSid": $deployment_sid, "Enabled": $enabled, "FriendlyName": $friendly_name, "Identity": $identity, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Devices"))
+  let req_body = {"DeploymentSid": $deployment_sid, "Enabled": $enabled, "FriendlyName": $friendly_name, "Identity": $identity, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific Device from the Fleet, also removing it from associated Deployments.
@@ -496,7 +512,7 @@ export def "deployed-devices-fleets-devices delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid, sid: $sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Devices/{sid}"))
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid), sid: (encode-path-segment $sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Devices/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -520,7 +536,7 @@ export def "deployed-devices-fleets-devices get" [
 ]: nothing -> record<account_sid: string, date_authenticated: string, date_created: string, date_updated: string, deployment_sid: string, enabled: bool, fleet_sid: string, friendly_name: string, identity: string, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid, sid: $sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Devices/{sid}"))
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid), sid: (encode-path-segment $sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Devices/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -549,12 +565,13 @@ export def "deployed-devices-fleets-devices update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid, sid: $sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Devices/{sid}"))
-  let body = {"DeploymentSid": $deployment_sid, "Enabled": $enabled, "FriendlyName": $friendly_name, "Identity": $identity} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid), sid: (encode-path-segment $sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Devices/{sid}"))
+  let req_body = {"DeploymentSid": $deployment_sid, "Enabled": $enabled, "FriendlyName": $friendly_name, "Identity": $identity} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Keys credentials belonging to the Fleet.
@@ -579,7 +596,7 @@ export def "deployed-devices-fleets-keys list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "DeviceSid" $device_sid "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Keys") $qp)
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Keys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -605,12 +622,13 @@ export def "deployed-devices-fleets-keys create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Keys"))
-  let body = {"DeviceSid": $device_sid, "FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Keys"))
+  let req_body = {"DeviceSid": $device_sid, "FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific Key credential from the Fleet, effectively disallowing any inbound client connections that are presenting it.
@@ -631,7 +649,7 @@ export def "deployed-devices-fleets-keys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid, sid: $sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Keys/{sid}"))
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid), sid: (encode-path-segment $sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Keys/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -655,7 +673,7 @@ export def "deployed-devices-fleets-keys get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, device_sid: string, fleet_sid: string, friendly_name: string, secret: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid, sid: $sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Keys/{sid}"))
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid), sid: (encode-path-segment $sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Keys/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -682,12 +700,13 @@ export def "deployed-devices-fleets-keys update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({fleet_sid: $fleet_sid, sid: $sid} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Keys/{sid}"))
-  let body = {"DeviceSid": $device_sid, "FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({fleet_sid: (encode-path-segment $fleet_sid), sid: (encode-path-segment $sid)} | format pattern "/DeployedDevices/Fleets/{fleet_sid}/Keys/{sid}"))
+  let req_body = {"DeviceSid": $device_sid, "FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific Fleet from your account, also destroys all nested resources: Devices, Deployments, Certificates, Keys.
@@ -707,7 +726,7 @@ export def "deployed-devices-fleets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/DeployedDevices/Fleets/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/DeployedDevices/Fleets/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -730,7 +749,7 @@ export def "deployed-devices-fleets get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, default_deployment_sid: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/DeployedDevices/Fleets/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/DeployedDevices/Fleets/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -756,12 +775,13 @@ export def "deployed-devices-fleets update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/DeployedDevices/Fleets/{sid}"))
-  let body = {"DefaultDeploymentSid": $default_deployment_sid, "FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/DeployedDevices/Fleets/{sid}"))
+  let req_body = {"DefaultDeploymentSid": $default_deployment_sid, "FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of AuthorizationDocuments belonging to the account initiating the request.
@@ -806,21 +826,22 @@ export def "hosted-numbers-authorization-documents create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   address_sid: string # A 34 character string that uniquely identifies the Address resource that is associated with this AuthorizationDocument.
-  --cc-emails: list # Email recipients who will be informed when an Authorization Document has been sent and signed.
+  --cc-emails: list<string> # Email recipients who will be informed when an Authorization Document has been sent and signed.
   contact_phone_number: string # The contact phone number of the person authorized to sign the Authorization Document.
   contact_title: string # The title of the person authorized to sign the Authorization Document for this phone number.
   email: string # Email that this AuthorizationDocument will be sent to for signing.
-  hosted_number_order_sids: list # A list of HostedNumberOrder sids that this AuthorizationDocument will authorize for hosting phone number capabilities on Twilio's platform.
+  hosted_number_order_sids: list<string> # A list of HostedNumberOrder sids that this AuthorizationDocument will authorize for hosting phone number capabilities on Twilio's platform.
 ]: any -> record<address_sid: string, cc_emails: list<string>, date_created: string, date_updated: string, email: string, links: record, sid: string, status: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let full_url = (build-url $base "/HostedNumbers/AuthorizationDocuments")
-  let body = {"AddressSid": $address_sid, "CcEmails": $cc_emails, "ContactPhoneNumber": $contact_phone_number, "ContactTitle": $contact_title, "Email": $email, "HostedNumberOrderSids": $hosted_number_order_sids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AddressSid": $address_sid, "CcEmails": $cc_emails, "ContactPhoneNumber": $contact_phone_number, "ContactTitle": $contact_title, "Email": $email, "HostedNumberOrderSids": $hosted_number_order_sids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetch a specific AuthorizationDocument.
@@ -840,7 +861,7 @@ export def "hosted-numbers-authorization-documents get" [
 ]: nothing -> record<address_sid: string, cc_emails: list<string>, date_created: string, date_updated: string, email: string, links: record, sid: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/HostedNumbers/AuthorizationDocuments/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/HostedNumbers/AuthorizationDocuments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -861,22 +882,23 @@ export def "hosted-numbers-authorization-documents update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --address-sid: string # A 34 character string that uniquely identifies the Address resource that is associated with this AuthorizationDocument.
-  --cc-emails: list # Email recipients who will be informed when an Authorization Document has been sent and signed
+  --cc-emails: list<string> # Email recipients who will be informed when an Authorization Document has been sent and signed
   --contact-phone-number: string # The contact phone number of the person authorized to sign the Authorization Document.
   --contact-title: string # The title of the person authorized to sign the Authorization Document for this phone number.
   --email: string # Email that this AuthorizationDocument will be sent to for signing.
-  --hosted-number-order-sids: list # A list of HostedNumberOrder sids that this AuthorizationDocument will authorize for hosting phone number capabilities on Twilio's platform.
+  --hosted-number-order-sids: list<string> # A list of HostedNumberOrder sids that this AuthorizationDocument will authorize for hosting phone number capabilities on Twilio's platform.
   --status: string@status-completer
 ]: any -> record<address_sid: string, cc_emails: list<string>, date_created: string, date_updated: string, email: string, links: record, sid: string, status: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/HostedNumbers/AuthorizationDocuments/{sid}"))
-  let body = {"AddressSid": $address_sid, "CcEmails": $cc_emails, "ContactPhoneNumber": $contact_phone_number, "ContactTitle": $contact_title, "Email": $email, "HostedNumberOrderSids": $hosted_number_order_sids, "Status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/HostedNumbers/AuthorizationDocuments/{sid}"))
+  let req_body = {"AddressSid": $address_sid, "CcEmails": $cc_emails, "ContactPhoneNumber": $contact_phone_number, "ContactTitle": $contact_title, "Email": $email, "HostedNumberOrderSids": $hosted_number_order_sids, "Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of dependent HostedNumberOrders belonging to the AuthorizationDocument.
@@ -905,7 +927,7 @@ export def "hosted-numbers-authorization-documents-dependent-hosted-number-order
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "Status" $status "scalar") (serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "IncomingPhoneNumberSid" $incoming_phone_number_sid "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "UniqueName" $unique_name "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({signing_document_sid: $signing_document_sid} | format pattern "/HostedNumbers/AuthorizationDocuments/{signing_document_sid}/DependentHostedNumberOrders") $qp)
+  let full_url = (build-url $base ({signing_document_sid: (encode-path-segment $signing_document_sid)} | format pattern "/HostedNumbers/AuthorizationDocuments/{signing_document_sid}/DependentHostedNumberOrders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -957,7 +979,7 @@ export def "hosted-numbers-hosted-number-orders create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-sid: string # This defaults to the AccountSid of the authorization the user is using. This can be provided to specify a subaccount to add the HostedNumberOrder to.
   --address-sid: string # Optional. A 34 character string that uniquely identifies the Address resource that represents the address of the owner of this phone number.
-  --cc-emails: list # Optional. A list of emails that the LOA document for this HostedNumberOrder will be carbon copied to.
+  --cc-emails: list<string> # Optional. A list of emails that the LOA document for this HostedNumberOrder will be carbon copied to.
   --email: string # Optional. Email of the owner of this phone number that is being hosted.
   --friendly-name: string # A 64 character string that is a human readable text that describes this resource.
   phone_number: string # The number to host in [+E.164](https://en.wikipedia.org/wiki/E.164) format (format: phone-number)
@@ -965,7 +987,7 @@ export def "hosted-numbers-hosted-number-orders create" [
   --sms-capability: oneof<nothing, bool> # Used to specify that the SMS capability will be hosted on Twilio's platform.
   --sms-fallback-method: string@sms-fallback-method-completer # The HTTP method that should be used to request the SmsFallbackUrl. Must be either `GET` or `POST`. This will be copied onto the IncomingPhoneNumber resource. (format: http-method)
   --sms-fallback-url: string # A URL that Twilio will request if an error occurs requesting or executing the TwiML defined by SmsUrl. This will be copied onto the IncomingPhoneNumber resource. (format: uri)
-  --sms-method: string@sms-method-completer # The HTTP method that should be used to request the SmsUrl. Must be either `GET` or `POST`.  This will be copied onto the IncomingPhoneNumber resource. (format: http-method)
+  --sms-method: string@sms-method-completer # The HTTP method that should be used to request the SmsUrl. Must be either `GET` or `POST`. This will be copied onto the IncomingPhoneNumber resource. (format: http-method)
   --sms-url: string # The URL that Twilio should request when somebody sends an SMS to the phone number. This will be copied onto the IncomingPhoneNumber resource. (format: uri)
   --status-callback-method: string@status-callback-method-completer # Optional. The Status Callback Method attached to the IncomingPhoneNumber resource. (format: http-method)
   --status-callback-url: string # Optional. The Status Callback URL attached to the IncomingPhoneNumber resource. (format: uri)
@@ -977,11 +999,12 @@ export def "hosted-numbers-hosted-number-orders create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let full_url = (build-url $base "/HostedNumbers/HostedNumberOrders")
-  let body = {"AccountSid": $account_sid, "AddressSid": $address_sid, "CcEmails": $cc_emails, "Email": $email, "FriendlyName": $friendly_name, "PhoneNumber": $phone_number, "SmsApplicationSid": $sms_application_sid, "SmsCapability": $sms_capability, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallbackMethod": $status_callback_method, "StatusCallbackUrl": $status_callback_url, "UniqueName": $unique_name, "VerificationDocumentSid": $verification_document_sid, "VerificationType": $verification_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AccountSid": $account_sid, "AddressSid": $address_sid, "CcEmails": $cc_emails, "Email": $email, "FriendlyName": $friendly_name, "PhoneNumber": $phone_number, "SmsApplicationSid": $sms_application_sid, "SmsCapability": $sms_capability, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallbackMethod": $status_callback_method, "StatusCallbackUrl": $status_callback_url, "UniqueName": $unique_name, "VerificationDocumentSid": $verification_document_sid, "VerificationType": $verification_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Cancel the HostedNumberOrder (only available when the status is in `received`).
@@ -1001,7 +1024,7 @@ export def "hosted-numbers-hosted-number-orders delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/HostedNumbers/HostedNumberOrders/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/HostedNumbers/HostedNumberOrders/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1024,7 +1047,7 @@ export def "hosted-numbers-hosted-number-orders get" [
 ]: nothing -> record<account_sid: string, address_sid: string, call_delay: int, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, cc_emails: list<string>, date_created: string, date_updated: string, email: string, extension: string, failure_reason: string, friendly_name: string, incoming_phone_number_sid: string, phone_number: string, sid: string, signing_document_sid: string, status: string, unique_name: string, url: string, verification_attempts: int, verification_call_sids: list<string>, verification_code: string, verification_document_sid: string, verification_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/HostedNumbers/HostedNumberOrders/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/HostedNumbers/HostedNumberOrders/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1045,7 +1068,7 @@ export def "hosted-numbers-hosted-number-orders update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --call-delay: int # The number of seconds, between 0 and 60, to delay before initiating the verification call. Defaults to 0.
-  --cc-emails: list # Optional. A list of emails that LOA document for this HostedNumberOrder will be carbon copied to.
+  --cc-emails: list<string> # Optional. A list of emails that LOA document for this HostedNumberOrder will be carbon copied to.
   --email: string # Email of the owner of this phone number that is being hosted.
   --extension: string # Digits to dial after connecting the verification call.
   --friendly-name: string # A 64 character string that is a human readable text that describes this resource.
@@ -1058,12 +1081,13 @@ export def "hosted-numbers-hosted-number-orders update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/HostedNumbers/HostedNumberOrders/{sid}"))
-  let body = {"CallDelay": $call_delay, "CcEmails": $cc_emails, "Email": $email, "Extension": $extension, "FriendlyName": $friendly_name, "Status": $status, "UniqueName": $unique_name, "VerificationCode": $verification_code, "VerificationDocumentSid": $verification_document_sid, "VerificationType": $verification_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/HostedNumbers/HostedNumberOrders/{sid}"))
+  let req_body = {"CallDelay": $call_delay, "CcEmails": $cc_emails, "Email": $email, "Extension": $extension, "FriendlyName": $friendly_name, "Status": $status, "UniqueName": $unique_name, "VerificationCode": $verification_code, "VerificationDocumentSid": $verification_document_sid, "VerificationType": $verification_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /Sync/Services
@@ -1112,11 +1136,12 @@ export def "sync-services create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let full_url = (build-url $base "/Sync/Services")
-  let body = {"AclEnabled": $acl_enabled, "FriendlyName": $friendly_name, "ReachabilityWebhooksEnabled": $reachability_webhooks_enabled, "WebhookUrl": $webhook_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AclEnabled": $acl_enabled, "FriendlyName": $friendly_name, "ReachabilityWebhooksEnabled": $reachability_webhooks_enabled, "WebhookUrl": $webhook_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /Sync/Services/{ServiceSid}/Documents
@@ -1139,7 +1164,7 @@ export def "sync-services-documents list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/Sync/Services/{service_sid}/Documents") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/Sync/Services/{service_sid}/Documents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1164,12 +1189,13 @@ export def "sync-services-documents create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/Sync/Services/{service_sid}/Documents"))
-  let body = {"Data": $data, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/Sync/Services/{service_sid}/Documents"))
+  let req_body = {"Data": $data, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Permissions applying to a Sync Document.
@@ -1194,7 +1220,7 @@ export def "sync-services-documents-permissions list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid, document_sid: $document_sid} | format pattern "/Sync/Services/{service_sid}/Documents/{document_sid}/Permissions") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), document_sid: (encode-path-segment $document_sid)} | format pattern "/Sync/Services/{service_sid}/Documents/{document_sid}/Permissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1219,7 +1245,7 @@ export def "sync-services-documents-permissions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, document_sid: $document_sid, identity: $identity} | format pattern "/Sync/Services/{service_sid}/Documents/{document_sid}/Permissions/{identity}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), document_sid: (encode-path-segment $document_sid), identity: (encode-path-segment $identity)} | format pattern "/Sync/Services/{service_sid}/Documents/{document_sid}/Permissions/{identity}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1244,7 +1270,7 @@ export def "sync-services-documents-permissions get" [
 ]: nothing -> record<account_sid: string, document_sid: string, identity: string, manage: bool, read: bool, service_sid: string, url: string, write: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, document_sid: $document_sid, identity: $identity} | format pattern "/Sync/Services/{service_sid}/Documents/{document_sid}/Permissions/{identity}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), document_sid: (encode-path-segment $document_sid), identity: (encode-path-segment $identity)} | format pattern "/Sync/Services/{service_sid}/Documents/{document_sid}/Permissions/{identity}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1273,12 +1299,13 @@ export def "sync-services-documents-permissions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, document_sid: $document_sid, identity: $identity} | format pattern "/Sync/Services/{service_sid}/Documents/{document_sid}/Permissions/{identity}"))
-  let body = {"Manage": $manage, "Read": $read, "Write": $write} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), document_sid: (encode-path-segment $document_sid), identity: (encode-path-segment $identity)} | format pattern "/Sync/Services/{service_sid}/Documents/{document_sid}/Permissions/{identity}"))
+  let req_body = {"Manage": $manage, "Read": $read, "Write": $write} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /Sync/Services/{ServiceSid}/Documents/{Sid}
@@ -1298,7 +1325,7 @@ export def "sync-services-documents delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/Sync/Services/{service_sid}/Documents/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/Sync/Services/{service_sid}/Documents/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1321,7 +1348,7 @@ export def "sync-services-documents get" [
 ]: nothing -> record<account_sid: string, created_by: string, data: any, date_created: string, date_updated: string, links: record, revision: string, service_sid: string, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/Sync/Services/{service_sid}/Documents/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/Sync/Services/{service_sid}/Documents/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1347,14 +1374,15 @@ export def "sync-services-documents update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/Sync/Services/{service_sid}/Documents/{sid}"))
-  let body = {"Data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/Sync/Services/{service_sid}/Documents/{sid}"))
+  let req_body = {"Data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /Sync/Services/{ServiceSid}/Lists
@@ -1377,7 +1405,7 @@ export def "sync-services-lists list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/Sync/Services/{service_sid}/Lists") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/Sync/Services/{service_sid}/Lists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1401,12 +1429,13 @@ export def "sync-services-lists create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/Sync/Services/{service_sid}/Lists"))
-  let body = {"UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/Sync/Services/{service_sid}/Lists"))
+  let req_body = {"UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /Sync/Services/{ServiceSid}/Lists/{ListSid}/Items
@@ -1433,7 +1462,7 @@ export def "sync-services-lists-items list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "Order" $order "scalar") (serialize-qp "From" $qp_from "scalar") (serialize-qp "Bounds" $bounds "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid, list_sid: $list_sid} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Items") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), list_sid: (encode-path-segment $list_sid)} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1458,12 +1487,13 @@ export def "sync-services-lists-items create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, list_sid: $list_sid} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Items"))
-  let body = {"Data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), list_sid: (encode-path-segment $list_sid)} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Items"))
+  let req_body = {"Data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /Sync/Services/{ServiceSid}/Lists/{ListSid}/Items/{Index}
@@ -1485,11 +1515,11 @@ export def "sync-services-lists-items delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, list_sid: $list_sid, index: $index} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Items/{index}"))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), list_sid: (encode-path-segment $list_sid), index: (encode-path-segment $index)} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Items/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1511,7 +1541,7 @@ export def "sync-services-lists-items get" [
 ]: nothing -> record<account_sid: string, created_by: string, data: any, date_created: string, date_updated: string, index: int, list_sid: string, revision: string, service_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, list_sid: $list_sid, index: $index} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Items/{index}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), list_sid: (encode-path-segment $list_sid), index: (encode-path-segment $index)} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Items/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1538,14 +1568,15 @@ export def "sync-services-lists-items update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, list_sid: $list_sid, index: $index} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Items/{index}"))
-  let body = {"Data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), list_sid: (encode-path-segment $list_sid), index: (encode-path-segment $index)} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Items/{index}"))
+  let req_body = {"Data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Permissions applying to a Sync List.
@@ -1570,7 +1601,7 @@ export def "sync-services-lists-permissions list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid, list_sid: $list_sid} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Permissions") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), list_sid: (encode-path-segment $list_sid)} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Permissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1595,7 +1626,7 @@ export def "sync-services-lists-permissions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, list_sid: $list_sid, identity: $identity} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Permissions/{identity}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), list_sid: (encode-path-segment $list_sid), identity: (encode-path-segment $identity)} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Permissions/{identity}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1620,7 +1651,7 @@ export def "sync-services-lists-permissions get" [
 ]: nothing -> record<account_sid: string, identity: string, list_sid: string, manage: bool, read: bool, service_sid: string, url: string, write: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, list_sid: $list_sid, identity: $identity} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Permissions/{identity}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), list_sid: (encode-path-segment $list_sid), identity: (encode-path-segment $identity)} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Permissions/{identity}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1649,12 +1680,13 @@ export def "sync-services-lists-permissions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, list_sid: $list_sid, identity: $identity} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Permissions/{identity}"))
-  let body = {"Manage": $manage, "Read": $read, "Write": $write} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), list_sid: (encode-path-segment $list_sid), identity: (encode-path-segment $identity)} | format pattern "/Sync/Services/{service_sid}/Lists/{list_sid}/Permissions/{identity}"))
+  let req_body = {"Manage": $manage, "Read": $read, "Write": $write} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /Sync/Services/{ServiceSid}/Lists/{Sid}
@@ -1674,7 +1706,7 @@ export def "sync-services-lists delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/Sync/Services/{service_sid}/Lists/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/Sync/Services/{service_sid}/Lists/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1697,7 +1729,7 @@ export def "sync-services-lists get" [
 ]: nothing -> record<account_sid: string, created_by: string, date_created: string, date_updated: string, links: record, revision: string, service_sid: string, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/Sync/Services/{service_sid}/Lists/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/Sync/Services/{service_sid}/Lists/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1723,7 +1755,7 @@ export def "sync-services-maps list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/Sync/Services/{service_sid}/Maps") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/Sync/Services/{service_sid}/Maps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1747,12 +1779,13 @@ export def "sync-services-maps create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/Sync/Services/{service_sid}/Maps"))
-  let body = {"UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/Sync/Services/{service_sid}/Maps"))
+  let req_body = {"UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /Sync/Services/{ServiceSid}/Maps/{MapSid}/Items
@@ -1779,7 +1812,7 @@ export def "sync-services-maps-items list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "Order" $order "scalar") (serialize-qp "From" $qp_from "scalar") (serialize-qp "Bounds" $bounds "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid, map_sid: $map_sid} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Items") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), map_sid: (encode-path-segment $map_sid)} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1805,12 +1838,13 @@ export def "sync-services-maps-items create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, map_sid: $map_sid} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Items"))
-  let body = {"Data": $data, "Key": $key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), map_sid: (encode-path-segment $map_sid)} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Items"))
+  let req_body = {"Data": $data, "Key": $key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /Sync/Services/{ServiceSid}/Maps/{MapSid}/Items/{Key}
@@ -1832,11 +1866,11 @@ export def "sync-services-maps-items delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, map_sid: $map_sid, key: $key} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Items/{key}"))
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), map_sid: (encode-path-segment $map_sid), key: (encode-path-segment $key)} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Items/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1858,7 +1892,7 @@ export def "sync-services-maps-items get" [
 ]: nothing -> record<account_sid: string, created_by: string, data: any, date_created: string, date_updated: string, key: string, map_sid: string, revision: string, service_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, map_sid: $map_sid, key: $key} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Items/{key}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), map_sid: (encode-path-segment $map_sid), key: (encode-path-segment $key)} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Items/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1885,14 +1919,15 @@ export def "sync-services-maps-items update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, map_sid: $map_sid, key: $key} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Items/{key}"))
-  let body = {"Data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), map_sid: (encode-path-segment $map_sid), key: (encode-path-segment $key)} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Items/{key}"))
+  let req_body = {"Data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Permissions applying to a Sync Map.
@@ -1917,7 +1952,7 @@ export def "sync-services-maps-permissions list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid, map_sid: $map_sid} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Permissions") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), map_sid: (encode-path-segment $map_sid)} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Permissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1942,7 +1977,7 @@ export def "sync-services-maps-permissions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, map_sid: $map_sid, identity: $identity} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Permissions/{identity}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), map_sid: (encode-path-segment $map_sid), identity: (encode-path-segment $identity)} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Permissions/{identity}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1967,7 +2002,7 @@ export def "sync-services-maps-permissions get" [
 ]: nothing -> record<account_sid: string, identity: string, manage: bool, map_sid: string, read: bool, service_sid: string, url: string, write: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, map_sid: $map_sid, identity: $identity} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Permissions/{identity}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), map_sid: (encode-path-segment $map_sid), identity: (encode-path-segment $identity)} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Permissions/{identity}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1996,12 +2031,13 @@ export def "sync-services-maps-permissions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, map_sid: $map_sid, identity: $identity} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Permissions/{identity}"))
-  let body = {"Manage": $manage, "Read": $read, "Write": $write} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), map_sid: (encode-path-segment $map_sid), identity: (encode-path-segment $identity)} | format pattern "/Sync/Services/{service_sid}/Maps/{map_sid}/Permissions/{identity}"))
+  let req_body = {"Manage": $manage, "Read": $read, "Write": $write} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /Sync/Services/{ServiceSid}/Maps/{Sid}
@@ -2021,7 +2057,7 @@ export def "sync-services-maps delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/Sync/Services/{service_sid}/Maps/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/Sync/Services/{service_sid}/Maps/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2044,7 +2080,7 @@ export def "sync-services-maps get" [
 ]: nothing -> record<account_sid: string, created_by: string, date_created: string, date_updated: string, links: record, revision: string, service_sid: string, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/Sync/Services/{service_sid}/Maps/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/Sync/Services/{service_sid}/Maps/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2066,7 +2102,7 @@ export def "sync-services delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/Sync/Services/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/Sync/Services/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2088,7 +2124,7 @@ export def "sync-services get" [
 ]: nothing -> record<account_sid: string, acl_enabled: bool, date_created: string, date_updated: string, friendly_name: string, links: record, reachability_webhooks_enabled: bool, sid: string, url: string, webhook_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/Sync/Services/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/Sync/Services/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2115,12 +2151,13 @@ export def "sync-services update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/Sync/Services/{sid}"))
-  let body = {"AclEnabled": $acl_enabled, "FriendlyName": $friendly_name, "ReachabilityWebhooksEnabled": $reachability_webhooks_enabled, "WebhookUrl": $webhook_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/Sync/Services/{sid}"))
+  let req_body = {"AclEnabled": $acl_enabled, "FriendlyName": $friendly_name, "ReachabilityWebhooksEnabled": $reachability_webhooks_enabled, "WebhookUrl": $webhook_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of Add-ons currently available to be installed.
@@ -2170,7 +2207,7 @@ export def "marketplace-available-add-ons-extensions list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({available_add_on_sid: $available_add_on_sid} | format pattern "/marketplace/AvailableAddOns/{available_add_on_sid}/Extensions") $qp)
+  let full_url = (build-url $base ({available_add_on_sid: (encode-path-segment $available_add_on_sid)} | format pattern "/marketplace/AvailableAddOns/{available_add_on_sid}/Extensions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2194,7 +2231,7 @@ export def "marketplace-available-add-ons-extensions get" [
 ]: nothing -> record<available_add_on_sid: string, friendly_name: string, product_name: string, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({available_add_on_sid: $available_add_on_sid, sid: $sid} | format pattern "/marketplace/AvailableAddOns/{available_add_on_sid}/Extensions/{sid}"))
+  let full_url = (build-url $base ({available_add_on_sid: (encode-path-segment $available_add_on_sid), sid: (encode-path-segment $sid)} | format pattern "/marketplace/AvailableAddOns/{available_add_on_sid}/Extensions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2217,7 +2254,7 @@ export def "marketplace-available-add-ons get" [
 ]: nothing -> record<configuration_schema: any, description: string, friendly_name: string, links: record, pricing_type: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/marketplace/AvailableAddOns/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/marketplace/AvailableAddOns/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2271,11 +2308,12 @@ export def "marketplace-installed-add-ons create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let full_url = (build-url $base "/marketplace/InstalledAddOns")
-  let body = {"AcceptTermsOfService": $accept_terms_of_service, "AvailableAddOnSid": $available_add_on_sid, "Configuration": $configuration, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AcceptTermsOfService": $accept_terms_of_service, "AvailableAddOnSid": $available_add_on_sid, "Configuration": $configuration, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of Extensions for the Installed Add-on.
@@ -2299,7 +2337,7 @@ export def "marketplace-installed-add-ons-extensions list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({installed_add_on_sid: $installed_add_on_sid} | format pattern "/marketplace/InstalledAddOns/{installed_add_on_sid}/Extensions") $qp)
+  let full_url = (build-url $base ({installed_add_on_sid: (encode-path-segment $installed_add_on_sid)} | format pattern "/marketplace/InstalledAddOns/{installed_add_on_sid}/Extensions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2323,7 +2361,7 @@ export def "marketplace-installed-add-ons-extensions get" [
 ]: nothing -> record<enabled: bool, friendly_name: string, installed_add_on_sid: string, product_name: string, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({installed_add_on_sid: $installed_add_on_sid, sid: $sid} | format pattern "/marketplace/InstalledAddOns/{installed_add_on_sid}/Extensions/{sid}"))
+  let full_url = (build-url $base ({installed_add_on_sid: (encode-path-segment $installed_add_on_sid), sid: (encode-path-segment $sid)} | format pattern "/marketplace/InstalledAddOns/{installed_add_on_sid}/Extensions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2349,12 +2387,13 @@ export def "marketplace-installed-add-ons-extensions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({installed_add_on_sid: $installed_add_on_sid, sid: $sid} | format pattern "/marketplace/InstalledAddOns/{installed_add_on_sid}/Extensions/{sid}"))
-  let body = {"Enabled": $enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({installed_add_on_sid: (encode-path-segment $installed_add_on_sid), sid: (encode-path-segment $sid)} | format pattern "/marketplace/InstalledAddOns/{installed_add_on_sid}/Extensions/{sid}"))
+  let req_body = {"Enabled": $enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Remove an Add-on installation from your account
@@ -2374,7 +2413,7 @@ export def "marketplace-installed-add-ons delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/marketplace/InstalledAddOns/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/marketplace/InstalledAddOns/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2397,7 +2436,7 @@ export def "marketplace-installed-add-ons get" [
 ]: nothing -> record<account_sid: string, configuration: any, date_created: string, date_updated: string, description: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/marketplace/InstalledAddOns/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/marketplace/InstalledAddOns/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2423,12 +2462,13 @@ export def "marketplace-installed-add-ons update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/marketplace/InstalledAddOns/{sid}"))
-  let body = {"Configuration": $configuration, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/marketplace/InstalledAddOns/{sid}"))
+  let req_body = {"Configuration": $configuration, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /understand/Assistants
@@ -2481,11 +2521,12 @@ export def "understand-assistants create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let full_url = (build-url $base "/understand/Assistants")
-  let body = {"CallbackEvents": $callback_events, "CallbackUrl": $callback_url, "FallbackActions": $fallback_actions, "FriendlyName": $friendly_name, "InitiationActions": $initiation_actions, "LogQueries": $log_queries, "StyleSheet": $style_sheet, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CallbackEvents": $callback_events, "CallbackUrl": $callback_url, "FallbackActions": $fallback_actions, "FriendlyName": $friendly_name, "InitiationActions": $initiation_actions, "LogQueries": $log_queries, "StyleSheet": $style_sheet, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /understand/Assistants/{AssistantSid}/Dialogues/{Sid}
@@ -2505,7 +2546,7 @@ export def "understand-assistants-dialogues get" [
 ]: nothing -> record<account_sid: string, assistant_sid: string, data: any, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/Dialogues/{sid}"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/Dialogues/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2527,7 +2568,7 @@ export def "understand-assistants-fallback-actions get" [
 ]: nothing -> record<account_sid: string, assistant_sid: string, data: any, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid} | format pattern "/understand/Assistants/{assistant_sid}/FallbackActions"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/understand/Assistants/{assistant_sid}/FallbackActions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2551,12 +2592,13 @@ export def "understand-assistants-fallback-actions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid} | format pattern "/understand/Assistants/{assistant_sid}/FallbackActions"))
-  let body = {"FallbackActions": $fallback_actions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/understand/Assistants/{assistant_sid}/FallbackActions"))
+  let req_body = {"FallbackActions": $fallback_actions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /understand/Assistants/{AssistantSid}/FieldTypes
@@ -2579,7 +2621,7 @@ export def "understand-assistants-field-types list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid} | format pattern "/understand/Assistants/{assistant_sid}/FieldTypes") $qp)
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/understand/Assistants/{assistant_sid}/FieldTypes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2604,12 +2646,13 @@ export def "understand-assistants-field-types create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid} | format pattern "/understand/Assistants/{assistant_sid}/FieldTypes"))
-  let body = {"FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/understand/Assistants/{assistant_sid}/FieldTypes"))
+  let req_body = {"FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /understand/Assistants/{AssistantSid}/FieldTypes/{FieldTypeSid}/FieldValues
@@ -2634,7 +2677,7 @@ export def "understand-assistants-field-types-field-values list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "Language" $language "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, field_type_sid: $field_type_sid} | format pattern "/understand/Assistants/{assistant_sid}/FieldTypes/{field_type_sid}/FieldValues") $qp)
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), field_type_sid: (encode-path-segment $field_type_sid)} | format pattern "/understand/Assistants/{assistant_sid}/FieldTypes/{field_type_sid}/FieldValues") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2661,12 +2704,13 @@ export def "understand-assistants-field-types-field-values create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, field_type_sid: $field_type_sid} | format pattern "/understand/Assistants/{assistant_sid}/FieldTypes/{field_type_sid}/FieldValues"))
-  let body = {"Language": $language, "SynonymOf": $synonym_of, "Value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), field_type_sid: (encode-path-segment $field_type_sid)} | format pattern "/understand/Assistants/{assistant_sid}/FieldTypes/{field_type_sid}/FieldValues"))
+  let req_body = {"Language": $language, "SynonymOf": $synonym_of, "Value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /understand/Assistants/{AssistantSid}/FieldTypes/{FieldTypeSid}/FieldValues/{Sid}
@@ -2687,7 +2731,7 @@ export def "understand-assistants-field-types-field-values delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, field_type_sid: $field_type_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/FieldTypes/{field_type_sid}/FieldValues/{sid}"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), field_type_sid: (encode-path-segment $field_type_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/FieldTypes/{field_type_sid}/FieldValues/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2711,7 +2755,7 @@ export def "understand-assistants-field-types-field-values get" [
 ]: nothing -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, field_type_sid: string, language: string, sid: string, synonym_of: string, url: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, field_type_sid: $field_type_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/FieldTypes/{field_type_sid}/FieldValues/{sid}"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), field_type_sid: (encode-path-segment $field_type_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/FieldTypes/{field_type_sid}/FieldValues/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2734,7 +2778,7 @@ export def "understand-assistants-field-types delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/FieldTypes/{sid}"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/FieldTypes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2757,7 +2801,7 @@ export def "understand-assistants-field-types get" [
 ]: nothing -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/FieldTypes/{sid}"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/FieldTypes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2783,12 +2827,13 @@ export def "understand-assistants-field-types update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/FieldTypes/{sid}"))
-  let body = {"FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/FieldTypes/{sid}"))
+  let req_body = {"FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /understand/Assistants/{AssistantSid}/InitiationActions
@@ -2807,7 +2852,7 @@ export def "understand-assistants-initiation-actions get" [
 ]: nothing -> record<account_sid: string, assistant_sid: string, data: any, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid} | format pattern "/understand/Assistants/{assistant_sid}/InitiationActions"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/understand/Assistants/{assistant_sid}/InitiationActions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2831,12 +2876,13 @@ export def "understand-assistants-initiation-actions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid} | format pattern "/understand/Assistants/{assistant_sid}/InitiationActions"))
-  let body = {"InitiationActions": $initiation_actions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/understand/Assistants/{assistant_sid}/InitiationActions"))
+  let req_body = {"InitiationActions": $initiation_actions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /understand/Assistants/{AssistantSid}/ModelBuilds
@@ -2859,7 +2905,7 @@ export def "understand-assistants-model-builds list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid} | format pattern "/understand/Assistants/{assistant_sid}/ModelBuilds") $qp)
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/understand/Assistants/{assistant_sid}/ModelBuilds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2884,12 +2930,13 @@ export def "understand-assistants-model-builds create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid} | format pattern "/understand/Assistants/{assistant_sid}/ModelBuilds"))
-  let body = {"StatusCallback": $status_callback, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/understand/Assistants/{assistant_sid}/ModelBuilds"))
+  let req_body = {"StatusCallback": $status_callback, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /understand/Assistants/{AssistantSid}/ModelBuilds/{Sid}
@@ -2909,7 +2956,7 @@ export def "understand-assistants-model-builds delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/ModelBuilds/{sid}"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/ModelBuilds/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2932,7 +2979,7 @@ export def "understand-assistants-model-builds get" [
 ]: nothing -> record<account_sid: string, assistant_sid: string, build_duration: int, date_created: string, date_updated: string, error_code: int, sid: string, status: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/ModelBuilds/{sid}"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/ModelBuilds/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2957,18 +3004,19 @@ export def "understand-assistants-model-builds update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/ModelBuilds/{sid}"))
-  let body = {"UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/ModelBuilds/{sid}"))
+  let req_body = {"UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /understand/Assistants/{AssistantSid}/Queries
 #
 # operationId: ListUnderstandQuery
-export def "understand-assistants-queries list-understand-query" [
+export def "understand-assistants-queries list-list" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2988,7 +3036,7 @@ export def "understand-assistants-queries list-understand-query" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "Language" $language "scalar") (serialize-qp "ModelBuild" $model_build "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid} | format pattern "/understand/Assistants/{assistant_sid}/Queries") $qp)
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/understand/Assistants/{assistant_sid}/Queries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2997,7 +3045,7 @@ export def "understand-assistants-queries list-understand-query" [
 # POST /understand/Assistants/{AssistantSid}/Queries
 #
 # operationId: CreateUnderstandQuery
-export def "understand-assistants-queries create-understand-query" [
+export def "understand-assistants-queries create-list" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3016,18 +3064,19 @@ export def "understand-assistants-queries create-understand-query" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid} | format pattern "/understand/Assistants/{assistant_sid}/Queries"))
-  let body = {"Field": $field, "Language": $language, "ModelBuild": $model_build, "Query": $query, "Tasks": $tasks} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/understand/Assistants/{assistant_sid}/Queries"))
+  let req_body = {"Field": $field, "Language": $language, "ModelBuild": $model_build, "Query": $query, "Tasks": $tasks} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /understand/Assistants/{AssistantSid}/Queries/{Sid}
 #
 # operationId: DeleteUnderstandQuery
-export def "understand-assistants-queries delete-understand-query" [
+export def "understand-assistants-queries delete-list" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3041,7 +3090,7 @@ export def "understand-assistants-queries delete-understand-query" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/Queries/{sid}"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/Queries/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3050,7 +3099,7 @@ export def "understand-assistants-queries delete-understand-query" [
 # GET /understand/Assistants/{AssistantSid}/Queries/{Sid}
 #
 # operationId: FetchUnderstandQuery
-export def "understand-assistants-queries get-understand-query" [
+export def "understand-assistants-queries get-list" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3064,7 +3113,7 @@ export def "understand-assistants-queries get-understand-query" [
 ]: nothing -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, language: string, model_build_sid: string, query: string, results: any, sample_sid: string, sid: string, source_channel: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/Queries/{sid}"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/Queries/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3073,7 +3122,7 @@ export def "understand-assistants-queries get-understand-query" [
 # POST /understand/Assistants/{AssistantSid}/Queries/{Sid}
 #
 # operationId: UpdateUnderstandQuery
-export def "understand-assistants-queries update-understand-query" [
+export def "understand-assistants-queries update-list" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3090,12 +3139,13 @@ export def "understand-assistants-queries update-understand-query" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/Queries/{sid}"))
-  let body = {"SampleSid": $sample_sid, "Status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/Queries/{sid}"))
+  let req_body = {"SampleSid": $sample_sid, "Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Returns Style sheet JSON object for this Assistant
@@ -3115,7 +3165,7 @@ export def "understand-assistants-style-sheet get" [
 ]: nothing -> record<account_sid: string, assistant_sid: string, data: any, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid} | format pattern "/understand/Assistants/{assistant_sid}/StyleSheet"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/understand/Assistants/{assistant_sid}/StyleSheet"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3140,12 +3190,13 @@ export def "understand-assistants-style-sheet update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid} | format pattern "/understand/Assistants/{assistant_sid}/StyleSheet"))
-  let body = {"StyleSheet": $style_sheet} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/understand/Assistants/{assistant_sid}/StyleSheet"))
+  let req_body = {"StyleSheet": $style_sheet} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /understand/Assistants/{AssistantSid}/Tasks
@@ -3168,7 +3219,7 @@ export def "understand-assistants-tasks list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid} | format pattern "/understand/Assistants/{assistant_sid}/Tasks") $qp)
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/understand/Assistants/{assistant_sid}/Tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3195,12 +3246,13 @@ export def "understand-assistants-tasks create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid} | format pattern "/understand/Assistants/{assistant_sid}/Tasks"))
-  let body = {"Actions": $actions, "ActionsUrl": $actions_url, "FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/understand/Assistants/{assistant_sid}/Tasks"))
+  let req_body = {"Actions": $actions, "ActionsUrl": $actions_url, "FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /understand/Assistants/{AssistantSid}/Tasks/{Sid}
@@ -3220,7 +3272,7 @@ export def "understand-assistants-tasks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{sid}"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3243,7 +3295,7 @@ export def "understand-assistants-tasks get" [
 ]: nothing -> record<account_sid: string, actions_url: string, assistant_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{sid}"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3271,12 +3323,13 @@ export def "understand-assistants-tasks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{sid}"))
-  let body = {"Actions": $actions, "ActionsUrl": $actions_url, "FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{sid}"))
+  let req_body = {"Actions": $actions, "ActionsUrl": $actions_url, "FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Returns JSON actions for this Task.
@@ -3297,7 +3350,7 @@ export def "understand-assistants-tasks-actions get" [
 ]: nothing -> record<account_sid: string, assistant_sid: string, data: any, task_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, task_sid: $task_sid} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Actions"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Actions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3323,12 +3376,13 @@ export def "understand-assistants-tasks-actions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, task_sid: $task_sid} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Actions"))
-  let body = {"Actions": $actions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Actions"))
+  let req_body = {"Actions": $actions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /understand/Assistants/{AssistantSid}/Tasks/{TaskSid}/Fields
@@ -3352,7 +3406,7 @@ export def "understand-assistants-tasks-fields list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, task_sid: $task_sid} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Fields") $qp)
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Fields") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3378,12 +3432,13 @@ export def "understand-assistants-tasks-fields create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, task_sid: $task_sid} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Fields"))
-  let body = {"FieldType": $field_type, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Fields"))
+  let req_body = {"FieldType": $field_type, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /understand/Assistants/{AssistantSid}/Tasks/{TaskSid}/Fields/{Sid}
@@ -3404,7 +3459,7 @@ export def "understand-assistants-tasks-fields delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, task_sid: $task_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Fields/{sid}"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Fields/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3428,7 +3483,7 @@ export def "understand-assistants-tasks-fields get" [
 ]: nothing -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, field_type: string, sid: string, task_sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, task_sid: $task_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Fields/{sid}"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Fields/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3456,7 +3511,7 @@ export def "understand-assistants-tasks-samples list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "Language" $language "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, task_sid: $task_sid} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples") $qp)
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3483,12 +3538,13 @@ export def "understand-assistants-tasks-samples create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, task_sid: $task_sid} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples"))
-  let body = {"Language": $language, "SourceChannel": $source_channel, "TaggedText": $tagged_text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples"))
+  let req_body = {"Language": $language, "SourceChannel": $source_channel, "TaggedText": $tagged_text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /understand/Assistants/{AssistantSid}/Tasks/{TaskSid}/Samples/{Sid}
@@ -3509,7 +3565,7 @@ export def "understand-assistants-tasks-samples delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, task_sid: $task_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples/{sid}"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3533,7 +3589,7 @@ export def "understand-assistants-tasks-samples get" [
 ]: nothing -> record<account_sid: string, assistant_sid: string, date_created: string, date_updated: string, language: string, sid: string, source_channel: string, tagged_text: string, task_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, task_sid: $task_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples/{sid}"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3561,12 +3617,13 @@ export def "understand-assistants-tasks-samples update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, task_sid: $task_sid, sid: $sid} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples/{sid}"))
-  let body = {"Language": $language, "SourceChannel": $source_channel, "TaggedText": $tagged_text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples/{sid}"))
+  let req_body = {"Language": $language, "SourceChannel": $source_channel, "TaggedText": $tagged_text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /understand/Assistants/{AssistantSid}/Tasks/{TaskSid}/Statistics
@@ -3586,7 +3643,7 @@ export def "understand-assistants-tasks-statistics get" [
 ]: nothing -> record<account_sid: string, assistant_sid: string, fields_count: int, samples_count: int, task_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({assistant_sid: $assistant_sid, task_sid: $task_sid} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Statistics"))
+  let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/understand/Assistants/{assistant_sid}/Tasks/{task_sid}/Statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3608,7 +3665,7 @@ export def "understand-assistants delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/understand/Assistants/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3630,7 +3687,7 @@ export def "understand-assistants get" [
 ]: nothing -> record<account_sid: string, callback_events: string, callback_url: string, date_created: string, date_updated: string, friendly_name: string, latest_model_build_sid: string, links: record, log_queries: bool, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/understand/Assistants/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3661,12 +3718,13 @@ export def "understand-assistants update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/understand/Assistants/{sid}"))
-  let body = {"CallbackEvents": $callback_events, "CallbackUrl": $callback_url, "FallbackActions": $fallback_actions, "FriendlyName": $friendly_name, "InitiationActions": $initiation_actions, "LogQueries": $log_queries, "StyleSheet": $style_sheet, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/understand/Assistants/{sid}"))
+  let req_body = {"CallbackEvents": $callback_events, "CallbackUrl": $callback_url, "FallbackActions": $fallback_actions, "FriendlyName": $friendly_name, "InitiationActions": $initiation_actions, "LogQueries": $log_queries, "StyleSheet": $style_sheet, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /wireless/Commands
@@ -3722,11 +3780,12 @@ export def "wireless-commands create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let full_url = (build-url $base "/wireless/Commands")
-  let body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "Command": $command, "CommandMode": $command_mode, "Device": $device, "IncludeSid": $include_sid, "Sim": $sim} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "Command": $command, "CommandMode": $command_mode, "Device": $device, "IncludeSid": $include_sid, "Sim": $sim} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /wireless/Commands/{Sid}
@@ -3745,7 +3804,7 @@ export def "wireless-commands get" [
 ]: nothing -> record<account_sid: string, command: string, command_mode: string, date_created: string, date_updated: string, device_sid: string, direction: string, sid: string, sim_sid: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/wireless/Commands/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/wireless/Commands/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3793,7 +3852,7 @@ export def "wireless-rate-plans create" [
   --data-limit: int
   --data-metering: string
   --friendly-name: string
-  --international-roaming: list
+  --international-roaming: list<string>
   --messaging-enabled: oneof<nothing, bool>
   --national-roaming-enabled: oneof<nothing, bool>
   --unique-name: string
@@ -3803,11 +3862,12 @@ export def "wireless-rate-plans create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let full_url = (build-url $base "/wireless/RatePlans")
-  let body = {"CommandsEnabled": $commands_enabled, "DataEnabled": $data_enabled, "DataLimit": $data_limit, "DataMetering": $data_metering, "FriendlyName": $friendly_name, "InternationalRoaming": $international_roaming, "MessagingEnabled": $messaging_enabled, "NationalRoamingEnabled": $national_roaming_enabled, "UniqueName": $unique_name, "VoiceEnabled": $voice_enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CommandsEnabled": $commands_enabled, "DataEnabled": $data_enabled, "DataLimit": $data_limit, "DataMetering": $data_metering, "FriendlyName": $friendly_name, "InternationalRoaming": $international_roaming, "MessagingEnabled": $messaging_enabled, "NationalRoamingEnabled": $national_roaming_enabled, "UniqueName": $unique_name, "VoiceEnabled": $voice_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /wireless/RatePlans/{Sid}
@@ -3826,7 +3886,7 @@ export def "wireless-rate-plans delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/wireless/RatePlans/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/wireless/RatePlans/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3848,7 +3908,7 @@ export def "wireless-rate-plans get" [
 ]: nothing -> record<account_sid: string, data_enabled: bool, data_limit: int, data_metering: string, date_created: string, date_updated: string, friendly_name: string, international_roaming: list<string>, messaging_enabled: bool, national_roaming_enabled: bool, sid: string, unique_name: string, url: string, voice_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/wireless/RatePlans/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/wireless/RatePlans/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3873,12 +3933,13 @@ export def "wireless-rate-plans update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/wireless/RatePlans/{sid}"))
-  let body = {"FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/wireless/RatePlans/{sid}"))
+  let req_body = {"FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /wireless/Sims
@@ -3927,7 +3988,7 @@ export def "wireless-sims get" [
 ]: nothing -> record<account_sid: string, commands_callback_method: string, commands_callback_url: string, date_created: string, date_updated: string, e_id: string, friendly_name: string, iccid: string, links: record, rate_plan_sid: string, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, unique_name: string, url: string, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/wireless/Sims/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/wireless/Sims/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3966,12 +4027,13 @@ export def "wireless-sims update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/wireless/Sims/{sid}"))
-  let body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "CommandsCallbackMethod": $commands_callback_method, "CommandsCallbackUrl": $commands_callback_url, "FriendlyName": $friendly_name, "RatePlan": $rate_plan, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "Status": $status, "UniqueName": $unique_name, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceUrl": $voice_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/wireless/Sims/{sid}"))
+  let req_body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "CommandsCallbackMethod": $commands_callback_method, "CommandsCallbackUrl": $commands_callback_url, "FriendlyName": $friendly_name, "RatePlan": $rate_plan, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "Status": $status, "UniqueName": $unique_name, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceUrl": $voice_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /wireless/Sims/{SimSid}/Usage
@@ -3993,7 +4055,7 @@ export def "wireless-sims-usage get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://preview.twilio.com")
   let qp = [(serialize-qp "End" $end "scalar") (serialize-qp "Start" $start "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({sim_sid: $sim_sid} | format pattern "/wireless/Sims/{sim_sid}/Usage") $qp)
+  let full_url = (build-url $base ({sim_sid: (encode-path-segment $sim_sid)} | format pattern "/wireless/Sims/{sim_sid}/Usage") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

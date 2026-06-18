@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -78,7 +87,7 @@ def workload-profile-completer-1 [] { ["WORKLOAD_PROFILE_GENERIC" "WORKLOAD_PROF
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects baremetalsolutionprojectslocationsinstancesdetachLun" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects create-detach-lun" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -102,7 +111,7 @@ export def commands []: nothing -> table {
 #
 # POST /v2/{instance}:detachLun
 # operationId: baremetalsolution.projects.locations.instances.detachLun
-export def "projects baremetalsolutionprojectslocationsinstancesdetachLun" [
+export def "projects create-detach-lun" [
   instance: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -130,19 +139,19 @@ export def "projects baremetalsolutionprojectslocationsinstancesdetachLun" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({instance: $instance} | format pattern "/v2/{instance}:detachLun") $qp)
-  let body = {"lun": $lun, "skipReboot": $skip_reboot} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({instance: (encode-path-segment $instance)} | format pattern "/v2/{instance}:detachLun") $qp)
+  let req_body = {"lun": $lun, "skipReboot": $skip_reboot} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get instance provisioning settings for a given project. This is hidden method used by UI only.
 #
 # GET /v2/{location}/instanceProvisioningSettings:fetch
 # operationId: baremetalsolution.projects.locations.instanceProvisioningSettings.fetch
-export def "instance-provisioning-settings-fetch baremetalsolutionprojectslocationsinstanceProvisioningSettingsfetch" [
+export def "instance-provisioning-settings-fetch get" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -167,7 +176,7 @@ export def "instance-provisioning-settings-fetch baremetalsolutionprojectslocati
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location: $location} | format pattern "/v2/{location}/instanceProvisioningSettings:fetch") $qp)
+  let full_url = (build-url $base ({location: (encode-path-segment $location)} | format pattern "/v2/{location}/instanceProvisioningSettings:fetch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -177,7 +186,7 @@ export def "instance-provisioning-settings-fetch baremetalsolutionprojectslocati
 #
 # GET /v2/{location}/networks:listNetworkUsage
 # operationId: baremetalsolution.projects.locations.networks.listNetworkUsage
-export def "networks-list-network-usage baremetalsolutionprojectslocationsnetworkslistNetworkUsage" [
+export def "networks-list-network-usage list" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -202,7 +211,7 @@ export def "networks-list-network-usage baremetalsolutionprojectslocationsnetwor
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location: $location} | format pattern "/v2/{location}/networks:listNetworkUsage") $qp)
+  let full_url = (build-url $base ({location: (encode-path-segment $location)} | format pattern "/v2/{location}/networks:listNetworkUsage") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -212,7 +221,7 @@ export def "networks-list-network-usage baremetalsolutionprojectslocationsnetwor
 #
 # DELETE /v2/{name}
 # operationId: baremetalsolution.projects.locations.volumes.snapshots.delete
-export def "projects baremetalsolutionprojectslocationsvolumessnapshotsdelete" [
+export def "projects delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -237,7 +246,7 @@ export def "projects baremetalsolutionprojectslocationsvolumessnapshotsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -247,7 +256,7 @@ export def "projects baremetalsolutionprojectslocationsvolumessnapshotsdelete" [
 #
 # GET /v2/{name}
 # operationId: baremetalsolution.projects.locations.volumes.snapshots.get
-export def "projects baremetalsolutionprojectslocationsvolumessnapshotsget" [
+export def "projects get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -272,7 +281,7 @@ export def "projects baremetalsolutionprojectslocationsvolumessnapshotsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -283,7 +292,7 @@ export def "projects baremetalsolutionprojectslocationsvolumessnapshotsget" [
 # PATCH /v2/{name}
 # operationId: baremetalsolution.projects.locations.volumes.patch
 # --snapshotReservationDetail shape: {reservedSpaceGib?: string, reservedSpacePercent?: int, reservedSpaceRemainingGib?: string, reservedSpaceUsedPercent?: int}
-export def "projects baremetalsolutionprojectslocationsvolumespatch" [
+export def "projects update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -330,19 +339,19 @@ export def "projects baremetalsolutionprojectslocationsvolumespatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}") $qp)
-  let body = {"autoGrownSizeGib": $auto_grown_size_gib, "currentSizeGib": $current_size_gib, "emergencySizeGib": $emergency_size_gib, "id": $id, "labels": $labels, "maxSizeGib": $max_size_gib, "notes": $notes, "originallyRequestedSizeGib": $originally_requested_size_gib, "performanceTier": $performance_tier, "pod": $pod, "remainingSpaceGib": $remaining_space_gib, "requestedSizeGib": $requested_size_gib, "snapshotAutoDeleteBehavior": $snapshot_auto_delete_behavior, "snapshotEnabled": $snapshot_enabled, "snapshotReservationDetail": $snapshot_reservation_detail, "snapshotSchedulePolicy": $snapshot_schedule_policy, "state": $state, "storageAggregatePool": $storage_aggregate_pool, "storageType": $storage_type, "workloadProfile": $workload_profile} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
+  let req_body = {"autoGrownSizeGib": $auto_grown_size_gib, "currentSizeGib": $current_size_gib, "emergencySizeGib": $emergency_size_gib, "id": $id, "labels": $labels, "maxSizeGib": $max_size_gib, "notes": $notes, "originallyRequestedSizeGib": $originally_requested_size_gib, "performanceTier": $performance_tier, "pod": $pod, "remainingSpaceGib": $remaining_space_gib, "requestedSizeGib": $requested_size_gib, "snapshotAutoDeleteBehavior": $snapshot_auto_delete_behavior, "snapshotEnabled": $snapshot_enabled, "snapshotReservationDetail": $snapshot_reservation_detail, "snapshotSchedulePolicy": $snapshot_schedule_policy, "state": $state, "storageAggregatePool": $storage_aggregate_pool, "storageType": $storage_type, "workloadProfile": $workload_profile} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists information about the supported locations for this service.
 #
 # GET /v2/{name}/locations
 # operationId: baremetalsolution.projects.locations.list
-export def "locations baremetalsolutionprojectslocationslist" [
+export def "locations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -370,7 +379,7 @@ export def "locations baremetalsolutionprojectslocationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}/locations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}/locations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -380,7 +389,7 @@ export def "locations baremetalsolutionprojectslocationslist" [
 #
 # POST /v2/{name}:disableInteractiveSerialConsole
 # operationId: baremetalsolution.projects.locations.instances.disableInteractiveSerialConsole
-export def "projects baremetalsolutionprojectslocationsinstancesdisableInteractiveSerialConsole" [
+export def "projects disable-interactive-serial-console" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -407,18 +416,19 @@ export def "projects baremetalsolutionprojectslocationsinstancesdisableInteracti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:disableInteractiveSerialConsole") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:disableInteractiveSerialConsole") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Enable the interactive serial console feature on an instance.
 #
 # POST /v2/{name}:enableInteractiveSerialConsole
 # operationId: baremetalsolution.projects.locations.instances.enableInteractiveSerialConsole
-export def "projects baremetalsolutionprojectslocationsinstancesenableInteractiveSerialConsole" [
+export def "projects enable-interactive-serial-console" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -445,18 +455,19 @@ export def "projects baremetalsolutionprojectslocationsinstancesenableInteractiv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:enableInteractiveSerialConsole") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:enableInteractiveSerialConsole") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Skips lun's cooloff and deletes it now. Lun must be in cooloff state.
 #
 # POST /v2/{name}:evict
 # operationId: baremetalsolution.projects.locations.volumes.luns.evict
-export def "projects baremetalsolutionprojectslocationsvolumeslunsevict" [
+export def "projects create-evict" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -483,18 +494,19 @@ export def "projects baremetalsolutionprojectslocationsvolumeslunsevict" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:evict") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:evict") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # RenameVolume sets a new name for a volume. Use with caution, previous names become immediately invalidated.
 #
 # POST /v2/{name}:rename
 # operationId: baremetalsolution.projects.locations.volumes.rename
-export def "projects baremetalsolutionprojectslocationsvolumesrename" [
+export def "projects rename" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -521,19 +533,19 @@ export def "projects baremetalsolutionprojectslocationsvolumesrename" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:rename") $qp)
-  let body = {"newVolumeId": $new_volume_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:rename") $qp)
+  let req_body = {"newVolumeId": $new_volume_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Perform an ungraceful, hard reset on a server. Equivalent to shutting the power off and then turning it back on.
 #
 # POST /v2/{name}:reset
 # operationId: baremetalsolution.projects.locations.instances.reset
-export def "projects baremetalsolutionprojectslocationsinstancesreset" [
+export def "projects reset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -560,18 +572,19 @@ export def "projects baremetalsolutionprojectslocationsinstancesreset" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:reset") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:reset") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Starts a server that was shutdown.
 #
 # POST /v2/{name}:start
 # operationId: baremetalsolution.projects.locations.instances.start
-export def "projects baremetalsolutionprojectslocationsinstancesstart" [
+export def "projects start" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -598,18 +611,19 @@ export def "projects baremetalsolutionprojectslocationsinstancesstart" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:start") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:start") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Stop a running server.
 #
 # POST /v2/{name}:stop
 # operationId: baremetalsolution.projects.locations.instances.stop
-export def "projects baremetalsolutionprojectslocationsinstancesstop" [
+export def "projects stop" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -636,18 +650,19 @@ export def "projects baremetalsolutionprojectslocationsinstancesstop" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v2/{name}:stop") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}:stop") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List servers in a given project and location.
 #
 # GET /v2/{parent}/instances
 # operationId: baremetalsolution.projects.locations.instances.list
-export def "instances baremetalsolutionprojectslocationsinstanceslist" [
+export def "instances list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -675,7 +690,7 @@ export def "instances baremetalsolutionprojectslocationsinstanceslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/instances") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/instances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -687,9 +702,9 @@ export def "instances baremetalsolutionprojectslocationsinstanceslist" [
 # operationId: baremetalsolution.projects.locations.instances.create
 # --logicalInterfaces item shape: {interfaceIndex?: int, logicalNetworkInterfaces?: list, name?: string}
 # --luns item shape: {bootLun?: bool, id?: string, multiprotocolType?: "MULTIPROTOCOL_TYPE_UNSPECIFIED"|"LINUX", shareable?: bool, sizeGb?: string, state?: "STATE_UNSPECIFIED"|"CREATING"|"UPDATING"|"READY"|"DELETING"|"COOL_OFF", storageType?: "STORAGE_TYPE_UNSPECIFIED"|"SSD"|"HDD", storageVolume?: string, wwid?: string}
-# --networks item shape: {cidr?: string, id?: string, ipAddress?: string, jumboFramesEnabled?: bool, labels?: record, macAddress?: list, mountPoints?: list, reservations?: list, servicesCidr?: string, state?: "STATE_UNSPECIFIED"|"PROVISIONING"|"PROVISIONED"|"DEPROVISIONING"|"UPDATING", type?: "TYPE_UNSPECIFIED"|"CLIENT"|"PRIVATE", vlanId?: string, vrf?: record}
-# --volumes item shape: {autoGrownSizeGib?: string, currentSizeGib?: string, emergencySizeGib?: string, id?: string, labels?: record, maxSizeGib?: string, notes?: string, originallyRequestedSizeGib?: string, performanceTier?: "VOLUME_PERFORMANCE_TIER_UNSPECIFIED"|"VOLUME_PERFORMANCE_TIER_SHARED"|"VOLUME_PERFORMANCE_TIER_ASSIGNED"|"VOLUME_PERFORMANCE_TIER_HT", pod?: string, remainingSpaceGib?: string, requestedSizeGib?: string, snapshotAutoDeleteBehavior?: "SNAPSHOT_AUTO_DELETE_BEHAVIOR_UNSPECIFIED"|"DISABLED"|"OLDEST_FIRST"|"NEWEST_FIRST", snapshotEnabled?: bool, snapshotReservationDetail?: record, snapshotSchedulePolicy?: string, state?: "STATE_UNSPECIFIED"|"CREATING"|"READY"|"DELETING"|"UPDATING"|"COOL_OFF", storageAggregatePool?: string, storageType?: "STORAGE_TYPE_UNSPECIFIED"|"SSD"|"HDD", workloadProfile?: "WORKLOAD_PROFILE_UNSPECIFIED"|"GENERIC"|"HANA"}
-export def "instances baremetalsolutionprojectslocationsinstancescreate" [
+# --networks item shape: {cidr?: string, id?: string, ipAddress?: string, jumboFramesEnabled?: bool, labels?: record, macAddress?: list<string>, mountPoints?: list, reservations?: list, servicesCidr?: string, state?: "STATE_UNSPECIFIED"|"PROVISIONING"|"PROVISIONED"|"DEPROVISIONING"|"UPDATING", type?: "TYPE_UNSPECIFIED"|"CLIENT"|"PRIVATE", vlanId?: string, vrf?: record}
+# --volumes item shape: {autoGrownSizeGib?: string, currentSizeGib?: string, emergencySizeGib?: string, id?: string, labels?: record, maxSizeGib?: string, notes?: string, originallyRequestedSizeGib?: string, performanceTier?: "VOLUME_PERFORMANCE_TIER_UNSPECIFIED"|"VOLUME_PERFORMANCE_TIER_SHARED"|"VOLUME_PERFORMANCE_TIER_ASSIGNED"|"VOLUME_PERFORMANCE_TIER_HT", pod?: string, remainingSpaceGib?: string, requestedSizeGib?: string, ... (8 more fields)}
+export def "instances create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -719,26 +734,26 @@ export def "instances baremetalsolutionprojectslocationsinstancescreate" [
   --network-template: string # Instance network template name. For eg, bondaa-bondaa, bondab-nic, etc. Generally, the template name follows the syntax of "bond" or "nic".
   --os-image: string # The OS image currently installed on the server.
   --pod: string # Immutable. Pod name. Pod is an independent part of infrastructure. Instance can be connected to the assets (networks, volumes) allocated in the same pod only.
-  --volumes: list # Input only. List of Volumes to attach to this Instance on creation. This field won't be populated in Get/List responses. — item shape: {autoGrownSizeGib?: string, currentSizeGib?: string, emergencySizeGib?: string, id?: string, labels?: record, maxSizeGib?: string, notes?: string, originallyRequestedSizeGib?: string, performanceTier?: "VOLUME_PERFORMANCE_TIER_UNSPECIFIED"|"VOLUME_PERFORMANCE_TIER_SHARED"|"VOLUME_PERFORMANCE_TIER_ASSIGNED"|"VOLUME_PERFORMANCE_TIER_HT", pod?: string, remainingSpaceGib?: string, requestedSizeGib?: string, snapshotAutoDeleteBehavior?: "SNAPSHOT_AUTO_DELETE_BEHAVIOR_UNSPECIFIED"|"DISABLED"|"OLDEST_FIRST"|"NEWEST_FIRST", snapshotEnabled?: bool, snapshotReservationDetail?: record, snapshotSchedulePolicy?: string, state?: "STATE_UNSPECIFIED"|"CREATING"|"READY"|"DELETING"|"UPDATING"|"COOL_OFF", storageAggregatePool?: string, storageType?: "STORAGE_TYPE_UNSPECIFIED"|"SSD"|"HDD", workloadProfile?: "WORKLOAD_PROFILE_UNSPECIFIED"|"GENERIC"|"HANA"}
+  --volumes: list # Input only. List of Volumes to attach to this Instance on creation. This field won't be populated in Get/List responses. — item shape: {autoGrownSizeGib?: string, currentSizeGib?: string, emergencySizeGib?: string, id?: string, labels?: record, maxSizeGib?: string, notes?: string, originallyRequestedSizeGib?: string, performanceTier?: "VOLUME_PERFORMANCE_TIER_UNSPECIFIED"|"VOLUME_PERFORMANCE_TIER_SHARED"|"VOLUME_PERFORMANCE_TIER_ASSIGNED"|"VOLUME_PERFORMANCE_TIER_HT", pod?: string, remainingSpaceGib?: string, requestedSizeGib?: string, ... (8 more fields)}
   --workload-profile: string@workload-profile-completer-1 # The workload profile for the instance.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/instances") $qp)
-  let body = {"hyperthreadingEnabled": $hyperthreading_enabled, "labels": $labels, "logicalInterfaces": $logical_interfaces, "luns": $luns, "machineType": $machine_type, "name": $name, "networkTemplate": $network_template, "osImage": $os_image, "pod": $pod, "volumes": $volumes, "workloadProfile": $workload_profile} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/instances") $qp)
+  let req_body = {"hyperthreadingEnabled": $hyperthreading_enabled, "labels": $labels, "logicalInterfaces": $logical_interfaces, "luns": $luns, "machineType": $machine_type, "name": $name, "networkTemplate": $network_template, "osImage": $os_image, "pod": $pod, "volumes": $volumes, "workloadProfile": $workload_profile} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List storage volume luns for given storage volume.
 #
 # GET /v2/{parent}/luns
 # operationId: baremetalsolution.projects.locations.volumes.luns.list
-export def "luns baremetalsolutionprojectslocationsvolumeslunslist" [
+export def "luns list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -765,7 +780,7 @@ export def "luns baremetalsolutionprojectslocationsvolumeslunslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/luns") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/luns") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -775,7 +790,7 @@ export def "luns baremetalsolutionprojectslocationsvolumeslunslist" [
 #
 # GET /v2/{parent}/networks
 # operationId: baremetalsolution.projects.locations.networks.list
-export def "networks baremetalsolutionprojectslocationsnetworkslist" [
+export def "networks list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -803,7 +818,7 @@ export def "networks baremetalsolutionprojectslocationsnetworkslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/networks") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/networks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -813,7 +828,7 @@ export def "networks baremetalsolutionprojectslocationsnetworkslist" [
 #
 # GET /v2/{parent}/nfsShares
 # operationId: baremetalsolution.projects.locations.nfsShares.list
-export def "nfs-shares baremetalsolutionprojectslocationsnfsShareslist" [
+export def "nfs-shares list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -841,7 +856,7 @@ export def "nfs-shares baremetalsolutionprojectslocationsnfsShareslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/nfsShares") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/nfsShares") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -852,7 +867,7 @@ export def "nfs-shares baremetalsolutionprojectslocationsnfsShareslist" [
 # POST /v2/{parent}/nfsShares
 # operationId: baremetalsolution.projects.locations.nfsShares.create
 # --allowedClients item shape: {allowDev?: bool, allowSuid?: bool, allowedClientsCidr?: string, mountPermissions?: "MOUNT_PERMISSIONS_UNSPECIFIED"|"READ"|"READ_WRITE", network?: string, noRootSquash?: bool}
-export def "nfs-shares baremetalsolutionprojectslocationsnfsSharescreate" [
+export def "nfs-shares create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -883,12 +898,12 @@ export def "nfs-shares baremetalsolutionprojectslocationsnfsSharescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/nfsShares") $qp)
-  let body = {"allowedClients": $allowed_clients, "labels": $labels, "name": $name, "requestedSizeGib": $requested_size_gib, "storageType": $storage_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/nfsShares") $qp)
+  let req_body = {"allowedClients": $allowed_clients, "labels": $labels, "name": $name, "requestedSizeGib": $requested_size_gib, "storageType": $storage_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create new ProvisioningConfig.
@@ -897,8 +912,8 @@ export def "nfs-shares baremetalsolutionprojectslocationsnfsSharescreate" [
 # operationId: baremetalsolution.projects.locations.provisioningConfigs.create
 # --instances item shape: {accountNetworksEnabled?: bool, clientNetwork?: record, hyperthreading?: bool, id?: string, instanceType?: string, logicalInterfaces?: list, networkConfig?: "NETWORKCONFIG_UNSPECIFIED"|"SINGLE_VLAN"|"MULTI_VLAN", networkTemplate?: string, osImage?: string, privateNetwork?: record, userNote?: string}
 # --networks item shape: {bandwidth?: "BANDWIDTH_UNSPECIFIED"|"BW_1_GBPS"|"BW_2_GBPS"|"BW_5_GBPS"|"BW_10_GBPS", cidr?: string, gcpService?: string, id?: string, jumboFramesEnabled?: bool, serviceCidr?: "SERVICE_CIDR_UNSPECIFIED"|"DISABLED"|"HIGH_26"|"HIGH_27"|"HIGH_28", type?: "TYPE_UNSPECIFIED"|"CLIENT"|"PRIVATE", userNote?: string, vlanAttachments?: list, vlanSameProject?: bool}
-# --volumes item shape: {gcpService?: string, id?: string, lunRanges?: list, machineIds?: list, nfsExports?: list, performanceTier?: "VOLUME_PERFORMANCE_TIER_UNSPECIFIED"|"VOLUME_PERFORMANCE_TIER_SHARED"|"VOLUME_PERFORMANCE_TIER_ASSIGNED"|"VOLUME_PERFORMANCE_TIER_HT", protocol?: "PROTOCOL_UNSPECIFIED"|"PROTOCOL_FC"|"PROTOCOL_NFS", sizeGb?: int, snapshotsEnabled?: bool, storageAggregatePool?: string, type?: "TYPE_UNSPECIFIED"|"FLASH"|"DISK", userNote?: string}
-export def "provisioning-configs baremetalsolutionprojectslocationsprovisioningConfigscreate" [
+# --volumes item shape: {gcpService?: string, id?: string, lunRanges?: list, machineIds?: list<string>, nfsExports?: list, performanceTier?: "VOLUME_PERFORMANCE_TIER_UNSPECIFIED"|"VOLUME_PERFORMANCE_TIER_SHARED"|"VOLUME_PERFORMANCE_TIER_ASSIGNED"|"VOLUME_PERFORMANCE_TIER_HT", protocol?: "PROTOCOL_UNSPECIFIED"|"PROTOCOL_FC"|"PROTOCOL_NFS", sizeGb?: int, snapshotsEnabled?: bool, storageAggregatePool?: string, type?: "TYPE_UNSPECIFIED"|"FLASH"|"DISK", userNote?: string}
+export def "provisioning-configs create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -928,19 +943,19 @@ export def "provisioning-configs baremetalsolutionprojectslocationsprovisioningC
   --networks: list # Networks to be created. — item shape: {bandwidth?: "BANDWIDTH_UNSPECIFIED"|"BW_1_GBPS"|"BW_2_GBPS"|"BW_5_GBPS"|"BW_10_GBPS", cidr?: string, gcpService?: string, id?: string, jumboFramesEnabled?: bool, serviceCidr?: "SERVICE_CIDR_UNSPECIFIED"|"DISABLED"|"HIGH_26"|"HIGH_27"|"HIGH_28", type?: "TYPE_UNSPECIFIED"|"CLIENT"|"PRIVATE", userNote?: string, vlanAttachments?: list, vlanSameProject?: bool}
   --status-message: string # Optional status messages associated with the FAILED state.
   --ticket-id: string # A generated ticket id to track provisioning request.
-  --volumes: list # Volumes to be created. — item shape: {gcpService?: string, id?: string, lunRanges?: list, machineIds?: list, nfsExports?: list, performanceTier?: "VOLUME_PERFORMANCE_TIER_UNSPECIFIED"|"VOLUME_PERFORMANCE_TIER_SHARED"|"VOLUME_PERFORMANCE_TIER_ASSIGNED"|"VOLUME_PERFORMANCE_TIER_HT", protocol?: "PROTOCOL_UNSPECIFIED"|"PROTOCOL_FC"|"PROTOCOL_NFS", sizeGb?: int, snapshotsEnabled?: bool, storageAggregatePool?: string, type?: "TYPE_UNSPECIFIED"|"FLASH"|"DISK", userNote?: string}
+  --volumes: list # Volumes to be created. — item shape: {gcpService?: string, id?: string, lunRanges?: list, machineIds?: list<string>, nfsExports?: list, performanceTier?: "VOLUME_PERFORMANCE_TIER_UNSPECIFIED"|"VOLUME_PERFORMANCE_TIER_SHARED"|"VOLUME_PERFORMANCE_TIER_ASSIGNED"|"VOLUME_PERFORMANCE_TIER_HT", protocol?: "PROTOCOL_UNSPECIFIED"|"PROTOCOL_FC"|"PROTOCOL_NFS", sizeGb?: int, snapshotsEnabled?: bool, storageAggregatePool?: string, type?: "TYPE_UNSPECIFIED"|"FLASH"|"DISK", userNote?: string}
   --vpc-sc-enabled: oneof<nothing, bool> # If true, VPC SC is enabled for the cluster.
 ]: any -> record<cloudConsoleUri: string, customId: string, email: string, handoverServiceAccount: string, instances: table<accountNetworksEnabled: bool, clientNetwork: record, hyperthreading: bool, id: string, instanceType: string, logicalInterfaces: list, name: string, networkConfig: string, networkTemplate: string, osImage: string, privateNetwork: record, userNote: string>, location: string, name: string, networks: table<bandwidth: string, cidr: string, gcpService: string, id: string, jumboFramesEnabled: bool, name: string, serviceCidr: string, type: string, userNote: string, vlanAttachments: list, vlanSameProject: bool>, state: string, statusMessage: string, ticketId: string, updateTime: string, volumes: table<gcpService: string, id: string, lunRanges: list, machineIds: list, name: string, nfsExports: list, performanceTier: string, protocol: string, sizeGb: int, snapshotsEnabled: bool, storageAggregatePool: string, type: string, userNote: string>, vpcScEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/provisioningConfigs") $qp)
-  let body = {"customId": $custom_id, "email": $email, "handoverServiceAccount": $handover_service_account, "instances": $instances, "location": $location, "networks": $networks, "statusMessage": $status_message, "ticketId": $ticket_id, "volumes": $volumes, "vpcScEnabled": $vpc_sc_enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/provisioningConfigs") $qp)
+  let req_body = {"customId": $custom_id, "email": $email, "handoverServiceAccount": $handover_service_account, "instances": $instances, "location": $location, "networks": $networks, "statusMessage": $status_message, "ticketId": $ticket_id, "volumes": $volumes, "vpcScEnabled": $vpc_sc_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Submit a provisiong configuration for a given project.
@@ -948,7 +963,7 @@ export def "provisioning-configs baremetalsolutionprojectslocationsprovisioningC
 # POST /v2/{parent}/provisioningConfigs:submit
 # operationId: baremetalsolution.projects.locations.provisioningConfigs.submit
 # --provisioningConfig shape: {customId?: string, email?: string, handoverServiceAccount?: string, instances?: list, location?: string, networks?: list, statusMessage?: string, ticketId?: string, volumes?: list, vpcScEnabled?: bool}
-export def "provisioning-configs-submit baremetalsolutionprojectslocationsprovisioningConfigssubmit" [
+export def "provisioning-configs-submit submit" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -976,19 +991,19 @@ export def "provisioning-configs-submit baremetalsolutionprojectslocationsprovis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/provisioningConfigs:submit") $qp)
-  let body = {"email": $email, "provisioningConfig": $provisioning_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/provisioningConfigs:submit") $qp)
+  let req_body = {"email": $email, "provisioningConfig": $provisioning_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List the budget details to provision resources on a given project.
 #
 # GET /v2/{parent}/provisioningQuotas
 # operationId: baremetalsolution.projects.locations.provisioningQuotas.list
-export def "provisioning-quotas baremetalsolutionprojectslocationsprovisioningQuotaslist" [
+export def "provisioning-quotas list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1015,7 +1030,7 @@ export def "provisioning-quotas baremetalsolutionprojectslocationsprovisioningQu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/provisioningQuotas") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/provisioningQuotas") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1025,7 +1040,7 @@ export def "provisioning-quotas baremetalsolutionprojectslocationsprovisioningQu
 #
 # GET /v2/{parent}/snapshots
 # operationId: baremetalsolution.projects.locations.volumes.snapshots.list
-export def "snapshots baremetalsolutionprojectslocationsvolumessnapshotslist" [
+export def "snapshots list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1052,7 +1067,7 @@ export def "snapshots baremetalsolutionprojectslocationsvolumessnapshotslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/snapshots") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/snapshots") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1062,7 +1077,7 @@ export def "snapshots baremetalsolutionprojectslocationsvolumessnapshotslist" [
 #
 # POST /v2/{parent}/snapshots
 # operationId: baremetalsolution.projects.locations.volumes.snapshots.create
-export def "snapshots baremetalsolutionprojectslocationsvolumessnapshotscreate" [
+export def "snapshots create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1090,19 +1105,19 @@ export def "snapshots baremetalsolutionprojectslocationsvolumessnapshotscreate" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/snapshots") $qp)
-  let body = {"description": $description, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/snapshots") $qp)
+  let req_body = {"description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the public SSH keys registered for the specified project. These SSH keys are used only for the interactive serial console feature.
 #
 # GET /v2/{parent}/sshKeys
 # operationId: baremetalsolution.projects.locations.sshKeys.list
-export def "ssh-keys baremetalsolutionprojectslocationssshKeyslist" [
+export def "ssh-keys list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1129,7 +1144,7 @@ export def "ssh-keys baremetalsolutionprojectslocationssshKeyslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/sshKeys") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/sshKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1139,7 +1154,7 @@ export def "ssh-keys baremetalsolutionprojectslocationssshKeyslist" [
 #
 # POST /v2/{parent}/sshKeys
 # operationId: baremetalsolution.projects.locations.sshKeys.create
-export def "ssh-keys baremetalsolutionprojectslocationssshKeyscreate" [
+export def "ssh-keys create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1167,19 +1182,19 @@ export def "ssh-keys baremetalsolutionprojectslocationssshKeyscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "sshKeyId" $ssh_key_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/sshKeys") $qp)
-  let body = {"publicKey": $public_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/sshKeys") $qp)
+  let req_body = {"publicKey": $public_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List storage volumes in a given project and location.
 #
 # GET /v2/{parent}/volumes
 # operationId: baremetalsolution.projects.locations.volumes.list
-export def "volumes baremetalsolutionprojectslocationsvolumeslist" [
+export def "volumes list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1207,7 +1222,7 @@ export def "volumes baremetalsolutionprojectslocationsvolumeslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v2/{parent}/volumes") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v2/{parent}/volumes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1217,7 +1232,7 @@ export def "volumes baremetalsolutionprojectslocationsvolumeslist" [
 #
 # POST /v2/{volumeSnapshot}:restoreVolumeSnapshot
 # operationId: baremetalsolution.projects.locations.volumes.snapshots.restoreVolumeSnapshot
-export def "projects baremetalsolutionprojectslocationsvolumessnapshotsrestoreVolumeSnapshot" [
+export def "projects create-restore-volume-snapshot" [
   volume_snapshot: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1244,18 +1259,19 @@ export def "projects baremetalsolutionprojectslocationsvolumessnapshotsrestoreVo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({volume_snapshot: $volume_snapshot} | format pattern "/v2/{volume_snapshot}:restoreVolumeSnapshot") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({volume_snapshot: (encode-path-segment $volume_snapshot)} | format pattern "/v2/{volume_snapshot}:restoreVolumeSnapshot") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Emergency Volume resize.
 #
 # POST /v2/{volume}:resize
 # operationId: baremetalsolution.projects.locations.volumes.resize
-export def "projects baremetalsolutionprojectslocationsvolumesresize" [
+export def "projects resize" [
   volume: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1282,10 +1298,10 @@ export def "projects baremetalsolutionprojectslocationsvolumesresize" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({volume: $volume} | format pattern "/v2/{volume}:resize") $qp)
-  let body = {"sizeGib": $size_gib} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({volume: (encode-path-segment $volume)} | format pattern "/v2/{volume}:resize") $qp)
+  let req_body = {"sizeGib": $size_gib} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

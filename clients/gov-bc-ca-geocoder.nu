@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -108,42 +117,42 @@ export def "addresses-output-format get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --address-string: string # Civic or intersection address as a single string. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#addressString target="_blank">addressString</a> (e.g. 525 Superior Street, Victoria, BC)
-  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
+  --address-string: string # Civic or intersection address as a single string. See addressString (e.g. 525 Superior Street, Victoria, BC)
+  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See locationDescriptor (default: any)
   --max-results: int # The maximum number of search results to return. (default: 1)
-  --interpolation: string@interpolation-completer # accessPoint interpolation method. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#interpolation target="_blank">interpolation</a> (default: adaptive)
+  --interpolation: string@interpolation-completer # accessPoint interpolation method. See interpolation (default: adaptive)
   --echo: oneof<nothing, bool> # If true, include unmatched address details such as site name in results. (default: true)
   --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
   --auto-complete: oneof<nothing, bool> # If true, addressString is expected to contain a partial address that requires completion. Not supported for shp, csv, gml formats. (default: false)
   --set-back: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
-  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
-  --min-score: int # The minimum score required for a match to be returned. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#minScore target="_blank">minScore</a> (default: 1)
-  --match-precision: string # Example: street,locality.  A comma separated list of individual match precision levels to include in results. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#matchPrecision target="_blank">matchPrecision</a>
-  --match-precision-not: string # Example: street,locality.  A comma separated list of individual match precision levels to exclude from results. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#matchPrecisionNot target="_blank">matchPrecisionNot</a>
-  --site-name: string # A string containing the name of the building, facility, or institution (e.g., Duck Building, Casa Del Mar, Crystal Garden, Bluebird House).See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#siteName target="_blank">siteName</a>
-  --unit-designator: string@unit-designator-completer # The type of unit within a house or building. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#unitDesignator target="_blank">unitDesignator</a>
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
+  --min-score: int # The minimum score required for a match to be returned. See minScore (default: 1)
+  --match-precision: string # Example: street,locality. A comma separated list of individual match precision levels to include in results. See matchPrecision
+  --match-precision-not: string # Example: street,locality. A comma separated list of individual match precision levels to exclude from results. See matchPrecisionNot
+  --site-name: string # A string containing the name of the building, facility, or institution (e.g., Duck Building, Casa Del Mar, Crystal Garden, Bluebird House).See siteName
+  --unit-designator: string@unit-designator-completer # The type of unit within a house or building. See unitDesignator
   --unit-number: string # The number of the unit, suite, or apartment within a house or building.
   --unit-number-suffix: string # A letter that follows the unit number as in Unit 1A or Suite 302B.
-  --civic-number: string # The official number assigned to a site by an address authority. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#civicNumber target="_blank">civicNumber</a>
-  --civic-number-suffix: string # A letter or fraction that follows the civic number (e.g., the A in 1039A Bledsoe St). See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#civicNumberSuffix target="_blank">civicNumberSuffix</a>
-  --street-name: string # The official name of the street as assigned by an address authority (e.g., the Douglas in 1175 Douglas Street). See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#streetName target="_blank">streetName</a>
-  --street-type: string # The type of street as assigned by a municipality (e.g., the ST in 1175 DOUGLAS St). See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#streetType target="_blank">streetType</a>
-  --street-direction: string@street-direction-completer # The abbreviated compass direction as defined by Canada Post and B.C. civic addressing authorities. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#streetDirection target="_blank">streetDirection</a>
-  --street-qualifier: string # Example: the Bridge in Johnson St Bridge. The qualifier of a street name. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#streetQualifier target="_blank">streetQualifier</a>
-  --locality-name: string # The name of the locality assigned to a given site by an address authority. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#localityName target="_blank">localityName</a>
+  --civic-number: string # The official number assigned to a site by an address authority. See civicNumber
+  --civic-number-suffix: string # A letter or fraction that follows the civic number (e.g., the A in 1039A Bledsoe St). See civicNumberSuffix
+  --street-name: string # The official name of the street as assigned by an address authority (e.g., the Douglas in 1175 Douglas Street). See streetName
+  --street-type: string # The type of street as assigned by a municipality (e.g., the ST in 1175 DOUGLAS St). See streetType
+  --street-direction: string@street-direction-completer # The abbreviated compass direction as defined by Canada Post and B.C. civic addressing authorities. See streetDirection
+  --street-qualifier: string # Example: the Bridge in Johnson St Bridge. The qualifier of a street name. See streetQualifier
+  --locality-name: string # The name of the locality assigned to a given site by an address authority. See localityName
   --province-code: string # The ISO 3166-2 Sub-Country Code. The code for British Columbia is BC. (default: BC)
   --localities: string # A comma separated list of locality names that matched addresses must belong to. For example, setting localities to Nanaimo only returns addresses in Nanaimo
   --not-localities: string # A comma-separated list of localities to exclude from the search.
-  --bbox: string # Example: -126.07929,49.7628,-126.0163,49.7907.  A bounding box (xmin,ymin,xmax,ymax) that limits the search area. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#bbox target="_blank">bbox</a>
-  --centre: string # Example: -124.0165926,49.2296251 .  The coordinates of a centre point (x,y) used to define a bounding circle that will limit the search area. This parameter must be specified together with 'maxDistance'. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#centre target='_blank'>centre</a>
-  --max-distance: float # The maximum distance (in metres) to search from the given point.  If not specified, the search distance is unlimited.
-  --extrapolate: oneof<nothing, bool> # If true, uses supplied parcelPoint to derive an appropriate accessPoint.           See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#extrapolate target="_blank">extrapolate</a>
-  --parcel-point: string # The coordinates of a point (x,y) known to be inside the parcel containing a given address. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#parcelPoint target="_blank">parcelPoint</a>
+  --bbox: string # Example: -126.07929,49.7628,-126.0163,49.7907. A bounding box (xmin,ymin,xmax,ymax) that limits the search area. See bbox
+  --centre: string # Example: -124.0165926,49.2296251 . The coordinates of a centre point (x,y) used to define a bounding circle that will limit the search area. This parameter must be specified together with 'maxDistance'. See centre
+  --max-distance: float # The maximum distance (in metres) to search from the given point. If not specified, the search distance is unlimited.
+  --extrapolate: oneof<nothing, bool> # If true, uses supplied parcelPoint to derive an appropriate accessPoint. See extrapolate
+  --parcel-point: string # The coordinates of a point (x,y) known to be inside the parcel containing a given address. See parcelPoint
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "addressString" $address_string "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "interpolation" $interpolation "scalar") (serialize-qp "echo" $echo "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "autoComplete" $auto_complete "scalar") (serialize-qp "setBack" $set_back "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "minScore" $min_score "scalar") (serialize-qp "matchPrecision" $match_precision "scalar") (serialize-qp "matchPrecisionNot" $match_precision_not "scalar") (serialize-qp "siteName" $site_name "scalar") (serialize-qp "unitDesignator" $unit_designator "scalar") (serialize-qp "unitNumber" $unit_number "scalar") (serialize-qp "unitNumberSuffix" $unit_number_suffix "scalar") (serialize-qp "civicNumber" $civic_number "scalar") (serialize-qp "civicNumberSuffix" $civic_number_suffix "scalar") (serialize-qp "streetName" $street_name "scalar") (serialize-qp "streetType" $street_type "scalar") (serialize-qp "streetDirection" $street_direction "scalar") (serialize-qp "streetQualifier" $street_qualifier "scalar") (serialize-qp "localityName" $locality_name "scalar") (serialize-qp "provinceCode" $province_code "scalar") (serialize-qp "localities" $localities "scalar") (serialize-qp "notLocalities" $not_localities "scalar") (serialize-qp "bbox" $bbox "scalar") (serialize-qp "centre" $centre "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "extrapolate" $extrapolate "scalar") (serialize-qp "parcelPoint" $parcel_point "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/addresses.{output_format}") $qp)
+  let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/addresses.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -163,8 +172,8 @@ export def "intersections-near-output-format get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --point: string # The point (x,y) from which the nearest site will be identified. The coordinates must be specified in the same SRS as given by the 'outputSRS' parameter. (e.g. -122.377,50.121)
-  --max-distance: int # The maximum distance (in metres) to search from the given point.  If not specified, the search distance is unlimited.
-  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --max-distance: int # The maximum distance (in metres) to search from the given point. If not specified, the search distance is unlimited.
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
   --max-results: int # The maximum number of search results to return. (default: 1)
   --min-degree: int # The minimum degree an intersection can have to be included in results. A dead-end has a degree of 1. (default: 2)
   --max-degree: int # The maximum degree an interesection can have to be included in results. A four-way stop has a degree of 4. (default: 100)
@@ -172,7 +181,7 @@ export def "intersections-near-output-format get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "minDegree" $min_degree "scalar") (serialize-qp "maxDegree" $max_degree "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/intersections/near.{output_format}") $qp)
+  let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/intersections/near.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -191,16 +200,16 @@ export def "intersections-nearest-output-format get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --point: string # Example: -122.377,50.121  The point (x,y) from which the nearest site will be identified. The coordinates must be specified in the same SRS as given by the 'outputSRS' parameter. (e.g. -122.377,50.121)
-  --max-distance: int # The maximum distance (in metres) to search from the given point.  If not specified, the search distance is unlimited.
-  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --point: string # Example: -122.377,50.121 The point (x,y) from which the nearest site will be identified. The coordinates must be specified in the same SRS as given by the 'outputSRS' parameter. (e.g. -122.377,50.121)
+  --max-distance: int # The maximum distance (in metres) to search from the given point. If not specified, the search distance is unlimited.
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
   --min-degree: int # The minimum degree an intersection can have to be included in results. A dead-end has a degree of 1. (default: 2)
   --max-degree: int # The maximum degree an interesection can have to be included in results. A four-way stop has a degree of 4. (default: 100)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "minDegree" $min_degree "scalar") (serialize-qp "maxDegree" $max_degree "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/intersections/nearest.{output_format}") $qp)
+  let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/intersections/nearest.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -219,8 +228,8 @@ export def "intersections-within-output-format get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --bbox: string # A bounding box (xmin,ymin,xmax,ymax) used to limit the search area. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#bbox target="_blank">bbox</a> (e.g. -119.51,49.48,-119.53,49.50)
-  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --bbox: string # A bounding box (xmin,ymin,xmax,ymax) used to limit the search area. See bbox (e.g. -119.51,49.48,-119.53,49.50)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
   --max-results: int # The maximum number of search results (default: 200)
   --min-degree: int # The minimum degree an intersection can have to be included in results. A dead-end has a degree of 1. (default: 2)
   --max-degree: int # The maximum degree an interesection can have to be included in results. A four-way stop has a degree of 4. (default: 100)
@@ -228,7 +237,7 @@ export def "intersections-within-output-format get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "bbox" $bbox "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "minDegree" $min_degree "scalar") (serialize-qp "maxDegree" $max_degree "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/intersections/within.{output_format}") $qp)
+  let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/intersections/within.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -248,12 +257,12 @@ export def "intersections get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "outputSRS" $output_srs "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({intersection_id: $intersection_id, output_format: $output_format} | format pattern "/intersections/{intersection_id}.{output_format}") $qp)
+  let full_url = (build-url $base ({intersection_id: (encode-path-segment $intersection_id), output_format: (encode-path-segment $output_format)} | format pattern "/intersections/{intersection_id}.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -273,42 +282,42 @@ export def "occupants-addresses-output-format get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --address-string: string # Occupant name OR Occupant name ** address (e.g. Sir James Douglas Elementary)
-  --tags: string # Example: schools;courts;employment<br>A list of tags separated by semicolons.
-  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
+  --tags: string # Example: schools;courts;employmentA list of tags separated by semicolons.
+  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See locationDescriptor (default: any)
   --max-results: int # The maximum number of search results to return. (default: 1)
-  --interpolation: string@interpolation-completer # accessPoint interpolation method. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#interpolation target="_blank">interpolation</a> (default: adaptive)
+  --interpolation: string@interpolation-completer # accessPoint interpolation method. See interpolation (default: adaptive)
   --echo: oneof<nothing, bool> # If true, include unmatched address details such as site name in results. (default: false)
   --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
   --auto-complete: oneof<nothing, bool> # If true, addressString is expected to contain a partial address that requires completion. Not supported for shp, csv, gml formats. (default: false)
   --set-back: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
-  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
-  --min-score: int # The minimum score required for a match to be returned. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#minScore target="_blank">minScore</a> (default: 1)
-  --match-precision: string # Example: street,locality.  A comma separated list of individual match precision levels to include in results. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#matchPrecision target="_blank">matchPrecision</a> (default: OCCUPANT)
-  --match-precision-not: string # Example: street,locality.  A comma separated list of individual match precision levels to exclude from results. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#matchPrecisionNot target="_blank">matchPrecisionNot</a>
-  --site-name: string # A string containing the name of the building, facility, or institution (e.g., Duck Building, Casa Del Mar, Crystal Garden, Bluebird House).See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#siteName target="_blank">siteName</a>
-  --unit-designator: string@unit-designator-completer # The type of unit within a house or building. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#unitDesignator target="_blank">unitDesignator</a>
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
+  --min-score: int # The minimum score required for a match to be returned. See minScore (default: 1)
+  --match-precision: string # Example: street,locality. A comma separated list of individual match precision levels to include in results. See matchPrecision (default: OCCUPANT)
+  --match-precision-not: string # Example: street,locality. A comma separated list of individual match precision levels to exclude from results. See matchPrecisionNot
+  --site-name: string # A string containing the name of the building, facility, or institution (e.g., Duck Building, Casa Del Mar, Crystal Garden, Bluebird House).See siteName
+  --unit-designator: string@unit-designator-completer # The type of unit within a house or building. See unitDesignator
   --unit-number: string # The number of the unit, suite, or apartment within a house or building.
   --unit-number-suffix: string # A letter that follows the unit number as in Unit 1A or Suite 302B.
-  --civic-number: string # The official number assigned to a site by an address authority. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#civicNumber target="_blank">civicNumber</a>
-  --civic-number-suffix: string # A letter or fraction that follows the civic number (e.g., the A in 1039A Bledsoe St). See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#civicNumberSuffix target="_blank">civicNumberSuffix</a>
-  --street-name: string # The official name of the street as assigned by an address authority (e.g., the Douglas in 1175 Douglas Street). See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#streetName target="_blank">streetName</a>
-  --street-type: string # The type of street as assigned by a municipality (e.g., the ST in 1175 DOUGLAS St). See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#streetType target="_blank">streetType</a>
-  --street-direction: string@street-direction-completer # The abbreviated compass direction as defined by Canada Post and B.C. civic addressing authorities. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#streetDirection target="_blank">streetDirection</a>
+  --civic-number: string # The official number assigned to a site by an address authority. See civicNumber
+  --civic-number-suffix: string # A letter or fraction that follows the civic number (e.g., the A in 1039A Bledsoe St). See civicNumberSuffix
+  --street-name: string # The official name of the street as assigned by an address authority (e.g., the Douglas in 1175 Douglas Street). See streetName
+  --street-type: string # The type of street as assigned by a municipality (e.g., the ST in 1175 DOUGLAS St). See streetType
+  --street-direction: string@street-direction-completer # The abbreviated compass direction as defined by Canada Post and B.C. civic addressing authorities. See streetDirection
   --street-qualifier: string # The qualifier of a street name (e.g., the Bridge in Johnson St Bridge)
-  --locality-name: string # The name of the locality assigned to a given site by an address authority. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#streetDirection target="_blank">streetDirection</a>
+  --locality-name: string # The name of the locality assigned to a given site by an address authority. See streetDirection
   --province-code: string # The ISO 3166-2 Sub-Country Code. The code for British Columbia is BC. (default: BC)
   --localities: string # A comma separated list of locality names that matched addresses must belong to. For example, setting localities to Nanaimo only returns addresses in Nanaimo
   --not-localities: string # A comma-separated list of localities to exclude from the search.
-  --bbox: string # Example: -126.07929,49.7628,-126.0163,49.7907.  A bounding box (xmin,ymin,xmax,ymax) that limits the search area. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#bbox target="_blank">bbox</a>
-  --centre: string # Example: -124.0165926,49.2296251 .  The coordinates of a centre point (x,y) used to define a bounding circle that will limit the search area. This parameter must be specified together with 'maxDistance'. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#centre target='_blank'>centre</a>
-  --max-distance: float # The maximum distance (in metres) to search from the given point.  If not specified, the search distance is unlimited.
-  --extrapolate: oneof<nothing, bool> # If true, uses supplied parcelPoint to derive an appropriate accessPoint.           See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#extrapolate target="_blank">extrapolate</a>
-  --parcel-point: string # The coordinates of a point (x,y) known to be inside the parcel containing a given address. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#parcelPoint target="_blank">parcelPoint</a>
+  --bbox: string # Example: -126.07929,49.7628,-126.0163,49.7907. A bounding box (xmin,ymin,xmax,ymax) that limits the search area. See bbox
+  --centre: string # Example: -124.0165926,49.2296251 . The coordinates of a centre point (x,y) used to define a bounding circle that will limit the search area. This parameter must be specified together with 'maxDistance'. See centre
+  --max-distance: float # The maximum distance (in metres) to search from the given point. If not specified, the search distance is unlimited.
+  --extrapolate: oneof<nothing, bool> # If true, uses supplied parcelPoint to derive an appropriate accessPoint. See extrapolate
+  --parcel-point: string # The coordinates of a point (x,y) known to be inside the parcel containing a given address. See parcelPoint
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "addressString" $address_string "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "interpolation" $interpolation "scalar") (serialize-qp "echo" $echo "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "autoComplete" $auto_complete "scalar") (serialize-qp "setBack" $set_back "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "minScore" $min_score "scalar") (serialize-qp "matchPrecision" $match_precision "scalar") (serialize-qp "matchPrecisionNot" $match_precision_not "scalar") (serialize-qp "siteName" $site_name "scalar") (serialize-qp "unitDesignator" $unit_designator "scalar") (serialize-qp "unitNumber" $unit_number "scalar") (serialize-qp "unitNumberSuffix" $unit_number_suffix "scalar") (serialize-qp "civicNumber" $civic_number "scalar") (serialize-qp "civicNumberSuffix" $civic_number_suffix "scalar") (serialize-qp "streetName" $street_name "scalar") (serialize-qp "streetType" $street_type "scalar") (serialize-qp "streetDirection" $street_direction "scalar") (serialize-qp "streetQualifier" $street_qualifier "scalar") (serialize-qp "localityName" $locality_name "scalar") (serialize-qp "provinceCode" $province_code "scalar") (serialize-qp "localities" $localities "scalar") (serialize-qp "notLocalities" $not_localities "scalar") (serialize-qp "bbox" $bbox "scalar") (serialize-qp "centre" $centre "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "extrapolate" $extrapolate "scalar") (serialize-qp "parcelPoint" $parcel_point "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/occupants/addresses.{output_format}") $qp)
+  let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/occupants/addresses.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -328,18 +337,18 @@ export def "occupants-near-output-format get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --point: string # The point (x,y) from which the nearest site will be identified. The coordinates must be specified in the same SRS as given by the 'outputSRS' parameter. (e.g. -122.377,50.121)
-  --tags: string # Example: schools;courts;employment<br>A list of tags separated by semicolons.
-  --max-distance: int # The maximum distance (in metres) to search from the given point.  If not specified, the search distance is unlimited.
-  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --tags: string # Example: schools;courts;employmentA list of tags separated by semicolons.
+  --max-distance: int # The maximum distance (in metres) to search from the given point. If not specified, the search distance is unlimited.
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
   --max-results: int # The maximum number of search results to return. (default: 1)
-  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
+  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See locationDescriptor (default: any)
   --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
   --set-back: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "setBack" $set_back "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/occupants/near.{output_format}") $qp)
+  let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/occupants/near.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -359,17 +368,17 @@ export def "occupants-nearest-output-format get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --point: string # The point (x,y) from which the nearest site will be identified. The coordinates must be specified in the same SRS as given by the 'outputSRS' parameter. (e.g. -122.377,50.121)
-  --max-distance: int # The maximum distance (in metres) to search from the given point.  If not specified, the search distance is unlimited.
-  --tags: string # Example: schools;courts;employment<br>A list of tags separated by semicolons.
-  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
-  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
+  --max-distance: int # The maximum distance (in metres) to search from the given point. If not specified, the search distance is unlimited.
+  --tags: string # Example: schools;courts;employmentA list of tags separated by semicolons.
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
+  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See locationDescriptor (default: any)
   --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
   --set-back: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "setBack" $set_back "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/occupants/nearest.{output_format}") $qp)
+  let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/occupants/nearest.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -388,18 +397,18 @@ export def "occupants-within-output-format get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --bbox: string # A bounding box (xmin,ymin,xmax,ymax) used to limit the search area. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#bbox target="_blank">bbox</a> (e.g. -123.14,49.28,-123.13,49.29)
-  --tags: string # Example: schools;courts;employment<br>A list of tags separated by semicolons.
-  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --bbox: string # A bounding box (xmin,ymin,xmax,ymax) used to limit the search area. See bbox (e.g. -123.14,49.28,-123.13,49.29)
+  --tags: string # Example: schools;courts;employmentA list of tags separated by semicolons.
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
   --max-results: int # The maximum number of search results to return. (default: 200)
-  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
+  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See locationDescriptor (default: any)
   --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
   --set-back: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "bbox" $bbox "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "setBack" $set_back "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/occupants/within.{output_format}") $qp)
+  let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/occupants/within.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -419,15 +428,15 @@ export def "occupants get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
-  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
+  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See locationDescriptor (default: any)
   --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
   --set-back: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "setBack" $set_back "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({occupant_id: $occupant_id, output_format: $output_format} | format pattern "/occupants/{occupant_id}.{output_format}") $qp)
+  let full_url = (build-url $base ({occupant_id: (encode-path-segment $occupant_id), output_format: (encode-path-segment $output_format)} | format pattern "/occupants/{occupant_id}.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -450,7 +459,7 @@ export def "parcels-pids get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({site_id: $site_id, output_format: $output_format} | format pattern "/parcels/pids/{site_id}.{output_format}"))
+  let full_url = (build-url $base ({site_id: (encode-path-segment $site_id), output_format: (encode-path-segment $output_format)} | format pattern "/parcels/pids/{site_id}.{output_format}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -470,10 +479,10 @@ export def "sites-near-output-format get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --point: string # The point (x,y) from which the nearby sites will be identified. The coordinates must be specified in the same SRS as given by the 'outputSRS' parameter. (e.g. -122.377,50.121)
-  --max-distance: int # The maximum distance (in metres) to search from the given point.  If not specified, the search distance is unlimited.
-  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --max-distance: int # The maximum distance (in metres) to search from the given point. If not specified, the search distance is unlimited.
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
   --max-results: int # The maximum number of search results to return. (default: 1)
-  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
+  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See locationDescriptor (default: any)
   --set-back: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
   --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
   --exclude-units: oneof<nothing, bool> # If true, excludes sites that are units of a parent site (default: false)
@@ -482,7 +491,7 @@ export def "sites-near-output-format get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "setBack" $set_back "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "excludeUnits" $exclude_units "scalar") (serialize-qp "onlyCivic" $only_civic "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/sites/near.{output_format}") $qp)
+  let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/sites/near.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -501,10 +510,10 @@ export def "sites-nearest-output-format get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --point: string # Centre point of search. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#point target="_blank">point</a> (e.g. -122.377,50.121)
-  --max-distance: int # The maximum distance (in metres) to search from the given point.  If not specified, the search distance is unlimited.
-  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
-  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
+  --point: string # Centre point of search. See point (e.g. -122.377,50.121)
+  --max-distance: int # The maximum distance (in metres) to search from the given point. If not specified, the search distance is unlimited.
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
+  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See locationDescriptor (default: any)
   --set-back: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
   --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
   --exclude-units: oneof<nothing, bool> # If true, excludes sites that are units of a parent site (default: false)
@@ -513,7 +522,7 @@ export def "sites-nearest-output-format get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "setBack" $set_back "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "excludeUnits" $exclude_units "scalar") (serialize-qp "onlyCivic" $only_civic "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/sites/nearest.{output_format}") $qp)
+  let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/sites/nearest.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -532,10 +541,10 @@ export def "sites-within-output-format get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --bbox: string # A bounding box (xmin,ymin,xmax,ymax) used to limit the search area. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#bbox target="_blank">bbox</a> (e.g. -119.51,49.48,-119.53,49.50)
-  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
+  --bbox: string # A bounding box (xmin,ymin,xmax,ymax) used to limit the search area. See bbox (e.g. -119.51,49.48,-119.53,49.50)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
   --max-results: int # The maximum number of search results to return. (default: 1)
-  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
+  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See locationDescriptor (default: any)
   --set-back: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
   --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
   --exclude-units: oneof<nothing, bool> # If true, excludes sites that are units of a parent site (default: false)
@@ -544,7 +553,7 @@ export def "sites-within-output-format get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "bbox" $bbox "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "setBack" $set_back "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "excludeUnits" $exclude_units "scalar") (serialize-qp "onlyCivic" $only_civic "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/sites/within.{output_format}") $qp)
+  let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/sites/within.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -564,15 +573,15 @@ export def "sites get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
-  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
+  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See locationDescriptor (default: any)
   --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
   --set-back: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "setBack" $set_back "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({site_id: $site_id, output_format: $output_format} | format pattern "/sites/{site_id}.{output_format}") $qp)
+  let full_url = (build-url $base ({site_id: (encode-path-segment $site_id), output_format: (encode-path-segment $output_format)} | format pattern "/sites/{site_id}.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -592,15 +601,15 @@ export def "sites-subsites-output-format get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
-  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
+  --output-srs: int@output-srs-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See outputSRS (default: 4326)
+  --location-descriptor: string@location-descriptor-completer # Describes the nature of the address location. See locationDescriptor (default: any)
   --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
   --set-back: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "setBack" $set_back "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({site_id: $site_id, output_format: $output_format} | format pattern "/sites/{site_id}/subsites.{output_format}") $qp)
+  let full_url = (build-url $base ({site_id: (encode-path-segment $site_id), output_format: (encode-path-segment $output_format)} | format pattern "/sites/{site_id}/subsites.{output_format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

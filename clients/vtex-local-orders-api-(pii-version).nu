@@ -37,6 +37,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -117,13 +126,15 @@ export def "orders-extendsearch-orders list-orders2" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "f_hasInputInvoice" $f_has_input_invoice "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/orders/extendsearch/orders" $qp)
-  let body = {"f_creationDate": $f_creation_date, "page": $page, "per_page": $per_page, "q": $q} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"f_creationDate": $f_creation_date, "page": $page, "per_page": $per_page, "q": $q} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get order
@@ -147,11 +158,11 @@ export def "orders-pvt-document get-order2" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "reason" $reason "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/api/orders/pvt/document/{order_id}") $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/api/orders/pvt/document/{order_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -174,11 +185,11 @@ export def "orders-pvt-document-actions-start-handling start-handling2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/api/orders/pvt/document/{order_id}/actions/start-handling"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/api/orders/pvt/document/{order_id}/actions/start-handling"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -203,14 +214,16 @@ export def "orders-pvt-document-cancel cancel-order2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/api/orders/pvt/document/{order_id}/cancel"))
-  let body = {"reason": $reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/api/orders/pvt/document/{order_id}/cancel"))
+  let req_body = {"reason": $reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Order invoice notification
@@ -218,7 +231,7 @@ export def "orders-pvt-document-cancel cancel-order2" [
 # POST /api/orders/pvt/document/{orderId}/invoices
 # operationId: InvoiceNotification2
 # --items item shape: {itemIndex: string, price: int, quantity: int}
-export def "orders-pvt-document-invoices post" [
+export def "orders-pvt-document-invoices create-notification2" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -231,7 +244,7 @@ export def "orders-pvt-document-invoices post" [
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
   --cfop: string # Fiscal code used in Brazil. (e.g. 6.104)
-  --courier: string # The name of the carrier responsible for delivering the order. > This field should only be used when sending **tracking** information. When the request is used for sending the invoice, this field should be left empty (`""`). (nullable)
+  --courier: string # The name of the carrier responsible for delivering the order. > This field should only be used when sending **tracking** information. When the request is used for sending the invoice, this field should be left empty (`""`). (nullable)
   --extra-value: int # Extra value in the invoice in cents. Do not use any decimal separator. For instance, `$24.99` should be represented as `2499`. (e.g. 100)
   --invoice-key: string # Invoice key. (nullable)
   invoice_number: string # Number that identifies the invoice. (e.g. 123456789)
@@ -239,29 +252,31 @@ export def "orders-pvt-document-invoices post" [
   invoice_value: string # Total amount being invoiced in cents. Do not use any decimal separator. For instance, `$24.99` should be represented as `2499`. (e.g. 2499)
   issued_date: string # Issuance date of the invoice in ISO format. (e.g. 2020-07-15)
   items: list # Array containing the SKUs that are being invoiced. — item shape: {itemIndex: string, price: int, quantity: int}
-  --tracking-number: string # Code that identifies the order tracking. > This field should only be used when sending the **tracking** information. When the request is used for sending the invoice, this field should be left empty (`""`). (nullable)
-  --tracking-url: string # URL used to track the order. > This field should only be used when sending the **tracking** information. When the request is used for sending the invoice, this field should be left empty (`""`). (nullable)
+  --tracking-number: string # Code that identifies the order tracking. > This field should only be used when sending the **tracking** information. When the request is used for sending the invoice, this field should be left empty (`""`). (nullable)
+  --tracking-url: string # URL used to track the order. > This field should only be used when sending the **tracking** information. When the request is used for sending the invoice, this field should be left empty (`""`). (nullable)
   type: string # The type of invoice. There are two possible values: `"Output"` and `"Input"`. The `"Output"` type should be used when the invoice you are sending is a selling invoice. The `"Input"` type should be used when you send a return invoice. (e.g. Output)
   --volumes: int # Number of volumes in the invoice. (e.g. 3)
 ]: any -> record<date: string, orderId: string, receipt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/api/orders/pvt/document/{order_id}/invoices"))
-  let body = {"cfop": $cfop, "courier": $courier, "extraValue": $extra_value, "invoiceKey": $invoice_key, "invoiceNumber": $invoice_number, "invoiceUrl": $invoice_url, "invoiceValue": $invoice_value, "issuedDate": $issued_date, "items": $items, "trackingNumber": $tracking_number, "trackingUrl": $tracking_url, "type": $type, "volumes": $volumes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/api/orders/pvt/document/{order_id}/invoices"))
+  let req_body = {"cfop": $cfop, "courier": $courier, "extraValue": $extra_value, "invoiceKey": $invoice_key, "invoiceNumber": $invoice_number, "invoiceUrl": $invoice_url, "invoiceValue": $invoice_value, "issuedDate": $issued_date, "items": $items, "trackingNumber": $tracking_number, "trackingUrl": $tracking_url, "type": $type, "volumes": $volumes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Send payment notification
 #
 # POST /api/orders/pvt/document/{orderId}/payment/{paymentId}/notify-payment
 # operationId: SendPaymentNotification2
-export def "orders-pvt-document-payment-notify-payment send-payment-notification2" [
+export def "orders-pvt-document-payment-notify-payment send-notification2" [
   order_id: string
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -277,10 +292,10 @@ export def "orders-pvt-document-payment-notify-payment send-payment-notification
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id, payment_id: $payment_id} | format pattern "/api/orders/pvt/document/{order_id}/payment/{payment_id}/notify-payment"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id), payment_id: (encode-path-segment $payment_id)} | format pattern "/api/orders/pvt/document/{order_id}/payment/{payment_id}/notify-payment"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

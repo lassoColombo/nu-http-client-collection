@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def event-type-completer [] { ["company.creation" "company.deletion" "company.pr
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "webhooks-settings clear" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "webhooks-settings delete-{app-id}-clear" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 # DELETE /webhooks/v3/{appId}/settings
 #
 # operationId: delete-/webhooks/v3/{appId}/settings_clear
-export def "webhooks-settings clear" [
+export def "webhooks-settings delete-{app-id}-clear" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -107,7 +116,7 @@ export def "webhooks-settings clear" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/webhooks/v3/{app_id}/settings"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/webhooks/v3/{app_id}/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -116,7 +125,7 @@ export def "webhooks-settings clear" [
 # GET /webhooks/v3/{appId}/settings
 #
 # operationId: get-/webhooks/v3/{appId}/settings_getAll
-export def "webhooks-settings get-all" [
+export def "webhooks-settings get-{app-id}-get-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -129,7 +138,7 @@ export def "webhooks-settings get-all" [
 ]: nothing -> record<createdAt: string, targetUrl: string, throttling: record<maxConcurrentRequests: int, period: string>, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/webhooks/v3/{app_id}/settings"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/webhooks/v3/{app_id}/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -139,7 +148,7 @@ export def "webhooks-settings get-all" [
 #
 # operationId: put-/webhooks/v3/{appId}/settings_configure
 # --throttling shape: {maxConcurrentRequests: int, period: "SECONDLY"|"ROLLING_MINUTE"}
-export def "webhooks-settings configure" [
+export def "webhooks-settings update-{app-id}-configure" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -155,18 +164,18 @@ export def "webhooks-settings configure" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/webhooks/v3/{app_id}/settings"))
-  let body = {"targetUrl": $target_url, "throttling": $throttling} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/webhooks/v3/{app_id}/settings"))
+  let req_body = {"targetUrl": $target_url, "throttling": $throttling} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /webhooks/v3/{appId}/subscriptions
 #
 # operationId: get-/webhooks/v3/{appId}/subscriptions_getAll
-export def "webhooks-subscriptions get-all" [
+export def "webhooks-subscriptions get-{app-id}-get-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -179,7 +188,7 @@ export def "webhooks-subscriptions get-all" [
 ]: nothing -> record<results: table<active: bool, createdAt: string, eventType: string, id: string, propertyName: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/webhooks/v3/{app_id}/subscriptions"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/webhooks/v3/{app_id}/subscriptions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -188,7 +197,7 @@ export def "webhooks-subscriptions get-all" [
 # POST /webhooks/v3/{appId}/subscriptions
 #
 # operationId: post-/webhooks/v3/{appId}/subscriptions_create
-export def "webhooks-subscriptions create" [
+export def "webhooks-subscriptions create-{app-id}-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -205,19 +214,19 @@ export def "webhooks-subscriptions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/webhooks/v3/{app_id}/subscriptions"))
-  let body = {"active": $active, "eventType": $event_type, "propertyName": $property_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/webhooks/v3/{app_id}/subscriptions"))
+  let req_body = {"active": $active, "eventType": $event_type, "propertyName": $property_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /webhooks/v3/{appId}/subscriptions/batch/update
 #
 # operationId: post-/webhooks/v3/{appId}/subscriptions/batch/update_updateBatch
 # --inputs item shape: {active: bool, id: int}
-export def "webhooks-subscriptions-batch-update update" [
+export def "webhooks-subscriptions-batch-update create-{app-id}" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,18 +241,18 @@ export def "webhooks-subscriptions-batch-update update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/webhooks/v3/{app_id}/subscriptions/batch/update"))
-  let body = {"inputs": $inputs} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/webhooks/v3/{app_id}/subscriptions/batch/update"))
+  let req_body = {"inputs": $inputs} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /webhooks/v3/{appId}/subscriptions/{subscriptionId}
 #
 # operationId: delete-/webhooks/v3/{appId}/subscriptions/{subscriptionId}_archive
-export def "webhooks-subscriptions archive" [
+export def "webhooks-subscriptions delete-{app-id}-{subscription-id}-archive" [
   app_id: int
   subscription_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -257,7 +266,7 @@ export def "webhooks-subscriptions archive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, subscription_id: $subscription_id} | format pattern "/webhooks/v3/{app_id}/subscriptions/{subscription_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/webhooks/v3/{app_id}/subscriptions/{subscription_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -266,7 +275,7 @@ export def "webhooks-subscriptions archive" [
 # GET /webhooks/v3/{appId}/subscriptions/{subscriptionId}
 #
 # operationId: get-/webhooks/v3/{appId}/subscriptions/{subscriptionId}_getById
-export def "webhooks-subscriptions get-by" [
+export def "webhooks-subscriptions get-{app-id}-{subscription-id}-get" [
   app_id: int
   subscription_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -280,7 +289,7 @@ export def "webhooks-subscriptions get-by" [
 ]: nothing -> record<active: bool, createdAt: string, eventType: string, id: string, propertyName: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, subscription_id: $subscription_id} | format pattern "/webhooks/v3/{app_id}/subscriptions/{subscription_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/webhooks/v3/{app_id}/subscriptions/{subscription_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -289,7 +298,7 @@ export def "webhooks-subscriptions get-by" [
 # PATCH /webhooks/v3/{appId}/subscriptions/{subscriptionId}
 #
 # operationId: patch-/webhooks/v3/{appId}/subscriptions/{subscriptionId}_update
-export def "webhooks-subscriptions update" [
+export def "webhooks-subscriptions update-{app-id}-{subscription-id}-update" [
   app_id: int
   subscription_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -305,10 +314,10 @@ export def "webhooks-subscriptions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, subscription_id: $subscription_id} | format pattern "/webhooks/v3/{app_id}/subscriptions/{subscription_id}"))
-  let body = {"active": $active} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/webhooks/v3/{app_id}/subscriptions/{subscription_id}"))
+  let req_body = {"active": $active} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

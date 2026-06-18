@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -102,16 +111,16 @@ export def "employer delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -119,7 +128,7 @@ export def "employer delete" [
 #
 # GET /Employer/{EmployerId}
 # operationId: GetEmployer
-export def "employer list" [
+export def "employer get" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -129,16 +138,16 @@ export def "employer list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Employer: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, ApprenticeshipLevyAllowance: float, AutoEnrolment: record<Pension: record, PostponementDate: string, PrimaryAddress: record, PrimaryEmail: string, PrimaryFirstName: string, PrimaryJobTitle: string, PrimaryLastName: string, PrimaryTelephone: string, ReEnrolmentDayOffset: int, ReEnrolmentMonthOffset: int, RecentOptOutReEnrolmentExcluded: bool, SecondaryAddress: record, SecondaryEmail: string, SecondaryFirstName: string, SecondaryJobTitle: string, SecondaryLastName: string, SecondaryTelephone: string, StagingDate: string>, BacsServiceUserNumber: string, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, CalculateApprenticeshipLevy: bool, ClaimEmploymentAllowance: bool, ClaimSmallEmployerRelief: bool, EffectiveDate: string, HmrcSettings: record<AccountingOfficeRef: string, COTAXRef: string, ContactEmail: string, ContactFax: string, ContactFirstName: string, ContactLastName: string, ContactTelephone: string, EmploymentAllowanceOverride: float, Password: string, SAUTR: string, Sender: string, SenderId: string, StateAidSector: string, TaxOfficeNumber: string, TaxOfficeReference: string>, MetaData: record, Name: string, NextRevisionDate: string, Region: string, Revision: int, RuleExclusions: string, Territory: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -146,7 +155,7 @@ export def "employer list" [
 #
 # PATCH /Employer/{EmployerId}
 # operationId: PatchEmployer
-# --Employer shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, RuleExclusions?: "None"|"NiMissingPayInstructionRule"|"TaxMissingPayInstructionRule"|"TaxCodeUpliftRule"|"NiSetExpectedLetterRule"|"NiDateOfBirthChangeRetrospectiveCRule"|"NiDefermentStatusChangeRule"|"NiEndContractedOutTransferRule"|"PaymentAfterLeavingTaxCodeRule"|"LeaverEndInstructionsRule"|"P45StudentLoanInstructionRule"|"P45TaxInstructionRule"|"P45YtdTaxRule"|"YtdInstructionRule"|"TaxCodeRegionChangeRule"|"AutoEnrolmentStatusChangeRule"|"EmployeeDeceasedRule"|"BenefitInstructionAutoEndRule", Territory?: "UnitedKingdom"}
+# --Employer shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, ... (2 more fields)}
 export def "employer update-by-EmployerId" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -157,28 +166,28 @@ export def "employer update-by-EmployerId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
-  --employer: record # shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, RuleExclusions?: "None"|"NiMissingPayInstructionRule"|"TaxMissingPayInstructionRule"|"TaxCodeUpliftRule"|"NiSetExpectedLetterRule"|"NiDateOfBirthChangeRetrospectiveCRule"|"NiDefermentStatusChangeRule"|"NiEndContractedOutTransferRule"|"PaymentAfterLeavingTaxCodeRule"|"LeaverEndInstructionsRule"|"P45StudentLoanInstructionRule"|"P45TaxInstructionRule"|"P45YtdTaxRule"|"YtdInstructionRule"|"TaxCodeRegionChangeRule"|"AutoEnrolmentStatusChangeRule"|"EmployeeDeceasedRule"|"BenefitInstructionAutoEndRule", Territory?: "UnitedKingdom"}
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
+  --employer: record # shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, ... (2 more fields)}
 ]: any -> record<Employer: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, ApprenticeshipLevyAllowance: float, AutoEnrolment: record<Pension: record, PostponementDate: string, PrimaryAddress: record, PrimaryEmail: string, PrimaryFirstName: string, PrimaryJobTitle: string, PrimaryLastName: string, PrimaryTelephone: string, ReEnrolmentDayOffset: int, ReEnrolmentMonthOffset: int, RecentOptOutReEnrolmentExcluded: bool, SecondaryAddress: record, SecondaryEmail: string, SecondaryFirstName: string, SecondaryJobTitle: string, SecondaryLastName: string, SecondaryTelephone: string, StagingDate: string>, BacsServiceUserNumber: string, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, CalculateApprenticeshipLevy: bool, ClaimEmploymentAllowance: bool, ClaimSmallEmployerRelief: bool, EffectiveDate: string, HmrcSettings: record<AccountingOfficeRef: string, COTAXRef: string, ContactEmail: string, ContactFax: string, ContactFirstName: string, ContactLastName: string, ContactTelephone: string, EmploymentAllowanceOverride: float, Password: string, SAUTR: string, Sender: string, SenderId: string, StateAidSector: string, TaxOfficeNumber: string, TaxOfficeReference: string>, MetaData: record, Name: string, NextRevisionDate: string, Region: string, Revision: int, RuleExclusions: string, Territory: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}"))
-  let body = {"Employer": $employer} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}"))
+  let req_body = {"Employer": $employer} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the Employer
 #
 # PUT /Employer/{EmployerId}
 # operationId: PutEmployer
-# --Employer shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, RuleExclusions?: "None"|"NiMissingPayInstructionRule"|"TaxMissingPayInstructionRule"|"TaxCodeUpliftRule"|"NiSetExpectedLetterRule"|"NiDateOfBirthChangeRetrospectiveCRule"|"NiDefermentStatusChangeRule"|"NiEndContractedOutTransferRule"|"PaymentAfterLeavingTaxCodeRule"|"LeaverEndInstructionsRule"|"P45StudentLoanInstructionRule"|"P45TaxInstructionRule"|"P45YtdTaxRule"|"YtdInstructionRule"|"TaxCodeRegionChangeRule"|"AutoEnrolmentStatusChangeRule"|"EmployeeDeceasedRule"|"BenefitInstructionAutoEndRule", Territory?: "UnitedKingdom"}
+# --Employer shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, ... (2 more fields)}
 export def "employer update-by-EmployerId-1" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -189,21 +198,21 @@ export def "employer update-by-EmployerId-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
-  --employer: record # shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, RuleExclusions?: "None"|"NiMissingPayInstructionRule"|"TaxMissingPayInstructionRule"|"TaxCodeUpliftRule"|"NiSetExpectedLetterRule"|"NiDateOfBirthChangeRetrospectiveCRule"|"NiDefermentStatusChangeRule"|"NiEndContractedOutTransferRule"|"PaymentAfterLeavingTaxCodeRule"|"LeaverEndInstructionsRule"|"P45StudentLoanInstructionRule"|"P45TaxInstructionRule"|"P45YtdTaxRule"|"YtdInstructionRule"|"TaxCodeRegionChangeRule"|"AutoEnrolmentStatusChangeRule"|"EmployeeDeceasedRule"|"BenefitInstructionAutoEndRule", Territory?: "UnitedKingdom"}
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
+  --employer: record # shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, ... (2 more fields)}
 ]: any -> record<Employer: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, ApprenticeshipLevyAllowance: float, AutoEnrolment: record<Pension: record, PostponementDate: string, PrimaryAddress: record, PrimaryEmail: string, PrimaryFirstName: string, PrimaryJobTitle: string, PrimaryLastName: string, PrimaryTelephone: string, ReEnrolmentDayOffset: int, ReEnrolmentMonthOffset: int, RecentOptOutReEnrolmentExcluded: bool, SecondaryAddress: record, SecondaryEmail: string, SecondaryFirstName: string, SecondaryJobTitle: string, SecondaryLastName: string, SecondaryTelephone: string, StagingDate: string>, BacsServiceUserNumber: string, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, CalculateApprenticeshipLevy: bool, ClaimEmploymentAllowance: bool, ClaimSmallEmployerRelief: bool, EffectiveDate: string, HmrcSettings: record<AccountingOfficeRef: string, COTAXRef: string, ContactEmail: string, ContactFax: string, ContactFirstName: string, ContactLastName: string, ContactTelephone: string, EmploymentAllowanceOverride: float, Password: string, SAUTR: string, Sender: string, SenderId: string, StateAidSector: string, TaxOfficeNumber: string, TaxOfficeReference: string>, MetaData: record, Name: string, NextRevisionDate: string, Region: string, Revision: int, RuleExclusions: string, Territory: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}"))
-  let body = {"Employer": $employer} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}"))
+  let req_body = {"Employer": $employer} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an CIS line type
@@ -221,16 +230,16 @@ export def "employer-cis-line-type delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, cis_line_type_id: $cis_line_type_id} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), cis_line_type_id: (encode-path-segment $cis_line_type_id)} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -238,7 +247,7 @@ export def "employer-cis-line-type delete" [
 #
 # GET /Employer/{EmployerId}/CisLineType/{CisLineTypeId}
 # operationId: GetCisLineTypeFromEmployer
-export def "employer-cis-line-type get-cis-line-type-from" [
+export def "employer-cis-line-type get" [
   employer_id: string
   cis_line_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -249,16 +258,16 @@ export def "employer-cis-line-type get-cis-line-type-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<CisLineType: record<Description: string, LineType: string, NominalCode: record<_href: string, _rel: string, _title: string>, TaxTreatment: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, cis_line_type_id: $cis_line_type_id} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), cis_line_type_id: (encode-path-segment $cis_line_type_id)} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -267,7 +276,7 @@ export def "employer-cis-line-type get-cis-line-type-from" [
 # PUT /Employer/{EmployerId}/CisLineType/{CisLineTypeId}
 # operationId: PutCisLineTypeIntoEmployer
 # --CisLineType shape: {Description?: string, LineType?: string, NominalCode?: record, TaxTreatment?: "Taxable"|"NonTaxable"|"Notional"|"Materials"}
-export def "employer-cis-line-type update-cis-line-type-into" [
+export def "employer-cis-line-type update-into" [
   employer_id: string
   cis_line_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -278,21 +287,21 @@ export def "employer-cis-line-type update-cis-line-type-into" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --cis-line-type: record # shape: {Description?: string, LineType?: string, NominalCode?: record, TaxTreatment?: "Taxable"|"NonTaxable"|"Notional"|"Materials"}
 ]: any -> record<CisLineType: record<Description: string, LineType: string, NominalCode: record<_href: string, _rel: string, _title: string>, TaxTreatment: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, cis_line_type_id: $cis_line_type_id} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}"))
-  let body = {"CisLineType": $cis_line_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), cis_line_type_id: (encode-path-segment $cis_line_type_id)} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}"))
+  let req_body = {"CisLineType": $cis_line_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete CIS line type tag
@@ -311,16 +320,16 @@ export def "employer-cis-line-type-tag delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, cis_line_type_id: $cis_line_type_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), cis_line_type_id: (encode-path-segment $cis_line_type_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -328,7 +337,7 @@ export def "employer-cis-line-type-tag delete" [
 #
 # GET /Employer/{EmployerId}/CisLineType/{CisLineTypeId}/Tag/{TagId}
 # operationId: GetTagFromCisLineType
-export def "employer-cis-line-type-tag get-tag-from" [
+export def "employer-cis-line-type-tag get" [
   employer_id: string
   cis_line_type_id: string
   tag_id: string
@@ -340,16 +349,16 @@ export def "employer-cis-line-type-tag get-tag-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, cis_line_type_id: $cis_line_type_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), cis_line_type_id: (encode-path-segment $cis_line_type_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -369,16 +378,16 @@ export def "employer-cis-line-type-tag update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, cis_line_type_id: $cis_line_type_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), cis_line_type_id: (encode-path-segment $cis_line_type_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -386,7 +395,7 @@ export def "employer-cis-line-type-tag update" [
 #
 # GET /Employer/{EmployerId}/CisLineType/{CisLineTypeId}/Tags
 # operationId: GetTagsFromCisLineType
-export def "employer-cis-line-type-tags get-tags-from" [
+export def "employer-cis-line-type-tags get" [
   employer_id: string
   cis_line_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -397,16 +406,16 @@ export def "employer-cis-line-type-tags get-tags-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, cis_line_type_id: $cis_line_type_id} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), cis_line_type_id: (encode-path-segment $cis_line_type_id)} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -414,7 +423,7 @@ export def "employer-cis-line-type-tags get-tags-from" [
 #
 # GET /Employer/{EmployerId}/CisLineTypes
 # operationId: GetCisLineTypesFromEmployer
-export def "employer-cis-line-types get-cis-line-types-from" [
+export def "employer-cis-line-types get" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -424,16 +433,16 @@ export def "employer-cis-line-types get-cis-line-types-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/CisLineTypes"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/CisLineTypes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -442,7 +451,7 @@ export def "employer-cis-line-types get-cis-line-types-from" [
 # POST /Employer/{EmployerId}/CisLineTypes
 # operationId: PostCisLineTypeIntoEmployer
 # --CisLineType shape: {Description?: string, LineType?: string, NominalCode?: record, TaxTreatment?: "Taxable"|"NonTaxable"|"Notional"|"Materials"}
-export def "employer-cis-line-types create-cis-line-type-into" [
+export def "employer-cis-line-types create-into" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -452,28 +461,28 @@ export def "employer-cis-line-types create-cis-line-type-into" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --cis-line-type: record # shape: {Description?: string, LineType?: string, NominalCode?: record, TaxTreatment?: "Taxable"|"NonTaxable"|"Notional"|"Materials"}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/CisLineTypes"))
-  let body = {"CisLineType": $cis_line_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/CisLineTypes"))
+  let req_body = {"CisLineType": $cis_line_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get CIS line types with tag
 #
 # GET /Employer/{EmployerId}/CisLineTypes/Tag/{TagId}
 # operationId: GetCisLineTypesWithTag
-export def "employer-cis-line-types-tag get-cis-line-types-with" [
+export def "employer-cis-line-types-tag get" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -484,16 +493,16 @@ export def "employer-cis-line-types-tag get-cis-line-types-with" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/CisLineTypes/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/CisLineTypes/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -501,7 +510,7 @@ export def "employer-cis-line-types-tag get-cis-line-types-with" [
 #
 # GET /Employer/{EmployerId}/CisLineTypes/Tags
 # operationId: GetAllCisLineTypeTags
-export def "employer-cis-line-types-tags get-all" [
+export def "employer-cis-line-types-tags get-list" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -511,16 +520,16 @@ export def "employer-cis-line-types-tags get-all" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/CisLineTypes/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/CisLineTypes/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -539,16 +548,16 @@ export def "employer-cis-transaction delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, cis_transaction_id: $cis_transaction_id} | format pattern "/Employer/{employer_id}/CisTransaction/{cis_transaction_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), cis_transaction_id: (encode-path-segment $cis_transaction_id)} | format pattern "/Employer/{employer_id}/CisTransaction/{cis_transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -556,7 +565,7 @@ export def "employer-cis-transaction delete" [
 #
 # GET /Employer/{EmployerId}/CisTransaction/{CisTransactionId}
 # operationId: GetCisTransactionFromEmployer
-export def "employer-cis-transaction get-cis-transaction-from" [
+export def "employer-cis-transaction get" [
   employer_id: string
   cis_transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -567,16 +576,16 @@ export def "employer-cis-transaction get-cis-transaction-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<CisTransaction: record<CisMessageType: string, EmployerCore: record<_href: string, _rel: string, _title: string>, RequestData: string, ResponseData: string, TaxYear: int, Timestamp: string, TransactionStatus: string, TransmissionDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, cis_transaction_id: $cis_transaction_id} | format pattern "/Employer/{employer_id}/CisTransaction/{cis_transaction_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), cis_transaction_id: (encode-path-segment $cis_transaction_id)} | format pattern "/Employer/{employer_id}/CisTransaction/{cis_transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -584,7 +593,7 @@ export def "employer-cis-transaction get-cis-transaction-from" [
 #
 # GET /Employer/{EmployerId}/CisTransactions
 # operationId: GetCisTransactionsFromEmployer
-export def "employer-cis-transactions get-cis-transactions-from" [
+export def "employer-cis-transactions get" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -594,16 +603,16 @@ export def "employer-cis-transactions get-cis-transactions-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/CisTransactions"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/CisTransactions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -622,16 +631,16 @@ export def "employer-dps-message delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, dps_message_id: $dps_message_id} | format pattern "/Employer/{employer_id}/DpsMessage/{dps_message_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), dps_message_id: (encode-path-segment $dps_message_id)} | format pattern "/Employer/{employer_id}/DpsMessage/{dps_message_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -639,7 +648,7 @@ export def "employer-dps-message delete" [
 #
 # GET /Employer/{EmployerId}/DpsMessage/{DpsMessageId}
 # operationId: GetDpsMessageFromEmployer
-export def "employer-dps-message get-dps-message-from" [
+export def "employer-dps-message get" [
   employer_id: string
   dps_message_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -650,16 +659,16 @@ export def "employer-dps-message get-dps-message-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<DpsMessage: record<FormType: string, IssueDate: string, LastUpdated: string, Message: string, MessageStatus: string, MessageType: string, ProcessingResult: string, RetrieveDate: string, SequenceNumber: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, dps_message_id: $dps_message_id} | format pattern "/Employer/{employer_id}/DpsMessage/{dps_message_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), dps_message_id: (encode-path-segment $dps_message_id)} | format pattern "/Employer/{employer_id}/DpsMessage/{dps_message_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -678,16 +687,16 @@ export def "employer-dps-message update-by-EmployerId-DpsMessageId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<DpsMessage: record<FormType: string, IssueDate: string, LastUpdated: string, Message: string, MessageStatus: string, MessageType: string, ProcessingResult: string, RetrieveDate: string, SequenceNumber: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, dps_message_id: $dps_message_id} | format pattern "/Employer/{employer_id}/DpsMessage/{dps_message_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), dps_message_id: (encode-path-segment $dps_message_id)} | format pattern "/Employer/{employer_id}/DpsMessage/{dps_message_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -706,16 +715,16 @@ export def "employer-dps-message update-by-EmployerId-DpsMessageId-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<DpsMessage: record<FormType: string, IssueDate: string, LastUpdated: string, Message: string, MessageStatus: string, MessageType: string, ProcessingResult: string, RetrieveDate: string, SequenceNumber: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, dps_message_id: $dps_message_id} | format pattern "/Employer/{employer_id}/DpsMessage/{dps_message_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), dps_message_id: (encode-path-segment $dps_message_id)} | format pattern "/Employer/{employer_id}/DpsMessage/{dps_message_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -723,7 +732,7 @@ export def "employer-dps-message update-by-EmployerId-DpsMessageId-1" [
 #
 # GET /Employer/{EmployerId}/DpsMessages
 # operationId: GetDpsMessagesFromEmployer
-export def "employer-dps-messages get-dps-messages-from" [
+export def "employer-dps-messages get" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -733,16 +742,16 @@ export def "employer-dps-messages get-dps-messages-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/DpsMessages"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/DpsMessages"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -760,16 +769,16 @@ export def "employer-dps-messages create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/DpsMessages"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/DpsMessages"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -788,16 +797,16 @@ export def "employer-employee delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -805,7 +814,7 @@ export def "employer-employee delete" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}
 # operationId: GetEmployeeFromEmployer
-export def "employer-employee get-employee-from" [
+export def "employer-employee get" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -816,16 +825,16 @@ export def "employer-employee get-employee-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Employee: record<AEAssessmentOverride: string, AEAssessmentOverrideDate: string, AEExclusionReasonCode: string, AEPostponementDate: string, Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, Code: string, DateOfBirth: string, Deactivated: bool, DirectorshipAppointmentDate: string, EEACitizen: bool, EPM6: bool, EffectiveDate: string, EmployeePartner: record<FirstName: string, Initials: string, LastName: string, MiddleName: string, NiNumber: string>, FirstName: string, Gender: string, HoursPerWeek: float, Initials: string, IrregularEmployment: bool, IsAgencyWorker: bool, LastName: string, LeaverReason: string, LeavingDate: string, MaritalStatus: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, NicLiability: string, OffPayrollWorker: bool, OnStrike: bool, P45IssuedDate: string, PassportNumber: string, PaySchedule: record<_href: string, _rel: string, _title: string>, PaymentMethod: string, PaymentToANonIndividual: bool, Region: string, Revision: int, RuleExclusions: string, Seconded: string, StartDate: string, StarterDeclaration: string, Territory: string, Title: string, VeteranPeriodStartDate: string, WorkingWeek: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -833,7 +842,7 @@ export def "employer-employee get-employee-from" [
 #
 # PATCH /Employer/{EmployerId}/Employee/{EmployeeId}
 # operationId: PatchEmployee
-# --Employee shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, BankAccount?: record, Code?: string, DateOfBirth?: string, Deactivated?: bool, DirectorshipAppointmentDate?: string, EEACitizen?: bool, EPM6?: bool, EffectiveDate?: string, EmployeePartner?: record, FirstName?: string, Gender?: "Unknown"|"Male"|"Female", HoursPerWeek?: float, Initials?: string, IrregularEmployment?: bool, IsAgencyWorker?: bool, LastName?: string, LeaverReason?: "Resigned"|"Dismissed"|"Redundant"|"Retired"|"Deceased"|"LegalCustody"|"Other", LeavingDate?: string, MaritalStatus?: "NotSet"|"Single"|"Married"|"Divorced"|"Widowed", MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, NicLiability?: "HasOtherJob"|"IsFemaleEntitledToReducedRate"|"IsNotLiable"|"IsContractedOut"|"IsFullyLiable"|"IsApprentice"|"LeaverBeyond6Weeks"|"PaymentAfterLeavingIrregular"|"IsFreePortWorker"|"IsNotLiableForEmployerNi", OffPayrollWorker?: bool, OnStrike?: bool, P45IssuedDate?: string, PassportNumber?: string, PaySchedule?: record, PaymentMethod?: "NotSet"|"Cash"|"Cheque"|"BACS"|"FasterPayments"|"Other", PaymentToANonIndividual?: bool, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, RuleExclusions?: "None"|"NiMissingPayInstructionRule"|"TaxMissingPayInstructionRule"|"TaxCodeUpliftRule"|"NiSetExpectedLetterRule"|"NiDateOfBirthChangeRetrospectiveCRule"|"NiDefermentStatusChangeRule"|"NiEndContractedOutTransferRule"|"PaymentAfterLeavingTaxCodeRule"|"LeaverEndInstructionsRule"|"P45StudentLoanInstructionRule"|"P45TaxInstructionRule"|"P45YtdTaxRule"|"YtdInstructionRule"|"TaxCodeRegionChangeRule"|"AutoEnrolmentStatusChangeRule"|"EmployeeDeceasedRule"|"BenefitInstructionAutoEndRule", Seconded?: "NotSet"|"Stay183DaysOrMore"|"StayLessThan183Days"|"InOutUk", StartDate?: string, StarterDeclaration?: "PreviouslyReported"|"A"|"B"|"C", Territory?: "UnitedKingdom", Title?: string, VeteranPeriodStartDate?: string, WorkingWeek?: "None"|"Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"AllWeekDays"|"Saturday"|"Sunday"|"AllDays"}
+# --Employee shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, ... (41 more fields)}
 export def "employer-employee update" [
   employer_id: string
   employee_id: string
@@ -845,29 +854,29 @@ export def "employer-employee update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
-  --employee: record # shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, BankAccount?: record, Code?: string, DateOfBirth?: string, Deactivated?: bool, DirectorshipAppointmentDate?: string, EEACitizen?: bool, EPM6?: bool, EffectiveDate?: string, EmployeePartner?: record, FirstName?: string, Gender?: "Unknown"|"Male"|"Female", HoursPerWeek?: float, Initials?: string, IrregularEmployment?: bool, IsAgencyWorker?: bool, LastName?: string, LeaverReason?: "Resigned"|"Dismissed"|"Redundant"|"Retired"|"Deceased"|"LegalCustody"|"Other", LeavingDate?: string, MaritalStatus?: "NotSet"|"Single"|"Married"|"Divorced"|"Widowed", MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, NicLiability?: "HasOtherJob"|"IsFemaleEntitledToReducedRate"|"IsNotLiable"|"IsContractedOut"|"IsFullyLiable"|"IsApprentice"|"LeaverBeyond6Weeks"|"PaymentAfterLeavingIrregular"|"IsFreePortWorker"|"IsNotLiableForEmployerNi", OffPayrollWorker?: bool, OnStrike?: bool, P45IssuedDate?: string, PassportNumber?: string, PaySchedule?: record, PaymentMethod?: "NotSet"|"Cash"|"Cheque"|"BACS"|"FasterPayments"|"Other", PaymentToANonIndividual?: bool, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, RuleExclusions?: "None"|"NiMissingPayInstructionRule"|"TaxMissingPayInstructionRule"|"TaxCodeUpliftRule"|"NiSetExpectedLetterRule"|"NiDateOfBirthChangeRetrospectiveCRule"|"NiDefermentStatusChangeRule"|"NiEndContractedOutTransferRule"|"PaymentAfterLeavingTaxCodeRule"|"LeaverEndInstructionsRule"|"P45StudentLoanInstructionRule"|"P45TaxInstructionRule"|"P45YtdTaxRule"|"YtdInstructionRule"|"TaxCodeRegionChangeRule"|"AutoEnrolmentStatusChangeRule"|"EmployeeDeceasedRule"|"BenefitInstructionAutoEndRule", Seconded?: "NotSet"|"Stay183DaysOrMore"|"StayLessThan183Days"|"InOutUk", StartDate?: string, StarterDeclaration?: "PreviouslyReported"|"A"|"B"|"C", Territory?: "UnitedKingdom", Title?: string, VeteranPeriodStartDate?: string, WorkingWeek?: "None"|"Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"AllWeekDays"|"Saturday"|"Sunday"|"AllDays"}
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
+  --employee: record # shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, ... (41 more fields)}
 ]: any -> record<Employee: record<AEAssessmentOverride: string, AEAssessmentOverrideDate: string, AEExclusionReasonCode: string, AEPostponementDate: string, Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, Code: string, DateOfBirth: string, Deactivated: bool, DirectorshipAppointmentDate: string, EEACitizen: bool, EPM6: bool, EffectiveDate: string, EmployeePartner: record<FirstName: string, Initials: string, LastName: string, MiddleName: string, NiNumber: string>, FirstName: string, Gender: string, HoursPerWeek: float, Initials: string, IrregularEmployment: bool, IsAgencyWorker: bool, LastName: string, LeaverReason: string, LeavingDate: string, MaritalStatus: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, NicLiability: string, OffPayrollWorker: bool, OnStrike: bool, P45IssuedDate: string, PassportNumber: string, PaySchedule: record<_href: string, _rel: string, _title: string>, PaymentMethod: string, PaymentToANonIndividual: bool, Region: string, Revision: int, RuleExclusions: string, Seconded: string, StartDate: string, StarterDeclaration: string, Territory: string, Title: string, VeteranPeriodStartDate: string, WorkingWeek: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}"))
-  let body = {"Employee": $employee} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}"))
+  let req_body = {"Employee": $employee} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the Employee
 #
 # PUT /Employer/{EmployerId}/Employee/{EmployeeId}
 # operationId: PutEmployeeIntoEmployer
-# --Employee shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, BankAccount?: record, Code?: string, DateOfBirth?: string, Deactivated?: bool, DirectorshipAppointmentDate?: string, EEACitizen?: bool, EPM6?: bool, EffectiveDate?: string, EmployeePartner?: record, FirstName?: string, Gender?: "Unknown"|"Male"|"Female", HoursPerWeek?: float, Initials?: string, IrregularEmployment?: bool, IsAgencyWorker?: bool, LastName?: string, LeaverReason?: "Resigned"|"Dismissed"|"Redundant"|"Retired"|"Deceased"|"LegalCustody"|"Other", LeavingDate?: string, MaritalStatus?: "NotSet"|"Single"|"Married"|"Divorced"|"Widowed", MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, NicLiability?: "HasOtherJob"|"IsFemaleEntitledToReducedRate"|"IsNotLiable"|"IsContractedOut"|"IsFullyLiable"|"IsApprentice"|"LeaverBeyond6Weeks"|"PaymentAfterLeavingIrregular"|"IsFreePortWorker"|"IsNotLiableForEmployerNi", OffPayrollWorker?: bool, OnStrike?: bool, P45IssuedDate?: string, PassportNumber?: string, PaySchedule?: record, PaymentMethod?: "NotSet"|"Cash"|"Cheque"|"BACS"|"FasterPayments"|"Other", PaymentToANonIndividual?: bool, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, RuleExclusions?: "None"|"NiMissingPayInstructionRule"|"TaxMissingPayInstructionRule"|"TaxCodeUpliftRule"|"NiSetExpectedLetterRule"|"NiDateOfBirthChangeRetrospectiveCRule"|"NiDefermentStatusChangeRule"|"NiEndContractedOutTransferRule"|"PaymentAfterLeavingTaxCodeRule"|"LeaverEndInstructionsRule"|"P45StudentLoanInstructionRule"|"P45TaxInstructionRule"|"P45YtdTaxRule"|"YtdInstructionRule"|"TaxCodeRegionChangeRule"|"AutoEnrolmentStatusChangeRule"|"EmployeeDeceasedRule"|"BenefitInstructionAutoEndRule", Seconded?: "NotSet"|"Stay183DaysOrMore"|"StayLessThan183Days"|"InOutUk", StartDate?: string, StarterDeclaration?: "PreviouslyReported"|"A"|"B"|"C", Territory?: "UnitedKingdom", Title?: string, VeteranPeriodStartDate?: string, WorkingWeek?: "None"|"Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"AllWeekDays"|"Saturday"|"Sunday"|"AllDays"}
-export def "employer-employee update-employee-into" [
+# --Employee shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, ... (41 more fields)}
+export def "employer-employee update-into" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -878,28 +887,28 @@ export def "employer-employee update-employee-into" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
-  --employee: record # shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, BankAccount?: record, Code?: string, DateOfBirth?: string, Deactivated?: bool, DirectorshipAppointmentDate?: string, EEACitizen?: bool, EPM6?: bool, EffectiveDate?: string, EmployeePartner?: record, FirstName?: string, Gender?: "Unknown"|"Male"|"Female", HoursPerWeek?: float, Initials?: string, IrregularEmployment?: bool, IsAgencyWorker?: bool, LastName?: string, LeaverReason?: "Resigned"|"Dismissed"|"Redundant"|"Retired"|"Deceased"|"LegalCustody"|"Other", LeavingDate?: string, MaritalStatus?: "NotSet"|"Single"|"Married"|"Divorced"|"Widowed", MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, NicLiability?: "HasOtherJob"|"IsFemaleEntitledToReducedRate"|"IsNotLiable"|"IsContractedOut"|"IsFullyLiable"|"IsApprentice"|"LeaverBeyond6Weeks"|"PaymentAfterLeavingIrregular"|"IsFreePortWorker"|"IsNotLiableForEmployerNi", OffPayrollWorker?: bool, OnStrike?: bool, P45IssuedDate?: string, PassportNumber?: string, PaySchedule?: record, PaymentMethod?: "NotSet"|"Cash"|"Cheque"|"BACS"|"FasterPayments"|"Other", PaymentToANonIndividual?: bool, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, RuleExclusions?: "None"|"NiMissingPayInstructionRule"|"TaxMissingPayInstructionRule"|"TaxCodeUpliftRule"|"NiSetExpectedLetterRule"|"NiDateOfBirthChangeRetrospectiveCRule"|"NiDefermentStatusChangeRule"|"NiEndContractedOutTransferRule"|"PaymentAfterLeavingTaxCodeRule"|"LeaverEndInstructionsRule"|"P45StudentLoanInstructionRule"|"P45TaxInstructionRule"|"P45YtdTaxRule"|"YtdInstructionRule"|"TaxCodeRegionChangeRule"|"AutoEnrolmentStatusChangeRule"|"EmployeeDeceasedRule"|"BenefitInstructionAutoEndRule", Seconded?: "NotSet"|"Stay183DaysOrMore"|"StayLessThan183Days"|"InOutUk", StartDate?: string, StarterDeclaration?: "PreviouslyReported"|"A"|"B"|"C", Territory?: "UnitedKingdom", Title?: string, VeteranPeriodStartDate?: string, WorkingWeek?: "None"|"Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"AllWeekDays"|"Saturday"|"Sunday"|"AllDays"}
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
+  --employee: record # shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, ... (41 more fields)}
 ]: any -> record<Employee: record<AEAssessmentOverride: string, AEAssessmentOverrideDate: string, AEExclusionReasonCode: string, AEPostponementDate: string, Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, Code: string, DateOfBirth: string, Deactivated: bool, DirectorshipAppointmentDate: string, EEACitizen: bool, EPM6: bool, EffectiveDate: string, EmployeePartner: record<FirstName: string, Initials: string, LastName: string, MiddleName: string, NiNumber: string>, FirstName: string, Gender: string, HoursPerWeek: float, Initials: string, IrregularEmployment: bool, IsAgencyWorker: bool, LastName: string, LeaverReason: string, LeavingDate: string, MaritalStatus: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, NicLiability: string, OffPayrollWorker: bool, OnStrike: bool, P45IssuedDate: string, PassportNumber: string, PaySchedule: record<_href: string, _rel: string, _title: string>, PaymentMethod: string, PaymentToANonIndividual: bool, Region: string, Revision: int, RuleExclusions: string, Seconded: string, StartDate: string, StarterDeclaration: string, Territory: string, Title: string, VeteranPeriodStartDate: string, WorkingWeek: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}"))
-  let body = {"Employee": $employee} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}"))
+  let req_body = {"Employee": $employee} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete auto enrolment assessment
 #
 # DELETE /Employer/{EmployerId}/Employee/{EmployeeId}/AEAssessment/{AEAssessmentId}
 # operationId: DeleteAEAssessment
-export def "employer-employee-ae-assessment delete-e" [
+export def "employer-employee-ae-assessment delete" [
   employer_id: string
   employee_id: string
   ae_assessment_id: string
@@ -911,16 +920,16 @@ export def "employer-employee-ae-assessment delete-e" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, ae_assessment_id: $ae_assessment_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/AEAssessment/{ae_assessment_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), ae_assessment_id: (encode-path-segment $ae_assessment_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/AEAssessment/{ae_assessment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -928,7 +937,7 @@ export def "employer-employee-ae-assessment delete-e" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/AEAssessment/{AEAssessmentId}
 # operationId: GetAEAssessmentFromEmployee
-export def "employer-employee-ae-assessment get-e-assessment-from" [
+export def "employer-employee-ae-assessment get" [
   employer_id: string
   employee_id: string
   ae_assessment_id: string
@@ -940,16 +949,16 @@ export def "employer-employee-ae-assessment get-e-assessment-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<AEAssessment: record<Age: int, AssessmentCode: string, AssessmentDate: string, AssessmentEvent: string, AssessmentOverride: string, AssessmentResult: string, IsMemberOfAlternativePensionScheme: bool, OptOutWindowEndDate: string, QualifyingEarnings: float, ReenrolmentDate: string, StatePensionAge: int, StatePensionDate: string, TaxPeriod: int, TaxYear: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, ae_assessment_id: $ae_assessment_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/AEAssessment/{ae_assessment_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), ae_assessment_id: (encode-path-segment $ae_assessment_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/AEAssessment/{ae_assessment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -957,7 +966,7 @@ export def "employer-employee-ae-assessment get-e-assessment-from" [
 #
 # PUT /Employer/{EmployerId}/Employee/{EmployeeId}/AEAssessment/{AEAssessmentId}
 # operationId: PutNewAEAssessment
-# --AEAssessment shape: {Age?: int, AssessmentCode?: "Excluded"|"EligibleJobHolder"|"NonEligibleJobHolder"|"EntitledWorker", AssessmentDate?: string, AssessmentEvent?: "NonEnrolmentEvent"|"AutomaticEnrolment"|"OptIn"|"VoluntaryJoiner"|"ContractualEnrolment", AssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AssessmentResult?: "Inconclusive"|"NoChange"|"Enrol"|"Exit", IsMemberOfAlternativePensionScheme?: bool, OptOutWindowEndDate?: string, QualifyingEarnings?: float, ReenrolmentDate?: string, StatePensionAge?: int, StatePensionDate?: string, TaxPeriod?: int, TaxYear?: int}
+# --AEAssessment shape: {Age?: int, AssessmentCode?: "Excluded"|"EligibleJobHolder"|"NonEligibleJobHolder"|"EntitledWorker", AssessmentDate?: string, AssessmentEvent?: "NonEnrolmentEvent"|"AutomaticEnrolment"|"OptIn"|"VoluntaryJoiner"|"ContractualEnrolment", AssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AssessmentResult?: "Inconclusive"|"NoChange"|"Enrol"|"Exit", IsMemberOfAlternativePensionScheme?: bool, OptOutWindowEndDate?: string, ... (6 more fields)}
 export def "employer-employee-ae-assessment update-new" [
   employer_id: string
   employee_id: string
@@ -970,28 +979,28 @@ export def "employer-employee-ae-assessment update-new" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
-  --ae-assessment: record # shape: {Age?: int, AssessmentCode?: "Excluded"|"EligibleJobHolder"|"NonEligibleJobHolder"|"EntitledWorker", AssessmentDate?: string, AssessmentEvent?: "NonEnrolmentEvent"|"AutomaticEnrolment"|"OptIn"|"VoluntaryJoiner"|"ContractualEnrolment", AssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AssessmentResult?: "Inconclusive"|"NoChange"|"Enrol"|"Exit", IsMemberOfAlternativePensionScheme?: bool, OptOutWindowEndDate?: string, QualifyingEarnings?: float, ReenrolmentDate?: string, StatePensionAge?: int, StatePensionDate?: string, TaxPeriod?: int, TaxYear?: int}
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
+  --ae-assessment: record # shape: {Age?: int, AssessmentCode?: "Excluded"|"EligibleJobHolder"|"NonEligibleJobHolder"|"EntitledWorker", AssessmentDate?: string, AssessmentEvent?: "NonEnrolmentEvent"|"AutomaticEnrolment"|"OptIn"|"VoluntaryJoiner"|"ContractualEnrolment", AssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AssessmentResult?: "Inconclusive"|"NoChange"|"Enrol"|"Exit", IsMemberOfAlternativePensionScheme?: bool, OptOutWindowEndDate?: string, ... (6 more fields)}
 ]: any -> record<AEAssessment: record<Age: int, AssessmentCode: string, AssessmentDate: string, AssessmentEvent: string, AssessmentOverride: string, AssessmentResult: string, IsMemberOfAlternativePensionScheme: bool, OptOutWindowEndDate: string, QualifyingEarnings: float, ReenrolmentDate: string, StatePensionAge: int, StatePensionDate: string, TaxPeriod: int, TaxYear: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, ae_assessment_id: $ae_assessment_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/AEAssessment/{ae_assessment_id}"))
-  let body = {"AEAssessment": $ae_assessment} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), ae_assessment_id: (encode-path-segment $ae_assessment_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/AEAssessment/{ae_assessment_id}"))
+  let req_body = {"AEAssessment": $ae_assessment} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the auto enrolment assessments
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/AEAssessments
 # operationId: GetAEAssessmentsFromEmployee
-export def "employer-employee-ae-assessments get-e-assessments-from" [
+export def "employer-employee-ae-assessments get" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1002,16 +1011,16 @@ export def "employer-employee-ae-assessments get-e-assessments-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/AEAssessments"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/AEAssessments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1019,7 +1028,7 @@ export def "employer-employee-ae-assessments get-e-assessments-from" [
 #
 # POST /Employer/{EmployerId}/Employee/{EmployeeId}/AEAssessments
 # operationId: PostNewAEAssessment
-# --AEAssessment shape: {Age?: int, AssessmentCode?: "Excluded"|"EligibleJobHolder"|"NonEligibleJobHolder"|"EntitledWorker", AssessmentDate?: string, AssessmentEvent?: "NonEnrolmentEvent"|"AutomaticEnrolment"|"OptIn"|"VoluntaryJoiner"|"ContractualEnrolment", AssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AssessmentResult?: "Inconclusive"|"NoChange"|"Enrol"|"Exit", IsMemberOfAlternativePensionScheme?: bool, OptOutWindowEndDate?: string, QualifyingEarnings?: float, ReenrolmentDate?: string, StatePensionAge?: int, StatePensionDate?: string, TaxPeriod?: int, TaxYear?: int}
+# --AEAssessment shape: {Age?: int, AssessmentCode?: "Excluded"|"EligibleJobHolder"|"NonEligibleJobHolder"|"EntitledWorker", AssessmentDate?: string, AssessmentEvent?: "NonEnrolmentEvent"|"AutomaticEnrolment"|"OptIn"|"VoluntaryJoiner"|"ContractualEnrolment", AssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AssessmentResult?: "Inconclusive"|"NoChange"|"Enrol"|"Exit", IsMemberOfAlternativePensionScheme?: bool, OptOutWindowEndDate?: string, ... (6 more fields)}
 export def "employer-employee-ae-assessments create-new" [
   employer_id: string
   employee_id: string
@@ -1031,28 +1040,28 @@ export def "employer-employee-ae-assessments create-new" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
-  --ae-assessment: record # shape: {Age?: int, AssessmentCode?: "Excluded"|"EligibleJobHolder"|"NonEligibleJobHolder"|"EntitledWorker", AssessmentDate?: string, AssessmentEvent?: "NonEnrolmentEvent"|"AutomaticEnrolment"|"OptIn"|"VoluntaryJoiner"|"ContractualEnrolment", AssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AssessmentResult?: "Inconclusive"|"NoChange"|"Enrol"|"Exit", IsMemberOfAlternativePensionScheme?: bool, OptOutWindowEndDate?: string, QualifyingEarnings?: float, ReenrolmentDate?: string, StatePensionAge?: int, StatePensionDate?: string, TaxPeriod?: int, TaxYear?: int}
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
+  --ae-assessment: record # shape: {Age?: int, AssessmentCode?: "Excluded"|"EligibleJobHolder"|"NonEligibleJobHolder"|"EntitledWorker", AssessmentDate?: string, AssessmentEvent?: "NonEnrolmentEvent"|"AutomaticEnrolment"|"OptIn"|"VoluntaryJoiner"|"ContractualEnrolment", AssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AssessmentResult?: "Inconclusive"|"NoChange"|"Enrol"|"Exit", IsMemberOfAlternativePensionScheme?: bool, OptOutWindowEndDate?: string, ... (6 more fields)}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/AEAssessments"))
-  let body = {"AEAssessment": $ae_assessment} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/AEAssessments"))
+  let req_body = {"AEAssessment": $ae_assessment} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get links to all commentaries for the specified employee
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Commentaries
 # operationId: GetCommentariesFromEmployee
-export def "employer-employee-commentaries get-commentaries-from" [
+export def "employer-employee-commentaries get" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1063,16 +1072,16 @@ export def "employer-employee-commentaries get-commentaries-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Commentaries"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Commentaries"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1080,7 +1089,7 @@ export def "employer-employee-commentaries get-commentaries-from" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Commentary/{CommentaryId}
 # operationId: GetCommentaryFromEmployee
-export def "employer-employee-commentary get-commentary-from" [
+export def "employer-employee-commentary get" [
   employer_id: string
   employee_id: string
   commentary_id: string
@@ -1092,16 +1101,16 @@ export def "employer-employee-commentary get-commentary-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Commentary: record<Created: string, Detail: string, Employee: record<_href: string, _rel: string, _title: string>, PayRun: record<_href: string, _rel: string, _title: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, commentary_id: $commentary_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Commentary/{commentary_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), commentary_id: (encode-path-segment $commentary_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Commentary/{commentary_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1109,7 +1118,7 @@ export def "employer-employee-commentary get-commentary-from" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/JournalLines
 # operationId: GetJournalLinesFromEmployee
-export def "employer-employee-journal-lines get-journal-lines-from" [
+export def "employer-employee-journal-lines get" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1120,16 +1129,16 @@ export def "employer-employee-journal-lines get-journal-lines-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/JournalLines"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/JournalLines"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1149,16 +1158,16 @@ export def "employer-employee-pay-instruction delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, pay_instruction_id: $pay_instruction_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_instruction_id: (encode-path-segment $pay_instruction_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1166,7 +1175,7 @@ export def "employer-employee-pay-instruction delete" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstruction/{PayInstructionId}
 # operationId: GetPayInstructionFromEmployee
-export def "employer-employee-pay-instruction get-pay-instruction-from" [
+export def "employer-employee-pay-instruction get" [
   employer_id: string
   employee_id: string
   pay_instruction_id: string
@@ -1178,16 +1187,16 @@ export def "employer-employee-pay-instruction get-pay-instruction-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<PayInstruction: record<Description: string, EndDate: string, PayLineTag: string, StartDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, pay_instruction_id: $pay_instruction_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_instruction_id: (encode-path-segment $pay_instruction_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1208,21 +1217,21 @@ export def "employer-employee-pay-instruction update-by-EmployerId-EmployeeId-Pa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --pay-instruction: record # shape: {Description?: string, EndDate?: string, PayLineTag?: string, StartDate?: string}
 ]: any -> record<PayInstruction: record<Description: string, EndDate: string, PayLineTag: string, StartDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, pay_instruction_id: $pay_instruction_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}"))
-  let body = {"PayInstruction": $pay_instruction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_instruction_id: (encode-path-segment $pay_instruction_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}"))
+  let req_body = {"PayInstruction": $pay_instruction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a Pay Instruction
@@ -1242,21 +1251,21 @@ export def "employer-employee-pay-instruction update-by-EmployerId-EmployeeId-Pa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --pay-instruction: record # shape: {Description?: string, EndDate?: string, PayLineTag?: string, StartDate?: string}
 ]: any -> record<PayInstruction: record<Description: string, EndDate: string, PayLineTag: string, StartDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, pay_instruction_id: $pay_instruction_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}"))
-  let body = {"PayInstruction": $pay_instruction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_instruction_id: (encode-path-segment $pay_instruction_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}"))
+  let req_body = {"PayInstruction": $pay_instruction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete pay instruction tag
@@ -1276,16 +1285,16 @@ export def "employer-employee-pay-instruction-tag delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, pay_instruction_id: $pay_instruction_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_instruction_id: (encode-path-segment $pay_instruction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1293,7 +1302,7 @@ export def "employer-employee-pay-instruction-tag delete" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstruction/{PayInstructionId}/Tag/{TagId}
 # operationId: GetTagFromPayInstruction
-export def "employer-employee-pay-instruction-tag get-tag-from" [
+export def "employer-employee-pay-instruction-tag get" [
   employer_id: string
   employee_id: string
   pay_instruction_id: string
@@ -1306,16 +1315,16 @@ export def "employer-employee-pay-instruction-tag get-tag-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, pay_instruction_id: $pay_instruction_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_instruction_id: (encode-path-segment $pay_instruction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1336,16 +1345,16 @@ export def "employer-employee-pay-instruction-tag update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, pay_instruction_id: $pay_instruction_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_instruction_id: (encode-path-segment $pay_instruction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1353,7 +1362,7 @@ export def "employer-employee-pay-instruction-tag update" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstruction/{PayInstructionId}/Tags
 # operationId: GetTagsFromPayInstruction
-export def "employer-employee-pay-instruction-tags get-tags-from" [
+export def "employer-employee-pay-instruction-tags get" [
   employer_id: string
   employee_id: string
   pay_instruction_id: string
@@ -1365,16 +1374,16 @@ export def "employer-employee-pay-instruction-tags get-tags-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, pay_instruction_id: $pay_instruction_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_instruction_id: (encode-path-segment $pay_instruction_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1382,7 +1391,7 @@ export def "employer-employee-pay-instruction-tags get-tags-from" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstructions
 # operationId: GetPayInstructionsFromEmployee
-export def "employer-employee-pay-instructions get-pay-instructions-from" [
+export def "employer-employee-pay-instructions get" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1393,16 +1402,16 @@ export def "employer-employee-pay-instructions get-pay-instructions-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstructions"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstructions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1422,28 +1431,28 @@ export def "employer-employee-pay-instructions create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --pay-instruction: record # shape: {Description?: string, EndDate?: string, PayLineTag?: string, StartDate?: string}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstructions"))
-  let body = {"PayInstruction": $pay_instruction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstructions"))
+  let req_body = {"PayInstruction": $pay_instruction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get pay instructions with tag
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstructions/Tag/{TagId}
 # operationId: GetPayInstructionsWithTag
-export def "employer-employee-pay-instructions-tag get-pay-instructions-with" [
+export def "employer-employee-pay-instructions-tag get" [
   employer_id: string
   employee_id: string
   tag_id: string
@@ -1455,16 +1464,16 @@ export def "employer-employee-pay-instructions-tag get-pay-instructions-with" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstructions/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstructions/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1472,7 +1481,7 @@ export def "employer-employee-pay-instructions-tag get-pay-instructions-with" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayInstructions/Tags
 # operationId: GetAllPayInstructionTags
-export def "employer-employee-pay-instructions-tags get-all" [
+export def "employer-employee-pay-instructions-tags get-list" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1483,16 +1492,16 @@ export def "employer-employee-pay-instructions-tags get-all" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstructions/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstructions/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1500,7 +1509,7 @@ export def "employer-employee-pay-instructions-tags get-all" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayLine/{PayLineId}
 # operationId: GetPayLineFromEmployee
-export def "employer-employee-pay-line get-pay-line-from" [
+export def "employer-employee-pay-line get" [
   employer_id: string
   employee_id: string
   pay_line_id: string
@@ -1512,16 +1521,16 @@ export def "employer-employee-pay-line get-pay-line-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<PayLine: record<Calculator: string, Description: string, Generated: string, PayCode: string, PayCodeType: string, PayRunSequence: int, PaymentDate: string, TaxPeriod: int, TaxYear: int, Value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, pay_line_id: $pay_line_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLine/{pay_line_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_line_id: (encode-path-segment $pay_line_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLine/{pay_line_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1542,16 +1551,16 @@ export def "employer-employee-pay-line-tag delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, pay_line_id: $pay_line_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLine/{pay_line_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_line_id: (encode-path-segment $pay_line_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLine/{pay_line_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1559,7 +1568,7 @@ export def "employer-employee-pay-line-tag delete" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayLine/{PayLineId}/Tag/{TagId}
 # operationId: GetTagFromPayLine
-export def "employer-employee-pay-line-tag get-tag-from" [
+export def "employer-employee-pay-line-tag get" [
   employer_id: string
   employee_id: string
   pay_line_id: string
@@ -1572,16 +1581,16 @@ export def "employer-employee-pay-line-tag get-tag-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, pay_line_id: $pay_line_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLine/{pay_line_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_line_id: (encode-path-segment $pay_line_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLine/{pay_line_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1602,16 +1611,16 @@ export def "employer-employee-pay-line-tag update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, pay_line_id: $pay_line_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLine/{pay_line_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_line_id: (encode-path-segment $pay_line_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLine/{pay_line_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1619,7 +1628,7 @@ export def "employer-employee-pay-line-tag update" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayLine/{PayLineId}/Tags
 # operationId: GetTagsFromPayLine
-export def "employer-employee-pay-line-tags get-tags-from" [
+export def "employer-employee-pay-line-tags get" [
   employer_id: string
   employee_id: string
   pay_line_id: string
@@ -1631,16 +1640,16 @@ export def "employer-employee-pay-line-tags get-tags-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, pay_line_id: $pay_line_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLine/{pay_line_id}/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_line_id: (encode-path-segment $pay_line_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLine/{pay_line_id}/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1648,7 +1657,7 @@ export def "employer-employee-pay-line-tags get-tags-from" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayLines
 # operationId: GetPayLinesFromEmployee
-export def "employer-employee-pay-lines get-pay-lines-from" [
+export def "employer-employee-pay-lines get" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1659,16 +1668,16 @@ export def "employer-employee-pay-lines get-pay-lines-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLines"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLines"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1676,7 +1685,7 @@ export def "employer-employee-pay-lines get-pay-lines-from" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayLines/Tag/{TagId}
 # operationId: GetPayLinesWithTag
-export def "employer-employee-pay-lines-tag get-pay-lines-with" [
+export def "employer-employee-pay-lines-tag get" [
   employer_id: string
   employee_id: string
   tag_id: string
@@ -1688,16 +1697,16 @@ export def "employer-employee-pay-lines-tag get-pay-lines-with" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLines/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLines/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1705,7 +1714,7 @@ export def "employer-employee-pay-lines-tag get-pay-lines-with" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayLines/Tags
 # operationId: GetAllPayLineTags
-export def "employer-employee-pay-lines-tags get-all" [
+export def "employer-employee-pay-lines-tags get-list" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1716,16 +1725,16 @@ export def "employer-employee-pay-lines-tags get-all" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLines/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLines/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1733,7 +1742,7 @@ export def "employer-employee-pay-lines-tags get-all" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/PayRuns
 # operationId: GetPayRunsFromEmployee
-export def "employer-employee-pay-runs get-pay-runs-from" [
+export def "employer-employee-pay-runs get" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1744,16 +1753,16 @@ export def "employer-employee-pay-runs get-pay-runs-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayRuns"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayRuns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1761,7 +1770,7 @@ export def "employer-employee-pay-runs get-pay-runs-from" [
 #
 # DELETE /Employer/{EmployerId}/Employee/{EmployeeId}/Revision/{RevisionNumber}
 # operationId: DeleteEmployeeRevisionByNumber
-export def "employer-employee-revision delete" [
+export def "employer-employee-revision delete-by-number" [
   employer_id: string
   employee_id: string
   revision_number: string
@@ -1773,16 +1782,16 @@ export def "employer-employee-revision delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, revision_number: $revision_number} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Revision/{revision_number}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Revision/{revision_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1790,7 +1799,7 @@ export def "employer-employee-revision delete" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Revision/{RevisionNumber}
 # operationId: GetEmployeeRevisionByNumber
-export def "employer-employee-revision get" [
+export def "employer-employee-revision get-by-number" [
   employer_id: string
   employee_id: string
   revision_number: string
@@ -1802,16 +1811,16 @@ export def "employer-employee-revision get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Employee: record<AEAssessmentOverride: string, AEAssessmentOverrideDate: string, AEExclusionReasonCode: string, AEPostponementDate: string, Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, Code: string, DateOfBirth: string, Deactivated: bool, DirectorshipAppointmentDate: string, EEACitizen: bool, EPM6: bool, EffectiveDate: string, EmployeePartner: record<FirstName: string, Initials: string, LastName: string, MiddleName: string, NiNumber: string>, FirstName: string, Gender: string, HoursPerWeek: float, Initials: string, IrregularEmployment: bool, IsAgencyWorker: bool, LastName: string, LeaverReason: string, LeavingDate: string, MaritalStatus: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, NicLiability: string, OffPayrollWorker: bool, OnStrike: bool, P45IssuedDate: string, PassportNumber: string, PaySchedule: record<_href: string, _rel: string, _title: string>, PaymentMethod: string, PaymentToANonIndividual: bool, Region: string, Revision: int, RuleExclusions: string, Seconded: string, StartDate: string, StarterDeclaration: string, Territory: string, Title: string, VeteranPeriodStartDate: string, WorkingWeek: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, revision_number: $revision_number} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Revision/{revision_number}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Revision/{revision_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1819,7 +1828,7 @@ export def "employer-employee-revision get" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Revision/{RevisionNumber}/Summary
 # operationId: GetEmployeeRevisionSummaryByNumber
-export def "employer-employee-revision-summary get" [
+export def "employer-employee-revision-summary get-by-number" [
   employer_id: string
   employee_id: string
   revision_number: string
@@ -1831,16 +1840,16 @@ export def "employer-employee-revision-summary get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, revision_number: $revision_number} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Revision/{revision_number}/Summary"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Revision/{revision_number}/Summary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1859,16 +1868,16 @@ export def "employer-employee-revisions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Revisions"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Revisions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1876,7 +1885,7 @@ export def "employer-employee-revisions get" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Revisions/Summary
 # operationId: GetEmployeeRevisionSummaries
-export def "employer-employee-revisions-summary get-employee-revision-summaries" [
+export def "employer-employee-revisions-summary get-summaries" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1887,16 +1896,16 @@ export def "employer-employee-revisions-summary get-employee-revision-summaries"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Revisions/Summary"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Revisions/Summary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1916,16 +1925,16 @@ export def "employer-employee-secret delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, secret_id: $secret_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Secret/{secret_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), secret_id: (encode-path-segment $secret_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Secret/{secret_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1945,16 +1954,16 @@ export def "employer-employee-secret get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<EmployeeSecret: record<Created: string, Name: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, secret_id: $secret_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Secret/{secret_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), secret_id: (encode-path-segment $secret_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Secret/{secret_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1974,16 +1983,16 @@ export def "employer-employee-secret update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<EmployeeSecret: record<Created: string, Name: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, secret_id: $secret_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Secret/{secret_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), secret_id: (encode-path-segment $secret_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Secret/{secret_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2002,16 +2011,16 @@ export def "employer-employee-secrets get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Secrets"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Secrets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2030,16 +2039,16 @@ export def "employer-employee-secrets create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Secrets"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Secrets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2047,7 +2056,7 @@ export def "employer-employee-secrets create" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Summary
 # operationId: GetEmployeeSummaryFromEmployer
-export def "employer-employee-summary get-employee-summary-from" [
+export def "employer-employee-summary get" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2058,16 +2067,16 @@ export def "employer-employee-summary get-employee-summary-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Summary"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Summary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2087,16 +2096,16 @@ export def "employer-employee-tag delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2104,7 +2113,7 @@ export def "employer-employee-tag delete" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Tag/{TagId}
 # operationId: GetTagFromEmployee
-export def "employer-employee-tag get-tag-from" [
+export def "employer-employee-tag get" [
   employer_id: string
   employee_id: string
   tag_id: string
@@ -2116,16 +2125,16 @@ export def "employer-employee-tag get-tag-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2145,16 +2154,16 @@ export def "employer-employee-tag update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2162,7 +2171,7 @@ export def "employer-employee-tag update" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Tag/{TagId}/{EffectiveDate}
 # operationId: GetTagFromEmployeeRevision
-export def "employer-employee-tag get-tag-from-employee-revision" [
+export def "employer-employee-tag get-from-revision" [
   employer_id: string
   employee_id: string
   tag_id: string
@@ -2175,16 +2184,16 @@ export def "employer-employee-tag get-tag-from-employee-revision" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, tag_id: $tag_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Tag/{tag_id}/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), tag_id: (encode-path-segment $tag_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Tag/{tag_id}/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2192,7 +2201,7 @@ export def "employer-employee-tag get-tag-from-employee-revision" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Tags
 # operationId: GetTagsFromEmployee
-export def "employer-employee-tags get-tags-from" [
+export def "employer-employee-tags get" [
   employer_id: string
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2203,16 +2212,16 @@ export def "employer-employee-tags get-tags-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2220,7 +2229,7 @@ export def "employer-employee-tags get-tags-from" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/Tags/{EffectiveDate}
 # operationId: GetTagsFromEmployeeRevision
-export def "employer-employee-tags get-tags-from-employee-revision" [
+export def "employer-employee-tags get-from-revision" [
   employer_id: string
   employee_id: string
   effective_date: string
@@ -2232,16 +2241,16 @@ export def "employer-employee-tags get-tags-from-employee-revision" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Tags/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Tags/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2249,7 +2258,7 @@ export def "employer-employee-tags get-tags-from-employee-revision" [
 #
 # DELETE /Employer/{EmployerId}/Employee/{EmployeeId}/{EffectiveDate}
 # operationId: DeleteEmployeeRevision
-export def "employer-employee delete-employee-revision" [
+export def "employer-employee delete-revision" [
   employer_id: string
   employee_id: string
   effective_date: string
@@ -2261,16 +2270,16 @@ export def "employer-employee delete-employee-revision" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2278,7 +2287,7 @@ export def "employer-employee delete-employee-revision" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/{EffectiveDate}
 # operationId: GetEmployeeByEffectiveDate
-export def "employer-employee get" [
+export def "employer-employee get-by-effective-date" [
   employer_id: string
   employee_id: string
   effective_date: string
@@ -2290,16 +2299,16 @@ export def "employer-employee get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Employee: record<AEAssessmentOverride: string, AEAssessmentOverrideDate: string, AEExclusionReasonCode: string, AEPostponementDate: string, Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, Code: string, DateOfBirth: string, Deactivated: bool, DirectorshipAppointmentDate: string, EEACitizen: bool, EPM6: bool, EffectiveDate: string, EmployeePartner: record<FirstName: string, Initials: string, LastName: string, MiddleName: string, NiNumber: string>, FirstName: string, Gender: string, HoursPerWeek: float, Initials: string, IrregularEmployment: bool, IsAgencyWorker: bool, LastName: string, LeaverReason: string, LeavingDate: string, MaritalStatus: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, NicLiability: string, OffPayrollWorker: bool, OnStrike: bool, P45IssuedDate: string, PassportNumber: string, PaySchedule: record<_href: string, _rel: string, _title: string>, PaymentMethod: string, PaymentToANonIndividual: bool, Region: string, Revision: int, RuleExclusions: string, Seconded: string, StartDate: string, StarterDeclaration: string, Territory: string, Title: string, VeteranPeriodStartDate: string, WorkingWeek: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2307,7 +2316,7 @@ export def "employer-employee get" [
 #
 # GET /Employer/{EmployerId}/Employee/{EmployeeId}/{EffectiveDate}/Summary
 # operationId: GetEmployeeSummaryByEffectiveDate
-export def "employer-employee-summary get" [
+export def "employer-employee-summary get-by-effective-date" [
   employer_id: string
   employee_id: string
   effective_date: string
@@ -2319,16 +2328,16 @@ export def "employer-employee-summary get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, employee_id: $employee_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/{effective_date}/Summary"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/{effective_date}/Summary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2336,7 +2345,7 @@ export def "employer-employee-summary get" [
 #
 # GET /Employer/{EmployerId}/Employees
 # operationId: GetEmployeesFromEmployer
-export def "employer-employees get-employees-from" [
+export def "employer-employees get" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2346,16 +2355,16 @@ export def "employer-employees get-employees-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/Employees"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Employees"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2363,8 +2372,8 @@ export def "employer-employees get-employees-from" [
 #
 # POST /Employer/{EmployerId}/Employees
 # operationId: PostEmployeeIntoEmployer
-# --Employee shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, BankAccount?: record, Code?: string, DateOfBirth?: string, Deactivated?: bool, DirectorshipAppointmentDate?: string, EEACitizen?: bool, EPM6?: bool, EffectiveDate?: string, EmployeePartner?: record, FirstName?: string, Gender?: "Unknown"|"Male"|"Female", HoursPerWeek?: float, Initials?: string, IrregularEmployment?: bool, IsAgencyWorker?: bool, LastName?: string, LeaverReason?: "Resigned"|"Dismissed"|"Redundant"|"Retired"|"Deceased"|"LegalCustody"|"Other", LeavingDate?: string, MaritalStatus?: "NotSet"|"Single"|"Married"|"Divorced"|"Widowed", MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, NicLiability?: "HasOtherJob"|"IsFemaleEntitledToReducedRate"|"IsNotLiable"|"IsContractedOut"|"IsFullyLiable"|"IsApprentice"|"LeaverBeyond6Weeks"|"PaymentAfterLeavingIrregular"|"IsFreePortWorker"|"IsNotLiableForEmployerNi", OffPayrollWorker?: bool, OnStrike?: bool, P45IssuedDate?: string, PassportNumber?: string, PaySchedule?: record, PaymentMethod?: "NotSet"|"Cash"|"Cheque"|"BACS"|"FasterPayments"|"Other", PaymentToANonIndividual?: bool, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, RuleExclusions?: "None"|"NiMissingPayInstructionRule"|"TaxMissingPayInstructionRule"|"TaxCodeUpliftRule"|"NiSetExpectedLetterRule"|"NiDateOfBirthChangeRetrospectiveCRule"|"NiDefermentStatusChangeRule"|"NiEndContractedOutTransferRule"|"PaymentAfterLeavingTaxCodeRule"|"LeaverEndInstructionsRule"|"P45StudentLoanInstructionRule"|"P45TaxInstructionRule"|"P45YtdTaxRule"|"YtdInstructionRule"|"TaxCodeRegionChangeRule"|"AutoEnrolmentStatusChangeRule"|"EmployeeDeceasedRule"|"BenefitInstructionAutoEndRule", Seconded?: "NotSet"|"Stay183DaysOrMore"|"StayLessThan183Days"|"InOutUk", StartDate?: string, StarterDeclaration?: "PreviouslyReported"|"A"|"B"|"C", Territory?: "UnitedKingdom", Title?: string, VeteranPeriodStartDate?: string, WorkingWeek?: "None"|"Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"AllWeekDays"|"Saturday"|"Sunday"|"AllDays"}
-export def "employer-employees create-employee-into" [
+# --Employee shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, ... (41 more fields)}
+export def "employer-employees create-into" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2374,28 +2383,28 @@ export def "employer-employees create-employee-into" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
-  --employee: record # shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, BankAccount?: record, Code?: string, DateOfBirth?: string, Deactivated?: bool, DirectorshipAppointmentDate?: string, EEACitizen?: bool, EPM6?: bool, EffectiveDate?: string, EmployeePartner?: record, FirstName?: string, Gender?: "Unknown"|"Male"|"Female", HoursPerWeek?: float, Initials?: string, IrregularEmployment?: bool, IsAgencyWorker?: bool, LastName?: string, LeaverReason?: "Resigned"|"Dismissed"|"Redundant"|"Retired"|"Deceased"|"LegalCustody"|"Other", LeavingDate?: string, MaritalStatus?: "NotSet"|"Single"|"Married"|"Divorced"|"Widowed", MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, NicLiability?: "HasOtherJob"|"IsFemaleEntitledToReducedRate"|"IsNotLiable"|"IsContractedOut"|"IsFullyLiable"|"IsApprentice"|"LeaverBeyond6Weeks"|"PaymentAfterLeavingIrregular"|"IsFreePortWorker"|"IsNotLiableForEmployerNi", OffPayrollWorker?: bool, OnStrike?: bool, P45IssuedDate?: string, PassportNumber?: string, PaySchedule?: record, PaymentMethod?: "NotSet"|"Cash"|"Cheque"|"BACS"|"FasterPayments"|"Other", PaymentToANonIndividual?: bool, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, RuleExclusions?: "None"|"NiMissingPayInstructionRule"|"TaxMissingPayInstructionRule"|"TaxCodeUpliftRule"|"NiSetExpectedLetterRule"|"NiDateOfBirthChangeRetrospectiveCRule"|"NiDefermentStatusChangeRule"|"NiEndContractedOutTransferRule"|"PaymentAfterLeavingTaxCodeRule"|"LeaverEndInstructionsRule"|"P45StudentLoanInstructionRule"|"P45TaxInstructionRule"|"P45YtdTaxRule"|"YtdInstructionRule"|"TaxCodeRegionChangeRule"|"AutoEnrolmentStatusChangeRule"|"EmployeeDeceasedRule"|"BenefitInstructionAutoEndRule", Seconded?: "NotSet"|"Stay183DaysOrMore"|"StayLessThan183Days"|"InOutUk", StartDate?: string, StarterDeclaration?: "PreviouslyReported"|"A"|"B"|"C", Territory?: "UnitedKingdom", Title?: string, VeteranPeriodStartDate?: string, WorkingWeek?: "None"|"Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"AllWeekDays"|"Saturday"|"Sunday"|"AllDays"}
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
+  --employee: record # shape: {AEAssessmentOverride?: "None"|"OptOut"|"OptIn"|"VoluntaryJoiner"|"ContractualPension"|"CeasedMembership"|"Leaver"|"Excluded", AEAssessmentOverrideDate?: string, AEExclusionReasonCode?: "OtherNotKnown"|"NotAWorker"|"NotUKWorker"|"TemporaryUKWorker"|"OutsideAgeRange"|"SingleEmployeeDirector"|"CeasedMembershipWithin12Months"|"CeasedMembershipBeyond12Months"|"WorkerWULSWithin12Month"|"WorkerWULSBeyond12Month"|"WorkerInNoticePeriod"|"WorkerTaxProtection", AEPostponementDate?: string, Address?: record, ... (41 more fields)}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/Employees"))
-  let body = {"Employee": $employee} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Employees"))
+  let req_body = {"Employee": $employee} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get employee summaries from employer.
 #
 # GET /Employer/{EmployerId}/Employees/Summary
 # operationId: GetEmployeeSummariesFromEmployer
-export def "employer-employees-summary get-employee-summaries-from" [
+export def "employer-employees-summary get-summaries" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2405,16 +2414,16 @@ export def "employer-employees-summary get-employee-summaries-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/Employees/Summary"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Employees/Summary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2422,7 +2431,7 @@ export def "employer-employees-summary get-employee-summaries-from" [
 #
 # GET /Employer/{EmployerId}/Employees/Tag/{TagId}
 # operationId: GetEmployeesWithTag
-export def "employer-employees-tag get-employees-with" [
+export def "employer-employees-tag get" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2433,16 +2442,16 @@ export def "employer-employees-tag get-employees-with" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/Employees/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employees/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2450,7 +2459,7 @@ export def "employer-employees-tag get-employees-with" [
 #
 # GET /Employer/{EmployerId}/Employees/Tags
 # operationId: GetAllEmployeeTags
-export def "employer-employees-tags get-all" [
+export def "employer-employees-tags get-list" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2460,16 +2469,16 @@ export def "employer-employees-tags get-all" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/Employees/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Employees/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2477,7 +2486,7 @@ export def "employer-employees-tags get-all" [
 #
 # GET /Employer/{EmployerId}/Employees/{EffectiveDate}
 # operationId: GetEmployeesByEffectiveDate
-export def "employer-employees get" [
+export def "employer-employees get-by-effective-date" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2488,16 +2497,16 @@ export def "employer-employees get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/Employees/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Employees/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2505,7 +2514,7 @@ export def "employer-employees get" [
 #
 # GET /Employer/{EmployerId}/Employees/{EffectiveDate}/Summary
 # operationId: GetEmployeeSummariesByEffectiveDate
-export def "employer-employees-summary get-employee-summaries" [
+export def "employer-employees-summary get-summaries-by-effective-date" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2516,16 +2525,16 @@ export def "employer-employees-summary get-employee-summaries" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/Employees/{effective_date}/Summary"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Employees/{effective_date}/Summary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2544,16 +2553,16 @@ export def "employer-holiday-scheme delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, holiday_scheme_id: $holiday_scheme_id} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2561,7 +2570,7 @@ export def "employer-holiday-scheme delete" [
 #
 # GET /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}
 # operationId: GetHolidaySchemeFromEmployer
-export def "employer-holiday-scheme get-holiday-scheme-from" [
+export def "employer-holiday-scheme get" [
   employer_id: string
   holiday_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2572,16 +2581,16 @@ export def "employer-holiday-scheme get-holiday-scheme-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<HolidayScheme: record<AccrualPayCodes: record<PayCode: list>, AllowExceedAnnualEntitlement: bool, AllowNegativeBalance: bool, AnnualEntitlementWeeks: float, BankHolidayInclusive: bool, Code: string, EffectiveDate: string, MaxCarryOverDays: float, NextRevisionDate: string, OffsetPayment: bool, Revision: int, SchemeCeasedDate: string, SchemeKey: string, SchemeName: string, YearStartDay: int, YearStartMonth: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, holiday_scheme_id: $holiday_scheme_id} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2601,21 +2610,21 @@ export def "employer-holiday-scheme update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --holiday-scheme: record # shape: {AccrualPayCodes?: record, AllowExceedAnnualEntitlement?: bool, AllowNegativeBalance?: bool, AnnualEntitlementWeeks?: float, BankHolidayInclusive?: bool, Code?: string, EffectiveDate?: string, MaxCarryOverDays?: float, NextRevisionDate?: string, OffsetPayment?: bool, Revision?: int, SchemeCeasedDate?: string, SchemeKey?: string, SchemeName?: string, YearStartDay?: int, YearStartMonth?: int}
 ]: any -> record<HolidayScheme: record<AccrualPayCodes: record<PayCode: list>, AllowExceedAnnualEntitlement: bool, AllowNegativeBalance: bool, AnnualEntitlementWeeks: float, BankHolidayInclusive: bool, Code: string, EffectiveDate: string, MaxCarryOverDays: float, NextRevisionDate: string, OffsetPayment: bool, Revision: int, SchemeCeasedDate: string, SchemeKey: string, SchemeName: string, YearStartDay: int, YearStartMonth: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, holiday_scheme_id: $holiday_scheme_id} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}"))
-  let body = {"HolidayScheme": $holiday_scheme} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}"))
+  let req_body = {"HolidayScheme": $holiday_scheme} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the holiday scheme
@@ -2623,7 +2632,7 @@ export def "employer-holiday-scheme update" [
 # PUT /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}
 # operationId: PutHolidaySchemeIntoEmployer
 # --HolidayScheme shape: {AccrualPayCodes?: record, AllowExceedAnnualEntitlement?: bool, AllowNegativeBalance?: bool, AnnualEntitlementWeeks?: float, BankHolidayInclusive?: bool, Code?: string, EffectiveDate?: string, MaxCarryOverDays?: float, NextRevisionDate?: string, OffsetPayment?: bool, Revision?: int, SchemeCeasedDate?: string, SchemeKey?: string, SchemeName?: string, YearStartDay?: int, YearStartMonth?: int}
-export def "employer-holiday-scheme update-holiday-scheme-into" [
+export def "employer-holiday-scheme update-into" [
   employer_id: string
   holiday_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2634,28 +2643,28 @@ export def "employer-holiday-scheme update-holiday-scheme-into" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --holiday-scheme: record # shape: {AccrualPayCodes?: record, AllowExceedAnnualEntitlement?: bool, AllowNegativeBalance?: bool, AnnualEntitlementWeeks?: float, BankHolidayInclusive?: bool, Code?: string, EffectiveDate?: string, MaxCarryOverDays?: float, NextRevisionDate?: string, OffsetPayment?: bool, Revision?: int, SchemeCeasedDate?: string, SchemeKey?: string, SchemeName?: string, YearStartDay?: int, YearStartMonth?: int}
 ]: any -> record<HolidayScheme: record<AccrualPayCodes: record<PayCode: list>, AllowExceedAnnualEntitlement: bool, AllowNegativeBalance: bool, AnnualEntitlementWeeks: float, BankHolidayInclusive: bool, Code: string, EffectiveDate: string, MaxCarryOverDays: float, NextRevisionDate: string, OffsetPayment: bool, Revision: int, SchemeCeasedDate: string, SchemeKey: string, SchemeName: string, YearStartDay: int, YearStartMonth: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, holiday_scheme_id: $holiday_scheme_id} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}"))
-  let body = {"HolidayScheme": $holiday_scheme} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}"))
+  let req_body = {"HolidayScheme": $holiday_scheme} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an HolidayScheme revision matching the specified revision number.
 #
 # DELETE /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}/Revision/{RevisionNumber}
 # operationId: DeleteHolidaySchemeRevisionByNumber
-export def "employer-holiday-scheme-revision delete" [
+export def "employer-holiday-scheme-revision delete-by-number" [
   employer_id: string
   holiday_scheme_id: string
   revision_number: string
@@ -2667,16 +2676,16 @@ export def "employer-holiday-scheme-revision delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, holiday_scheme_id: $holiday_scheme_id, revision_number: $revision_number} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Revision/{revision_number}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Revision/{revision_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2684,7 +2693,7 @@ export def "employer-holiday-scheme-revision delete" [
 #
 # GET /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}/Revision/{RevisionNumber}
 # operationId: GetHolidaySchemeRevisionByNumber
-export def "employer-holiday-scheme-revision get" [
+export def "employer-holiday-scheme-revision get-by-number" [
   employer_id: string
   holiday_scheme_id: string
   revision_number: string
@@ -2696,16 +2705,16 @@ export def "employer-holiday-scheme-revision get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<HolidayScheme: record<AccrualPayCodes: record<PayCode: list>, AllowExceedAnnualEntitlement: bool, AllowNegativeBalance: bool, AnnualEntitlementWeeks: float, BankHolidayInclusive: bool, Code: string, EffectiveDate: string, MaxCarryOverDays: float, NextRevisionDate: string, OffsetPayment: bool, Revision: int, SchemeCeasedDate: string, SchemeKey: string, SchemeName: string, YearStartDay: int, YearStartMonth: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, holiday_scheme_id: $holiday_scheme_id, revision_number: $revision_number} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Revision/{revision_number}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Revision/{revision_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2724,16 +2733,16 @@ export def "employer-holiday-scheme-revisions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, holiday_scheme_id: $holiday_scheme_id} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Revisions"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Revisions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2753,16 +2762,16 @@ export def "employer-holiday-scheme-tag delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, holiday_scheme_id: $holiday_scheme_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2770,7 +2779,7 @@ export def "employer-holiday-scheme-tag delete" [
 #
 # GET /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}/Tag/{TagId}
 # operationId: GetTagFromHolidayScheme
-export def "employer-holiday-scheme-tag get-tag-from" [
+export def "employer-holiday-scheme-tag get" [
   employer_id: string
   holiday_scheme_id: string
   tag_id: string
@@ -2782,16 +2791,16 @@ export def "employer-holiday-scheme-tag get-tag-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, holiday_scheme_id: $holiday_scheme_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2811,16 +2820,16 @@ export def "employer-holiday-scheme-tag update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, holiday_scheme_id: $holiday_scheme_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2828,7 +2837,7 @@ export def "employer-holiday-scheme-tag update" [
 #
 # GET /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}/Tag/{TagId}/{EffectiveDate}
 # operationId: GetTagFromHolidaySchemeRevision
-export def "employer-holiday-scheme-tag get-tag-from-holiday-scheme-revision" [
+export def "employer-holiday-scheme-tag get-from-revision" [
   employer_id: string
   holiday_scheme_id: string
   tag_id: string
@@ -2841,16 +2850,16 @@ export def "employer-holiday-scheme-tag get-tag-from-holiday-scheme-revision" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, holiday_scheme_id: $holiday_scheme_id, tag_id: $tag_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Tag/{tag_id}/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id), tag_id: (encode-path-segment $tag_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Tag/{tag_id}/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2858,7 +2867,7 @@ export def "employer-holiday-scheme-tag get-tag-from-holiday-scheme-revision" [
 #
 # GET /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}/Tags
 # operationId: GetTagsFromHolidayScheme
-export def "employer-holiday-scheme-tags get-tags-from" [
+export def "employer-holiday-scheme-tags get" [
   employer_id: string
   holiday_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2869,16 +2878,16 @@ export def "employer-holiday-scheme-tags get-tags-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, holiday_scheme_id: $holiday_scheme_id} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2886,7 +2895,7 @@ export def "employer-holiday-scheme-tags get-tags-from" [
 #
 # GET /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}/Tags/{EffectiveDate}
 # operationId: GetTagsFromHolidaySchemeRevision
-export def "employer-holiday-scheme-tags get-tags-from-holiday-scheme-revision" [
+export def "employer-holiday-scheme-tags get-from-revision" [
   employer_id: string
   holiday_scheme_id: string
   effective_date: string
@@ -2898,16 +2907,16 @@ export def "employer-holiday-scheme-tags get-tags-from-holiday-scheme-revision" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, holiday_scheme_id: $holiday_scheme_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Tags/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Tags/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2915,7 +2924,7 @@ export def "employer-holiday-scheme-tags get-tags-from-holiday-scheme-revision" 
 #
 # DELETE /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}/{EffectiveDate}
 # operationId: DeleteHolidaySchemeRevision
-export def "employer-holiday-scheme delete-holiday-scheme-revision" [
+export def "employer-holiday-scheme delete-revision" [
   employer_id: string
   holiday_scheme_id: string
   effective_date: string
@@ -2927,16 +2936,16 @@ export def "employer-holiday-scheme delete-holiday-scheme-revision" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, holiday_scheme_id: $holiday_scheme_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2944,7 +2953,7 @@ export def "employer-holiday-scheme delete-holiday-scheme-revision" [
 #
 # GET /Employer/{EmployerId}/HolidayScheme/{HolidaySchemeId}/{EffectiveDate}
 # operationId: GetHolidaySchemeByEffectiveDate
-export def "employer-holiday-scheme get" [
+export def "employer-holiday-scheme get-by-effective-date" [
   employer_id: string
   holiday_scheme_id: string
   effective_date: string
@@ -2956,16 +2965,16 @@ export def "employer-holiday-scheme get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<HolidayScheme: record<AccrualPayCodes: record<PayCode: list>, AllowExceedAnnualEntitlement: bool, AllowNegativeBalance: bool, AnnualEntitlementWeeks: float, BankHolidayInclusive: bool, Code: string, EffectiveDate: string, MaxCarryOverDays: float, NextRevisionDate: string, OffsetPayment: bool, Revision: int, SchemeCeasedDate: string, SchemeKey: string, SchemeName: string, YearStartDay: int, YearStartMonth: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, holiday_scheme_id: $holiday_scheme_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2973,7 +2982,7 @@ export def "employer-holiday-scheme get" [
 #
 # GET /Employer/{EmployerId}/HolidaySchemes
 # operationId: GetHolidaySchemesFromEmployer
-export def "employer-holiday-schemes get-holiday-schemes-from" [
+export def "employer-holiday-schemes get" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2983,16 +2992,16 @@ export def "employer-holiday-schemes get-holiday-schemes-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/HolidaySchemes"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/HolidaySchemes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3001,7 +3010,7 @@ export def "employer-holiday-schemes get-holiday-schemes-from" [
 # POST /Employer/{EmployerId}/HolidaySchemes
 # operationId: PostHolidaySchemeIntoEmployer
 # --HolidayScheme shape: {AccrualPayCodes?: record, AllowExceedAnnualEntitlement?: bool, AllowNegativeBalance?: bool, AnnualEntitlementWeeks?: float, BankHolidayInclusive?: bool, Code?: string, EffectiveDate?: string, MaxCarryOverDays?: float, NextRevisionDate?: string, OffsetPayment?: bool, Revision?: int, SchemeCeasedDate?: string, SchemeKey?: string, SchemeName?: string, YearStartDay?: int, YearStartMonth?: int}
-export def "employer-holiday-schemes create-holiday-scheme-into" [
+export def "employer-holiday-schemes create-into" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3011,28 +3020,28 @@ export def "employer-holiday-schemes create-holiday-scheme-into" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --holiday-scheme: record # shape: {AccrualPayCodes?: record, AllowExceedAnnualEntitlement?: bool, AllowNegativeBalance?: bool, AnnualEntitlementWeeks?: float, BankHolidayInclusive?: bool, Code?: string, EffectiveDate?: string, MaxCarryOverDays?: float, NextRevisionDate?: string, OffsetPayment?: bool, Revision?: int, SchemeCeasedDate?: string, SchemeKey?: string, SchemeName?: string, YearStartDay?: int, YearStartMonth?: int}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/HolidaySchemes"))
-  let body = {"HolidayScheme": $holiday_scheme} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/HolidaySchemes"))
+  let req_body = {"HolidayScheme": $holiday_scheme} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get holiday schemes with tag
 #
 # GET /Employer/{EmployerId}/HolidaySchemes/Tag/{TagId}
 # operationId: GetHolidaySchemesWithTag
-export def "employer-holiday-schemes-tag get-holiday-schemes-with" [
+export def "employer-holiday-schemes-tag get" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3043,16 +3052,16 @@ export def "employer-holiday-schemes-tag get-holiday-schemes-with" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/HolidaySchemes/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/HolidaySchemes/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3060,7 +3069,7 @@ export def "employer-holiday-schemes-tag get-holiday-schemes-with" [
 #
 # GET /Employer/{EmployerId}/HolidaySchemes/Tags
 # operationId: GetAllHolidaySchemeTags
-export def "employer-holiday-schemes-tags get-all" [
+export def "employer-holiday-schemes-tags get-list" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3070,16 +3079,16 @@ export def "employer-holiday-schemes-tags get-all" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/HolidaySchemes/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/HolidaySchemes/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3087,7 +3096,7 @@ export def "employer-holiday-schemes-tags get-all" [
 #
 # GET /Employer/{EmployerId}/HolidaySchemes/{EffectiveDate}
 # operationId: GetHolidaySchemesByEffectiveDate
-export def "employer-holiday-schemes get" [
+export def "employer-holiday-schemes get-by-effective-date" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3098,16 +3107,16 @@ export def "employer-holiday-schemes get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/HolidaySchemes/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/HolidaySchemes/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3126,16 +3135,16 @@ export def "employer-journal-instruction delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, journal_instruction_id: $journal_instruction_id} | format pattern "/Employer/{employer_id}/JournalInstruction/{journal_instruction_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), journal_instruction_id: (encode-path-segment $journal_instruction_id)} | format pattern "/Employer/{employer_id}/JournalInstruction/{journal_instruction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3143,7 +3152,7 @@ export def "employer-journal-instruction delete" [
 #
 # GET /Employer/{EmployerId}/JournalInstruction/{JournalInstructionId}
 # operationId: GetJournalInstructionFromEmployer
-export def "employer-journal-instruction get-journal-instruction-from" [
+export def "employer-journal-instruction get" [
   employer_id: string
   journal_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3154,16 +3163,16 @@ export def "employer-journal-instruction get-journal-instruction-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<JournalInstruction: record<AccountingType: string, Description: string, EndDate: string, Expression: string, JournalLineTag: string, LedgerTarget: string, NomCode: string, StartDate: string, SubNomCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, journal_instruction_id: $journal_instruction_id} | format pattern "/Employer/{employer_id}/JournalInstruction/{journal_instruction_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), journal_instruction_id: (encode-path-segment $journal_instruction_id)} | format pattern "/Employer/{employer_id}/JournalInstruction/{journal_instruction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3182,16 +3191,16 @@ export def "employer-journal-instruction update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<JournalInstruction: record<AccountingType: string, Description: string, EndDate: string, Expression: string, JournalLineTag: string, LedgerTarget: string, NomCode: string, StartDate: string, SubNomCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, journal_instruction_id: $journal_instruction_id} | format pattern "/Employer/{employer_id}/JournalInstruction/{journal_instruction_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), journal_instruction_id: (encode-path-segment $journal_instruction_id)} | format pattern "/Employer/{employer_id}/JournalInstruction/{journal_instruction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3199,7 +3208,7 @@ export def "employer-journal-instruction update" [
 #
 # GET /Employer/{EmployerId}/JournalInstructions
 # operationId: GetJournalInstructionsFromEmployer
-export def "employer-journal-instructions get-journal-instructions-from" [
+export def "employer-journal-instructions get" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3209,16 +3218,16 @@ export def "employer-journal-instructions get-journal-instructions-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/JournalInstructions"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/JournalInstructions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3236,16 +3245,16 @@ export def "employer-journal-instructions create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/JournalInstructions"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/JournalInstructions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3253,7 +3262,7 @@ export def "employer-journal-instructions create" [
 #
 # GET /Employer/{EmployerId}/JournalLine/{JournalLineId}
 # operationId: GetJournalLineFromEmployer
-export def "employer-journal-line get-journal-line-from" [
+export def "employer-journal-line get" [
   employer_id: string
   journal_line_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3264,16 +3273,16 @@ export def "employer-journal-line get-journal-line-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<JournalLine: record<Credit: float, Debit: float, Description: string, Employee: record<_href: string, _rel: string, _title: string>, Generated: string, Grouping: string, LedgerTarget: string, NomCode: string, PayFrequency: string, PayRun: record<_href: string, _rel: string, _title: string>, SubContractor: record<_href: string, _rel: string, _title: string>, SubNomCode: string, TaxPeriod: int, TaxYear: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, journal_line_id: $journal_line_id} | format pattern "/Employer/{employer_id}/JournalLine/{journal_line_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), journal_line_id: (encode-path-segment $journal_line_id)} | format pattern "/Employer/{employer_id}/JournalLine/{journal_line_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3293,16 +3302,16 @@ export def "employer-journal-line-tag delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, journal_line_id: $journal_line_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/JournalLine/{journal_line_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), journal_line_id: (encode-path-segment $journal_line_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/JournalLine/{journal_line_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3310,7 +3319,7 @@ export def "employer-journal-line-tag delete" [
 #
 # GET /Employer/{EmployerId}/JournalLine/{JournalLineId}/Tag/{TagId}
 # operationId: GetTagFromJournalLine
-export def "employer-journal-line-tag get-tag-from" [
+export def "employer-journal-line-tag get" [
   employer_id: string
   journal_line_id: string
   tag_id: string
@@ -3322,16 +3331,16 @@ export def "employer-journal-line-tag get-tag-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, journal_line_id: $journal_line_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/JournalLine/{journal_line_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), journal_line_id: (encode-path-segment $journal_line_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/JournalLine/{journal_line_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3351,16 +3360,16 @@ export def "employer-journal-line-tag update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, journal_line_id: $journal_line_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/JournalLine/{journal_line_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), journal_line_id: (encode-path-segment $journal_line_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/JournalLine/{journal_line_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3368,7 +3377,7 @@ export def "employer-journal-line-tag update" [
 #
 # GET /Employer/{EmployerId}/JournalLine/{JournalLineId}/Tags
 # operationId: GetTagsFromJournalLine
-export def "employer-journal-line-tags get-tags-from" [
+export def "employer-journal-line-tags get" [
   employer_id: string
   journal_line_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3379,16 +3388,16 @@ export def "employer-journal-line-tags get-tags-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, journal_line_id: $journal_line_id} | format pattern "/Employer/{employer_id}/JournalLine/{journal_line_id}/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), journal_line_id: (encode-path-segment $journal_line_id)} | format pattern "/Employer/{employer_id}/JournalLine/{journal_line_id}/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3396,7 +3405,7 @@ export def "employer-journal-line-tags get-tags-from" [
 #
 # GET /Employer/{EmployerId}/JournalLines
 # operationId: GetJournalLinesFromEmployer
-export def "employer-journal-lines get-journal-lines-from" [
+export def "employer-journal-lines get" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3406,16 +3415,16 @@ export def "employer-journal-lines get-journal-lines-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/JournalLines"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/JournalLines"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3423,7 +3432,7 @@ export def "employer-journal-lines get-journal-lines-from" [
 #
 # GET /Employer/{EmployerId}/JournalLines/Tag/{TagId}
 # operationId: GetAllJournalLinesWithTag
-export def "employer-journal-lines-tag get-all-journal-lines-with" [
+export def "employer-journal-lines-tag get-list" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3434,16 +3443,16 @@ export def "employer-journal-lines-tag get-all-journal-lines-with" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/JournalLines/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/JournalLines/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3451,7 +3460,7 @@ export def "employer-journal-lines-tag get-all-journal-lines-with" [
 #
 # GET /Employer/{EmployerId}/JournalLines/Tags
 # operationId: GetAllJournalLineTags
-export def "employer-journal-lines-tags get-all" [
+export def "employer-journal-lines-tags get-list" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3461,16 +3470,16 @@ export def "employer-journal-lines-tags get-all" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/JournalLines/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/JournalLines/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3489,16 +3498,16 @@ export def "employer-nominal-code delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, nominal_code_id: $nominal_code_id} | format pattern "/Employer/{employer_id}/NominalCode/{nominal_code_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), nominal_code_id: (encode-path-segment $nominal_code_id)} | format pattern "/Employer/{employer_id}/NominalCode/{nominal_code_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3506,7 +3515,7 @@ export def "employer-nominal-code delete" [
 #
 # GET /Employer/{EmployerId}/NominalCode/{NominalCodeId}
 # operationId: GetNominalCodeFromEmployer
-export def "employer-nominal-code get-nominal-code-from" [
+export def "employer-nominal-code get" [
   employer_id: string
   nominal_code_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3517,16 +3526,16 @@ export def "employer-nominal-code get-nominal-code-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<NominalCode: record<Description: string, Key: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, nominal_code_id: $nominal_code_id} | format pattern "/Employer/{employer_id}/NominalCode/{nominal_code_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), nominal_code_id: (encode-path-segment $nominal_code_id)} | format pattern "/Employer/{employer_id}/NominalCode/{nominal_code_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3546,28 +3555,28 @@ export def "employer-nominal-code update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --nominal-code: record # shape: {Description?: string, Key?: string}
 ]: any -> record<NominalCode: record<Description: string, Key: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, nominal_code_id: $nominal_code_id} | format pattern "/Employer/{employer_id}/NominalCode/{nominal_code_id}"))
-  let body = {"NominalCode": $nominal_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), nominal_code_id: (encode-path-segment $nominal_code_id)} | format pattern "/Employer/{employer_id}/NominalCode/{nominal_code_id}"))
+  let req_body = {"NominalCode": $nominal_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the pay codes by nominal code
 #
 # GET /Employer/{EmployerId}/NominalCode/{NominalCodeId}/PayCodes
 # operationId: GetPayCodesFromNominalCode
-export def "employer-nominal-code-pay-codes get-pay-codes-from" [
+export def "employer-nominal-code-pay-codes get" [
   employer_id: string
   nominal_code_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3578,16 +3587,16 @@ export def "employer-nominal-code-pay-codes get-pay-codes-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, nominal_code_id: $nominal_code_id} | format pattern "/Employer/{employer_id}/NominalCode/{nominal_code_id}/PayCodes"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), nominal_code_id: (encode-path-segment $nominal_code_id)} | format pattern "/Employer/{employer_id}/NominalCode/{nominal_code_id}/PayCodes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3595,7 +3604,7 @@ export def "employer-nominal-code-pay-codes get-pay-codes-from" [
 #
 # GET /Employer/{EmployerId}/NominalCodes
 # operationId: GetNominalCodesFromEmployer
-export def "employer-nominal-codes get-nominal-codes-from" [
+export def "employer-nominal-codes get" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3605,16 +3614,16 @@ export def "employer-nominal-codes get-nominal-codes-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/NominalCodes"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/NominalCodes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3633,21 +3642,21 @@ export def "employer-nominal-codes create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --nominal-code: record # shape: {Description?: string, Key?: string}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/NominalCodes"))
-  let body = {"NominalCode": $nominal_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/NominalCodes"))
+  let req_body = {"NominalCode": $nominal_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a pay code
@@ -3665,16 +3674,16 @@ export def "employer-pay-code delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_code_id: $pay_code_id} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3682,7 +3691,7 @@ export def "employer-pay-code delete" [
 #
 # GET /Employer/{EmployerId}/PayCode/{PayCodeId}
 # operationId: GetPayCodeFromEmployer
-export def "employer-pay-code get-pay-code-from" [
+export def "employer-pay-code get" [
   employer_id: string
   pay_code_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3693,16 +3702,16 @@ export def "employer-pay-code get-pay-code-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<PayCode: record<Benefit: bool, Code: string, Description: string, EffectiveDate: string, MetaData: record, NextRevisionDate: string, Niable: bool, NominalCode: record<_href: string, _rel: string, _title: string>, NonArrestable: bool, Notional: bool, Readonly: bool, Region: string, Revision: int, Taxable: bool, Territory: string, Type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_code_id: $pay_code_id} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3722,21 +3731,21 @@ export def "employer-pay-code update-by-EmployerId-PayCodeId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --pay-code: record # shape: {Benefit?: bool, Code?: string, Description?: string, EffectiveDate?: string, MetaData?: record, NextRevisionDate?: string, Niable?: bool, NominalCode?: record, NonArrestable?: bool, Notional?: bool, Readonly?: bool, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, Taxable?: bool, Territory?: "UnitedKingdom", Type?: "NotSet"|"Payment"|"Deduction"}
 ]: any -> record<PayCode: record<Benefit: bool, Code: string, Description: string, EffectiveDate: string, MetaData: record, NextRevisionDate: string, Niable: bool, NominalCode: record<_href: string, _rel: string, _title: string>, NonArrestable: bool, Notional: bool, Readonly: bool, Region: string, Revision: int, Taxable: bool, Territory: string, Type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_code_id: $pay_code_id} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}"))
-  let body = {"PayCode": $pay_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}"))
+  let req_body = {"PayCode": $pay_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a pay code
@@ -3755,28 +3764,28 @@ export def "employer-pay-code update-by-EmployerId-PayCodeId-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --pay-code: record # shape: {Benefit?: bool, Code?: string, Description?: string, EffectiveDate?: string, MetaData?: record, NextRevisionDate?: string, Niable?: bool, NominalCode?: record, NonArrestable?: bool, Notional?: bool, Readonly?: bool, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, Taxable?: bool, Territory?: "UnitedKingdom", Type?: "NotSet"|"Payment"|"Deduction"}
 ]: any -> record<PayCode: record<Benefit: bool, Code: string, Description: string, EffectiveDate: string, MetaData: record, NextRevisionDate: string, Niable: bool, NominalCode: record<_href: string, _rel: string, _title: string>, NonArrestable: bool, Notional: bool, Readonly: bool, Region: string, Revision: int, Taxable: bool, Territory: string, Type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_code_id: $pay_code_id} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}"))
-  let body = {"PayCode": $pay_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}"))
+  let req_body = {"PayCode": $pay_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an PayCode revision matching the specified revision number.
 #
 # DELETE /Employer/{EmployerId}/PayCode/{PayCodeId}/Revision/{RevisionNumber}
 # operationId: DeletePayCodeRevisionByNumber
-export def "employer-pay-code-revision delete" [
+export def "employer-pay-code-revision delete-by-number" [
   employer_id: string
   pay_code_id: string
   revision_number: string
@@ -3788,16 +3797,16 @@ export def "employer-pay-code-revision delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_code_id: $pay_code_id, revision_number: $revision_number} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Revision/{revision_number}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Revision/{revision_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3805,7 +3814,7 @@ export def "employer-pay-code-revision delete" [
 #
 # GET /Employer/{EmployerId}/PayCode/{PayCodeId}/Revision/{RevisionNumber}
 # operationId: GetPayCodeRevisionByNumber
-export def "employer-pay-code-revision get" [
+export def "employer-pay-code-revision get-by-number" [
   employer_id: string
   pay_code_id: string
   revision_number: string
@@ -3817,16 +3826,16 @@ export def "employer-pay-code-revision get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<PayCode: record<Benefit: bool, Code: string, Description: string, EffectiveDate: string, MetaData: record, NextRevisionDate: string, Niable: bool, NominalCode: record<_href: string, _rel: string, _title: string>, NonArrestable: bool, Notional: bool, Readonly: bool, Region: string, Revision: int, Taxable: bool, Territory: string, Type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_code_id: $pay_code_id, revision_number: $revision_number} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Revision/{revision_number}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Revision/{revision_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3845,16 +3854,16 @@ export def "employer-pay-code-revisions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_code_id: $pay_code_id} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Revisions"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Revisions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3874,16 +3883,16 @@ export def "employer-pay-code-tag delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_code_id: $pay_code_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3891,7 +3900,7 @@ export def "employer-pay-code-tag delete" [
 #
 # GET /Employer/{EmployerId}/PayCode/{PayCodeId}/Tag/{TagId}
 # operationId: GetTagFromPayCode
-export def "employer-pay-code-tag get-tag-from" [
+export def "employer-pay-code-tag get" [
   employer_id: string
   pay_code_id: string
   tag_id: string
@@ -3903,16 +3912,16 @@ export def "employer-pay-code-tag get-tag-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_code_id: $pay_code_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3932,16 +3941,16 @@ export def "employer-pay-code-tag update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_code_id: $pay_code_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3949,7 +3958,7 @@ export def "employer-pay-code-tag update" [
 #
 # GET /Employer/{EmployerId}/PayCode/{PayCodeId}/Tags
 # operationId: GetTagsFromPayCode
-export def "employer-pay-code-tags get-tags-from" [
+export def "employer-pay-code-tags get" [
   employer_id: string
   pay_code_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3960,16 +3969,16 @@ export def "employer-pay-code-tags get-tags-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_code_id: $pay_code_id} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -3977,7 +3986,7 @@ export def "employer-pay-code-tags get-tags-from" [
 #
 # DELETE /Employer/{EmployerId}/PayCode/{PayCodeId}/{EffectiveDate}
 # operationId: DeletePayCodeRevision
-export def "employer-pay-code delete-pay-code-revision" [
+export def "employer-pay-code delete-revision" [
   employer_id: string
   pay_code_id: string
   effective_date: string
@@ -3989,16 +3998,16 @@ export def "employer-pay-code delete-pay-code-revision" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_code_id: $pay_code_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4006,7 +4015,7 @@ export def "employer-pay-code delete-pay-code-revision" [
 #
 # GET /Employer/{EmployerId}/PayCode/{PayCodeId}/{EffectiveDate}
 # operationId: GetPayCodeByEffectiveDate
-export def "employer-pay-code get" [
+export def "employer-pay-code get-by-effective-date" [
   employer_id: string
   pay_code_id: string
   effective_date: string
@@ -4018,16 +4027,16 @@ export def "employer-pay-code get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<PayCode: record<Benefit: bool, Code: string, Description: string, EffectiveDate: string, MetaData: record, NextRevisionDate: string, Niable: bool, NominalCode: record<_href: string, _rel: string, _title: string>, NonArrestable: bool, Notional: bool, Readonly: bool, Region: string, Revision: int, Taxable: bool, Territory: string, Type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_code_id: $pay_code_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4035,7 +4044,7 @@ export def "employer-pay-code get" [
 #
 # GET /Employer/{EmployerId}/PayCodes
 # operationId: GetPayCodesFromEmployer
-export def "employer-pay-codes get-pay-codes-from" [
+export def "employer-pay-codes get" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4045,16 +4054,16 @@ export def "employer-pay-codes get-pay-codes-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/PayCodes"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/PayCodes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4073,28 +4082,28 @@ export def "employer-pay-codes create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --pay-code: record # shape: {Benefit?: bool, Code?: string, Description?: string, EffectiveDate?: string, MetaData?: record, NextRevisionDate?: string, Niable?: bool, NominalCode?: record, NonArrestable?: bool, Notional?: bool, Readonly?: bool, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, Taxable?: bool, Territory?: "UnitedKingdom", Type?: "NotSet"|"Payment"|"Deduction"}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/PayCodes"))
-  let body = {"PayCode": $pay_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/PayCodes"))
+  let req_body = {"PayCode": $pay_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get pay codes with tag
 #
 # GET /Employer/{EmployerId}/PayCodes/Tag/{TagId}
 # operationId: GetPayCodesWithTag
-export def "employer-pay-codes-tag get-pay-codes-with" [
+export def "employer-pay-codes-tag get" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4105,16 +4114,16 @@ export def "employer-pay-codes-tag get-pay-codes-with" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/PayCodes/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PayCodes/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4122,7 +4131,7 @@ export def "employer-pay-codes-tag get-pay-codes-with" [
 #
 # GET /Employer/{EmployerId}/PayCodes/Tags
 # operationId: GetAllPayCodeTags
-export def "employer-pay-codes-tags get-all" [
+export def "employer-pay-codes-tags get-list" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4132,16 +4141,16 @@ export def "employer-pay-codes-tags get-all" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/PayCodes/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/PayCodes/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4149,7 +4158,7 @@ export def "employer-pay-codes-tags get-all" [
 #
 # GET /Employer/{EmployerId}/PayCodes/{EffectiveDate}
 # operationId: GetPayCodesByEffectiveDate
-export def "employer-pay-codes get" [
+export def "employer-pay-codes get-by-effective-date" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4160,16 +4169,16 @@ export def "employer-pay-codes get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/PayCodes/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/PayCodes/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4188,16 +4197,16 @@ export def "employer-pay-schedule delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4205,7 +4214,7 @@ export def "employer-pay-schedule delete" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}
 # operationId: GetPayScheduleFromEmployer
-export def "employer-pay-schedule get-pay-schedule-from" [
+export def "employer-pay-schedule get" [
   employer_id: string
   pay_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4216,16 +4225,16 @@ export def "employer-pay-schedule get-pay-schedule-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<PaySchedule: record<MetaData: record, Name: string, PayFrequency: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4245,28 +4254,28 @@ export def "employer-pay-schedule update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --pay-schedule: record # shape: {MetaData?: record, Name?: string, PayFrequency?: "Weekly"|"Monthly"|"TwoWeekly"|"FourWeekly"|"Yearly"}
 ]: any -> record<PaySchedule: record<MetaData: record, Name: string, PayFrequency: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}"))
-  let body = {"PaySchedule": $pay_schedule} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}"))
+  let req_body = {"PaySchedule": $pay_schedule} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all employees revisions from a pay schedule.
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/Employees
 # operationId: GetEmployeesFromPaySchedule
-export def "employer-pay-schedule-employees get-employees-from" [
+export def "employer-pay-schedule-employees get" [
   employer_id: string
   pay_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4277,16 +4286,16 @@ export def "employer-pay-schedule-employees get-employees-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/Employees"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/Employees"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4294,7 +4303,7 @@ export def "employer-pay-schedule-employees get-employees-from" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/Employees/{EffectiveDate}
 # operationId: GetEmployeesFromPayScheduleOnEffectiveDate
-export def "employer-pay-schedule-employees get-employees-from-pay-schedule-on-effective-date" [
+export def "employer-pay-schedule-employees get-from-on-effective-date" [
   employer_id: string
   pay_schedule_id: string
   effective_date: string
@@ -4306,16 +4315,16 @@ export def "employer-pay-schedule-employees get-employees-from-pay-schedule-on-e
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/Employees/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/Employees/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4335,16 +4344,16 @@ export def "employer-pay-schedule-pay-run delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id, pay_run_id: $pay_run_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4352,7 +4361,7 @@ export def "employer-pay-schedule-pay-run delete" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}
 # operationId: GetPayRunFromPaySchedule
-export def "employer-pay-schedule-pay-run get-pay-run-from" [
+export def "employer-pay-schedule-pay-run get" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -4364,16 +4373,16 @@ export def "employer-pay-schedule-pay-run get-pay-run-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<PayRun: record<Executed: string, IsSupplementary: bool, PayFrequency: string, PaySchedule: record<_href: string, _rel: string, _title: string>, PaymentDate: string, PeriodEnd: string, PeriodStart: string, ProceedingPayRun: record<_href: string, _rel: string, _title: string>, Sequence: int, TaxPeriod: int, TaxYear: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id, pay_run_id: $pay_run_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4381,7 +4390,7 @@ export def "employer-pay-schedule-pay-run get-pay-run-from" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/AEAssessments
 # operationId: GetAEAssessmentsFromPayRun
-export def "employer-pay-schedule-pay-run-ae-assessments get-e-assessments-from" [
+export def "employer-pay-schedule-pay-run-ae-assessments get" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -4393,16 +4402,16 @@ export def "employer-pay-schedule-pay-run-ae-assessments get-e-assessments-from"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id, pay_run_id: $pay_run_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/AEAssessments"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/AEAssessments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4410,7 +4419,7 @@ export def "employer-pay-schedule-pay-run-ae-assessments get-e-assessments-from"
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/Commentaries
 # operationId: GetCommentariesFromPayRun
-export def "employer-pay-schedule-pay-run-commentaries get-commentaries-from" [
+export def "employer-pay-schedule-pay-run-commentaries get" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -4422,16 +4431,16 @@ export def "employer-pay-schedule-pay-run-commentaries get-commentaries-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id, pay_run_id: $pay_run_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Commentaries"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Commentaries"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4452,16 +4461,16 @@ export def "employer-pay-schedule-pay-run-employee delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id, pay_run_id: $pay_run_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Employee/{employee_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Employee/{employee_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4469,7 +4478,7 @@ export def "employer-pay-schedule-pay-run-employee delete" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/Employee/{EmployeeId}/Commentary
 # operationId: GetCommentaryFromPayRunByEmployee
-export def "employer-pay-schedule-pay-run-employee-commentary get-commentary-from" [
+export def "employer-pay-schedule-pay-run-employee-commentary get-from" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -4482,16 +4491,16 @@ export def "employer-pay-schedule-pay-run-employee-commentary get-commentary-fro
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Commentary: record<Created: string, Detail: string, Employee: record<_href: string, _rel: string, _title: string>, PayRun: record<_href: string, _rel: string, _title: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id, pay_run_id: $pay_run_id, employee_id: $employee_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Employee/{employee_id}/Commentary"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Employee/{employee_id}/Commentary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4499,7 +4508,7 @@ export def "employer-pay-schedule-pay-run-employee-commentary get-commentary-fro
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/Employees
 # operationId: GetEmployeesFromPayRun
-export def "employer-pay-schedule-pay-run-employees get-employees-from" [
+export def "employer-pay-schedule-pay-run-employees get" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -4511,16 +4520,16 @@ export def "employer-pay-schedule-pay-run-employees get-employees-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id, pay_run_id: $pay_run_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Employees"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Employees"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4528,7 +4537,7 @@ export def "employer-pay-schedule-pay-run-employees get-employees-from" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/JournalLines
 # operationId: GetJournalLinesFromPayRun
-export def "employer-pay-schedule-pay-run-journal-lines get-journal-lines-from" [
+export def "employer-pay-schedule-pay-run-journal-lines get" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -4540,16 +4549,16 @@ export def "employer-pay-schedule-pay-run-journal-lines get-journal-lines-from" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id, pay_run_id: $pay_run_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/JournalLines"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/JournalLines"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4557,7 +4566,7 @@ export def "employer-pay-schedule-pay-run-journal-lines get-journal-lines-from" 
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/PayLines
 # operationId: GetPayLinesFromPayRun
-export def "employer-pay-schedule-pay-run-pay-lines get-pay-lines-from" [
+export def "employer-pay-schedule-pay-run-pay-lines get" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -4569,16 +4578,16 @@ export def "employer-pay-schedule-pay-run-pay-lines get-pay-lines-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id, pay_run_id: $pay_run_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/PayLines"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/PayLines"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4586,7 +4595,7 @@ export def "employer-pay-schedule-pay-run-pay-lines get-pay-lines-from" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/ReportLines
 # operationId: GetReportLinesFromPayRun
-export def "employer-pay-schedule-pay-run-report-lines get-report-lines-from" [
+export def "employer-pay-schedule-pay-run-report-lines get" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -4598,16 +4607,16 @@ export def "employer-pay-schedule-pay-run-report-lines get-report-lines-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id, pay_run_id: $pay_run_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/ReportLines"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/ReportLines"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4628,16 +4637,16 @@ export def "employer-pay-schedule-pay-run-tag delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id, pay_run_id: $pay_run_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4645,7 +4654,7 @@ export def "employer-pay-schedule-pay-run-tag delete" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/Tag/{TagId}
 # operationId: GetTagFromPayRun
-export def "employer-pay-schedule-pay-run-tag get-tag-from" [
+export def "employer-pay-schedule-pay-run-tag get" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -4658,16 +4667,16 @@ export def "employer-pay-schedule-pay-run-tag get-tag-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id, pay_run_id: $pay_run_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4688,16 +4697,16 @@ export def "employer-pay-schedule-pay-run-tag update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id, pay_run_id: $pay_run_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4705,7 +4714,7 @@ export def "employer-pay-schedule-pay-run-tag update" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRun/{PayRunId}/Tags
 # operationId: GetTagsFromPayRun
-export def "employer-pay-schedule-pay-run-tags get-tags-from" [
+export def "employer-pay-schedule-pay-run-tags get" [
   employer_id: string
   pay_schedule_id: string
   pay_run_id: string
@@ -4717,16 +4726,16 @@ export def "employer-pay-schedule-pay-run-tags get-tags-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id, pay_run_id: $pay_run_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4734,7 +4743,7 @@ export def "employer-pay-schedule-pay-run-tags get-tags-from" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRuns
 # operationId: GetPayRunsFromPaySchedule
-export def "employer-pay-schedule-pay-runs get-pay-runs-from" [
+export def "employer-pay-schedule-pay-runs get" [
   employer_id: string
   pay_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4745,16 +4754,16 @@ export def "employer-pay-schedule-pay-runs get-pay-runs-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRuns"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRuns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4762,7 +4771,7 @@ export def "employer-pay-schedule-pay-runs get-pay-runs-from" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRuns/Tag/{TagId}
 # operationId: GetPayRunsWithTag
-export def "employer-pay-schedule-pay-runs-tag get-pay-runs-with" [
+export def "employer-pay-schedule-pay-runs-tag get" [
   employer_id: string
   pay_schedule_id: string
   tag_id: string
@@ -4774,16 +4783,16 @@ export def "employer-pay-schedule-pay-runs-tag get-pay-runs-with" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRuns/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRuns/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4791,7 +4800,7 @@ export def "employer-pay-schedule-pay-runs-tag get-pay-runs-with" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/PayRuns/Tags
 # operationId: GetAllPayRunTags
-export def "employer-pay-schedule-pay-runs-tags get-all" [
+export def "employer-pay-schedule-pay-runs-tags get-list" [
   employer_id: string
   pay_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4802,16 +4811,16 @@ export def "employer-pay-schedule-pay-runs-tags get-all" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRuns/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRuns/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4831,16 +4840,16 @@ export def "employer-pay-schedule-tag delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4848,7 +4857,7 @@ export def "employer-pay-schedule-tag delete" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/Tag/{TagId}
 # operationId: GetTagFromPaySchedule
-export def "employer-pay-schedule-tag get-tag-from" [
+export def "employer-pay-schedule-tag get" [
   employer_id: string
   pay_schedule_id: string
   tag_id: string
@@ -4860,16 +4869,16 @@ export def "employer-pay-schedule-tag get-tag-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4889,16 +4898,16 @@ export def "employer-pay-schedule-tag update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4906,7 +4915,7 @@ export def "employer-pay-schedule-tag update" [
 #
 # GET /Employer/{EmployerId}/PaySchedule/{PayScheduleId}/Tags
 # operationId: GetTagsFromPaySchedule
-export def "employer-pay-schedule-tags get-tags-from" [
+export def "employer-pay-schedule-tags get" [
   employer_id: string
   pay_schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4917,16 +4926,16 @@ export def "employer-pay-schedule-tags get-tags-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pay_schedule_id: $pay_schedule_id} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4934,7 +4943,7 @@ export def "employer-pay-schedule-tags get-tags-from" [
 #
 # GET /Employer/{EmployerId}/PaySchedules
 # operationId: GetPaySchedulesFromEmployer
-export def "employer-pay-schedules get-pay-schedules-from" [
+export def "employer-pay-schedules get" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4944,16 +4953,16 @@ export def "employer-pay-schedules get-pay-schedules-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/PaySchedules"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/PaySchedules"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4972,28 +4981,28 @@ export def "employer-pay-schedules create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --pay-schedule: record # shape: {MetaData?: record, Name?: string, PayFrequency?: "Weekly"|"Monthly"|"TwoWeekly"|"FourWeekly"|"Yearly"}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/PaySchedules"))
-  let body = {"PaySchedule": $pay_schedule} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/PaySchedules"))
+  let req_body = {"PaySchedule": $pay_schedule} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get pay schedule with tag
 #
 # GET /Employer/{EmployerId}/PaySchedules/Tag/{TagId}
 # operationId: GetPaySchedulesWithTag
-export def "employer-pay-schedules-tag get-pay-schedules-with" [
+export def "employer-pay-schedules-tag get" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5004,16 +5013,16 @@ export def "employer-pay-schedules-tag get-pay-schedules-with" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/PaySchedules/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PaySchedules/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5021,7 +5030,7 @@ export def "employer-pay-schedules-tag get-pay-schedules-with" [
 #
 # GET /Employer/{EmployerId}/PaySchedules/Tags
 # operationId: GetAllPayScheduleTags
-export def "employer-pay-schedules-tags get-all" [
+export def "employer-pay-schedules-tags get-list" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5031,16 +5040,16 @@ export def "employer-pay-schedules-tags get-all" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/PaySchedules/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/PaySchedules/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5059,16 +5068,16 @@ export def "employer-pension delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pension_id: $pension_id} | format pattern "/Employer/{employer_id}/Pension/{pension_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pension_id: (encode-path-segment $pension_id)} | format pattern "/Employer/{employer_id}/Pension/{pension_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5076,7 +5085,7 @@ export def "employer-pension delete" [
 #
 # GET /Employer/{EmployerId}/Pension/{PensionId}
 # operationId: GetPensionFromEmployer
-export def "employer-pension get-pension-from" [
+export def "employer-pension get" [
   employer_id: string
   pension_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5087,16 +5096,16 @@ export def "employer-pension get-pension-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Pension: record<AECompatible: bool, Certification: string, Code: string, ContributionDeductionDay: int, EffectiveDate: string, EmployeeContributionCash: float, EmployeeContributionPercent: float, EmployerContributionCash: float, EmployerContributionPercent: float, EmployerNiSaving: bool, EmployerNiSavingPercentage: float, Group: string, LowerThreshold: float, MetaData: record, NextRevisionDate: string, PensionablePayCodes: record<PayCode: list>, ProRataMethod: string, ProviderEmployerRef: string, ProviderName: string, QualifyingPayCodes: record<PayCode: list>, RasRoundingOverride: string, Revision: int, RoundingOption: string, SalarySacrifice: bool, SchemeName: string, SubGroup: string, TaxationMethod: string, UpperThreshold: float, UseAEThresholds: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pension_id: $pension_id} | format pattern "/Employer/{employer_id}/Pension/{pension_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pension_id: (encode-path-segment $pension_id)} | format pattern "/Employer/{employer_id}/Pension/{pension_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5104,7 +5113,7 @@ export def "employer-pension get-pension-from" [
 #
 # PATCH /Employer/{EmployerId}/Pension/{PensionId}
 # operationId: PatchPension
-# --Pension shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ProRataMethod?: "NotSet"|"Annual260Days"|"Annual365Days"|"AnnualQualifyingDays"|"DaysPerCalendarMonth"|"DaysPerTaxPeriod"|"WorkingDaysPerCalendarMonth"|"WeekDaysPerCalendarMonth", ProviderEmployerRef?: string, ProviderName?: string, QualifyingPayCodes?: record, RasRoundingOverride?: "NotSet"|"PennyUp"|"PennyDown"|"Bankers"|"FiveUp"|"FiveDown"|"Floor"|"Ceiling", Revision?: int, RoundingOption?: "NotSet"|"PennyUp"|"PennyDown"|"Bankers"|"FiveUp"|"FiveDown"|"Floor"|"Ceiling", SalarySacrifice?: bool, SchemeName?: string, SubGroup?: string, TaxationMethod?: "NotSet"|"NetBased"|"ReliefAtSource"|"TaxReliefExcluded", UpperThreshold?: float, UseAEThresholds?: bool}
+# --Pension shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ... (13 more fields)}
 export def "employer-pension update" [
   employer_id: string
   pension_id: string
@@ -5116,29 +5125,29 @@ export def "employer-pension update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
-  --pension: record # shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ProRataMethod?: "NotSet"|"Annual260Days"|"Annual365Days"|"AnnualQualifyingDays"|"DaysPerCalendarMonth"|"DaysPerTaxPeriod"|"WorkingDaysPerCalendarMonth"|"WeekDaysPerCalendarMonth", ProviderEmployerRef?: string, ProviderName?: string, QualifyingPayCodes?: record, RasRoundingOverride?: "NotSet"|"PennyUp"|"PennyDown"|"Bankers"|"FiveUp"|"FiveDown"|"Floor"|"Ceiling", Revision?: int, RoundingOption?: "NotSet"|"PennyUp"|"PennyDown"|"Bankers"|"FiveUp"|"FiveDown"|"Floor"|"Ceiling", SalarySacrifice?: bool, SchemeName?: string, SubGroup?: string, TaxationMethod?: "NotSet"|"NetBased"|"ReliefAtSource"|"TaxReliefExcluded", UpperThreshold?: float, UseAEThresholds?: bool}
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
+  --pension: record # shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ... (13 more fields)}
 ]: any -> record<Pension: record<AECompatible: bool, Certification: string, Code: string, ContributionDeductionDay: int, EffectiveDate: string, EmployeeContributionCash: float, EmployeeContributionPercent: float, EmployerContributionCash: float, EmployerContributionPercent: float, EmployerNiSaving: bool, EmployerNiSavingPercentage: float, Group: string, LowerThreshold: float, MetaData: record, NextRevisionDate: string, PensionablePayCodes: record<PayCode: list>, ProRataMethod: string, ProviderEmployerRef: string, ProviderName: string, QualifyingPayCodes: record<PayCode: list>, RasRoundingOverride: string, Revision: int, RoundingOption: string, SalarySacrifice: bool, SchemeName: string, SubGroup: string, TaxationMethod: string, UpperThreshold: float, UseAEThresholds: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pension_id: $pension_id} | format pattern "/Employer/{employer_id}/Pension/{pension_id}"))
-  let body = {"Pension": $pension} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pension_id: (encode-path-segment $pension_id)} | format pattern "/Employer/{employer_id}/Pension/{pension_id}"))
+  let req_body = {"Pension": $pension} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the Pension
 #
 # PUT /Employer/{EmployerId}/Pension/{PensionId}
 # operationId: PutPensionIntoEmployer
-# --Pension shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ProRataMethod?: "NotSet"|"Annual260Days"|"Annual365Days"|"AnnualQualifyingDays"|"DaysPerCalendarMonth"|"DaysPerTaxPeriod"|"WorkingDaysPerCalendarMonth"|"WeekDaysPerCalendarMonth", ProviderEmployerRef?: string, ProviderName?: string, QualifyingPayCodes?: record, RasRoundingOverride?: "NotSet"|"PennyUp"|"PennyDown"|"Bankers"|"FiveUp"|"FiveDown"|"Floor"|"Ceiling", Revision?: int, RoundingOption?: "NotSet"|"PennyUp"|"PennyDown"|"Bankers"|"FiveUp"|"FiveDown"|"Floor"|"Ceiling", SalarySacrifice?: bool, SchemeName?: string, SubGroup?: string, TaxationMethod?: "NotSet"|"NetBased"|"ReliefAtSource"|"TaxReliefExcluded", UpperThreshold?: float, UseAEThresholds?: bool}
-export def "employer-pension update-pension-into" [
+# --Pension shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ... (13 more fields)}
+export def "employer-pension update-into" [
   employer_id: string
   pension_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5149,28 +5158,28 @@ export def "employer-pension update-pension-into" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
-  --pension: record # shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ProRataMethod?: "NotSet"|"Annual260Days"|"Annual365Days"|"AnnualQualifyingDays"|"DaysPerCalendarMonth"|"DaysPerTaxPeriod"|"WorkingDaysPerCalendarMonth"|"WeekDaysPerCalendarMonth", ProviderEmployerRef?: string, ProviderName?: string, QualifyingPayCodes?: record, RasRoundingOverride?: "NotSet"|"PennyUp"|"PennyDown"|"Bankers"|"FiveUp"|"FiveDown"|"Floor"|"Ceiling", Revision?: int, RoundingOption?: "NotSet"|"PennyUp"|"PennyDown"|"Bankers"|"FiveUp"|"FiveDown"|"Floor"|"Ceiling", SalarySacrifice?: bool, SchemeName?: string, SubGroup?: string, TaxationMethod?: "NotSet"|"NetBased"|"ReliefAtSource"|"TaxReliefExcluded", UpperThreshold?: float, UseAEThresholds?: bool}
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
+  --pension: record # shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ... (13 more fields)}
 ]: any -> record<Pension: record<AECompatible: bool, Certification: string, Code: string, ContributionDeductionDay: int, EffectiveDate: string, EmployeeContributionCash: float, EmployeeContributionPercent: float, EmployerContributionCash: float, EmployerContributionPercent: float, EmployerNiSaving: bool, EmployerNiSavingPercentage: float, Group: string, LowerThreshold: float, MetaData: record, NextRevisionDate: string, PensionablePayCodes: record<PayCode: list>, ProRataMethod: string, ProviderEmployerRef: string, ProviderName: string, QualifyingPayCodes: record<PayCode: list>, RasRoundingOverride: string, Revision: int, RoundingOption: string, SalarySacrifice: bool, SchemeName: string, SubGroup: string, TaxationMethod: string, UpperThreshold: float, UseAEThresholds: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pension_id: $pension_id} | format pattern "/Employer/{employer_id}/Pension/{pension_id}"))
-  let body = {"Pension": $pension} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pension_id: (encode-path-segment $pension_id)} | format pattern "/Employer/{employer_id}/Pension/{pension_id}"))
+  let req_body = {"Pension": $pension} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an Pension revision matching the specified revision number.
 #
 # DELETE /Employer/{EmployerId}/Pension/{PensionId}/Revision/{RevisionNumber}
 # operationId: DeletePensionRevisionByNumber
-export def "employer-pension-revision delete" [
+export def "employer-pension-revision delete-by-number" [
   employer_id: string
   pension_id: string
   revision_number: string
@@ -5182,16 +5191,16 @@ export def "employer-pension-revision delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pension_id: $pension_id, revision_number: $revision_number} | format pattern "/Employer/{employer_id}/Pension/{pension_id}/Revision/{revision_number}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pension_id: (encode-path-segment $pension_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/Pension/{pension_id}/Revision/{revision_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5199,7 +5208,7 @@ export def "employer-pension-revision delete" [
 #
 # GET /Employer/{EmployerId}/Pension/{PensionId}/Revision/{RevisionNumber}
 # operationId: GetPensionRevisionByNumber
-export def "employer-pension-revision get" [
+export def "employer-pension-revision get-by-number" [
   employer_id: string
   pension_id: string
   revision_number: string
@@ -5211,16 +5220,16 @@ export def "employer-pension-revision get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Pension: record<AECompatible: bool, Certification: string, Code: string, ContributionDeductionDay: int, EffectiveDate: string, EmployeeContributionCash: float, EmployeeContributionPercent: float, EmployerContributionCash: float, EmployerContributionPercent: float, EmployerNiSaving: bool, EmployerNiSavingPercentage: float, Group: string, LowerThreshold: float, MetaData: record, NextRevisionDate: string, PensionablePayCodes: record<PayCode: list>, ProRataMethod: string, ProviderEmployerRef: string, ProviderName: string, QualifyingPayCodes: record<PayCode: list>, RasRoundingOverride: string, Revision: int, RoundingOption: string, SalarySacrifice: bool, SchemeName: string, SubGroup: string, TaxationMethod: string, UpperThreshold: float, UseAEThresholds: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pension_id: $pension_id, revision_number: $revision_number} | format pattern "/Employer/{employer_id}/Pension/{pension_id}/Revision/{revision_number}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pension_id: (encode-path-segment $pension_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/Pension/{pension_id}/Revision/{revision_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5239,16 +5248,16 @@ export def "employer-pension-revisions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pension_id: $pension_id} | format pattern "/Employer/{employer_id}/Pension/{pension_id}/Revisions"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pension_id: (encode-path-segment $pension_id)} | format pattern "/Employer/{employer_id}/Pension/{pension_id}/Revisions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5256,7 +5265,7 @@ export def "employer-pension-revisions get" [
 #
 # DELETE /Employer/{EmployerId}/Pension/{PensionId}/{EffectiveDate}
 # operationId: DeletePensionRevision
-export def "employer-pension delete-pension-revision" [
+export def "employer-pension delete-revision" [
   employer_id: string
   pension_id: string
   effective_date: string
@@ -5268,16 +5277,16 @@ export def "employer-pension delete-pension-revision" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pension_id: $pension_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/Pension/{pension_id}/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pension_id: (encode-path-segment $pension_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Pension/{pension_id}/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5285,7 +5294,7 @@ export def "employer-pension delete-pension-revision" [
 #
 # GET /Employer/{EmployerId}/Pension/{PensionId}/{EffectiveDate}
 # operationId: GetPensionByEffectiveDate
-export def "employer-pension get" [
+export def "employer-pension get-by-effective-date" [
   employer_id: string
   pension_id: string
   effective_date: string
@@ -5297,16 +5306,16 @@ export def "employer-pension get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Pension: record<AECompatible: bool, Certification: string, Code: string, ContributionDeductionDay: int, EffectiveDate: string, EmployeeContributionCash: float, EmployeeContributionPercent: float, EmployerContributionCash: float, EmployerContributionPercent: float, EmployerNiSaving: bool, EmployerNiSavingPercentage: float, Group: string, LowerThreshold: float, MetaData: record, NextRevisionDate: string, PensionablePayCodes: record<PayCode: list>, ProRataMethod: string, ProviderEmployerRef: string, ProviderName: string, QualifyingPayCodes: record<PayCode: list>, RasRoundingOverride: string, Revision: int, RoundingOption: string, SalarySacrifice: bool, SchemeName: string, SubGroup: string, TaxationMethod: string, UpperThreshold: float, UseAEThresholds: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, pension_id: $pension_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/Pension/{pension_id}/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pension_id: (encode-path-segment $pension_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Pension/{pension_id}/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5314,7 +5323,7 @@ export def "employer-pension get" [
 #
 # GET /Employer/{EmployerId}/Pensions
 # operationId: GetPensionsFromEmployer
-export def "employer-pensions get-pensions-from" [
+export def "employer-pensions get" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5324,16 +5333,16 @@ export def "employer-pensions get-pensions-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/Pensions"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Pensions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5341,8 +5350,8 @@ export def "employer-pensions get-pensions-from" [
 #
 # POST /Employer/{EmployerId}/Pensions
 # operationId: PostPensionIntoEmployer
-# --Pension shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ProRataMethod?: "NotSet"|"Annual260Days"|"Annual365Days"|"AnnualQualifyingDays"|"DaysPerCalendarMonth"|"DaysPerTaxPeriod"|"WorkingDaysPerCalendarMonth"|"WeekDaysPerCalendarMonth", ProviderEmployerRef?: string, ProviderName?: string, QualifyingPayCodes?: record, RasRoundingOverride?: "NotSet"|"PennyUp"|"PennyDown"|"Bankers"|"FiveUp"|"FiveDown"|"Floor"|"Ceiling", Revision?: int, RoundingOption?: "NotSet"|"PennyUp"|"PennyDown"|"Bankers"|"FiveUp"|"FiveDown"|"Floor"|"Ceiling", SalarySacrifice?: bool, SchemeName?: string, SubGroup?: string, TaxationMethod?: "NotSet"|"NetBased"|"ReliefAtSource"|"TaxReliefExcluded", UpperThreshold?: float, UseAEThresholds?: bool}
-export def "employer-pensions create-pension-into" [
+# --Pension shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ... (13 more fields)}
+export def "employer-pensions create-into" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5352,28 +5361,28 @@ export def "employer-pensions create-pension-into" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
-  --pension: record # shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ProRataMethod?: "NotSet"|"Annual260Days"|"Annual365Days"|"AnnualQualifyingDays"|"DaysPerCalendarMonth"|"DaysPerTaxPeriod"|"WorkingDaysPerCalendarMonth"|"WeekDaysPerCalendarMonth", ProviderEmployerRef?: string, ProviderName?: string, QualifyingPayCodes?: record, RasRoundingOverride?: "NotSet"|"PennyUp"|"PennyDown"|"Bankers"|"FiveUp"|"FiveDown"|"Floor"|"Ceiling", Revision?: int, RoundingOption?: "NotSet"|"PennyUp"|"PennyDown"|"Bankers"|"FiveUp"|"FiveDown"|"Floor"|"Ceiling", SalarySacrifice?: bool, SchemeName?: string, SubGroup?: string, TaxationMethod?: "NotSet"|"NetBased"|"ReliefAtSource"|"TaxReliefExcluded", UpperThreshold?: float, UseAEThresholds?: bool}
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
+  --pension: record # shape: {AECompatible?: bool, Certification?: "NotSet"|"Set1"|"Set2"|"Set3", Code?: string, ContributionDeductionDay?: int, EffectiveDate?: string, EmployeeContributionCash?: float, EmployeeContributionPercent?: float, EmployerContributionCash?: float, EmployerContributionPercent?: float, EmployerNiSaving?: bool, EmployerNiSavingPercentage?: float, Group?: string, LowerThreshold?: float, MetaData?: record, NextRevisionDate?: string, PensionablePayCodes?: record, ... (13 more fields)}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/Pensions"))
-  let body = {"Pension": $pension} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Pensions"))
+  let req_body = {"Pension": $pension} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get pensions from employer at a given effective date.
 #
 # GET /Employer/{EmployerId}/Pensions/{EffectiveDate}
 # operationId: GetPensionsByEffectiveDate
-export def "employer-pensions get" [
+export def "employer-pensions get-by-effective-date" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5384,16 +5393,16 @@ export def "employer-pensions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/Pensions/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Pensions/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5401,7 +5410,7 @@ export def "employer-pensions get" [
 #
 # GET /Employer/{EmployerId}/ReportLine/{ReportLineId}
 # operationId: GetReportLineFromEmployer
-export def "employer-report-line get-report-line-from" [
+export def "employer-report-line get" [
   employer_id: string
   report_line_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5412,16 +5421,16 @@ export def "employer-report-line get-report-line-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<ReportLine: record<Description: string, Generated: string, TaxMonth: int, TaxYear: int, Value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, report_line_id: $report_line_id} | format pattern "/Employer/{employer_id}/ReportLine/{report_line_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), report_line_id: (encode-path-segment $report_line_id)} | format pattern "/Employer/{employer_id}/ReportLine/{report_line_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5429,7 +5438,7 @@ export def "employer-report-line get-report-line-from" [
 #
 # GET /Employer/{EmployerId}/ReportLines
 # operationId: GetReportLinesFromEmployer
-export def "employer-report-lines get-report-lines-from" [
+export def "employer-report-lines get" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5439,16 +5448,16 @@ export def "employer-report-lines get-report-lines-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/ReportLines"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/ReportLines"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5467,16 +5476,16 @@ export def "employer-reporting-instruction delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, reporting_instruction_id: $reporting_instruction_id} | format pattern "/Employer/{employer_id}/ReportingInstruction/{reporting_instruction_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), reporting_instruction_id: (encode-path-segment $reporting_instruction_id)} | format pattern "/Employer/{employer_id}/ReportingInstruction/{reporting_instruction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5484,7 +5493,7 @@ export def "employer-reporting-instruction delete" [
 #
 # GET /Employer/{EmployerId}/ReportingInstruction/{ReportingInstructionId}
 # operationId: GetReportingInstructionFromEmployer
-export def "employer-reporting-instruction get-reporting-instruction-from" [
+export def "employer-reporting-instruction get" [
   employer_id: string
   reporting_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5495,16 +5504,16 @@ export def "employer-reporting-instruction get-reporting-instruction-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<ReportingInstruction: record<EndDate: string, StartDate: string, TaxMonth: int, TaxYear: int, Value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, reporting_instruction_id: $reporting_instruction_id} | format pattern "/Employer/{employer_id}/ReportingInstruction/{reporting_instruction_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), reporting_instruction_id: (encode-path-segment $reporting_instruction_id)} | format pattern "/Employer/{employer_id}/ReportingInstruction/{reporting_instruction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5524,28 +5533,28 @@ export def "employer-reporting-instruction update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --reporting-instruction: record # shape: {EndDate?: string, StartDate?: string, TaxMonth?: int, TaxYear?: int, Value?: float}
 ]: any -> record<ReportingInstruction: record<EndDate: string, StartDate: string, TaxMonth: int, TaxYear: int, Value: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, reporting_instruction_id: $reporting_instruction_id} | format pattern "/Employer/{employer_id}/ReportingInstruction/{reporting_instruction_id}"))
-  let body = {"ReportingInstruction": $reporting_instruction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), reporting_instruction_id: (encode-path-segment $reporting_instruction_id)} | format pattern "/Employer/{employer_id}/ReportingInstruction/{reporting_instruction_id}"))
+  let req_body = {"ReportingInstruction": $reporting_instruction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the reporting instructions from the specified employer
 #
 # GET /Employer/{EmployerId}/ReportingInstructions
 # operationId: GetReportingInstructionsFromEmployer
-export def "employer-reporting-instructions get-reporting-instructions-from" [
+export def "employer-reporting-instructions get" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5555,16 +5564,16 @@ export def "employer-reporting-instructions get-reporting-instructions-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/ReportingInstructions"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/ReportingInstructions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5583,28 +5592,28 @@ export def "employer-reporting-instructions create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --reporting-instruction: record # shape: {EndDate?: string, StartDate?: string, TaxMonth?: int, TaxYear?: int, Value?: float}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/ReportingInstructions"))
-  let body = {"ReportingInstruction": $reporting_instruction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/ReportingInstructions"))
+  let req_body = {"ReportingInstruction": $reporting_instruction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an Employer revision matching the specified revision number.
 #
 # DELETE /Employer/{EmployerId}/Revision/{RevisionNumber}
 # operationId: DeleteEmployerRevisionByNumber
-export def "employer-revision delete" [
+export def "employer-revision delete-by-number" [
   employer_id: string
   revision_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5615,16 +5624,16 @@ export def "employer-revision delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, revision_number: $revision_number} | format pattern "/Employer/{employer_id}/Revision/{revision_number}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/Revision/{revision_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5632,7 +5641,7 @@ export def "employer-revision delete" [
 #
 # GET /Employer/{EmployerId}/Revision/{RevisionNumber}
 # operationId: GetEmployerRevisionByNumber
-export def "employer-revision get" [
+export def "employer-revision get-by-number" [
   employer_id: string
   revision_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5643,16 +5652,16 @@ export def "employer-revision get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Employer: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, ApprenticeshipLevyAllowance: float, AutoEnrolment: record<Pension: record, PostponementDate: string, PrimaryAddress: record, PrimaryEmail: string, PrimaryFirstName: string, PrimaryJobTitle: string, PrimaryLastName: string, PrimaryTelephone: string, ReEnrolmentDayOffset: int, ReEnrolmentMonthOffset: int, RecentOptOutReEnrolmentExcluded: bool, SecondaryAddress: record, SecondaryEmail: string, SecondaryFirstName: string, SecondaryJobTitle: string, SecondaryLastName: string, SecondaryTelephone: string, StagingDate: string>, BacsServiceUserNumber: string, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, CalculateApprenticeshipLevy: bool, ClaimEmploymentAllowance: bool, ClaimSmallEmployerRelief: bool, EffectiveDate: string, HmrcSettings: record<AccountingOfficeRef: string, COTAXRef: string, ContactEmail: string, ContactFax: string, ContactFirstName: string, ContactLastName: string, ContactTelephone: string, EmploymentAllowanceOverride: float, Password: string, SAUTR: string, Sender: string, SenderId: string, StateAidSector: string, TaxOfficeNumber: string, TaxOfficeReference: string>, MetaData: record, Name: string, NextRevisionDate: string, Region: string, Revision: int, RuleExclusions: string, Territory: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, revision_number: $revision_number} | format pattern "/Employer/{employer_id}/Revision/{revision_number}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/Revision/{revision_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5660,7 +5669,7 @@ export def "employer-revision get" [
 #
 # GET /Employer/{EmployerId}/Revision/{RevisionNumber}/Summary
 # operationId: GetEmployerRevisionSummaryByNumber
-export def "employer-revision-summary get" [
+export def "employer-revision-summary get-by-number" [
   employer_id: string
   revision_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5671,16 +5680,16 @@ export def "employer-revision-summary get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, revision_number: $revision_number} | format pattern "/Employer/{employer_id}/Revision/{revision_number}/Summary"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/Revision/{revision_number}/Summary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5698,16 +5707,16 @@ export def "employer-revisions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/Revisions"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Revisions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5715,7 +5724,7 @@ export def "employer-revisions get" [
 #
 # GET /Employer/{EmployerId}/Revisions/Summary
 # operationId: GetEmployerRevisionSummaries
-export def "employer-revisions-summary get-employer-revision-summaries" [
+export def "employer-revisions-summary get-summaries" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5725,16 +5734,16 @@ export def "employer-revisions-summary get-employer-revision-summaries" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/Revisions/Summary"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Revisions/Summary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5753,16 +5762,16 @@ export def "employer-rti-transaction delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, rti_transaction_id: $rti_transaction_id} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), rti_transaction_id: (encode-path-segment $rti_transaction_id)} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5770,7 +5779,7 @@ export def "employer-rti-transaction delete" [
 #
 # GET /Employer/{EmployerId}/RtiTransaction/{RtiTransactionId}
 # operationId: GetRtiTransactionFromEmployer
-export def "employer-rti-transaction get-rti-transaction-from" [
+export def "employer-rti-transaction get" [
   employer_id: string
   rti_transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5781,16 +5790,16 @@ export def "employer-rti-transaction get-rti-transaction-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<RtiTransactionBase: record<EmployerCore: record<_href: string, _rel: string, _title: string>, RequestData: string, ResponseData: string, RtiType: string, TaxYear: int, Timestamp: string, TransactionStatus: string, TransmissionDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, rti_transaction_id: $rti_transaction_id} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), rti_transaction_id: (encode-path-segment $rti_transaction_id)} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5798,7 +5807,7 @@ export def "employer-rti-transaction get-rti-transaction-from" [
 #
 # GET /Employer/{EmployerId}/RtiTransaction/{RtiTransactionId}/Summary
 # operationId: GetRtiTransactionSummaryFromEmployer
-export def "employer-rti-transaction-summary get-rti-transaction-summary-from" [
+export def "employer-rti-transaction-summary get" [
   employer_id: string
   rti_transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5809,16 +5818,16 @@ export def "employer-rti-transaction-summary get-rti-transaction-summary-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<RtiTransactionBase: record<EmployerCore: record<_href: string, _rel: string, _title: string>, RequestData: string, ResponseData: string, RtiType: string, TaxYear: int, Timestamp: string, TransactionStatus: string, TransmissionDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, rti_transaction_id: $rti_transaction_id} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}/Summary"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), rti_transaction_id: (encode-path-segment $rti_transaction_id)} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}/Summary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5838,16 +5847,16 @@ export def "employer-rti-transaction-tag delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, rti_transaction_id: $rti_transaction_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), rti_transaction_id: (encode-path-segment $rti_transaction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5855,7 +5864,7 @@ export def "employer-rti-transaction-tag delete" [
 #
 # GET /Employer/{EmployerId}/RtiTransaction/{RtiTransactionId}/Tag/{TagId}
 # operationId: GetTagFromRtiTransaction
-export def "employer-rti-transaction-tag get-tag-from" [
+export def "employer-rti-transaction-tag get" [
   employer_id: string
   rti_transaction_id: string
   tag_id: string
@@ -5867,16 +5876,16 @@ export def "employer-rti-transaction-tag get-tag-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, rti_transaction_id: $rti_transaction_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), rti_transaction_id: (encode-path-segment $rti_transaction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5896,16 +5905,16 @@ export def "employer-rti-transaction-tag update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, rti_transaction_id: $rti_transaction_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), rti_transaction_id: (encode-path-segment $rti_transaction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5913,7 +5922,7 @@ export def "employer-rti-transaction-tag update" [
 #
 # GET /Employer/{EmployerId}/RtiTransaction/{RtiTransactionId}/Tags
 # operationId: GetTagsFromRtiTransaction
-export def "employer-rti-transaction-tags get-tags-from" [
+export def "employer-rti-transaction-tags get" [
   employer_id: string
   rti_transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5924,16 +5933,16 @@ export def "employer-rti-transaction-tags get-tags-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, rti_transaction_id: $rti_transaction_id} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), rti_transaction_id: (encode-path-segment $rti_transaction_id)} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5941,7 +5950,7 @@ export def "employer-rti-transaction-tags get-tags-from" [
 #
 # GET /Employer/{EmployerId}/RtiTransactions
 # operationId: GetRtiTransactionsFromEmployer
-export def "employer-rti-transactions get-rti-transactions-from" [
+export def "employer-rti-transactions get" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5951,16 +5960,16 @@ export def "employer-rti-transactions get-rti-transactions-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/RtiTransactions"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/RtiTransactions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5968,7 +5977,7 @@ export def "employer-rti-transactions get-rti-transactions-from" [
 #
 # GET /Employer/{EmployerId}/RtiTransactions/Summary
 # operationId: GetRtiTransactionSummariesFromEmployer
-export def "employer-rti-transactions-summary get-rti-transaction-summaries-from" [
+export def "employer-rti-transactions-summary get-summaries" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5978,16 +5987,16 @@ export def "employer-rti-transactions-summary get-rti-transaction-summaries-from
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/RtiTransactions/Summary"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/RtiTransactions/Summary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -5995,7 +6004,7 @@ export def "employer-rti-transactions-summary get-rti-transaction-summaries-from
 #
 # GET /Employer/{EmployerId}/RtiTransactions/Tag/{TagId}
 # operationId: GetRtiTransactionsWithTag
-export def "employer-rti-transactions-tag get-rti-transactions-with" [
+export def "employer-rti-transactions-tag get" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6006,16 +6015,16 @@ export def "employer-rti-transactions-tag get-rti-transactions-with" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/RtiTransactions/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/RtiTransactions/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6023,7 +6032,7 @@ export def "employer-rti-transactions-tag get-rti-transactions-with" [
 #
 # GET /Employer/{EmployerId}/RtiTransactions/Tags
 # operationId: GetAllRtiTransactionTags
-export def "employer-rti-transactions-tags get-all" [
+export def "employer-rti-transactions-tags get-list" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6033,16 +6042,16 @@ export def "employer-rti-transactions-tags get-all" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/RtiTransactions/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/RtiTransactions/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6061,16 +6070,16 @@ export def "employer-secret delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, secret_id: $secret_id} | format pattern "/Employer/{employer_id}/Secret/{secret_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), secret_id: (encode-path-segment $secret_id)} | format pattern "/Employer/{employer_id}/Secret/{secret_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6089,16 +6098,16 @@ export def "employer-secret get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<EmployerSecret: record<Created: string, Name: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, secret_id: $secret_id} | format pattern "/Employer/{employer_id}/Secret/{secret_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), secret_id: (encode-path-segment $secret_id)} | format pattern "/Employer/{employer_id}/Secret/{secret_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6117,16 +6126,16 @@ export def "employer-secret update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<EmployerSecret: record<Created: string, Name: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, secret_id: $secret_id} | format pattern "/Employer/{employer_id}/Secret/{secret_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), secret_id: (encode-path-segment $secret_id)} | format pattern "/Employer/{employer_id}/Secret/{secret_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6144,16 +6153,16 @@ export def "employer-secrets get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/Secrets"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Secrets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6171,16 +6180,16 @@ export def "employer-secrets create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/Secrets"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Secrets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6199,16 +6208,16 @@ export def "employer-sub-contractor delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6216,7 +6225,7 @@ export def "employer-sub-contractor delete" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}
 # operationId: GetSubContractorFromEmployer
-export def "employer-sub-contractor get-sub-contractor-from" [
+export def "employer-sub-contractor get" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6227,16 +6236,16 @@ export def "employer-sub-contractor get-sub-contractor-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<SubContractor: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, BusinessType: string, CompanyName: string, CompanyRegistrationNumber: string, Deactivated: bool, EffectiveDate: string, FirstName: string, Initials: string, LastName: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, PartnershipName: string, PartnershipUniqueTaxReference: string, PayFrequency: string, PaymentMethod: string, Region: string, Revision: int, TaxationStatus: string, Telephone: string, Territory: string, Title: string, TradingName: string, UniqueTaxReference: string, VatRegistered: bool, VatRegistrationNumber: string, VerificationDate: string, VerificationNumber: string, WorksNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6244,7 +6253,7 @@ export def "employer-sub-contractor get-sub-contractor-from" [
 #
 # PATCH /Employer/{EmployerId}/SubContractor/{SubContractorId}
 # operationId: PatchSubContractor
-# --SubContractor shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", PaymentMethod?: "NotSet"|"Cash"|"Cheque"|"BACS"|"FasterPayments"|"Other", Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, TaxationStatus?: "Unmatched"|"Net"|"Gross", Telephone?: string, Territory?: "UnitedKingdom", Title?: string, TradingName?: string, UniqueTaxReference?: string, VatRegistered?: bool, VatRegistrationNumber?: string, VerificationDate?: string, VerificationNumber?: string, WorksNumber?: string}
+# --SubContractor shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", ... (14 more fields)}
 export def "employer-sub-contractor update" [
   employer_id: string
   sub_contractor_id: string
@@ -6256,29 +6265,29 @@ export def "employer-sub-contractor update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
-  --sub-contractor: record # shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", PaymentMethod?: "NotSet"|"Cash"|"Cheque"|"BACS"|"FasterPayments"|"Other", Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, TaxationStatus?: "Unmatched"|"Net"|"Gross", Telephone?: string, Territory?: "UnitedKingdom", Title?: string, TradingName?: string, UniqueTaxReference?: string, VatRegistered?: bool, VatRegistrationNumber?: string, VerificationDate?: string, VerificationNumber?: string, WorksNumber?: string}
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
+  --sub-contractor: record # shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", ... (14 more fields)}
 ]: any -> record<SubContractor: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, BusinessType: string, CompanyName: string, CompanyRegistrationNumber: string, Deactivated: bool, EffectiveDate: string, FirstName: string, Initials: string, LastName: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, PartnershipName: string, PartnershipUniqueTaxReference: string, PayFrequency: string, PaymentMethod: string, Region: string, Revision: int, TaxationStatus: string, Telephone: string, Territory: string, Title: string, TradingName: string, UniqueTaxReference: string, VatRegistered: bool, VatRegistrationNumber: string, VerificationDate: string, VerificationNumber: string, WorksNumber: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}"))
-  let body = {"SubContractor": $sub_contractor} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}"))
+  let req_body = {"SubContractor": $sub_contractor} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the sub contractor
 #
 # PUT /Employer/{EmployerId}/SubContractor/{SubContractorId}
 # operationId: PutSubContractorIntoEmployer
-# --SubContractor shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", PaymentMethod?: "NotSet"|"Cash"|"Cheque"|"BACS"|"FasterPayments"|"Other", Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, TaxationStatus?: "Unmatched"|"Net"|"Gross", Telephone?: string, Territory?: "UnitedKingdom", Title?: string, TradingName?: string, UniqueTaxReference?: string, VatRegistered?: bool, VatRegistrationNumber?: string, VerificationDate?: string, VerificationNumber?: string, WorksNumber?: string}
-export def "employer-sub-contractor update-sub-contractor-into" [
+# --SubContractor shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", ... (14 more fields)}
+export def "employer-sub-contractor update-into" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6289,21 +6298,21 @@ export def "employer-sub-contractor update-sub-contractor-into" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
-  --sub-contractor: record # shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", PaymentMethod?: "NotSet"|"Cash"|"Cheque"|"BACS"|"FasterPayments"|"Other", Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, TaxationStatus?: "Unmatched"|"Net"|"Gross", Telephone?: string, Territory?: "UnitedKingdom", Title?: string, TradingName?: string, UniqueTaxReference?: string, VatRegistered?: bool, VatRegistrationNumber?: string, VerificationDate?: string, VerificationNumber?: string, WorksNumber?: string}
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
+  --sub-contractor: record # shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", ... (14 more fields)}
 ]: any -> record<SubContractor: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, BusinessType: string, CompanyName: string, CompanyRegistrationNumber: string, Deactivated: bool, EffectiveDate: string, FirstName: string, Initials: string, LastName: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, PartnershipName: string, PartnershipUniqueTaxReference: string, PayFrequency: string, PaymentMethod: string, Region: string, Revision: int, TaxationStatus: string, Telephone: string, Territory: string, Title: string, TradingName: string, UniqueTaxReference: string, VatRegistered: bool, VatRegistrationNumber: string, VerificationDate: string, VerificationNumber: string, WorksNumber: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}"))
-  let body = {"SubContractor": $sub_contractor} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}"))
+  let req_body = {"SubContractor": $sub_contractor} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a CIS instruction
@@ -6322,16 +6331,16 @@ export def "employer-sub-contractor-cis-instruction delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, cis_instruction_id: $cis_instruction_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_instruction_id: (encode-path-segment $cis_instruction_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6339,7 +6348,7 @@ export def "employer-sub-contractor-cis-instruction delete" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstruction/{CisInstructionId}
 # operationId: GetCisInstructionFromSubContractor
-export def "employer-sub-contractor-cis-instruction get-cis-instruction-from" [
+export def "employer-sub-contractor-cis-instruction get" [
   employer_id: string
   sub_contractor_id: string
   cis_instruction_id: string
@@ -6351,16 +6360,16 @@ export def "employer-sub-contractor-cis-instruction get-cis-instruction-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<CisInstruction: record<CisLineTag: string, CisLineType: string, Description: string, PayFrequency: string, PeriodEnd: int, PeriodStart: int, TaxYearEnd: int, TaxYearStart: int, UOM: string, Units: float, VAT: float, Value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, cis_instruction_id: $cis_instruction_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_instruction_id: (encode-path-segment $cis_instruction_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6380,16 +6389,16 @@ export def "employer-sub-contractor-cis-instruction update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<CisInstruction: record<CisLineTag: string, CisLineType: string, Description: string, PayFrequency: string, PeriodEnd: int, PeriodStart: int, TaxYearEnd: int, TaxYearStart: int, UOM: string, Units: float, VAT: float, Value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, cis_instruction_id: $cis_instruction_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_instruction_id: (encode-path-segment $cis_instruction_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6398,7 +6407,7 @@ export def "employer-sub-contractor-cis-instruction update" [
 # PUT /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstruction/{CisInstructionId}
 # operationId: PutCisInstructionIntoSubContractor
 # --CisInstruction shape: {CisLineTag?: string, CisLineType?: string, Description?: string, PayFrequency?: "Monthly"|"Weekly", PeriodEnd?: int, PeriodStart?: int, TaxYearEnd?: int, TaxYearStart?: int, UOM?: "NotSet"|"Minute"|"Hour"|"Day"|"Week"|"Month"|"Year"|"Unit", Units?: float, VAT?: float, Value?: float}
-export def "employer-sub-contractor-cis-instruction update-cis-instruction-into" [
+export def "employer-sub-contractor-cis-instruction update-into" [
   employer_id: string
   sub_contractor_id: string
   cis_instruction_id: string
@@ -6410,21 +6419,21 @@ export def "employer-sub-contractor-cis-instruction update-cis-instruction-into"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --cis-instruction: record # shape: {CisLineTag?: string, CisLineType?: string, Description?: string, PayFrequency?: "Monthly"|"Weekly", PeriodEnd?: int, PeriodStart?: int, TaxYearEnd?: int, TaxYearStart?: int, UOM?: "NotSet"|"Minute"|"Hour"|"Day"|"Week"|"Month"|"Year"|"Unit", Units?: float, VAT?: float, Value?: float}
 ]: any -> record<CisInstruction: record<CisLineTag: string, CisLineType: string, Description: string, PayFrequency: string, PeriodEnd: int, PeriodStart: int, TaxYearEnd: int, TaxYearStart: int, UOM: string, Units: float, VAT: float, Value: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, cis_instruction_id: $cis_instruction_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}"))
-  let body = {"CisInstruction": $cis_instruction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_instruction_id: (encode-path-segment $cis_instruction_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}"))
+  let req_body = {"CisInstruction": $cis_instruction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete CIS instruction tag
@@ -6444,16 +6453,16 @@ export def "employer-sub-contractor-cis-instruction-tag delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, cis_instruction_id: $cis_instruction_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_instruction_id: (encode-path-segment $cis_instruction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6461,7 +6470,7 @@ export def "employer-sub-contractor-cis-instruction-tag delete" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstruction/{CisInstructionId}/Tag/{TagId}
 # operationId: GetTagFromCisInstruction
-export def "employer-sub-contractor-cis-instruction-tag get-tag-from" [
+export def "employer-sub-contractor-cis-instruction-tag get" [
   employer_id: string
   sub_contractor_id: string
   cis_instruction_id: string
@@ -6474,16 +6483,16 @@ export def "employer-sub-contractor-cis-instruction-tag get-tag-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, cis_instruction_id: $cis_instruction_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_instruction_id: (encode-path-segment $cis_instruction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6504,16 +6513,16 @@ export def "employer-sub-contractor-cis-instruction-tag update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, cis_instruction_id: $cis_instruction_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_instruction_id: (encode-path-segment $cis_instruction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6521,7 +6530,7 @@ export def "employer-sub-contractor-cis-instruction-tag update" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstruction/{CisInstructionId}/Tags
 # operationId: GetTagsFromCisInstruction
-export def "employer-sub-contractor-cis-instruction-tags get-tags-from" [
+export def "employer-sub-contractor-cis-instruction-tags get" [
   employer_id: string
   sub_contractor_id: string
   cis_instruction_id: string
@@ -6533,16 +6542,16 @@ export def "employer-sub-contractor-cis-instruction-tags get-tags-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, cis_instruction_id: $cis_instruction_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_instruction_id: (encode-path-segment $cis_instruction_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6550,7 +6559,7 @@ export def "employer-sub-contractor-cis-instruction-tags get-tags-from" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstructions
 # operationId: GetCisInstructionsFromSubContractor
-export def "employer-sub-contractor-cis-instructions get-cis-instructions-from" [
+export def "employer-sub-contractor-cis-instructions get" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6561,16 +6570,16 @@ export def "employer-sub-contractor-cis-instructions get-cis-instructions-from" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstructions"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstructions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6579,7 +6588,7 @@ export def "employer-sub-contractor-cis-instructions get-cis-instructions-from" 
 # POST /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstructions
 # operationId: PostCisInstructionIntoSubContractor
 # --CisInstruction shape: {CisLineTag?: string, CisLineType?: string, Description?: string, PayFrequency?: "Monthly"|"Weekly", PeriodEnd?: int, PeriodStart?: int, TaxYearEnd?: int, TaxYearStart?: int, UOM?: "NotSet"|"Minute"|"Hour"|"Day"|"Week"|"Month"|"Year"|"Unit", Units?: float, VAT?: float, Value?: float}
-export def "employer-sub-contractor-cis-instructions create-cis-instruction-into" [
+export def "employer-sub-contractor-cis-instructions create-into" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6590,28 +6599,28 @@ export def "employer-sub-contractor-cis-instructions create-cis-instruction-into
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --cis-instruction: record # shape: {CisLineTag?: string, CisLineType?: string, Description?: string, PayFrequency?: "Monthly"|"Weekly", PeriodEnd?: int, PeriodStart?: int, TaxYearEnd?: int, TaxYearStart?: int, UOM?: "NotSet"|"Minute"|"Hour"|"Day"|"Week"|"Month"|"Year"|"Unit", Units?: float, VAT?: float, Value?: float}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstructions"))
-  let body = {"CisInstruction": $cis_instruction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstructions"))
+  let req_body = {"CisInstruction": $cis_instruction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get CIS instructions with tag
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstructions/Tag/{TagId}
 # operationId: GetCisInstructionsWithTag
-export def "employer-sub-contractor-cis-instructions-tag get-cis-instructions-with" [
+export def "employer-sub-contractor-cis-instructions-tag get" [
   employer_id: string
   sub_contractor_id: string
   tag_id: string
@@ -6623,16 +6632,16 @@ export def "employer-sub-contractor-cis-instructions-tag get-cis-instructions-wi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstructions/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstructions/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6640,7 +6649,7 @@ export def "employer-sub-contractor-cis-instructions-tag get-cis-instructions-wi
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisInstructions/Tags
 # operationId: GetAllCisInstructionTags
-export def "employer-sub-contractor-cis-instructions-tags get-all" [
+export def "employer-sub-contractor-cis-instructions-tags get-list" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6651,16 +6660,16 @@ export def "employer-sub-contractor-cis-instructions-tags get-all" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstructions/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstructions/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6680,16 +6689,16 @@ export def "employer-sub-contractor-cis-line delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, cis_line_id: $cis_line_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLine/{cis_line_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_line_id: (encode-path-segment $cis_line_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLine/{cis_line_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6697,7 +6706,7 @@ export def "employer-sub-contractor-cis-line delete" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisLine/{CisLineId}
 # operationId: GetCisLineFromSubContractor
-export def "employer-sub-contractor-cis-line get-cis-line-from" [
+export def "employer-sub-contractor-cis-line get" [
   employer_id: string
   sub_contractor_id: string
   cis_line_id: string
@@ -6709,16 +6718,16 @@ export def "employer-sub-contractor-cis-line get-cis-line-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<CisLine: record<CisDeduction: float, CisLineType: string, Description: string, Generated: string, GrossPay: float, NominalCodeKey: string, PayFrequency: string, TaxMonth: int, TaxPeriod: int, TaxTreatment: string, TaxYear: int, UOM: string, UnitRate: float, Units: float, VAT: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, cis_line_id: $cis_line_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLine/{cis_line_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_line_id: (encode-path-segment $cis_line_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLine/{cis_line_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6739,16 +6748,16 @@ export def "employer-sub-contractor-cis-line-tag delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, cis_line_id: $cis_line_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLine/{cis_line_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_line_id: (encode-path-segment $cis_line_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLine/{cis_line_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6756,7 +6765,7 @@ export def "employer-sub-contractor-cis-line-tag delete" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisLine/{CisLineId}/Tag/{TagId}
 # operationId: GetTagFromCisLine
-export def "employer-sub-contractor-cis-line-tag get-tag-from" [
+export def "employer-sub-contractor-cis-line-tag get" [
   employer_id: string
   sub_contractor_id: string
   cis_line_id: string
@@ -6769,16 +6778,16 @@ export def "employer-sub-contractor-cis-line-tag get-tag-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, cis_line_id: $cis_line_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLine/{cis_line_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_line_id: (encode-path-segment $cis_line_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLine/{cis_line_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6799,16 +6808,16 @@ export def "employer-sub-contractor-cis-line-tag update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, cis_line_id: $cis_line_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLine/{cis_line_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_line_id: (encode-path-segment $cis_line_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLine/{cis_line_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6816,7 +6825,7 @@ export def "employer-sub-contractor-cis-line-tag update" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisLine/{CisLineId}/Tags
 # operationId: GetTagsFromCisLine
-export def "employer-sub-contractor-cis-line-tags get-tags-from" [
+export def "employer-sub-contractor-cis-line-tags get" [
   employer_id: string
   sub_contractor_id: string
   cis_line_id: string
@@ -6828,16 +6837,16 @@ export def "employer-sub-contractor-cis-line-tags get-tags-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, cis_line_id: $cis_line_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLine/{cis_line_id}/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_line_id: (encode-path-segment $cis_line_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLine/{cis_line_id}/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6845,7 +6854,7 @@ export def "employer-sub-contractor-cis-line-tags get-tags-from" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisLines
 # operationId: GetCisLinesFromSubContractor
-export def "employer-sub-contractor-cis-lines get-cis-lines-from" [
+export def "employer-sub-contractor-cis-lines get" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6856,16 +6865,16 @@ export def "employer-sub-contractor-cis-lines get-cis-lines-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLines"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLines"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6873,7 +6882,7 @@ export def "employer-sub-contractor-cis-lines get-cis-lines-from" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisLines/Tag/{TagId}
 # operationId: GetCisLinesWithTag
-export def "employer-sub-contractor-cis-lines-tag get-cis-lines-with" [
+export def "employer-sub-contractor-cis-lines-tag get" [
   employer_id: string
   sub_contractor_id: string
   tag_id: string
@@ -6885,16 +6894,16 @@ export def "employer-sub-contractor-cis-lines-tag get-cis-lines-with" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLines/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLines/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6902,7 +6911,7 @@ export def "employer-sub-contractor-cis-lines-tag get-cis-lines-with" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/CisLines/Tags
 # operationId: GetAllCisLineTags
-export def "employer-sub-contractor-cis-lines-tags get-all" [
+export def "employer-sub-contractor-cis-lines-tags get-list" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6913,16 +6922,16 @@ export def "employer-sub-contractor-cis-lines-tags get-all" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLines/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLines/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6930,7 +6939,7 @@ export def "employer-sub-contractor-cis-lines-tags get-all" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/JournalLines
 # operationId: GetJournalLinesFromSubContractor
-export def "employer-sub-contractor-journal-lines get-journal-lines-from" [
+export def "employer-sub-contractor-journal-lines get" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6941,16 +6950,16 @@ export def "employer-sub-contractor-journal-lines get-journal-lines-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/JournalLines"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/JournalLines"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6958,7 +6967,7 @@ export def "employer-sub-contractor-journal-lines get-journal-lines-from" [
 #
 # DELETE /Employer/{EmployerId}/SubContractor/{SubContractorId}/Revision/{RevisionNumber}
 # operationId: DeleteSubContractorRevisionByNumber
-export def "employer-sub-contractor-revision delete" [
+export def "employer-sub-contractor-revision delete-by-number" [
   employer_id: string
   sub_contractor_id: string
   revision_number: string
@@ -6970,16 +6979,16 @@ export def "employer-sub-contractor-revision delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, revision_number: $revision_number} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Revision/{revision_number}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Revision/{revision_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -6987,7 +6996,7 @@ export def "employer-sub-contractor-revision delete" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/Revision/{RevisionNumber}
 # operationId: GetSubContractorRevisionByNumber
-export def "employer-sub-contractor-revision get" [
+export def "employer-sub-contractor-revision get-by-number" [
   employer_id: string
   sub_contractor_id: string
   revision_number: string
@@ -6999,16 +7008,16 @@ export def "employer-sub-contractor-revision get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<SubContractor: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, BusinessType: string, CompanyName: string, CompanyRegistrationNumber: string, Deactivated: bool, EffectiveDate: string, FirstName: string, Initials: string, LastName: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, PartnershipName: string, PartnershipUniqueTaxReference: string, PayFrequency: string, PaymentMethod: string, Region: string, Revision: int, TaxationStatus: string, Telephone: string, Territory: string, Title: string, TradingName: string, UniqueTaxReference: string, VatRegistered: bool, VatRegistrationNumber: string, VerificationDate: string, VerificationNumber: string, WorksNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, revision_number: $revision_number} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Revision/{revision_number}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Revision/{revision_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7027,16 +7036,16 @@ export def "employer-sub-contractor-revisions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Revisions"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Revisions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7056,16 +7065,16 @@ export def "employer-sub-contractor-tag delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7073,7 +7082,7 @@ export def "employer-sub-contractor-tag delete" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/Tag/{TagId}
 # operationId: GetTagFromSubContractor
-export def "employer-sub-contractor-tag get-tag-from" [
+export def "employer-sub-contractor-tag get" [
   employer_id: string
   sub_contractor_id: string
   tag_id: string
@@ -7085,16 +7094,16 @@ export def "employer-sub-contractor-tag get-tag-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7114,16 +7123,16 @@ export def "employer-sub-contractor-tag update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7131,7 +7140,7 @@ export def "employer-sub-contractor-tag update" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/Tag/{TagId}/{EffectiveDate}
 # operationId: GetTagFromSubContractorRevision
-export def "employer-sub-contractor-tag get-tag-from-sub-contractor-revision" [
+export def "employer-sub-contractor-tag get-from-revision" [
   employer_id: string
   sub_contractor_id: string
   tag_id: string
@@ -7144,16 +7153,16 @@ export def "employer-sub-contractor-tag get-tag-from-sub-contractor-revision" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, tag_id: $tag_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Tag/{tag_id}/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), tag_id: (encode-path-segment $tag_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Tag/{tag_id}/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7161,7 +7170,7 @@ export def "employer-sub-contractor-tag get-tag-from-sub-contractor-revision" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/Tags
 # operationId: GetTagsFromSubContractor
-export def "employer-sub-contractor-tags get-tags-from" [
+export def "employer-sub-contractor-tags get" [
   employer_id: string
   sub_contractor_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7172,16 +7181,16 @@ export def "employer-sub-contractor-tags get-tags-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7189,7 +7198,7 @@ export def "employer-sub-contractor-tags get-tags-from" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/Tags/{EffectiveDate}
 # operationId: GetTagsFromSubContractorRevision
-export def "employer-sub-contractor-tags get-tags-from-sub-contractor-revision" [
+export def "employer-sub-contractor-tags get-from-revision" [
   employer_id: string
   sub_contractor_id: string
   effective_date: string
@@ -7201,16 +7210,16 @@ export def "employer-sub-contractor-tags get-tags-from-sub-contractor-revision" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Tags/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Tags/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7218,7 +7227,7 @@ export def "employer-sub-contractor-tags get-tags-from-sub-contractor-revision" 
 #
 # DELETE /Employer/{EmployerId}/SubContractor/{SubContractorId}/{EffectiveDate}
 # operationId: DeleteSubContractorRevision
-export def "employer-sub-contractor delete-sub-contractor-revision" [
+export def "employer-sub-contractor delete-revision" [
   employer_id: string
   sub_contractor_id: string
   effective_date: string
@@ -7230,16 +7239,16 @@ export def "employer-sub-contractor delete-sub-contractor-revision" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7247,7 +7256,7 @@ export def "employer-sub-contractor delete-sub-contractor-revision" [
 #
 # GET /Employer/{EmployerId}/SubContractor/{SubContractorId}/{EffectiveDate}
 # operationId: GetSubContractorByEffectiveDate
-export def "employer-sub-contractor get" [
+export def "employer-sub-contractor get-by-effective-date" [
   employer_id: string
   sub_contractor_id: string
   effective_date: string
@@ -7259,16 +7268,16 @@ export def "employer-sub-contractor get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<SubContractor: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, BusinessType: string, CompanyName: string, CompanyRegistrationNumber: string, Deactivated: bool, EffectiveDate: string, FirstName: string, Initials: string, LastName: string, MetaData: record, MiddleName: string, NextRevisionDate: string, NiNumber: string, PartnershipName: string, PartnershipUniqueTaxReference: string, PayFrequency: string, PaymentMethod: string, Region: string, Revision: int, TaxationStatus: string, Telephone: string, Territory: string, Title: string, TradingName: string, UniqueTaxReference: string, VatRegistered: bool, VatRegistrationNumber: string, VerificationDate: string, VerificationNumber: string, WorksNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, sub_contractor_id: $sub_contractor_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7276,7 +7285,7 @@ export def "employer-sub-contractor get" [
 #
 # GET /Employer/{EmployerId}/SubContractors
 # operationId: GetSubContractorsFromEmployer
-export def "employer-sub-contractors get-sub-contractors-from" [
+export def "employer-sub-contractors get" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7286,16 +7295,16 @@ export def "employer-sub-contractors get-sub-contractors-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/SubContractors"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/SubContractors"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7303,8 +7312,8 @@ export def "employer-sub-contractors get-sub-contractors-from" [
 #
 # POST /Employer/{EmployerId}/SubContractors
 # operationId: PostSubContractorIntoEmployer
-# --SubContractor shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", PaymentMethod?: "NotSet"|"Cash"|"Cheque"|"BACS"|"FasterPayments"|"Other", Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, TaxationStatus?: "Unmatched"|"Net"|"Gross", Telephone?: string, Territory?: "UnitedKingdom", Title?: string, TradingName?: string, UniqueTaxReference?: string, VatRegistered?: bool, VatRegistrationNumber?: string, VerificationDate?: string, VerificationNumber?: string, WorksNumber?: string}
-export def "employer-sub-contractors create-sub-contractor-into" [
+# --SubContractor shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", ... (14 more fields)}
+export def "employer-sub-contractors create-into" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7314,28 +7323,28 @@ export def "employer-sub-contractors create-sub-contractor-into" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
-  --sub-contractor: record # shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", PaymentMethod?: "NotSet"|"Cash"|"Cheque"|"BACS"|"FasterPayments"|"Other", Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, TaxationStatus?: "Unmatched"|"Net"|"Gross", Telephone?: string, Territory?: "UnitedKingdom", Title?: string, TradingName?: string, UniqueTaxReference?: string, VatRegistered?: bool, VatRegistrationNumber?: string, VerificationDate?: string, VerificationNumber?: string, WorksNumber?: string}
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
+  --sub-contractor: record # shape: {Address?: record, BankAccount?: record, BusinessType?: "SoleTrader"|"Company"|"Partnership"|"Trust", CompanyName?: string, CompanyRegistrationNumber?: string, Deactivated?: bool, EffectiveDate?: string, FirstName?: string, Initials?: string, LastName?: string, MetaData?: record, MiddleName?: string, NextRevisionDate?: string, NiNumber?: string, PartnershipName?: string, PartnershipUniqueTaxReference?: string, PayFrequency?: "Monthly"|"Weekly", ... (14 more fields)}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/SubContractors"))
-  let body = {"SubContractor": $sub_contractor} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/SubContractors"))
+  let req_body = {"SubContractor": $sub_contractor} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get sub contractors with tag
 #
 # GET /Employer/{EmployerId}/SubContractors/Tag/{TagId}
 # operationId: GetSubContractorsWithTag
-export def "employer-sub-contractors-tag get-sub-contractors-with" [
+export def "employer-sub-contractors-tag get" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7346,16 +7355,16 @@ export def "employer-sub-contractors-tag get-sub-contractors-with" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/SubContractors/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractors/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7363,7 +7372,7 @@ export def "employer-sub-contractors-tag get-sub-contractors-with" [
 #
 # GET /Employer/{EmployerId}/SubContractors/Tags
 # operationId: GetAllSubContractorTags
-export def "employer-sub-contractors-tags get-all" [
+export def "employer-sub-contractors-tags get-list" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7373,16 +7382,16 @@ export def "employer-sub-contractors-tags get-all" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/SubContractors/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/SubContractors/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7390,7 +7399,7 @@ export def "employer-sub-contractors-tags get-all" [
 #
 # GET /Employer/{EmployerId}/SubContractors/{EffectiveDate}
 # operationId: GetSubContractorsByEffectiveDate
-export def "employer-sub-contractors get" [
+export def "employer-sub-contractors get-by-effective-date" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7401,16 +7410,16 @@ export def "employer-sub-contractors get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/SubContractors/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/SubContractors/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7418,7 +7427,7 @@ export def "employer-sub-contractors get" [
 #
 # GET /Employer/{EmployerId}/Summary
 # operationId: GetEmployerSummary
-export def "employer-summary list" [
+export def "employer-summary get" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7428,16 +7437,16 @@ export def "employer-summary list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/Summary"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Summary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7456,16 +7465,16 @@ export def "employer-tag delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7473,7 +7482,7 @@ export def "employer-tag delete" [
 #
 # GET /Employer/{EmployerId}/Tag/{TagId}
 # operationId: GetTagFromEmployer
-export def "employer-tag get-tag-from" [
+export def "employer-tag get" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7484,16 +7493,16 @@ export def "employer-tag get-tag-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7512,16 +7521,16 @@ export def "employer-tag update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7529,7 +7538,7 @@ export def "employer-tag update" [
 #
 # GET /Employer/{EmployerId}/Tag/{TagId}/{EffectiveDate}
 # operationId: GetTagFromEmployerRevision
-export def "employer-tag get-tag-from-employer-revision" [
+export def "employer-tag get-from-revision" [
   employer_id: string
   tag_id: string
   effective_date: string
@@ -7541,16 +7550,16 @@ export def "employer-tag get-tag-from-employer-revision" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, tag_id: $tag_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/Tag/{tag_id}/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Tag/{tag_id}/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7558,7 +7567,7 @@ export def "employer-tag get-tag-from-employer-revision" [
 #
 # GET /Employer/{EmployerId}/Tags
 # operationId: GetTagsFromEmployer
-export def "employer-tags get-tags-from" [
+export def "employer-tags get" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7568,16 +7577,16 @@ export def "employer-tags get-tags-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7585,7 +7594,7 @@ export def "employer-tags get-tags-from" [
 #
 # GET /Employer/{EmployerId}/Tags/{EffectiveDate}
 # operationId: GetTagsFromEmployerRevision
-export def "employer-tags get-tags-from-employer-revision" [
+export def "employer-tags get-from-revision" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7596,16 +7605,16 @@ export def "employer-tags get-tags-from-employer-revision" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/Tags/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Tags/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7624,16 +7633,16 @@ export def "employer-third-party-transaction delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, third_party_transaction_id: $third_party_transaction_id} | format pattern "/Employer/{employer_id}/ThirdPartyTransaction/{third_party_transaction_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), third_party_transaction_id: (encode-path-segment $third_party_transaction_id)} | format pattern "/Employer/{employer_id}/ThirdPartyTransaction/{third_party_transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7652,16 +7661,16 @@ export def "employer-third-party-transaction get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, third_party_transaction_id: $third_party_transaction_id} | format pattern "/Employer/{employer_id}/ThirdPartyTransaction/{third_party_transaction_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), third_party_transaction_id: (encode-path-segment $third_party_transaction_id)} | format pattern "/Employer/{employer_id}/ThirdPartyTransaction/{third_party_transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7681,16 +7690,16 @@ export def "employer-third-party-transaction-tag delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, third_party_transaction_id: $third_party_transaction_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/ThirdPartyTransaction/{third_party_transaction_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), third_party_transaction_id: (encode-path-segment $third_party_transaction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/ThirdPartyTransaction/{third_party_transaction_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7698,7 +7707,7 @@ export def "employer-third-party-transaction-tag delete" [
 #
 # GET /Employer/{EmployerId}/ThirdPartyTransaction/{ThirdPartyTransactionId}/Tag/{TagId}
 # operationId: GetTagFromThirdPartyTransaction
-export def "employer-third-party-transaction-tag get-tag-from" [
+export def "employer-third-party-transaction-tag get" [
   employer_id: string
   third_party_transaction_id: string
   tag_id: string
@@ -7710,16 +7719,16 @@ export def "employer-third-party-transaction-tag get-tag-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, third_party_transaction_id: $third_party_transaction_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/ThirdPartyTransaction/{third_party_transaction_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), third_party_transaction_id: (encode-path-segment $third_party_transaction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/ThirdPartyTransaction/{third_party_transaction_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7739,16 +7748,16 @@ export def "employer-third-party-transaction-tag update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, third_party_transaction_id: $third_party_transaction_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/ThirdPartyTransaction/{third_party_transaction_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), third_party_transaction_id: (encode-path-segment $third_party_transaction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/ThirdPartyTransaction/{third_party_transaction_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7756,7 +7765,7 @@ export def "employer-third-party-transaction-tag update" [
 #
 # GET /Employer/{EmployerId}/ThirdPartyTransaction/{ThirdPartyTransactionId}/Tags
 # operationId: GetTagsFromThirdPartyTransaction
-export def "employer-third-party-transaction-tags get-tags-from" [
+export def "employer-third-party-transaction-tags get" [
   employer_id: string
   third_party_transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7767,16 +7776,16 @@ export def "employer-third-party-transaction-tags get-tags-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, third_party_transaction_id: $third_party_transaction_id} | format pattern "/Employer/{employer_id}/ThirdPartyTransaction/{third_party_transaction_id}/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), third_party_transaction_id: (encode-path-segment $third_party_transaction_id)} | format pattern "/Employer/{employer_id}/ThirdPartyTransaction/{third_party_transaction_id}/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7794,16 +7803,16 @@ export def "employer-third-party-transactions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/ThirdPartyTransactions"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/ThirdPartyTransactions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7811,7 +7820,7 @@ export def "employer-third-party-transactions get" [
 #
 # GET /Employer/{EmployerId}/ThirdPartyTransactions/Tag/{TagId}
 # operationId: GetAllThirdPartyTransactionsWithTag
-export def "employer-third-party-transactions-tag get-all-third-party-transactions-with" [
+export def "employer-third-party-transactions-tag get-list" [
   employer_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7822,16 +7831,16 @@ export def "employer-third-party-transactions-tag get-all-third-party-transactio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, tag_id: $tag_id} | format pattern "/Employer/{employer_id}/ThirdPartyTransactions/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/ThirdPartyTransactions/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7839,7 +7848,7 @@ export def "employer-third-party-transactions-tag get-all-third-party-transactio
 #
 # GET /Employer/{EmployerId}/ThirdPartyTransactions/Tags
 # operationId: GetAllThirdPartyTransactionTags
-export def "employer-third-party-transactions-tags get-all" [
+export def "employer-third-party-transactions-tags get-list" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7849,16 +7858,16 @@ export def "employer-third-party-transactions-tags get-all" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Employer/{employer_id}/ThirdPartyTransactions/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/ThirdPartyTransactions/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7866,7 +7875,7 @@ export def "employer-third-party-transactions-tags get-all" [
 #
 # DELETE /Employer/{EmployerId}/{EffectiveDate}
 # operationId: DeleteEmployerRevision
-export def "employer delete-employer-revision" [
+export def "employer delete-revision" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7877,16 +7886,16 @@ export def "employer delete-employer-revision" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7894,7 +7903,7 @@ export def "employer delete-employer-revision" [
 #
 # GET /Employer/{EmployerId}/{EffectiveDate}
 # operationId: GetEmployerByEffectiveDate
-export def "employer get" [
+export def "employer get-by-effective-date" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7905,16 +7914,16 @@ export def "employer get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Employer: record<Address: record<Address1: string, Address2: string, Address3: string, Address4: string, Country: string, Postcode: string>, ApprenticeshipLevyAllowance: float, AutoEnrolment: record<Pension: record, PostponementDate: string, PrimaryAddress: record, PrimaryEmail: string, PrimaryFirstName: string, PrimaryJobTitle: string, PrimaryLastName: string, PrimaryTelephone: string, ReEnrolmentDayOffset: int, ReEnrolmentMonthOffset: int, RecentOptOutReEnrolmentExcluded: bool, SecondaryAddress: record, SecondaryEmail: string, SecondaryFirstName: string, SecondaryJobTitle: string, SecondaryLastName: string, SecondaryTelephone: string, StagingDate: string>, BacsServiceUserNumber: string, BankAccount: record<AccountName: string, AccountNumber: string, BranchName: string, Reference: string, SortCode: string>, CalculateApprenticeshipLevy: bool, ClaimEmploymentAllowance: bool, ClaimSmallEmployerRelief: bool, EffectiveDate: string, HmrcSettings: record<AccountingOfficeRef: string, COTAXRef: string, ContactEmail: string, ContactFax: string, ContactFirstName: string, ContactLastName: string, ContactTelephone: string, EmploymentAllowanceOverride: float, Password: string, SAUTR: string, Sender: string, SenderId: string, StateAidSector: string, TaxOfficeNumber: string, TaxOfficeReference: string>, MetaData: record, Name: string, NextRevisionDate: string, Region: string, Revision: int, RuleExclusions: string, Territory: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7922,7 +7931,7 @@ export def "employer get" [
 #
 # GET /Employer/{EmployerId}/{EffectiveDate}/Summary
 # operationId: GetEmployerSummaryByEffectiveDate
-export def "employer-summary get" [
+export def "employer-summary get-by-effective-date" [
   employer_id: string
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7933,16 +7942,16 @@ export def "employer-summary get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id, effective_date: $effective_date} | format pattern "/Employer/{employer_id}/{effective_date}/Summary"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/{effective_date}/Summary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7950,7 +7959,7 @@ export def "employer-summary get" [
 #
 # GET /Employers
 # operationId: GetEmployers
-export def "employers list" [
+export def "employers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7959,16 +7968,16 @@ export def "employers list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Employers")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -7976,7 +7985,7 @@ export def "employers list" [
 #
 # POST /Employers
 # operationId: PostEmployer
-# --Employer shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, RuleExclusions?: "None"|"NiMissingPayInstructionRule"|"TaxMissingPayInstructionRule"|"TaxCodeUpliftRule"|"NiSetExpectedLetterRule"|"NiDateOfBirthChangeRetrospectiveCRule"|"NiDefermentStatusChangeRule"|"NiEndContractedOutTransferRule"|"PaymentAfterLeavingTaxCodeRule"|"LeaverEndInstructionsRule"|"P45StudentLoanInstructionRule"|"P45TaxInstructionRule"|"P45YtdTaxRule"|"YtdInstructionRule"|"TaxCodeRegionChangeRule"|"AutoEnrolmentStatusChangeRule"|"EmployeeDeceasedRule"|"BenefitInstructionAutoEndRule", Territory?: "UnitedKingdom"}
+# --Employer shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, ... (2 more fields)}
 export def "employers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7986,28 +7995,28 @@ export def "employers create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
-  --employer: record # shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, RuleExclusions?: "None"|"NiMissingPayInstructionRule"|"TaxMissingPayInstructionRule"|"TaxCodeUpliftRule"|"NiSetExpectedLetterRule"|"NiDateOfBirthChangeRetrospectiveCRule"|"NiDefermentStatusChangeRule"|"NiEndContractedOutTransferRule"|"PaymentAfterLeavingTaxCodeRule"|"LeaverEndInstructionsRule"|"P45StudentLoanInstructionRule"|"P45TaxInstructionRule"|"P45YtdTaxRule"|"YtdInstructionRule"|"TaxCodeRegionChangeRule"|"AutoEnrolmentStatusChangeRule"|"EmployeeDeceasedRule"|"BenefitInstructionAutoEndRule", Territory?: "UnitedKingdom"}
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
+  --employer: record # shape: {Address?: record, ApprenticeshipLevyAllowance?: float, AutoEnrolment?: record, BacsServiceUserNumber?: string, BankAccount?: record, CalculateApprenticeshipLevy?: bool, ClaimEmploymentAllowance?: bool, ClaimSmallEmployerRelief?: bool, EffectiveDate?: string, HmrcSettings?: record, MetaData?: record, Name?: string, NextRevisionDate?: string, Region?: "NotSet"|"England"|"Scotland"|"Wales", Revision?: int, ... (2 more fields)}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Employers")
-  let body = {"Employer": $employer} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Employer": $employer} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get employer summaries.
 #
 # GET /Employers/Summary
 # operationId: GetEmployerSummaries
-export def "employers-summary list" [
+export def "employers-summary get-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8016,16 +8025,16 @@ export def "employers-summary list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Employers/Summary")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8033,7 +8042,7 @@ export def "employers-summary list" [
 #
 # GET /Employers/Tag/{TagId}
 # operationId: GetEmployersWithTag
-export def "employers-tag get-employers-with" [
+export def "employers-tag get" [
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8043,16 +8052,16 @@ export def "employers-tag get-employers-with" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/Employers/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/Employers/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8060,7 +8069,7 @@ export def "employers-tag get-employers-with" [
 #
 # GET /Employers/Tags
 # operationId: GetAllEmployerTags
-export def "employers-tags get-all" [
+export def "employers-tags get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8069,16 +8078,16 @@ export def "employers-tags get-all" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Employers/Tags")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8086,7 +8095,7 @@ export def "employers-tags get-all" [
 #
 # GET /Employers/{EffectiveDate}
 # operationId: GetEmployersByEffectiveDate
-export def "employers get" [
+export def "employers get-by-effective-date" [
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8096,16 +8105,16 @@ export def "employers get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({effective_date: $effective_date} | format pattern "/Employers/{effective_date}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({effective_date: (encode-path-segment $effective_date)} | format pattern "/Employers/{effective_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8113,7 +8122,7 @@ export def "employers get" [
 #
 # GET /Employers/{EffectiveDate}/Summary
 # operationId: GetEmployerSummariesByEffectiveDate
-export def "employers-summary get-employer-summaries" [
+export def "employers-summary get-summaries-by-effective-date" [
   effective_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8123,16 +8132,16 @@ export def "employers-summary get-employer-summaries" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({effective_date: $effective_date} | format pattern "/Employers/{effective_date}/Summary"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({effective_date: (encode-path-segment $effective_date)} | format pattern "/Employers/{effective_date}/Summary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8140,7 +8149,7 @@ export def "employers-summary get-employer-summaries" [
 #
 # GET /Healthcheck
 # operationId: GetHealthCheck
-export def "healthcheck get" [
+export def "healthcheck get-health-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8171,16 +8180,16 @@ export def "jobs-batch get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Jobs/Batch")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8198,21 +8207,21 @@ export def "jobs-batch create-new" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --batch-job-instruction: record # shape: {HoldingDate?: string, Instructions?: record, ValidateOnly?: bool}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Jobs/Batch")
-  let body = {"BatchJobInstruction": $batch_job_instruction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"BatchJobInstruction": $batch_job_instruction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete the Batch job
@@ -8229,16 +8238,16 @@ export def "jobs-batch delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/Batch/{job_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Batch/{job_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8256,16 +8265,16 @@ export def "jobs-batch-info get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<JobInfo: record<Created: string, EmployerKey: string, Errors: record<Error: list>, HoldingDate: string, JobId: string, JobStatus: string, JobType: string, LastUpdated: string, Progress: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/Batch/{job_id}/Info"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Batch/{job_id}/Info"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8283,16 +8292,16 @@ export def "jobs-batch-progress get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/Batch/{job_id}/Progress"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Batch/{job_id}/Progress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8310,16 +8319,16 @@ export def "jobs-batch-status get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/Batch/{job_id}/Status"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Batch/{job_id}/Status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8336,16 +8345,16 @@ export def "jobs-cis get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Jobs/Cis")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8363,21 +8372,21 @@ export def "jobs-cis create-new" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --cis-job-instruction-base: record # shape: {Employer?: record, HoldingDate?: string, SubContractors?: record}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Jobs/Cis")
-  let body = {"CisJobInstructionBase": $cis_job_instruction_base} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"CisJobInstructionBase": $cis_job_instruction_base} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete the CIS job
@@ -8394,16 +8403,16 @@ export def "jobs-cis delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/Cis/{job_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Cis/{job_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8421,16 +8430,16 @@ export def "jobs-cis-info get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<JobInfo: record<Created: string, EmployerKey: string, Errors: record<Error: list>, HoldingDate: string, JobId: string, JobStatus: string, JobType: string, LastUpdated: string, Progress: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/Cis/{job_id}/Info"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Cis/{job_id}/Info"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8448,16 +8457,16 @@ export def "jobs-cis-progress get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/Cis/{job_id}/Progress"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Cis/{job_id}/Progress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8475,16 +8484,16 @@ export def "jobs-cis-status get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/Cis/{job_id}/Status"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Cis/{job_id}/Status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8501,16 +8510,16 @@ export def "jobs-dps get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Jobs/Dps")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8528,21 +8537,21 @@ export def "jobs-dps create-new" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --dps-job-instruction: record # shape: {Apply?: bool, Employer?: record, FromDate?: string, HoldingDate?: string, MessageTypes?: record, MessagesToProcess?: record, Retrieve?: bool}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Jobs/Dps")
-  let body = {"DpsJobInstruction": $dps_job_instruction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DpsJobInstruction": $dps_job_instruction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete the DPS job
@@ -8559,16 +8568,16 @@ export def "jobs-dps delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/Dps/{job_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Dps/{job_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8586,16 +8595,16 @@ export def "jobs-dps-info get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<JobInfo: record<Created: string, EmployerKey: string, Errors: record<Error: list>, HoldingDate: string, JobId: string, JobStatus: string, JobType: string, LastUpdated: string, Progress: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/Dps/{job_id}/Info"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Dps/{job_id}/Info"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8613,16 +8622,16 @@ export def "jobs-dps-progress get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/Dps/{job_id}/Progress"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Dps/{job_id}/Progress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8640,16 +8649,16 @@ export def "jobs-dps-status get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/Dps/{job_id}/Status"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Dps/{job_id}/Status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8667,16 +8676,16 @@ export def "jobs-employer get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employer_id: $employer_id} | format pattern "/Jobs/Employer/{employer_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Jobs/Employer/{employer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8693,16 +8702,16 @@ export def "jobs-pay-runs get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Jobs/PayRuns")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8720,21 +8729,21 @@ export def "jobs-pay-runs create-new" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --pay-run-job-instruction: record # shape: {Employees?: record, EndDate?: string, HoldingDate?: string, IsSupplementary?: bool, PaySchedule?: record, PaymentDate?: string, StartDate?: string}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Jobs/PayRuns")
-  let body = {"PayRunJobInstruction": $pay_run_job_instruction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"PayRunJobInstruction": $pay_run_job_instruction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete the pay run job
@@ -8751,16 +8760,16 @@ export def "jobs-pay-runs delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/PayRuns/{job_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/PayRuns/{job_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8778,16 +8787,16 @@ export def "jobs-pay-runs-info get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<JobInfo: record<Created: string, EmployerKey: string, Errors: record<Error: list>, HoldingDate: string, JobId: string, JobStatus: string, JobType: string, LastUpdated: string, Progress: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/PayRuns/{job_id}/Info"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/PayRuns/{job_id}/Info"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8805,16 +8814,16 @@ export def "jobs-pay-runs-progress get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/PayRuns/{job_id}/Progress"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/PayRuns/{job_id}/Progress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8832,16 +8841,16 @@ export def "jobs-pay-runs-status get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/PayRuns/{job_id}/Status"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/PayRuns/{job_id}/Status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8858,16 +8867,16 @@ export def "jobs-rti get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Jobs/Rti")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8885,21 +8894,21 @@ export def "jobs-rti create-new" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --rti-job-instruction: record # shape: {EarlierTaxYear?: int, Employer?: record, FinalSubmissionForYear?: bool, Generate?: bool, HoldingDate?: string, LateReason?: "A"|"B"|"C"|"D"|"F"|"G"|"H", NoPaymentForPeriodFrom?: string, NoPaymentForPeriodTo?: string, PaySchedule?: record, PaymentDate?: string, PeriodOfInactivityFrom?: string, PeriodOfInactivityTo?: string, RtiTransaction?: record, RtiType?: string, SchemeCeased?: string, TaxMonth?: int, TaxYear?: int, Timestamp?: string, Transmit?: bool}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Jobs/Rti")
-  let body = {"RtiJobInstruction": $rti_job_instruction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"RtiJobInstruction": $rti_job_instruction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete the RTI job
@@ -8916,16 +8925,16 @@ export def "jobs-rti delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/Rti/{job_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Rti/{job_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8943,16 +8952,16 @@ export def "jobs-rti-info get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<JobInfo: record<Created: string, EmployerKey: string, Errors: record<Error: list>, HoldingDate: string, JobId: string, JobStatus: string, JobType: string, LastUpdated: string, Progress: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/Rti/{job_id}/Info"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Rti/{job_id}/Info"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8970,16 +8979,16 @@ export def "jobs-rti-progress get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/Rti/{job_id}/Progress"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Rti/{job_id}/Progress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -8997,16 +9006,16 @@ export def "jobs-rti-status get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/Rti/{job_id}/Status"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Rti/{job_id}/Status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9023,16 +9032,16 @@ export def "jobs-third-party get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Jobs/ThirdParty")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9050,21 +9059,21 @@ export def "jobs-third-party create-new" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --third-party-job-instruction: record # shape: {EmployerHref?: string, HoldingDate?: string, InstructionType?: string, MetaData?: record, PayLoad?: string}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Jobs/ThirdParty")
-  let body = {"ThirdPartyJobInstruction": $third_party_job_instruction} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"ThirdPartyJobInstruction": $third_party_job_instruction} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete the Third Party job
@@ -9081,16 +9090,16 @@ export def "jobs-third-party delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/ThirdParty/{job_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/ThirdParty/{job_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9108,16 +9117,16 @@ export def "jobs-third-party-info get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<JobInfo: record<Created: string, EmployerKey: string, Errors: record<Error: list>, HoldingDate: string, JobId: string, JobStatus: string, JobType: string, LastUpdated: string, Progress: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/ThirdParty/{job_id}/Info"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/ThirdParty/{job_id}/Info"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9135,16 +9144,16 @@ export def "jobs-third-party-progress get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/ThirdParty/{job_id}/Progress"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/ThirdParty/{job_id}/Progress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9162,16 +9171,16 @@ export def "jobs-third-party-status get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/Jobs/ThirdParty/{job_id}/Status"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/ThirdParty/{job_id}/Status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9179,7 +9188,7 @@ export def "jobs-third-party-status get" [
 #
 # DELETE /JournalInstruction/{JournalInstructionId}
 # operationId: DeleteJournalInstructionTemplate
-export def "journal-instruction delete-journal-instruction-template" [
+export def "journal-instruction delete-template" [
   journal_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9189,16 +9198,16 @@ export def "journal-instruction delete-journal-instruction-template" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({journal_instruction_id: $journal_instruction_id} | format pattern "/JournalInstruction/{journal_instruction_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({journal_instruction_id: (encode-path-segment $journal_instruction_id)} | format pattern "/JournalInstruction/{journal_instruction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9206,7 +9215,7 @@ export def "journal-instruction delete-journal-instruction-template" [
 #
 # GET /JournalInstruction/{JournalInstructionId}
 # operationId: GetJournalInstructionTemplate
-export def "journal-instruction get-journal-instruction-template" [
+export def "journal-instruction get-template" [
   journal_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9216,16 +9225,16 @@ export def "journal-instruction get-journal-instruction-template" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<JournalInstruction: record<AccountingType: string, Description: string, EndDate: string, Expression: string, JournalLineTag: string, LedgerTarget: string, NomCode: string, StartDate: string, SubNomCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({journal_instruction_id: $journal_instruction_id} | format pattern "/JournalInstruction/{journal_instruction_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({journal_instruction_id: (encode-path-segment $journal_instruction_id)} | format pattern "/JournalInstruction/{journal_instruction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9233,7 +9242,7 @@ export def "journal-instruction get-journal-instruction-template" [
 #
 # PUT /JournalInstruction/{JournalInstructionId}
 # operationId: PutJournalInstructionTemplate
-export def "journal-instruction update-journal-instruction-template" [
+export def "journal-instruction update-template" [
   journal_instruction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9243,16 +9252,16 @@ export def "journal-instruction update-journal-instruction-template" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<JournalInstruction: record<AccountingType: string, Description: string, EndDate: string, Expression: string, JournalLineTag: string, LedgerTarget: string, NomCode: string, StartDate: string, SubNomCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({journal_instruction_id: $journal_instruction_id} | format pattern "/JournalInstruction/{journal_instruction_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({journal_instruction_id: (encode-path-segment $journal_instruction_id)} | format pattern "/JournalInstruction/{journal_instruction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9260,7 +9269,7 @@ export def "journal-instruction update-journal-instruction-template" [
 #
 # GET /JournalInstructions
 # operationId: GetJournalInstructionTemplates
-export def "journal-instructions get-journal-instruction-templates" [
+export def "journal-instructions get-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9269,16 +9278,16 @@ export def "journal-instructions get-journal-instruction-templates" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/JournalInstructions")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9286,7 +9295,7 @@ export def "journal-instructions get-journal-instruction-templates" [
 #
 # POST /JournalInstructions
 # operationId: PostJournalInstructionTemplate
-export def "journal-instructions create-journal-instruction-template" [
+export def "journal-instructions create-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9295,16 +9304,16 @@ export def "journal-instructions create-journal-instruction-template" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/JournalInstructions")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9322,16 +9331,16 @@ export def "permission delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({permission_id: $permission_id} | format pattern "/Permission/{permission_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({permission_id: (encode-path-segment $permission_id)} | format pattern "/Permission/{permission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9349,16 +9358,16 @@ export def "permission get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Permission: record<Description: string, Expression: string, Name: string, Policy: string, Verbs: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({permission_id: $permission_id} | format pattern "/Permission/{permission_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({permission_id: (encode-path-segment $permission_id)} | format pattern "/Permission/{permission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9376,16 +9385,16 @@ export def "permission update-by-PermissionId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Permission: record<Description: string, Expression: string, Name: string, Policy: string, Verbs: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({permission_id: $permission_id} | format pattern "/Permission/{permission_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({permission_id: (encode-path-segment $permission_id)} | format pattern "/Permission/{permission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9403,16 +9412,16 @@ export def "permission update-by-PermissionId-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Permission: record<Description: string, Expression: string, Name: string, Policy: string, Verbs: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({permission_id: $permission_id} | format pattern "/Permission/{permission_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({permission_id: (encode-path-segment $permission_id)} | format pattern "/Permission/{permission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9431,16 +9440,16 @@ export def "permission-tag delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({permission_id: $permission_id, tag_id: $tag_id} | format pattern "/Permission/{permission_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({permission_id: (encode-path-segment $permission_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Permission/{permission_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9448,7 +9457,7 @@ export def "permission-tag delete" [
 #
 # GET /Permission/{PermissionId}/Tag/{TagId}
 # operationId: GetTagFromPermission
-export def "permission-tag get-tag-from" [
+export def "permission-tag get" [
   permission_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9459,16 +9468,16 @@ export def "permission-tag get-tag-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({permission_id: $permission_id, tag_id: $tag_id} | format pattern "/Permission/{permission_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({permission_id: (encode-path-segment $permission_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Permission/{permission_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9487,16 +9496,16 @@ export def "permission-tag update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({permission_id: $permission_id, tag_id: $tag_id} | format pattern "/Permission/{permission_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({permission_id: (encode-path-segment $permission_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Permission/{permission_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9504,7 +9513,7 @@ export def "permission-tag update" [
 #
 # GET /Permission/{PermissionId}/Tags
 # operationId: GetTagsFromPermission
-export def "permission-tags get-tags-from" [
+export def "permission-tags get" [
   permission_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9514,16 +9523,16 @@ export def "permission-tags get-tags-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({permission_id: $permission_id} | format pattern "/Permission/{permission_id}/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({permission_id: (encode-path-segment $permission_id)} | format pattern "/Permission/{permission_id}/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9540,16 +9549,16 @@ export def "permissions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Permissions")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9566,16 +9575,16 @@ export def "permissions create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Permissions")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9583,7 +9592,7 @@ export def "permissions create" [
 #
 # GET /Permissions/Tag/{TagId}
 # operationId: GetAllPermissionsWithTag
-export def "permissions-tag get-all-permissions-with" [
+export def "permissions-tag get-list" [
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9593,16 +9602,16 @@ export def "permissions-tag get-all-permissions-with" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/Permissions/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/Permissions/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9610,7 +9619,7 @@ export def "permissions-tag get-all-permissions-with" [
 #
 # GET /Permissions/Tags
 # operationId: GetAllPermissionTags
-export def "permissions-tags get-all" [
+export def "permissions-tags get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9619,16 +9628,16 @@ export def "permissions-tags get-all" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Permissions/Tags")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9637,7 +9646,7 @@ export def "permissions-tags get-all" [
 # POST /Query
 # operationId: GetQueryResponse
 # --Query shape: {Encoding?: string, ExcludeNullOrEmptyElements?: bool, Groups?: record, RootNodeName?: string, SuppressMetricAttributes?: bool, Variables?: record}
-export def "query get-query-response" [
+export def "query get-response" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9646,28 +9655,28 @@ export def "query get-query-response" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --query: record # shape: {Encoding?: string, ExcludeNullOrEmptyElements?: bool, Groups?: record, RootNodeName?: string, SuppressMetricAttributes?: bool, Variables?: record}
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Query")
-  let body = {"Query": $query} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Query": $query} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the journal expression data schema
 #
 # GET /ReferenceData/JournalExpressionDataTable
 # operationId: GetJournalExpressionSchema
-export def "reference-data-journal-expression-data-table get-journal-expression-schema" [
+export def "reference-data-journal-expression-data-table get-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9676,16 +9685,16 @@ export def "reference-data-journal-expression-data-table get-journal-expression-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ReferenceData/JournalExpressionDataTable")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9693,7 +9702,7 @@ export def "reference-data-journal-expression-data-table get-journal-expression-
 #
 # GET /Report/ACTPAYINS/run
 # operationId: GetActivePayInstructionsReportOutput
-export def "report-actpayins-run get-active-pay-instructions-report-output" [
+export def "report-actpayins-run get-active-pay-instructions-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9708,17 +9717,17 @@ export def "report-actpayins-run get-active-pay-instructions-report-output" [
   --from-date: string # The lower filter date. E.g 2016-04-06 (format: date)
   --to-date: string # The upper filter date. E.g 2017-04-05 (format: date)
   --type: string # the data type to filter on. E.g. TaxPayInstruction
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "EmployeeKey" $employee_key "scalar") (serialize-qp "ActiveOn" $active_on "scalar") (serialize-qp "FromDate" $from_date "scalar") (serialize-qp "ToDate" $to_date "scalar") (serialize-qp "Type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/ACTPAYINS/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9726,7 +9735,7 @@ export def "report-actpayins-run get-active-pay-instructions-report-output" [
 #
 # GET /Report/AOELIABILITY/run
 # operationId: GetAoeLiabilityReportOuput
-export def "report-aoeliability-run get-aoe-liability-report-ouput" [
+export def "report-aoeliability-run get-aoe-liability-ouput" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9740,17 +9749,17 @@ export def "report-aoeliability-run get-aoe-liability-report-ouput" [
   --tax-year: string # The tax year. E.g. 2017 = 2017/18 year. (format: integer)
   --tax-period: string # The tax period number. (format: integer)
   --transform-definition-key: string # The transform definition unique key. E.g. P45-Pdf
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "TaxPeriod" $tax_period "scalar") (serialize-qp "TransformDefinitionKey" $transform_definition_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/AOELIABILITY/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9758,7 +9767,7 @@ export def "report-aoeliability-run get-aoe-liability-report-ouput" [
 #
 # GET /Report/DPSMSG/run
 # operationId: GetDpsMessageReportOutput
-export def "report-dpsmsg-run get-dps-message-report-output" [
+export def "report-dpsmsg-run get-dps-message-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9774,17 +9783,17 @@ export def "report-dpsmsg-run get-dps-message-report-output" [
   --message-statuses: string # The DPS message status as a CSV list. E.g. Retrieved,Processed,Blocked,Ignored
   --start-index: string # The element index to begin the report. Used to control paging within large data sets. E.g. 1
   --max-index: string # The highest element index to return from the report. Used to control paging within large data sets. E.g. 100
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "FromDate" $from_date "scalar") (serialize-qp "ToDate" $to_date "scalar") (serialize-qp "MessageTypes" $message_types "scalar") (serialize-qp "MessageStatuses" $message_statuses "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/DPSMSG/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9792,7 +9801,7 @@ export def "report-dpsmsg-run get-dps-message-report-output" [
 #
 # GET /Report/EMPSUM/run
 # operationId: GetEmployerSummaryReportOuput
-export def "report-empsum-run get-employer-summary-report-ouput" [
+export def "report-empsum-run get-employer-summary-ouput" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9803,17 +9812,17 @@ export def "report-empsum-run get-employer-summary-report-ouput" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --employer-key: string # The employer unique key. E.g. ER001
   --context-date: string # The date context for the report. E.g. 2018-04-30 (format: date)
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "ContextDate" $context_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/EMPSUM/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9821,7 +9830,7 @@ export def "report-empsum-run get-employer-summary-report-ouput" [
 #
 # GET /Report/GRO2NET/run
 # operationId: GetGrossToNetReportOutput
-export def "report-gro2net-run get-gross-to-net-report-output" [
+export def "report-gro2-net-run get-gross-to-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9836,17 +9845,17 @@ export def "report-gro2net-run get-gross-to-net-report-output" [
   --tax-period: string # The tax period number. (format: integer)
   --start-index: string # The element index to begin the report. Used to control paging within large data sets. E.g. 1
   --max-index: string # The highest element index to return from the report. Used to control paging within large data sets. E.g. 100
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "TaxPeriod" $tax_period "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/GRO2NET/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9854,7 +9863,7 @@ export def "report-gro2net-run get-gross-to-net-report-output" [
 #
 # GET /Report/HOLBAL/run
 # operationId: GetHolidayBalanceReportOutput
-export def "report-holbal-run get-holiday-balance-report-output" [
+export def "report-holbal-run get-holiday-balance-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9868,17 +9877,17 @@ export def "report-holbal-run get-holiday-balance-report-output" [
   --employee-codes: string # A comma separated list of the employee codes. E.g. EMP001,EMP002
   --start-index: string # The element index to begin the report. Used to control paging within large data sets. E.g. 1
   --max-index: string # The highest element index to return from the report. Used to control paging within large data sets. E.g. 100
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "HolidayYearEnd" $holiday_year_end "scalar") (serialize-qp "EmployeeCodes" $employee_codes "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/HOLBAL/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9886,7 +9895,7 @@ export def "report-holbal-run get-holiday-balance-report-output" [
 #
 # GET /Report/JOURNAL/run
 # operationId: GetJournalReportOuput
-export def "report-journal-run get-journal-report-ouput" [
+export def "report-journal-run get-ouput" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9900,17 +9909,17 @@ export def "report-journal-run get-journal-report-ouput" [
   --tax-year: string # The tax year. E.g. 2017 = 2017/18 year. (format: integer)
   --tax-period: string # The tax period number. (format: integer)
   --ledger-target: string # Specific to JOURNAL report, a filter used to select the journal lines for the specified ledger target. E.g. [Default]
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayFrequency" $pay_frequency "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "TaxPeriod" $tax_period "scalar") (serialize-qp "LedgerTarget" $ledger_target "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/JOURNAL/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9918,7 +9927,7 @@ export def "report-journal-run get-journal-report-ouput" [
 #
 # GET /Report/LASTPAYDATE/run
 # operationId: GetLastPayDateReportOuput
-export def "report-lastpaydate-run get-last-pay-date-report-ouput" [
+export def "report-lastpaydate-run get-last-pay-date-ouput" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9929,17 +9938,17 @@ export def "report-lastpaydate-run get-last-pay-date-report-ouput" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --employer-key: string # The employer unique key. E.g. ER001
   --employee-key: string # The employee unique key. E.g. EE001
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "EmployeeKey" $employee_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/LASTPAYDATE/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9947,7 +9956,7 @@ export def "report-lastpaydate-run get-last-pay-date-report-ouput" [
 #
 # GET /Report/NETPAY/run
 # operationId: GetNetPayReportOutput
-export def "report-netpay-run get-net-pay-report-output" [
+export def "report-netpay-run get-net-pay-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9962,17 +9971,17 @@ export def "report-netpay-run get-net-pay-report-output" [
   --tax-period: string # The tax period number. (format: integer)
   --start-index: string # The element index to begin the report. Used to control paging within large data sets. E.g. 1
   --max-index: string # The highest element index to return from the report. Used to control paging within large data sets. E.g. 100
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "TaxPeriod" $tax_period "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/NETPAY/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -9980,7 +9989,7 @@ export def "report-netpay-run get-net-pay-report-output" [
 #
 # GET /Report/NEXTPERIOD/run
 # operationId: GetNextPayPeriodDatesReportOutput
-export def "report-nextperiod-run get-next-pay-period-dates-report-output" [
+export def "report-nextperiod-run get-next-pay-period-dates-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9991,17 +10000,17 @@ export def "report-nextperiod-run get-next-pay-period-dates-report-output" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --employer-key: string # The employer unique key. E.g. ER001
   --pay-schedule-key: string # The pay schedule unique key. E.g. SCH001
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/NEXTPERIOD/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10009,7 +10018,7 @@ export def "report-nextperiod-run get-next-pay-period-dates-report-output" [
 #
 # GET /Report/P11SUM/run
 # operationId: GetP11SummaryReportOutput
-export def "report-p11sum-run get-p11-summary-report-output" [
+export def "report-p11-sum-run get-summary-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10023,17 +10032,17 @@ export def "report-p11sum-run get-p11-summary-report-output" [
   --tax-year: string # The tax year. E.g. 2017 = 2017/18 year. (format: integer)
   --start-index: string # The element index to begin the report. Used to control paging within large data sets. E.g. 1
   --max-index: string # The highest element index to return from the report. Used to control paging within large data sets. E.g. 100
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/P11SUM/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10041,7 +10050,7 @@ export def "report-p11sum-run get-p11-summary-report-output" [
 #
 # GET /Report/P32/run
 # operationId: GetP32NetReportOutput
-export def "report-p32-run get-p32-net-report-output" [
+export def "report-p32-run get-net-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10052,17 +10061,17 @@ export def "report-p32-run get-p32-net-report-output" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --employer-key: string # The employer unique key. E.g. ER001
   --tax-year: string # The tax year. E.g. 2017 = 2017/18 year. (format: integer)
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/P32/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10070,7 +10079,7 @@ export def "report-p32-run get-p32-net-report-output" [
 #
 # GET /Report/P32SUM/run
 # operationId: GetP32SummaryNetReportOutput
-export def "report-p32sum-run get-p32-summary-net-report-output" [
+export def "report-p32-sum-run get-summary-net-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10081,17 +10090,17 @@ export def "report-p32sum-run get-p32-summary-net-report-output" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --employer-key: string # The employer unique key. E.g. ER001
   --tax-year: string # The tax year. E.g. 2017 = 2017/18 year. (format: integer)
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/P32SUM/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10099,7 +10108,7 @@ export def "report-p32sum-run get-p32-summary-net-report-output" [
 #
 # GET /Report/P45/run
 # operationId: GetP45ReportOutput
-export def "report-p45-run get-p45-report-output" [
+export def "report-p45-run get-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10111,17 +10120,17 @@ export def "report-p45-run get-p45-report-output" [
   --employer-key: string # The employer unique key. E.g. ER001
   --employee-key: string # The employee unique key. E.g. EE001
   --transform-definition-key: string # The transform definition unique key. E.g. P45-Pdf
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "EmployeeKey" $employee_key "scalar") (serialize-qp "TransformDefinitionKey" $transform_definition_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/P45/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10129,7 +10138,7 @@ export def "report-p45-run get-p45-report-output" [
 #
 # GET /Report/P60/run
 # operationId: GetP60ReportOutput
-export def "report-p60-run get-p60-report-output" [
+export def "report-p60-run get-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10144,17 +10153,17 @@ export def "report-p60-run get-p60-report-output" [
   --transform-definition-key: string # The transform definition unique key. E.g. P45-Pdf
   --start-index: string # The element index to begin the report. Used to control paging within large data sets. E.g. 1
   --max-index: string # The highest element index to return from the report. Used to control paging within large data sets. E.g. 100
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "EmployeeCodes" $employee_codes "scalar") (serialize-qp "TransformDefinitionKey" $transform_definition_key "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/P60/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10162,7 +10171,7 @@ export def "report-p60-run get-p60-report-output" [
 #
 # GET /Report/PAPDIS/run
 # operationId: GetPapdisReportOuput
-export def "report-papdis-run get-papdis-report-ouput" [
+export def "report-papdis-run get-ouput" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10178,17 +10187,17 @@ export def "report-papdis-run get-papdis-report-ouput" [
   --pension-key: string # The pension scheme unique key. E.g. PENSCH001
   --message-function-code: string # Specific to PAPDIS report, specifies the business function that the sender is requesting. If left BLANK it will be assumed to be 0 (Enrol / Receive Contributions).
   --transform-definition-key: string # The transform definition unique key. E.g. P45-Pdf
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "PaymentDate" $payment_date "scalar") (serialize-qp "PensionKey" $pension_key "scalar") (serialize-qp "MessageFunctionCode" $message_function_code "scalar") (serialize-qp "TransformDefinitionKey" $transform_definition_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/PAPDIS/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10196,7 +10205,7 @@ export def "report-papdis-run get-papdis-report-ouput" [
 #
 # GET /Report/PASS/run
 # operationId: GetPassReportOuput
-export def "report-pass-run get-pass-report-ouput" [
+export def "report-pass-run get-ouput" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10213,17 +10222,17 @@ export def "report-pass-run get-pass-report-ouput" [
   --message-function-code: string # Specific to PAPDIS report, specifies the business function that the sender is requesting. If left BLANK it will be assumed to be 0 (Enrol / Receive Contributions).
   --intermediary-id: string # Specific to PensionSync PASS report, a unique identifier for the Intermediary who is acting on behalf of the employer.
   --document-id: string # Specific to PensionSync PASS report, a document identifier unique for this document within the Intermediary.
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "PaymentDate" $payment_date "scalar") (serialize-qp "PensionKey" $pension_key "scalar") (serialize-qp "MessageFunctionCode" $message_function_code "scalar") (serialize-qp "IntermediaryId" $intermediary_id "scalar") (serialize-qp "DocumentId" $document_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/PASS/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10231,7 +10240,7 @@ export def "report-pass-run get-pass-report-ouput" [
 #
 # GET /Report/PAYDASHBOARD/run
 # operationId: GetPayDashboardPayslipReportOuput
-export def "report-paydashboard-run get-pay-dashboard-payslip-report-ouput" [
+export def "report-paydashboard-run get-pay-dashboard-payslip-ouput" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10249,17 +10258,17 @@ export def "report-paydashboard-run get-pay-dashboard-payslip-report-ouput" [
   --max-index: string # The highest element index to return from the report. Used to control paging within large data sets. E.g. 100
   --payment-date: string # The payment date context for the report. E.g. 2018-04-30 (format: date)
   --publication-date: string # Specific to the Pay Dashboard report, allows the specification of a future payslip publication date. E.g. 2018-12-31 (format: date)
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "EmployeeCodes" $employee_codes "scalar") (serialize-qp "TransformDefinitionKey" $transform_definition_key "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar") (serialize-qp "PaymentDate" $payment_date "scalar") (serialize-qp "PublicationDate" $publication_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/PAYDASHBOARD/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10267,7 +10276,7 @@ export def "report-paydashboard-run get-pay-dashboard-payslip-report-ouput" [
 #
 # GET /Report/PAYSLIP3/run
 # operationId: GetPayslip3ReportOutput
-export def "report-payslip3-run get-payslip3-report-output" [
+export def "report-payslip3-run get-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10284,17 +10293,17 @@ export def "report-payslip3-run get-payslip3-report-output" [
   --start-index: string # The element index to begin the report. Used to control paging within large data sets. E.g. 1
   --max-index: string # The highest element index to return from the report. Used to control paging within large data sets. E.g. 100
   --payment-date: string # The payment date context for the report. E.g. 2018-04-30 (format: date)
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "EmployeeCodes" $employee_codes "scalar") (serialize-qp "TransformDefinitionKey" $transform_definition_key "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar") (serialize-qp "PaymentDate" $payment_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/PAYSLIP3/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10302,7 +10311,7 @@ export def "report-payslip3-run get-payslip3-report-output" [
 #
 # GET /Report/PENLIABILITY/run
 # operationId: GetPensionLiabilityReportOutput
-export def "report-penliability-run get-pension-liability-report-output" [
+export def "report-penliability-run get-pension-liability-output" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10314,17 +10323,17 @@ export def "report-penliability-run get-pension-liability-report-output" [
   --employer-key: string # The employer unique key. E.g. ER001
   --tax-year: string # The tax year. E.g. 2017 = 2017/18 year. (format: integer)
   --pension-key: string # The pension scheme unique key. E.g. PENSCH001
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "PensionKey" $pension_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/PENLIABILITY/run" $qp)
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10332,7 +10341,7 @@ export def "report-penliability-run get-pension-liability-report-output" [
 #
 # DELETE /Report/{ReportDefinitionId}
 # operationId: DeleteReportDefinition
-export def "report delete-report-definition" [
+export def "report delete-definition" [
   report_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10342,16 +10351,16 @@ export def "report delete-report-definition" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({report_definition_id: $report_definition_id} | format pattern "/Report/{report_definition_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({report_definition_id: (encode-path-segment $report_definition_id)} | format pattern "/Report/{report_definition_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10359,7 +10368,7 @@ export def "report delete-report-definition" [
 #
 # GET /Report/{ReportDefinitionId}
 # operationId: GetReportDefinitionFromApplication
-export def "report get-report-definition-from-application" [
+export def "report get-definition-from-application" [
   report_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10369,16 +10378,16 @@ export def "report get-report-definition-from-application" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<ReportDefinition: record<Active: bool, Readonly: bool, ReportQuery: record<Encoding: string, ExcludeNullOrEmptyElements: bool, Groups: record, RootNodeName: string, SuppressMetricAttributes: bool, Variables: record>, SupportedTransforms: string, Title: string, Version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({report_definition_id: $report_definition_id} | format pattern "/Report/{report_definition_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({report_definition_id: (encode-path-segment $report_definition_id)} | format pattern "/Report/{report_definition_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10387,7 +10396,7 @@ export def "report get-report-definition-from-application" [
 # PUT /Report/{ReportDefinitionId}
 # operationId: PutReportDefinition
 # --ReportDefinition shape: {Active?: bool, Readonly?: bool, ReportQuery?: record, SupportedTransforms?: string, Title?: string, Version?: string}
-export def "report update-report-definition" [
+export def "report update-definition" [
   report_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10397,28 +10406,28 @@ export def "report update-report-definition" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --report-definition: record # shape: {Active?: bool, Readonly?: bool, ReportQuery?: record, SupportedTransforms?: string, Title?: string, Version?: string}
 ]: any -> record<ReportDefinition: record<Active: bool, Readonly: bool, ReportQuery: record<Encoding: string, ExcludeNullOrEmptyElements: bool, Groups: record, RootNodeName: string, SuppressMetricAttributes: bool, Variables: record>, SupportedTransforms: string, Title: string, Version: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({report_definition_id: $report_definition_id} | format pattern "/Report/{report_definition_id}"))
-  let body = {"ReportDefinition": $report_definition} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({report_definition_id: (encode-path-segment $report_definition_id)} | format pattern "/Report/{report_definition_id}"))
+  let req_body = {"ReportDefinition": $report_definition} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Runs the specified report definition
 #
 # GET /Report/{ReportDefinitionId}/run
 # operationId: GetReportOutput
-export def "report-run get-report-output" [
+export def "report-run get-output" [
   report_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10428,16 +10437,16 @@ export def "report-run get-report-output" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({report_definition_id: $report_definition_id} | format pattern "/Report/{report_definition_id}/run"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({report_definition_id: (encode-path-segment $report_definition_id)} | format pattern "/Report/{report_definition_id}/run"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10445,7 +10454,7 @@ export def "report-run get-report-output" [
 #
 # GET /Reports
 # operationId: GetReportDefinitionsFromApplication
-export def "reports get-report-definitions-from-application" [
+export def "reports get-definitions-from-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10454,16 +10463,16 @@ export def "reports get-report-definitions-from-application" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Reports")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10472,7 +10481,7 @@ export def "reports get-report-definitions-from-application" [
 # POST /Reports
 # operationId: PostReportDefinition
 # --ReportDefinition shape: {Active?: bool, Readonly?: bool, ReportQuery?: record, SupportedTransforms?: string, Title?: string, Version?: string}
-export def "reports create-report-definition" [
+export def "reports create-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10481,21 +10490,21 @@ export def "reports create-report-definition" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --report-definition: record # shape: {Active?: bool, Readonly?: bool, ReportQuery?: record, SupportedTransforms?: string, Title?: string, Version?: string}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Reports")
-  let body = {"ReportDefinition": $report_definition} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"ReportDefinition": $report_definition} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a list of all available schemas
@@ -10511,16 +10520,16 @@ export def "schemas list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Schemas")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10538,16 +10547,16 @@ export def "schemas get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dto_data_type: $dto_data_type} | format pattern "/Schemas/{dto_data_type}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dto_data_type: (encode-path-segment $dto_data_type)} | format pattern "/Schemas/{dto_data_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10565,16 +10574,16 @@ export def "secret delete-application" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({secret_id: $secret_id} | format pattern "/Secret/{secret_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({secret_id: (encode-path-segment $secret_id)} | format pattern "/Secret/{secret_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10592,16 +10601,16 @@ export def "secret get-application" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({secret_id: $secret_id} | format pattern "/Secret/{secret_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({secret_id: (encode-path-segment $secret_id)} | format pattern "/Secret/{secret_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10619,16 +10628,16 @@ export def "secret update-application" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({secret_id: $secret_id} | format pattern "/Secret/{secret_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({secret_id: (encode-path-segment $secret_id)} | format pattern "/Secret/{secret_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10645,16 +10654,16 @@ export def "secrets get-application" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Secrets")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10671,16 +10680,16 @@ export def "secrets create-application" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Secrets")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10688,7 +10697,7 @@ export def "secrets create-application" [
 #
 # GET /Template/{DtoDataType}
 # operationId: GetTemplateModel
-export def "template get-template-model" [
+export def "template get-model" [
   dto_data_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10698,16 +10707,16 @@ export def "template get-template-model" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dto_data_type: $dto_data_type} | format pattern "/Template/{dto_data_type}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({dto_data_type: (encode-path-segment $dto_data_type)} | format pattern "/Template/{dto_data_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10724,16 +10733,16 @@ export def "templates get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Templates")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10741,7 +10750,7 @@ export def "templates get" [
 #
 # DELETE /Transform/{TransformDefinitionId}
 # operationId: DeleteTransformDefinition
-export def "transform delete-transform-definition" [
+export def "transform delete-definition" [
   transform_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10751,16 +10760,16 @@ export def "transform delete-transform-definition" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({transform_definition_id: $transform_definition_id} | format pattern "/Transform/{transform_definition_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({transform_definition_id: (encode-path-segment $transform_definition_id)} | format pattern "/Transform/{transform_definition_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10768,7 +10777,7 @@ export def "transform delete-transform-definition" [
 #
 # GET /Transform/{TransformDefinitionId}
 # operationId: GetTransformDefinitionFromApplication
-export def "transform get-transform-definition-from-application" [
+export def "transform get-definition-from-application" [
   transform_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10778,16 +10787,16 @@ export def "transform get-transform-definition-from-application" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<TransformDefinition: record<Active: bool, ContentType: string, Definition: string, DefinitionType: string, Readonly: bool, SupportedReports: string, TaxYear: int, Title: string, Version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({transform_definition_id: $transform_definition_id} | format pattern "/Transform/{transform_definition_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({transform_definition_id: (encode-path-segment $transform_definition_id)} | format pattern "/Transform/{transform_definition_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10796,7 +10805,7 @@ export def "transform get-transform-definition-from-application" [
 # PUT /Transform/{TransformDefinitionId}
 # operationId: PutTransformDefinition
 # --TransformDefinition shape: {Active?: bool, ContentType?: string, Definition?: string, DefinitionType?: string, Readonly?: bool, SupportedReports?: string, TaxYear?: int, Title?: string, Version?: string}
-export def "transform update-transform-definition" [
+export def "transform update-definition" [
   transform_definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10806,28 +10815,28 @@ export def "transform update-transform-definition" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --transform-definition: record # shape: {Active?: bool, ContentType?: string, Definition?: string, DefinitionType?: string, Readonly?: bool, SupportedReports?: string, TaxYear?: int, Title?: string, Version?: string}
 ]: any -> record<TransformDefinition: record<Active: bool, ContentType: string, Definition: string, DefinitionType: string, Readonly: bool, SupportedReports: string, TaxYear: int, Title: string, Version: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({transform_definition_id: $transform_definition_id} | format pattern "/Transform/{transform_definition_id}"))
-  let body = {"TransformDefinition": $transform_definition} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({transform_definition_id: (encode-path-segment $transform_definition_id)} | format pattern "/Transform/{transform_definition_id}"))
+  let req_body = {"TransformDefinition": $transform_definition} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets all transform definitions
 #
 # GET /Transforms
 # operationId: GetTransformDefinitionsFromApplication
-export def "transforms get-transform-definitions-from-application" [
+export def "transforms get-definitions-from-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10836,16 +10845,16 @@ export def "transforms get-transform-definitions-from-application" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Transforms")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10854,7 +10863,7 @@ export def "transforms get-transform-definitions-from-application" [
 # POST /Transforms
 # operationId: PostTransformDefinition
 # --TransformDefinition shape: {Active?: bool, ContentType?: string, Definition?: string, DefinitionType?: string, Readonly?: bool, SupportedReports?: string, TaxYear?: int, Title?: string, Version?: string}
-export def "transforms create-transform-definition" [
+export def "transforms create-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10863,21 +10872,21 @@ export def "transforms create-transform-definition" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --transform-definition: record # shape: {Active?: bool, ContentType?: string, Definition?: string, DefinitionType?: string, Readonly?: bool, SupportedReports?: string, TaxYear?: int, Title?: string, Version?: string}
 ]: any -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Transforms")
-  let body = {"TransformDefinition": $transform_definition} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"TransformDefinition": $transform_definition} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the user object
@@ -10894,16 +10903,16 @@ export def "user delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/User/{user_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/User/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10921,16 +10930,16 @@ export def "user get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<User: record<MetaData: record, Permissions: record<Permission: list>, Roles: record<Role: list>, UserIdentifier: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/User/{user_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/User/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10948,16 +10957,16 @@ export def "user update-by-UserId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<User: record<MetaData: record, Permissions: record<Permission: list>, Roles: record<Role: list>, UserIdentifier: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/User/{user_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/User/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -10975,16 +10984,16 @@ export def "user update-by-UserId-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<User: record<MetaData: record, Permissions: record<Permission: list>, Roles: record<Role: list>, UserIdentifier: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/User/{user_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/User/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -11002,16 +11011,16 @@ export def "user-permissions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/User/{user_id}/Permissions"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/User/{user_id}/Permissions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -11030,16 +11039,16 @@ export def "user-tag delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, tag_id: $tag_id} | format pattern "/User/{user_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/User/{user_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -11047,7 +11056,7 @@ export def "user-tag delete" [
 #
 # GET /User/{UserId}/Tag/{TagId}
 # operationId: GetTagFromUser
-export def "user-tag get-tag-from" [
+export def "user-tag get" [
   user_id: string
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11058,16 +11067,16 @@ export def "user-tag get-tag-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, tag_id: $tag_id} | format pattern "/User/{user_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/User/{user_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -11086,16 +11095,16 @@ export def "user-tag update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Tag: record<Created: string, TaggedItem: record<_href: string, _rel: string, _title: string>, Text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, tag_id: $tag_id} | format pattern "/User/{user_id}/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/User/{user_id}/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -11103,7 +11112,7 @@ export def "user-tag update" [
 #
 # GET /User/{UserId}/Tags
 # operationId: GetTagsFromUser
-export def "user-tags get-tags-from" [
+export def "user-tags get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11113,16 +11122,16 @@ export def "user-tags get-tags-from" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/User/{user_id}/Tags"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/User/{user_id}/Tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -11139,16 +11148,16 @@ export def "users get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Users")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -11165,16 +11174,16 @@ export def "users create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<Link: record<_href: string, _rel: string, _title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Users")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -11182,7 +11191,7 @@ export def "users create" [
 #
 # GET /Users/Tag/{TagId}
 # operationId: GetAllUsersWithTag
-export def "users-tag get-all-users-with" [
+export def "users-tag get-list" [
   tag_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11192,16 +11201,16 @@ export def "users-tag get-all-users-with" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/Users/Tag/{tag_id}"))
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/Users/Tag/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -11209,7 +11218,7 @@ export def "users-tag get-all-users-with" [
 #
 # GET /Users/Tags
 # operationId: GetAllUserTags
-export def "users-tags get-all" [
+export def "users-tags get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11218,15 +11227,15 @@ export def "users-tags get-all" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorization: string # The OAuth 1 authorization header. &apos;Auto&apos; enables auto complete.
-  --api-version: string # The version of the api to target. Omit or set as &apos;default&apos; to target the current api version.
+  --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
+  --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
 ]: nothing -> record<LinkCollection: record<Links: record<Link: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Users/Tags")
-  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

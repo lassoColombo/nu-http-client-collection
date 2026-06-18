@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -80,7 +89,7 @@ def origin-completer [] { ["APPLICATION_IP_PROVISIONING" "PIPER_V2" "PIPER_V3" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "callback-generate-token integrationscallbackgenerateToken" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "callback-generate-token generate" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -104,7 +113,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/callback:generateToken
 # operationId: integrations.callback.generateToken
-export def "callback-generate-token integrationscallbackgenerateToken" [
+export def "callback-generate-token generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,7 +152,7 @@ export def "callback-generate-token integrationscallbackgenerateToken" [
 #
 # GET /v1/connectorPlatformRegions:enumerate
 # operationId: integrations.connectorPlatformRegions.enumerate
-export def "connector-platform-regions-enumerate integrationsconnectorPlatformRegionsenumerate" [
+export def "connector-platform-regions-enumerate get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +186,7 @@ export def "connector-platform-regions-enumerate integrationsconnectorPlatformRe
 #
 # POST /v1/{integrationVersion}:takeoverEditLock
 # operationId: integrations.projects.locations.products.integrations.versions.takeoverEditLock
-export def "projects integrationsprojectslocationsproductsintegrationsversionstakeoverEditLock" [
+export def "projects lock-takeover-edit" [
   integration_version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -204,18 +213,19 @@ export def "projects integrationsprojectslocationsproductsintegrationsversionsta
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({integration_version: $integration_version} | format pattern "/v1/{integration_version}:takeoverEditLock") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({integration_version: (encode-path-segment $integration_version)} | format pattern "/v1/{integration_version}:takeoverEditLock") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an sfdc channel.
 #
 # DELETE /v1/{name}
 # operationId: integrations.projects.locations.sfdcInstances.sfdcChannels.delete
-export def "projects integrationsprojectslocationssfdcInstancessfdcChannelsdelete" [
+export def "projects delete-by-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +250,7 @@ export def "projects integrationsprojectslocationssfdcInstancessfdcChannelsdelet
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -250,7 +260,7 @@ export def "projects integrationsprojectslocationssfdcInstancessfdcChannelsdelet
 #
 # GET /v1/{name}
 # operationId: integrations.projects.locations.sfdcInstances.sfdcChannels.get
-export def "projects integrationsprojectslocationssfdcInstancessfdcChannelsget" [
+export def "projects get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -275,7 +285,7 @@ export def "projects integrationsprojectslocationssfdcInstancessfdcChannelsget" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -285,7 +295,7 @@ export def "projects integrationsprojectslocationssfdcInstancessfdcChannelsget" 
 #
 # PATCH /v1/{name}
 # operationId: integrations.projects.locations.sfdcInstances.sfdcChannels.patch
-export def "projects integrationsprojectslocationssfdcInstancessfdcChannelspatch" [
+export def "projects update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -320,19 +330,19 @@ export def "projects integrationsprojectslocationssfdcInstancessfdcChannelspatch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar") (serialize-qp "clientCertificate.passphrase" $client_certificate_passphrase "scalar") (serialize-qp "clientCertificate.sslCertificate" $client_certificate_ssl_certificate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
-  let body = {"channelTopic": $channel_topic, "description": $description, "displayName": $display_name, "isActive": $is_active, "lastReplayId": $last_replay_id, "name": $body_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"channelTopic": $channel_topic, "description": $description, "displayName": $display_name, "isActive": $is_active, "lastReplayId": $last_replay_id, "name": $body_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancellation of an execution
 #
 # POST /v1/{name}:cancel
 # operationId: integrations.projects.locations.products.integrations.executions.cancel
-export def "projects integrationsprojectslocationsproductsintegrationsexecutionscancel" [
+export def "projects cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -359,18 +369,19 @@ export def "projects integrationsprojectslocationsproductsintegrationsexecutions
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:cancel") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:cancel") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Downloads an integration. Retrieves the `IntegrationVersion` for a given `integration_id` and returns the response as a string.
 #
 # GET /v1/{name}:download
 # operationId: integrations.projects.locations.products.integrations.versions.download
-export def "projects integrationsprojectslocationsproductsintegrationsversionsdownload" [
+export def "projects download" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -396,7 +407,7 @@ export def "projects integrationsprojectslocationsproductsintegrationsversionsdo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fileFormat" $file_format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:download") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:download") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -408,7 +419,7 @@ export def "projects integrationsprojectslocationsproductsintegrationsversionsdo
 # operationId: integrations.projects.locations.products.integrations.execute
 # --parameterEntries item shape: {dataType?: "DATA_TYPE_UNSPECIFIED"|"STRING_VALUE"|"INT_VALUE"|"DOUBLE_VALUE"|"BOOLEAN_VALUE"|"PROTO_VALUE"|"SERIALIZED_OBJECT_VALUE"|"STRING_ARRAY"|"INT_ARRAY"|"DOUBLE_ARRAY"|"PROTO_ARRAY"|"PROTO_ENUM"|"BOOLEAN_ARRAY"|"PROTO_ENUM_ARRAY"|"BYTES"|"BYTES_ARRAY"|"NON_SERIALIZABLE_OBJECT"|"JSON_VALUE", key?: string, value?: record}
 # --parameters shape: {parameters?: list}
-export def "projects integrationsprojectslocationsproductsintegrationsexecute" [
+export def "projects create-execute" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -441,19 +452,19 @@ export def "projects integrationsprojectslocationsproductsintegrationsexecute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:execute") $qp)
-  let body = {"doNotPropagateError": $do_not_propagate_error, "executionId": $execution_id, "inputParameters": $input_parameters, "parameterEntries": $parameter_entries, "parameters": $parameters, "requestId": $request_id, "triggerId": $trigger_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:execute") $qp)
+  let req_body = {"doNotPropagateError": $do_not_propagate_error, "executionId": $execution_id, "inputParameters": $input_parameters, "parameterEntries": $parameter_entries, "parameters": $parameters, "requestId": $request_id, "triggerId": $trigger_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # * Lifts suspension for advanced suspension task. Fetch corresponding suspension with provided suspension Id, resolve suspension, and set up suspension result for the Suspension Task.
 #
 # POST /v1/{name}:lift
 # operationId: integrations.projects.locations.products.integrations.executions.suspensions.lift
-export def "projects integrationsprojectslocationsproductsintegrationsexecutionssuspensionslift" [
+export def "projects create-lift" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -480,19 +491,19 @@ export def "projects integrationsprojectslocationsproductsintegrationsexecutions
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:lift") $qp)
-  let body = {"suspensionResult": $suspension_result} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:lift") $qp)
+  let req_body = {"suspensionResult": $suspension_result} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # This RPC throws an exception if the integration is in ARCHIVED or ACTIVE state. This RPC throws an exception if the version being published is DRAFT, and if the `locked_by` user is not the same as the user performing the Publish. Audit fields updated include last_published_timestamp, last_published_by, last_modified_timestamp, last_modified_by. Any existing lock is on this integration is released.
 #
 # POST /v1/{name}:publish
 # operationId: integrations.projects.locations.products.integrations.versions.publish
-export def "projects integrationsprojectslocationsproductsintegrationsversionspublish" [
+export def "projects publish" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -519,11 +530,12 @@ export def "projects integrationsprojectslocationsproductsintegrationsversionspu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:publish") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:publish") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # * Resolves (lifts/rejects) any number of suspensions. If the integration is already running, only the status of the suspension is updated. Otherwise, the suspended integration will begin execution again.
@@ -531,7 +543,7 @@ export def "projects integrationsprojectslocationsproductsintegrationsversionspu
 # POST /v1/{name}:resolve
 # operationId: integrations.projects.locations.products.integrations.executions.suspensions.resolve
 # --suspension shape: {approvalConfig?: record, audit?: record, eventExecutionInfoId?: string, integration?: string, name?: string, state?: "RESOLUTION_STATE_UNSPECIFIED"|"PENDING"|"REJECTED"|"LIFTED", suspensionConfig?: record, taskId?: string}
-export def "projects integrationsprojectslocationsproductsintegrationsexecutionssuspensionsresolve" [
+export def "projects create-resolve" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -558,12 +570,12 @@ export def "projects integrationsprojectslocationsproductsintegrationsexecutions
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:resolve") $qp)
-  let body = {"suspension": $suspension} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:resolve") $qp)
+  let req_body = {"suspension": $suspension} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Schedules an integration for execution by passing the trigger id and the scheduled time in the request body.
@@ -572,7 +584,7 @@ export def "projects integrationsprojectslocationsproductsintegrationsexecutions
 # operationId: integrations.projects.locations.products.integrations.schedule
 # --parameterEntries item shape: {dataType?: "DATA_TYPE_UNSPECIFIED"|"STRING_VALUE"|"INT_VALUE"|"DOUBLE_VALUE"|"BOOLEAN_VALUE"|"PROTO_VALUE"|"SERIALIZED_OBJECT_VALUE"|"STRING_ARRAY"|"INT_ARRAY"|"DOUBLE_ARRAY"|"PROTO_ARRAY"|"PROTO_ENUM"|"BOOLEAN_ARRAY"|"PROTO_ENUM_ARRAY"|"BYTES"|"BYTES_ARRAY"|"NON_SERIALIZABLE_OBJECT"|"JSON_VALUE", key?: string, value?: record}
 # --parameters shape: {parameters?: list}
-export def "projects integrationsprojectslocationsproductsintegrationsschedule" [
+export def "projects create-schedule" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -604,21 +616,21 @@ export def "projects integrationsprojectslocationsproductsintegrationsschedule" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:schedule") $qp)
-  let body = {"inputParameters": $input_parameters, "parameterEntries": $parameter_entries, "parameters": $parameters, "requestId": $request_id, "scheduleTime": $schedule_time, "triggerId": $trigger_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:schedule") $qp)
+  let req_body = {"inputParameters": $input_parameters, "parameterEntries": $parameter_entries, "parameters": $parameters, "requestId": $request_id, "scheduleTime": $schedule_time, "triggerId": $trigger_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Execute the integration in draft state
 #
 # POST /v1/{name}:test
 # operationId: integrations.projects.locations.products.integrations.test
-# --integrationVersion shape: {databasePersistencePolicy?: "DATABASE_PERSISTENCE_POLICY_UNSPECIFIED"|"DATABASE_PERSISTENCE_DISABLED", description?: string, errorCatcherConfigs?: list, integrationParameters?: list, integrationParametersInternal?: record, lastModifierEmail?: string, lockHolder?: string, origin?: "UNSPECIFIED"|"UI"|"PIPER_V2"|"PIPER_V3"|"APPLICATION_IP_PROVISIONING", parentTemplateId?: string, runAsServiceAccount?: string, snapshotNumber?: string, taskConfigs?: list, taskConfigsInternal?: list, teardown?: record, triggerConfigs?: list, triggerConfigsInternal?: list, userLabel?: string}
+# --integrationVersion shape: {databasePersistencePolicy?: "DATABASE_PERSISTENCE_POLICY_UNSPECIFIED"|"DATABASE_PERSISTENCE_DISABLED", description?: string, errorCatcherConfigs?: list, integrationParameters?: list, integrationParametersInternal?: record, lastModifierEmail?: string, lockHolder?: string, origin?: "UNSPECIFIED"|"UI"|"PIPER_V2"|"PIPER_V3"|"APPLICATION_IP_PROVISIONING", parentTemplateId?: string, runAsServiceAccount?: string, snapshotNumber?: string, taskConfigs?: list, taskConfigsInternal?: list, teardown?: record, ... (3 more fields)}
 # --parameters shape: {parameters?: list}
-export def "projects integrationsprojectslocationsproductsintegrationstest" [
+export def "projects test" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -642,7 +654,7 @@ export def "projects integrationsprojectslocationsproductsintegrationstest" [
   --client-id: string # Required. This is used to identify the client on whose behalf the event will be executed.
   --deadline-seconds-time: string # Optional. custom deadline of the rpc (format: google-datetime)
   --input-parameters: record # Optional. Input parameters used during integration execution.
-  --integration-version: record # The integration version definition. — shape: {databasePersistencePolicy?: "DATABASE_PERSISTENCE_POLICY_UNSPECIFIED"|"DATABASE_PERSISTENCE_DISABLED", description?: string, errorCatcherConfigs?: list, integrationParameters?: list, integrationParametersInternal?: record, lastModifierEmail?: string, lockHolder?: string, origin?: "UNSPECIFIED"|"UI"|"PIPER_V2"|"PIPER_V3"|"APPLICATION_IP_PROVISIONING", parentTemplateId?: string, runAsServiceAccount?: string, snapshotNumber?: string, taskConfigs?: list, taskConfigsInternal?: list, teardown?: record, triggerConfigs?: list, triggerConfigsInternal?: list, userLabel?: string}
+  --integration-version: record # The integration version definition. — shape: {databasePersistencePolicy?: "DATABASE_PERSISTENCE_POLICY_UNSPECIFIED"|"DATABASE_PERSISTENCE_DISABLED", description?: string, errorCatcherConfigs?: list, integrationParameters?: list, integrationParametersInternal?: record, lastModifierEmail?: string, lockHolder?: string, origin?: "UNSPECIFIED"|"UI"|"PIPER_V2"|"PIPER_V3"|"APPLICATION_IP_PROVISIONING", parentTemplateId?: string, runAsServiceAccount?: string, snapshotNumber?: string, taskConfigs?: list, taskConfigsInternal?: list, teardown?: record, ... (3 more fields)}
   --parameters: record # LINT.IfChange This message is used for processing and persisting (when applicable) key value pair parameters for each event in the event bus. Please see — shape: {parameters?: list}
   --test-mode: oneof<nothing, bool> # Optional. Can be specified in the event request, otherwise false (default). If true, enables tasks with condition "test_mode = true". If false, disables tasks with condition "test_mode = true" if global test mode (set by platform) is also false {@link EventBusConfig}.
   --trigger-id: string # Required. The trigger id of the integration trigger config. If both trigger_id and client_id is present, the integration is executed from the start tasks provided by the matching trigger config otherwise it is executed from the default start tasks.
@@ -651,19 +663,19 @@ export def "projects integrationsprojectslocationsproductsintegrationstest" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:test") $qp)
-  let body = {"clientId": $client_id, "deadlineSecondsTime": $deadline_seconds_time, "inputParameters": $input_parameters, "integrationVersion": $integration_version, "parameters": $parameters, "testMode": $test_mode, "triggerId": $trigger_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:test") $qp)
+  let req_body = {"clientId": $client_id, "deadlineSecondsTime": $deadline_seconds_time, "inputParameters": $input_parameters, "integrationVersion": $integration_version, "parameters": $parameters, "testMode": $test_mode, "triggerId": $trigger_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sets the status of the ACTIVE integration to SNAPSHOT with a new tag "PREVIOUSLY_PUBLISHED" after validating it. The "HEAD" and "PUBLISH_REQUESTED" tags do not change. This RPC throws an exception if the version being snapshot is not ACTIVE. Audit fields added include action, action_by, action_timestamp.
 #
 # POST /v1/{name}:unpublish
 # operationId: integrations.projects.locations.products.integrations.versions.unpublish
-export def "projects integrationsprojectslocationsproductsintegrationsversionsunpublish" [
+export def "projects delete-by-name-1" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -690,18 +702,19 @@ export def "projects integrationsprojectslocationsproductsintegrationsversionsun
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:unpublish") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:unpublish") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates an Apps Script project.
 #
 # POST /v1/{parent}/appsScriptProjects
 # operationId: integrations.projects.locations.appsScriptProjects.create
-export def "apps-script-projects integrationsprojectslocationsappsScriptProjectscreate" [
+export def "apps-script-projects create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -729,19 +742,19 @@ export def "apps-script-projects integrationsprojectslocationsappsScriptProjects
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/appsScriptProjects") $qp)
-  let body = {"appsScriptProject": $apps_script_project, "authConfigId": $auth_config_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/appsScriptProjects") $qp)
+  let req_body = {"appsScriptProject": $apps_script_project, "authConfigId": $auth_config_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Links a existing Apps Script project.
 #
 # POST /v1/{parent}/appsScriptProjects:link
 # operationId: integrations.projects.locations.appsScriptProjects.link
-export def "apps-script-projects-link integrationsprojectslocationsappsScriptProjectslink" [
+export def "apps-script-projects-link create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -768,19 +781,19 @@ export def "apps-script-projects-link integrationsprojectslocationsappsScriptPro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/appsScriptProjects:link") $qp)
-  let body = {"scriptId": $script_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/appsScriptProjects:link") $qp)
+  let req_body = {"scriptId": $script_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all auth configs that match the filter. Restrict to auth configs belong to the current client only.
 #
 # GET /v1/{parent}/authConfigs
 # operationId: integrations.projects.locations.products.authConfigs.list
-export def "auth-configs integrationsprojectslocationsproductsauthConfigslist" [
+export def "auth-configs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -809,7 +822,7 @@ export def "auth-configs integrationsprojectslocationsproductsauthConfigslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/authConfigs") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/authConfigs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -820,7 +833,7 @@ export def "auth-configs integrationsprojectslocationsproductsauthConfigslist" [
 # POST /v1/{parent}/authConfigs
 # operationId: integrations.projects.locations.products.authConfigs.create
 # --decryptedCredential shape: {authToken?: record, credentialType?: "CREDENTIAL_TYPE_UNSPECIFIED"|"USERNAME_AND_PASSWORD"|"API_KEY"|"OAUTH2_AUTHORIZATION_CODE"|"OAUTH2_IMPLICIT"|"OAUTH2_CLIENT_CREDENTIALS"|"OAUTH2_RESOURCE_OWNER_CREDENTIALS"|"JWT"|"AUTH_TOKEN"|"SERVICE_ACCOUNT"|"CLIENT_CERTIFICATE_ONLY"|"OIDC_TOKEN", jwt?: record, oauth2AuthorizationCode?: record, oauth2ClientCredentials?: record, oauth2ResourceOwnerCredentials?: record, oidcToken?: record, serviceAccountCredentials?: record, usernameAndPassword?: record}
-export def "auth-configs integrationsprojectslocationsproductsauthConfigscreate" [
+export def "auth-configs create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -851,7 +864,7 @@ export def "auth-configs integrationsprojectslocationsproductsauthConfigscreate"
   --description: string # A description of the auth config.
   --display-name: string # The name of the auth config.
   --encrypted-credential: string # Auth credential encrypted by Cloud KMS. Can be decrypted as Credential with proper KMS key. (format: byte)
-  --expiry-notification-duration: list # User can define the time to receive notification after which the auth config becomes invalid. Support up to 30 days. Support granularity in hours.
+  --expiry-notification-duration: list<string> # User can define the time to receive notification after which the auth config becomes invalid. Support up to 30 days. Support granularity in hours.
   --last-modifier-email: string # The last modifier's email address. Generated based on the End User Credentials/LOAS role of the user making the call.
   --name: string # Resource name of the SFDC instance projects/{project}/locations/{location}/authConfigs/{authConfig}.
   --override-valid-time: string # User provided expiry time to override. For the example of Salesforce, username/password credentials can be valid for 6 months depending on the instance settings. (format: google-datetime)
@@ -864,19 +877,19 @@ export def "auth-configs integrationsprojectslocationsproductsauthConfigscreate"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientCertificate.encryptedPrivateKey" $client_certificate_encrypted_private_key "scalar") (serialize-qp "clientCertificate.passphrase" $client_certificate_passphrase "scalar") (serialize-qp "clientCertificate.sslCertificate" $client_certificate_ssl_certificate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/authConfigs") $qp)
-  let body = {"certificateId": $certificate_id, "creatorEmail": $creator_email, "credentialType": $credential_type, "decryptedCredential": $decrypted_credential, "description": $description, "displayName": $display_name, "encryptedCredential": $encrypted_credential, "expiryNotificationDuration": $expiry_notification_duration, "lastModifierEmail": $last_modifier_email, "name": $name, "overrideValidTime": $override_valid_time, "reason": $reason, "state": $state, "validTime": $valid_time, "visibility": $visibility} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/authConfigs") $qp)
+  let req_body = {"certificateId": $certificate_id, "creatorEmail": $creator_email, "credentialType": $credential_type, "decryptedCredential": $decrypted_credential, "description": $description, "displayName": $display_name, "encryptedCredential": $encrypted_credential, "expiryNotificationDuration": $expiry_notification_duration, "lastModifierEmail": $last_modifier_email, "name": $name, "overrideValidTime": $override_valid_time, "reason": $reason, "state": $state, "validTime": $valid_time, "visibility": $visibility} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all the certificates that match the filter. Restrict to certificate of current client only.
 #
 # GET /v1/{parent}/certificates
 # operationId: integrations.projects.locations.products.certificates.list
-export def "certificates integrationsprojectslocationsproductscertificateslist" [
+export def "certificates list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -905,7 +918,7 @@ export def "certificates integrationsprojectslocationsproductscertificateslist" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/certificates") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/certificates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -916,7 +929,7 @@ export def "certificates integrationsprojectslocationsproductscertificateslist" 
 # POST /v1/{parent}/certificates
 # operationId: integrations.projects.locations.products.certificates.create
 # --rawCertificate shape: {encryptedPrivateKey?: string, passphrase?: string, sslCertificate?: string}
-export def "certificates integrationsprojectslocationsproductscertificatescreate" [
+export def "certificates create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -948,19 +961,19 @@ export def "certificates integrationsprojectslocationsproductscertificatescreate
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/certificates") $qp)
-  let body = {"certificateStatus": $certificate_status, "credentialId": $credential_id, "description": $description, "displayName": $display_name, "rawCertificate": $raw_certificate, "requestorId": $requestor_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/certificates") $qp)
+  let req_body = {"certificateStatus": $certificate_status, "credentialId": $credential_id, "description": $description, "displayName": $display_name, "rawCertificate": $raw_certificate, "requestorId": $requestor_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the metadata info for the requested client
 #
 # GET /v1/{parent}/clientmetadata
 # operationId: integrations.projects.getClientmetadata
-export def "clientmetadata integrationsprojectsgetClientmetadata" [
+export def "clientmetadata get" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -985,7 +998,7 @@ export def "clientmetadata integrationsprojectsgetClientmetadata" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/clientmetadata") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/clientmetadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -995,7 +1008,7 @@ export def "clientmetadata integrationsprojectsgetClientmetadata" [
 #
 # GET /v1/{parent}/clients
 # operationId: integrations.projects.locations.getClients
-export def "clients integrationsprojectslocationsgetClients" [
+export def "clients get" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1020,7 +1033,7 @@ export def "clients integrationsprojectslocationsgetClients" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/clients") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/clients") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1030,7 +1043,7 @@ export def "clients integrationsprojectslocationsgetClients" [
 #
 # POST /v1/{parent}/clients:deprovision
 # operationId: integrations.projects.locations.clients.deprovision
-export def "clients-deprovision integrationsprojectslocationsclientsdeprovision" [
+export def "clients-deprovision create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1057,11 +1070,12 @@ export def "clients-deprovision integrationsprojectslocationsclientsdeprovision"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/clients:deprovision") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/clients:deprovision") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Perform the provisioning steps to enable a user GCP project to use IP. If GCP project already registered on IP end via Apigee Integration, provisioning will fail.
@@ -1069,7 +1083,7 @@ export def "clients-deprovision integrationsprojectslocationsclientsdeprovision"
 # POST /v1/{parent}/clients:provision
 # operationId: integrations.projects.locations.clients.provision
 # --cloudKmsConfig shape: {key?: string, keyVersion?: string, kmsLocation?: string, kmsProjectId?: string, kmsRing?: string}
-export def "clients-provision integrationsprojectslocationsclientsprovision" [
+export def "clients-provision create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1098,12 +1112,12 @@ export def "clients-provision integrationsprojectslocationsclientsprovision" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/clients:provision") $qp)
-  let body = {"cloudKmsConfig": $cloud_kms_config, "createSampleWorkflows": $create_sample_workflows, "provisionGmek": $provision_gmek} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/clients:provision") $qp)
+  let req_body = {"cloudKmsConfig": $cloud_kms_config, "createSampleWorkflows": $create_sample_workflows, "provisionGmek": $provision_gmek} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update client from GMEK to CMEK
@@ -1111,7 +1125,7 @@ export def "clients-provision integrationsprojectslocationsclientsprovision" [
 # POST /v1/{parent}/clients:switch
 # operationId: integrations.projects.locations.clients.switch
 # --cloudKmsConfig shape: {key?: string, keyVersion?: string, kmsLocation?: string, kmsProjectId?: string, kmsRing?: string}
-export def "clients-switch integrationsprojectslocationsclientsswitch" [
+export def "clients-switch create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1138,19 +1152,19 @@ export def "clients-switch integrationsprojectslocationsclientsswitch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/clients:switch") $qp)
-  let body = {"cloudKmsConfig": $cloud_kms_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/clients:switch") $qp)
+  let req_body = {"cloudKmsConfig": $cloud_kms_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates an cloud function project.
 #
 # POST /v1/{parent}/cloudFunctions
 # operationId: integrations.projects.locations.products.cloudFunctions.create
-export def "cloud-functions integrationsprojectslocationsproductscloudFunctionscreate" [
+export def "cloud-functions create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1179,19 +1193,19 @@ export def "cloud-functions integrationsprojectslocationsproductscloudFunctionsc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/cloudFunctions") $qp)
-  let body = {"functionName": $function_name, "functionRegion": $function_region, "projectId": $project_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/cloudFunctions") $qp)
+  let req_body = {"functionName": $function_name, "functionRegion": $function_region, "projectId": $project_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists Connections in a given project and location.
 #
 # GET /v1/{parent}/connections
 # operationId: integrations.projects.locations.connections.list
-export def "connections integrationsprojectslocationsconnectionslist" [
+export def "connections list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1220,7 +1234,7 @@ export def "connections integrationsprojectslocationsconnectionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/connections") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/connections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1230,7 +1244,7 @@ export def "connections integrationsprojectslocationsconnectionslist" [
 #
 # GET /v1/{parent}/executions
 # operationId: integrations.projects.locations.products.integrations.executions.list
-export def "executions integrationsprojectslocationsproductsintegrationsexecutionslist" [
+export def "executions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1254,7 +1268,7 @@ export def "executions integrationsprojectslocationsproductsintegrationsexecutio
   --filter: string # Optional. Standard filter field, we support filtering on following fields: workflow_name: the name of the integration. CreateTimestamp: the execution created time. event_execution_state: the state of the executions. execution_id: the id of the execution. trigger_id: the id of the trigger. parameter_type: the type of the parameters involved in the execution. All fields support for EQUALS, in additional: CreateTimestamp support for LESS_THAN, GREATER_THAN ParameterType support for HAS For example: "parameter_type" HAS \"string\" Also supports operators like AND, OR, NOT For example, trigger_id=\"id1\" AND workflow_name=\"testWorkflow\"
   --filter-params-custom-filter: string # Optional user-provided custom filter.
   --filter-params-end-time: string # End timestamp.
-  --filter-params-event-statuses: list # List of possible event statuses.
+  --filter-params-event-statuses: list<string> # List of possible event statuses.
   --filter-params-execution-id: string # Execution id.
   --filter-params-parameter-key: string # Param key. DEPRECATED. User parameter_pair_key instead.
   --filter-params-parameter-pair-key: string # Param key in the key value pair filter.
@@ -1262,7 +1276,7 @@ export def "executions integrationsprojectslocationsproductsintegrationsexecutio
   --filter-params-parameter-type: string # Param type.
   --filter-params-parameter-value: string # Param value. DEPRECATED. User parameter_pair_value instead.
   --filter-params-start-time: string # Start timestamp.
-  --filter-params-task-statuses: list # List of possible task statuses.
+  --filter-params-task-statuses: list<string> # List of possible task statuses.
   --filter-params-workflow-name: string # Workflow name.
   --order-by: string # Optional. The results would be returned in order you specified here. Currently supporting "last_modified_time" and "create_time".
   --page-size: int # Optional. The size of entries in the response.
@@ -1274,7 +1288,7 @@ export def "executions integrationsprojectslocationsproductsintegrationsexecutio
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filterParams.customFilter" $filter_params_custom_filter "scalar") (serialize-qp "filterParams.endTime" $filter_params_end_time "scalar") (serialize-qp "filterParams.eventStatuses" $filter_params_event_statuses "multi") (serialize-qp "filterParams.executionId" $filter_params_execution_id "scalar") (serialize-qp "filterParams.parameterKey" $filter_params_parameter_key "scalar") (serialize-qp "filterParams.parameterPairKey" $filter_params_parameter_pair_key "scalar") (serialize-qp "filterParams.parameterPairValue" $filter_params_parameter_pair_value "scalar") (serialize-qp "filterParams.parameterType" $filter_params_parameter_type "scalar") (serialize-qp "filterParams.parameterValue" $filter_params_parameter_value "scalar") (serialize-qp "filterParams.startTime" $filter_params_start_time "scalar") (serialize-qp "filterParams.taskStatuses" $filter_params_task_statuses "multi") (serialize-qp "filterParams.workflowName" $filter_params_workflow_name "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "readMask" $read_mask "scalar") (serialize-qp "refreshAcl" $refresh_acl "scalar") (serialize-qp "truncateParams" $truncate_params "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/executions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/executions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1284,7 +1298,7 @@ export def "executions integrationsprojectslocationsproductsintegrationsexecutio
 #
 # GET /v1/{parent}/integrations
 # operationId: integrations.projects.locations.products.integrations.list
-export def "integrations integrationsprojectslocationsproductsintegrationslist" [
+export def "integrations list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1313,7 +1327,7 @@ export def "integrations integrationsprojectslocationsproductsintegrationslist" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/integrations") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/integrations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1323,7 +1337,7 @@ export def "integrations integrationsprojectslocationsproductsintegrationslist" 
 #
 # GET /v1/{parent}/runtimeActionSchemas
 # operationId: integrations.projects.locations.connections.runtimeActionSchemas.list
-export def "runtime-action-schemas integrationsprojectslocationsconnectionsruntimeActionSchemaslist" [
+export def "runtime-action-schemas list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1351,7 +1365,7 @@ export def "runtime-action-schemas integrationsprojectslocationsconnectionsrunti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/runtimeActionSchemas") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/runtimeActionSchemas") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1361,7 +1375,7 @@ export def "runtime-action-schemas integrationsprojectslocationsconnectionsrunti
 #
 # GET /v1/{parent}/runtimeEntitySchemas
 # operationId: integrations.projects.locations.connections.runtimeEntitySchemas.list
-export def "runtime-entity-schemas integrationsprojectslocationsconnectionsruntimeEntitySchemaslist" [
+export def "runtime-entity-schemas list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1389,7 +1403,7 @@ export def "runtime-entity-schemas integrationsprojectslocationsconnectionsrunti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/runtimeEntitySchemas") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/runtimeEntitySchemas") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1399,7 +1413,7 @@ export def "runtime-entity-schemas integrationsprojectslocationsconnectionsrunti
 #
 # GET /v1/{parent}/sfdcChannels
 # operationId: integrations.projects.locations.sfdcInstances.sfdcChannels.list
-export def "sfdc-channels integrationsprojectslocationssfdcInstancessfdcChannelslist" [
+export def "sfdc-channels list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1428,7 +1442,7 @@ export def "sfdc-channels integrationsprojectslocationssfdcInstancessfdcChannels
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/sfdcChannels") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/sfdcChannels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1438,7 +1452,7 @@ export def "sfdc-channels integrationsprojectslocationssfdcInstancessfdcChannels
 #
 # POST /v1/{parent}/sfdcChannels
 # operationId: integrations.projects.locations.sfdcInstances.sfdcChannels.create
-export def "sfdc-channels integrationsprojectslocationssfdcInstancessfdcChannelscreate" [
+export def "sfdc-channels create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1470,19 +1484,19 @@ export def "sfdc-channels integrationsprojectslocationssfdcInstancessfdcChannels
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/sfdcChannels") $qp)
-  let body = {"channelTopic": $channel_topic, "description": $description, "displayName": $display_name, "isActive": $is_active, "lastReplayId": $last_replay_id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/sfdcChannels") $qp)
+  let req_body = {"channelTopic": $channel_topic, "description": $description, "displayName": $display_name, "isActive": $is_active, "lastReplayId": $last_replay_id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all sfdc instances that match the filter. Restrict to sfdc instances belonging to the current client only.
 #
 # GET /v1/{parent}/sfdcInstances
 # operationId: integrations.projects.locations.sfdcInstances.list
-export def "sfdc-instances integrationsprojectslocationssfdcInstanceslist" [
+export def "sfdc-instances list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1511,7 +1525,7 @@ export def "sfdc-instances integrationsprojectslocationssfdcInstanceslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/sfdcInstances") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/sfdcInstances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1521,7 +1535,7 @@ export def "sfdc-instances integrationsprojectslocationssfdcInstanceslist" [
 #
 # POST /v1/{parent}/sfdcInstances
 # operationId: integrations.projects.locations.sfdcInstances.create
-export def "sfdc-instances integrationsprojectslocationssfdcInstancescreate" [
+export def "sfdc-instances create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1542,7 +1556,7 @@ export def "sfdc-instances integrationsprojectslocationssfdcInstancescreate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --auth-config-id: list # A list of AuthConfigs that can be tried to open the channel to SFDC
+  --auth-config-id: list<string> # A list of AuthConfigs that can be tried to open the channel to SFDC
   --description: string # A description of the sfdc instance.
   --display-name: string # User selected unique name/alias to easily reference an instance.
   --name: string # Resource name of the SFDC instance projects/{project}/locations/{location}/sfdcInstances/{sfdcInstance}.
@@ -1553,19 +1567,19 @@ export def "sfdc-instances integrationsprojectslocationssfdcInstancescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/sfdcInstances") $qp)
-  let body = {"authConfigId": $auth_config_id, "description": $description, "displayName": $display_name, "name": $name, "serviceAuthority": $service_authority, "sfdcOrgId": $sfdc_org_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/sfdcInstances") $qp)
+  let req_body = {"authConfigId": $auth_config_id, "description": $description, "displayName": $display_name, "name": $name, "serviceAuthority": $service_authority, "sfdcOrgId": $sfdc_org_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # * Lists suspensions associated with a specific execution. Only those with permissions to resolve the relevant suspensions will be able to view them.
 #
 # GET /v1/{parent}/suspensions
 # operationId: integrations.projects.locations.products.integrations.executions.suspensions.list
-export def "suspensions integrationsprojectslocationsproductsintegrationsexecutionssuspensionslist" [
+export def "suspensions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1594,7 +1608,7 @@ export def "suspensions integrationsprojectslocationsproductsintegrationsexecuti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/suspensions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/suspensions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1604,7 +1618,7 @@ export def "suspensions integrationsprojectslocationsproductsintegrationsexecuti
 #
 # GET /v1/{parent}/versions
 # operationId: integrations.projects.locations.products.integrations.versions.list
-export def "versions integrationsprojectslocationsproductsintegrationsversionslist" [
+export def "versions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1634,7 +1648,7 @@ export def "versions integrationsprojectslocationsproductsintegrationsversionsli
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fieldMask" $field_mask "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/versions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1647,12 +1661,12 @@ export def "versions integrationsprojectslocationsproductsintegrationsversionsli
 # --errorCatcherConfigs item shape: {description?: string, errorCatcherId?: string, errorCatcherNumber?: string, label?: string, position?: record, startErrorTasks?: list}
 # --integrationParameters item shape: {dataType?: "INTEGRATION_PARAMETER_DATA_TYPE_UNSPECIFIED"|"STRING_VALUE"|"INT_VALUE"|"DOUBLE_VALUE"|"BOOLEAN_VALUE"|"STRING_ARRAY"|"INT_ARRAY"|"DOUBLE_ARRAY"|"BOOLEAN_ARRAY"|"JSON_VALUE"|"PROTO_VALUE"|"PROTO_ARRAY", defaultValue?: record, displayName?: string, inputOutputType?: "IN_OUT_TYPE_UNSPECIFIED"|"IN"|"OUT"|"IN_OUT", isTransient?: bool, jsonSchema?: string, key?: string, producer?: string, searchable?: bool}
 # --integrationParametersInternal shape: {parameters?: list}
-# --taskConfigs item shape: {description?: string, displayName?: string, errorCatcherId?: string, externalTaskType?: "EXTERNAL_TASK_TYPE_UNSPECIFIED"|"NORMAL_TASK"|"ERROR_TASK", failurePolicy?: record, jsonValidationOption?: "JSON_VALIDATION_OPTION_UNSPECIFIED"|"SKIP"|"PRE_EXECUTION"|"POST_EXECUTION"|"PRE_POST_EXECUTION", nextTasks?: list, nextTasksExecutionPolicy?: "NEXT_TASKS_EXECUTION_POLICY_UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", parameters?: record, position?: record, successPolicy?: record, synchronousCallFailurePolicy?: record, task?: string, taskExecutionStrategy?: "TASK_EXECUTION_STRATEGY_UNSPECIFIED"|"WHEN_ALL_SUCCEED"|"WHEN_ANY_SUCCEED"|"WHEN_ALL_TASKS_AND_CONDITIONS_SUCCEED", taskId?: string, taskTemplate?: string}
-# --taskConfigsInternal item shape: {alertConfigs?: list, createTime?: string, creatorEmail?: string, description?: string, disableStrictTypeValidation?: bool, errorCatcherId?: string, externalTaskType?: "EXTERNAL_TASK_TYPE_UNSPECIFIED"|"NORMAL_TASK"|"ERROR_TASK", failurePolicy?: record, incomingEdgeCount?: int, jsonValidationOption?: "UNSPECIFIED_JSON_VALIDATION_OPTION"|"SKIP"|"PRE_EXECUTION"|"POST_EXECUTION"|"PRE_POST_EXECUTION", label?: string, lastModifiedTime?: string, nextTasks?: list, nextTasksExecutionPolicy?: "UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", parameters?: record, position?: record, precondition?: string, preconditionLabel?: string, rollbackStrategy?: record, successPolicy?: record, synchronousCallFailurePolicy?: record, taskEntity?: record, taskExecutionStrategy?: "WHEN_ALL_SUCCEED"|"WHEN_ANY_SUCCEED"|"WHEN_ALL_TASKS_AND_CONDITIONS_SUCCEED", taskName?: string, taskNumber?: string, taskSpec?: string, taskTemplateName?: string, taskType?: "TASK"|"ASIS_TEMPLATE"|"IO_TEMPLATE"}
+# --taskConfigs item shape: {description?: string, displayName?: string, errorCatcherId?: string, externalTaskType?: "EXTERNAL_TASK_TYPE_UNSPECIFIED"|"NORMAL_TASK"|"ERROR_TASK", failurePolicy?: record, jsonValidationOption?: "JSON_VALIDATION_OPTION_UNSPECIFIED"|"SKIP"|"PRE_EXECUTION"|"POST_EXECUTION"|"PRE_POST_EXECUTION", nextTasks?: list, nextTasksExecutionPolicy?: "NEXT_TASKS_EXECUTION_POLICY_UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", parameters?: record, position?: record, successPolicy?: record, ... (5 more fields)}
+# --taskConfigsInternal item shape: {alertConfigs?: list, createTime?: string, creatorEmail?: string, description?: string, disableStrictTypeValidation?: bool, errorCatcherId?: string, externalTaskType?: "EXTERNAL_TASK_TYPE_UNSPECIFIED"|"NORMAL_TASK"|"ERROR_TASK", failurePolicy?: record, incomingEdgeCount?: int, jsonValidationOption?: "UNSPECIFIED_JSON_VALIDATION_OPTION"|"SKIP"|"PRE_EXECUTION"|"POST_EXECUTION"|"PRE_POST_EXECUTION", label?: string, lastModifiedTime?: string, nextTasks?: list, ... (15 more fields)}
 # --teardown shape: {teardownTaskConfigs?: list}
 # --triggerConfigs item shape: {alertConfig?: list, cloudSchedulerConfig?: record, description?: string, errorCatcherId?: string, label?: string, nextTasksExecutionPolicy?: "NEXT_TASKS_EXECUTION_POLICY_UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", position?: record, properties?: record, startTasks?: list, triggerId?: string, triggerNumber?: string, triggerType?: "TRIGGER_TYPE_UNSPECIFIED"|"CRON"|"API"|"SFDC_CHANNEL"|"CLOUD_PUBSUB_EXTERNAL"|"SFDC_CDC_CHANNEL"|"CLOUD_SCHEDULER"}
-# --triggerConfigsInternal item shape: {alertConfig?: list, cloudSchedulerConfig?: record, description?: string, enabledClients?: list, errorCatcherId?: string, label?: string, nextTasksExecutionPolicy?: "UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", pauseWorkflowExecutions?: bool, position?: record, properties?: record, startTasks?: list, triggerCriteria?: record, triggerId?: string, triggerNumber?: string, triggerType?: "UNKNOWN"|"CLOUD_PUBSUB"|"GOOPS"|"SFDC_SYNC"|"CRON"|"API"|"MANIFOLD_TRIGGER"|"DATALAYER_DATA_CHANGE"|"SFDC_CHANNEL"|"CLOUD_PUBSUB_EXTERNAL"|"SFDC_CDC_CHANNEL"|"SFDC_PLATFORM_EVENTS_CHANNEL"|"CLOUD_SCHEDULER"}
-export def "versions integrationsprojectslocationsproductsintegrationsversionscreate" [
+# --triggerConfigsInternal item shape: {alertConfig?: list, cloudSchedulerConfig?: record, description?: string, enabledClients?: list<string>, errorCatcherId?: string, label?: string, nextTasksExecutionPolicy?: "UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", pauseWorkflowExecutions?: bool, position?: record, properties?: record, startTasks?: list, triggerCriteria?: record, triggerId?: string, triggerNumber?: string, ... (1 more fields)}
+export def "versions create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1685,30 +1699,30 @@ export def "versions integrationsprojectslocationsproductsintegrationsversionscr
   --parent-template-id: string # Optional. The id of the template which was used to create this integration_version.
   --run-as-service-account: string # Optional. The run-as service account email, if set and auth config is not configured, that will be used to generate auth token to be used in Connector task, Rest caller task and Cloud function task.
   --snapshot-number: string # Optional. An increasing sequence that is set when a new snapshot is created. The last created snapshot can be identified by [workflow_name, org_id latest(snapshot_number)]. However, last created snapshot need not be same as the HEAD. So users should always use "HEAD" tag to identify the head. (format: int64)
-  --task-configs: list # Optional. Task configuration for the integration. It's optional, but the integration doesn't do anything without task_configs. — item shape: {description?: string, displayName?: string, errorCatcherId?: string, externalTaskType?: "EXTERNAL_TASK_TYPE_UNSPECIFIED"|"NORMAL_TASK"|"ERROR_TASK", failurePolicy?: record, jsonValidationOption?: "JSON_VALIDATION_OPTION_UNSPECIFIED"|"SKIP"|"PRE_EXECUTION"|"POST_EXECUTION"|"PRE_POST_EXECUTION", nextTasks?: list, nextTasksExecutionPolicy?: "NEXT_TASKS_EXECUTION_POLICY_UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", parameters?: record, position?: record, successPolicy?: record, synchronousCallFailurePolicy?: record, task?: string, taskExecutionStrategy?: "TASK_EXECUTION_STRATEGY_UNSPECIFIED"|"WHEN_ALL_SUCCEED"|"WHEN_ANY_SUCCEED"|"WHEN_ALL_TASKS_AND_CONDITIONS_SUCCEED", taskId?: string, taskTemplate?: string}
-  --task-configs-internal: list # Optional. Task configuration for the integration. It's optional, but the integration doesn't do anything without task_configs. — item shape: {alertConfigs?: list, createTime?: string, creatorEmail?: string, description?: string, disableStrictTypeValidation?: bool, errorCatcherId?: string, externalTaskType?: "EXTERNAL_TASK_TYPE_UNSPECIFIED"|"NORMAL_TASK"|"ERROR_TASK", failurePolicy?: record, incomingEdgeCount?: int, jsonValidationOption?: "UNSPECIFIED_JSON_VALIDATION_OPTION"|"SKIP"|"PRE_EXECUTION"|"POST_EXECUTION"|"PRE_POST_EXECUTION", label?: string, lastModifiedTime?: string, nextTasks?: list, nextTasksExecutionPolicy?: "UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", parameters?: record, position?: record, precondition?: string, preconditionLabel?: string, rollbackStrategy?: record, successPolicy?: record, synchronousCallFailurePolicy?: record, taskEntity?: record, taskExecutionStrategy?: "WHEN_ALL_SUCCEED"|"WHEN_ANY_SUCCEED"|"WHEN_ALL_TASKS_AND_CONDITIONS_SUCCEED", taskName?: string, taskNumber?: string, taskSpec?: string, taskTemplateName?: string, taskType?: "TASK"|"ASIS_TEMPLATE"|"IO_TEMPLATE"}
+  --task-configs: list # Optional. Task configuration for the integration. It's optional, but the integration doesn't do anything without task_configs. — item shape: {description?: string, displayName?: string, errorCatcherId?: string, externalTaskType?: "EXTERNAL_TASK_TYPE_UNSPECIFIED"|"NORMAL_TASK"|"ERROR_TASK", failurePolicy?: record, jsonValidationOption?: "JSON_VALIDATION_OPTION_UNSPECIFIED"|"SKIP"|"PRE_EXECUTION"|"POST_EXECUTION"|"PRE_POST_EXECUTION", nextTasks?: list, nextTasksExecutionPolicy?: "NEXT_TASKS_EXECUTION_POLICY_UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", parameters?: record, position?: record, successPolicy?: record, ... (5 more fields)}
+  --task-configs-internal: list # Optional. Task configuration for the integration. It's optional, but the integration doesn't do anything without task_configs. — item shape: {alertConfigs?: list, createTime?: string, creatorEmail?: string, description?: string, disableStrictTypeValidation?: bool, errorCatcherId?: string, externalTaskType?: "EXTERNAL_TASK_TYPE_UNSPECIFIED"|"NORMAL_TASK"|"ERROR_TASK", failurePolicy?: record, incomingEdgeCount?: int, jsonValidationOption?: "UNSPECIFIED_JSON_VALIDATION_OPTION"|"SKIP"|"PRE_EXECUTION"|"POST_EXECUTION"|"PRE_POST_EXECUTION", label?: string, lastModifiedTime?: string, nextTasks?: list, ... (15 more fields)}
   --teardown: record # shape: {teardownTaskConfigs?: list}
   --trigger-configs: list # Optional. Trigger configurations. — item shape: {alertConfig?: list, cloudSchedulerConfig?: record, description?: string, errorCatcherId?: string, label?: string, nextTasksExecutionPolicy?: "NEXT_TASKS_EXECUTION_POLICY_UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", position?: record, properties?: record, startTasks?: list, triggerId?: string, triggerNumber?: string, triggerType?: "TRIGGER_TYPE_UNSPECIFIED"|"CRON"|"API"|"SFDC_CHANNEL"|"CLOUD_PUBSUB_EXTERNAL"|"SFDC_CDC_CHANNEL"|"CLOUD_SCHEDULER"}
-  --trigger-configs-internal: list # Optional. Trigger configurations. — item shape: {alertConfig?: list, cloudSchedulerConfig?: record, description?: string, enabledClients?: list, errorCatcherId?: string, label?: string, nextTasksExecutionPolicy?: "UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", pauseWorkflowExecutions?: bool, position?: record, properties?: record, startTasks?: list, triggerCriteria?: record, triggerId?: string, triggerNumber?: string, triggerType?: "UNKNOWN"|"CLOUD_PUBSUB"|"GOOPS"|"SFDC_SYNC"|"CRON"|"API"|"MANIFOLD_TRIGGER"|"DATALAYER_DATA_CHANGE"|"SFDC_CHANNEL"|"CLOUD_PUBSUB_EXTERNAL"|"SFDC_CDC_CHANNEL"|"SFDC_PLATFORM_EVENTS_CHANNEL"|"CLOUD_SCHEDULER"}
+  --trigger-configs-internal: list # Optional. Trigger configurations. — item shape: {alertConfig?: list, cloudSchedulerConfig?: record, description?: string, enabledClients?: list<string>, errorCatcherId?: string, label?: string, nextTasksExecutionPolicy?: "UNSPECIFIED"|"RUN_ALL_MATCH"|"RUN_FIRST_MATCH", pauseWorkflowExecutions?: bool, position?: record, properties?: record, startTasks?: list, triggerCriteria?: record, triggerId?: string, triggerNumber?: string, ... (1 more fields)}
   --user-label: string # Optional. A user-defined label that annotates an integration version. Typically, this is only set when the integration version is created.
 ]: any -> record<createTime: string, databasePersistencePolicy: string, description: string, errorCatcherConfigs: table<description: string, errorCatcherId: string, errorCatcherNumber: string, label: string, position: record, startErrorTasks: list>, integrationParameters: table<dataType: string, defaultValue: record, displayName: string, inputOutputType: string, isTransient: bool, jsonSchema: string, key: string, producer: string, searchable: bool>, integrationParametersInternal: record<parameters: list<record>>, lastModifierEmail: string, lockHolder: string, name: string, origin: string, parentTemplateId: string, runAsServiceAccount: string, snapshotNumber: string, state: string, status: string, taskConfigs: table<description: string, displayName: string, errorCatcherId: string, externalTaskType: string, failurePolicy: record, jsonValidationOption: string, nextTasks: list, nextTasksExecutionPolicy: string, parameters: record, position: record, successPolicy: record, synchronousCallFailurePolicy: record, task: string, taskExecutionStrategy: string, taskId: string, taskTemplate: string>, taskConfigsInternal: table<alertConfigs: list, createTime: string, creatorEmail: string, description: string, disableStrictTypeValidation: bool, errorCatcherId: string, externalTaskType: string, failurePolicy: record, incomingEdgeCount: int, jsonValidationOption: string, label: string, lastModifiedTime: string, nextTasks: list, nextTasksExecutionPolicy: string, parameters: record, position: record, precondition: string, preconditionLabel: string, rollbackStrategy: record, successPolicy: record, synchronousCallFailurePolicy: record, taskEntity: record, taskExecutionStrategy: string, taskName: string, taskNumber: string, taskSpec: string, taskTemplateName: string, taskType: string>, teardown: record<teardownTaskConfigs: list<record>>, triggerConfigs: table<alertConfig: list, cloudSchedulerConfig: record, description: string, errorCatcherId: string, label: string, nextTasksExecutionPolicy: string, position: record, properties: record, startTasks: list, triggerId: string, triggerNumber: string, triggerType: string>, triggerConfigsInternal: table<alertConfig: list, cloudSchedulerConfig: record, description: string, enabledClients: list, errorCatcherId: string, label: string, nextTasksExecutionPolicy: string, pauseWorkflowExecutions: bool, position: record, properties: record, startTasks: list, triggerCriteria: record, triggerId: string, triggerNumber: string, triggerType: string>, updateTime: string, userLabel: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "newIntegration" $new_integration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/versions") $qp)
-  let body = {"databasePersistencePolicy": $database_persistence_policy, "description": $description, "errorCatcherConfigs": $error_catcher_configs, "integrationParameters": $integration_parameters, "integrationParametersInternal": $integration_parameters_internal, "lastModifierEmail": $last_modifier_email, "lockHolder": $lock_holder, "origin": $origin, "parentTemplateId": $parent_template_id, "runAsServiceAccount": $run_as_service_account, "snapshotNumber": $snapshot_number, "taskConfigs": $task_configs, "taskConfigsInternal": $task_configs_internal, "teardown": $teardown, "triggerConfigs": $trigger_configs, "triggerConfigsInternal": $trigger_configs_internal, "userLabel": $user_label} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/versions") $qp)
+  let req_body = {"databasePersistencePolicy": $database_persistence_policy, "description": $description, "errorCatcherConfigs": $error_catcher_configs, "integrationParameters": $integration_parameters, "integrationParametersInternal": $integration_parameters_internal, "lastModifierEmail": $last_modifier_email, "lockHolder": $lock_holder, "origin": $origin, "parentTemplateId": $parent_template_id, "runAsServiceAccount": $run_as_service_account, "snapshotNumber": $snapshot_number, "taskConfigs": $task_configs, "taskConfigsInternal": $task_configs_internal, "teardown": $teardown, "triggerConfigs": $trigger_configs, "triggerConfigsInternal": $trigger_configs_internal, "userLabel": $user_label} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Uploads an integration. The content can be a previously downloaded integration. Performs the same function as CreateDraftIntegrationVersion, but accepts input in a string format, which holds the complete representation of the IntegrationVersion content.
 #
 # POST /v1/{parent}/versions:upload
 # operationId: integrations.projects.locations.products.integrations.versions.upload
-export def "versions-upload integrationsprojectslocationsproductsintegrationsversionsupload" [
+export def "versions-upload upload" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1736,10 +1750,10 @@ export def "versions-upload integrationsprojectslocationsproductsintegrationsver
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/versions:upload") $qp)
-  let body = {"content": $content, "fileFormat": $file_format} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/versions:upload") $qp)
+  let req_body = {"content": $content, "fileFormat": $file_format} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -112,10 +121,10 @@ export def "employees list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Employees" $qp)
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -139,12 +148,13 @@ export def "employees create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Employees")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves an employee's detail by unique employee id
@@ -165,11 +175,11 @@ export def "employees get" [
 ]: nothing -> record<Employees: table<BankAccounts: list, Classification: string, DateOfBirth: string, Email: string, EmployeeGroupName: string, EmployeeID: string, FirstName: string, Gender: string, HomeAddress: record, IsAuthorisedToApproveLeave: bool, IsAuthorisedToApproveTimesheets: bool, JobTitle: string, LastName: string, LeaveBalances: list, LeaveLines: list, MiddleNames: string, Mobile: string, OpeningBalances: record, OrdinaryEarningsRateID: string, PayTemplate: record, PayrollCalendarID: string, Phone: string, StartDate: string, Status: string, SuperMemberships: list, TaxDeclaration: record, TerminationDate: string, Title: string, TwitterUserName: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employee_id: $employee_id} | format pattern "/Employees/{employee_id}"))
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/Employees/{employee_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -193,13 +203,14 @@ export def "employees update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employee_id: $employee_id} | format pattern "/Employees/{employee_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/Employees/{employee_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves leave applications
@@ -225,10 +236,10 @@ export def "leave-applications list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/LeaveApplications" $qp)
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -252,12 +263,13 @@ export def "leave-applications create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/LeaveApplications")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a leave application by a unique leave application id
@@ -278,11 +290,11 @@ export def "leave-applications get" [
 ]: nothing -> record<LeaveApplications: table<Description: string, EmployeeID: string, EndDate: string, LeaveApplicationID: string, LeavePeriods: list, LeaveTypeID: string, StartDate: string, Title: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({leave_application_id: $leave_application_id} | format pattern "/LeaveApplications/{leave_application_id}"))
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({leave_application_id: (encode-path-segment $leave_application_id)} | format pattern "/LeaveApplications/{leave_application_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -306,13 +318,14 @@ export def "leave-applications update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({leave_application_id: $leave_application_id} | format pattern "/LeaveApplications/{leave_application_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({leave_application_id: (encode-path-segment $leave_application_id)} | format pattern "/LeaveApplications/{leave_application_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves pay items
@@ -338,10 +351,10 @@ export def "pay-items get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/PayItems" $qp)
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -350,7 +363,7 @@ export def "pay-items get" [
 # POST /PayItems
 # operationId: createPayItem
 # --DeductionTypes item shape: {AccountCode?: string, CurrentRecord?: bool, DeductionCategory?: "NONE"|"UNIONFEES"|"WORKPLACEGIVING", DeductionTypeID?: string, IsExemptFromW1?: bool, Name?: string, ReducesSuper?: bool, ReducesTax?: bool}
-# --EarningsRates item shape: {AccountCode?: string, AccrueLeave?: bool, AllowanceType?: "CAR"|"TRANSPORT"|"TRAVEL"|"LAUNDRY"|"MEALS"|"JOBKEEPER"|"OTHER", Amount?: float, CurrentRecord?: bool, EarningsRateID?: string, EarningsType?: "FIXED"|"ORDINARYTIMEEARNINGS"|"OVERTIMEEARNINGS"|"ALLOWANCE"|"LUMPSUMD"|"EMPLOYMENTTERMINATIONPAYMENT"|"LUMPSUMA"|"LUMPSUMB"|"BONUSESANDCOMMISSIONS"|"LUMPSUME", EmploymentTerminationPaymentType?: "O"|"R", IsExemptFromSuper?: bool, IsExemptFromTax?: bool, IsReportableAsW1?: bool, Multiplier?: float, Name?: string, RatePerUnit?: string, RateType?: "FIXEDAMOUNT"|"MULTIPLE"|"RATEPERUNIT", TypeOfUnits?: string}
+# --EarningsRates item shape: {AccountCode?: string, AccrueLeave?: bool, AllowanceType?: "CAR"|"TRANSPORT"|"TRAVEL"|"LAUNDRY"|"MEALS"|"JOBKEEPER"|"OTHER", Amount?: float, CurrentRecord?: bool, EarningsRateID?: string, EarningsType?: "FIXED"|"ORDINARYTIMEEARNINGS"|"OVERTIMEEARNINGS"|"ALLOWANCE"|"LUMPSUMD"|"EMPLOYMENTTERMINATIONPAYMENT"|"LUMPSUMA"|"LUMPSUMB"|"BONUSESANDCOMMISSIONS"|"LUMPSUME", EmploymentTerminationPaymentType?: "O"|"R", IsExemptFromSuper?: bool, IsExemptFromTax?: bool, IsReportableAsW1?: bool, ... (5 more fields)}
 # --LeaveTypes item shape: {CurrentRecord?: bool, IsPaidLeave?: bool, LeaveLoadingRate?: float, LeaveTypeID?: string, Name?: string, NormalEntitlement?: float, ShowOnPayslip?: bool, TypeOfUnits?: string}
 # --ReimbursementTypes item shape: {AccountCode?: string, CurrentRecord?: bool, Name?: string, ReimbursementTypeID?: string}
 export def "pay-items create" [
@@ -364,7 +377,7 @@ export def "pay-items create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant
   --deduction-types: list # item shape: {AccountCode?: string, CurrentRecord?: bool, DeductionCategory?: "NONE"|"UNIONFEES"|"WORKPLACEGIVING", DeductionTypeID?: string, IsExemptFromW1?: bool, Name?: string, ReducesSuper?: bool, ReducesTax?: bool}
-  --earnings-rates: list # item shape: {AccountCode?: string, AccrueLeave?: bool, AllowanceType?: "CAR"|"TRANSPORT"|"TRAVEL"|"LAUNDRY"|"MEALS"|"JOBKEEPER"|"OTHER", Amount?: float, CurrentRecord?: bool, EarningsRateID?: string, EarningsType?: "FIXED"|"ORDINARYTIMEEARNINGS"|"OVERTIMEEARNINGS"|"ALLOWANCE"|"LUMPSUMD"|"EMPLOYMENTTERMINATIONPAYMENT"|"LUMPSUMA"|"LUMPSUMB"|"BONUSESANDCOMMISSIONS"|"LUMPSUME", EmploymentTerminationPaymentType?: "O"|"R", IsExemptFromSuper?: bool, IsExemptFromTax?: bool, IsReportableAsW1?: bool, Multiplier?: float, Name?: string, RatePerUnit?: string, RateType?: "FIXEDAMOUNT"|"MULTIPLE"|"RATEPERUNIT", TypeOfUnits?: string}
+  --earnings-rates: list # item shape: {AccountCode?: string, AccrueLeave?: bool, AllowanceType?: "CAR"|"TRANSPORT"|"TRAVEL"|"LAUNDRY"|"MEALS"|"JOBKEEPER"|"OTHER", Amount?: float, CurrentRecord?: bool, EarningsRateID?: string, EarningsType?: "FIXED"|"ORDINARYTIMEEARNINGS"|"OVERTIMEEARNINGS"|"ALLOWANCE"|"LUMPSUMD"|"EMPLOYMENTTERMINATIONPAYMENT"|"LUMPSUMA"|"LUMPSUMB"|"BONUSESANDCOMMISSIONS"|"LUMPSUME", EmploymentTerminationPaymentType?: "O"|"R", IsExemptFromSuper?: bool, IsExemptFromTax?: bool, IsReportableAsW1?: bool, ... (5 more fields)}
   --leave-types: list # item shape: {CurrentRecord?: bool, IsPaidLeave?: bool, LeaveLoadingRate?: float, LeaveTypeID?: string, Name?: string, NormalEntitlement?: float, ShowOnPayslip?: bool, TypeOfUnits?: string}
   --reimbursement-types: list # item shape: {AccountCode?: string, CurrentRecord?: bool, Name?: string, ReimbursementTypeID?: string}
 ]: any -> record<PayItems: record<DeductionTypes: list<record>, EarningsRates: list<record>, LeaveTypes: list<record>, ReimbursementTypes: list<record>>> {
@@ -372,13 +385,13 @@ export def "pay-items create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/PayItems")
-  let body = {"DeductionTypes": $deduction_types, "EarningsRates": $earnings_rates, "LeaveTypes": $leave_types, "ReimbursementTypes": $reimbursement_types} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"DeductionTypes": $deduction_types, "EarningsRates": $earnings_rates, "LeaveTypes": $leave_types, "ReimbursementTypes": $reimbursement_types} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves pay runs
@@ -404,10 +417,10 @@ export def "pay-runs list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/PayRuns" $qp)
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -431,12 +444,13 @@ export def "pay-runs create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/PayRuns")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a pay run by using a unique pay run id
@@ -457,11 +471,11 @@ export def "pay-runs get" [
 ]: nothing -> record<PayRuns: table<Deductions: float, NetPay: float, PayRunID: string, PayRunPeriodEndDate: string, PayRunPeriodStartDate: string, PayRunStatus: string, PaymentDate: string, PayrollCalendarID: string, PayslipMessage: string, Payslips: list, Reimbursement: float, Super: float, Tax: float, UpdatedDateUTC: string, ValidationErrors: list, Wages: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pay_run_id: $pay_run_id} | format pattern "/PayRuns/{pay_run_id}"))
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/PayRuns/{pay_run_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -485,13 +499,14 @@ export def "pay-runs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pay_run_id: $pay_run_id} | format pattern "/PayRuns/{pay_run_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/PayRuns/{pay_run_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves payroll calendars
@@ -517,10 +532,10 @@ export def "payroll-calendars list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/PayrollCalendars" $qp)
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -544,12 +559,13 @@ export def "payroll-calendars create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/PayrollCalendars")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves payroll calendar by using a unique payroll calendar ID
@@ -570,11 +586,11 @@ export def "payroll-calendars get" [
 ]: nothing -> record<PayrollCalendars: table<CalendarType: string, Name: string, PaymentDate: string, PayrollCalendarID: string, StartDate: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({payroll_calendar_id: $payroll_calendar_id} | format pattern "/PayrollCalendars/{payroll_calendar_id}"))
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({payroll_calendar_id: (encode-path-segment $payroll_calendar_id)} | format pattern "/PayrollCalendars/{payroll_calendar_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -596,11 +612,11 @@ export def "payslip get" [
 ]: nothing -> record<Payslip: record<DeductionLines: list<record>, Deductions: float, EarningsLines: list<record>, EmployeeID: string, FirstName: string, LastName: string, LeaveAccrualLines: list<record>, LeaveEarningsLines: list<record>, NetPay: float, PayslipID: string, ReimbursementLines: list<record>, Reimbursements: float, Super: float, SuperannuationLines: list<record>, Tax: float, TaxLines: list<record>, TimesheetEarningsLines: list<record>, UpdatedDateUTC: string, Wages: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({payslip_id: $payslip_id} | format pattern "/Payslip/{payslip_id}"))
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({payslip_id: (encode-path-segment $payslip_id)} | format pattern "/Payslip/{payslip_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -624,13 +640,14 @@ export def "payslip update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({payslip_id: $payslip_id} | format pattern "/Payslip/{payslip_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({payslip_id: (encode-path-segment $payslip_id)} | format pattern "/Payslip/{payslip_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves payroll settings
@@ -651,10 +668,10 @@ export def "settings get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Settings")
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -679,10 +696,10 @@ export def "superfund-products get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ABN" $abn "scalar") (serialize-qp "USI" $usi "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/SuperfundProducts" $qp)
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -709,10 +726,10 @@ export def "superfunds list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Superfunds" $qp)
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -736,12 +753,13 @@ export def "superfunds create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Superfunds")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a superfund by using a unique superfund ID
@@ -762,11 +780,11 @@ export def "superfunds get" [
 ]: nothing -> record<SuperFunds: table<ABN: string, AccountName: string, AccountNumber: string, BSB: string, ElectronicServiceAddress: string, EmployerNumber: string, Name: string, SPIN: string, SuperFundID: string, Type: string, USI: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({super_fund_id: $super_fund_id} | format pattern "/Superfunds/{super_fund_id}"))
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({super_fund_id: (encode-path-segment $super_fund_id)} | format pattern "/Superfunds/{super_fund_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -790,13 +808,14 @@ export def "superfunds update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({super_fund_id: $super_fund_id} | format pattern "/Superfunds/{super_fund_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({super_fund_id: (encode-path-segment $super_fund_id)} | format pattern "/Superfunds/{super_fund_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves timesheets
@@ -822,10 +841,10 @@ export def "timesheets list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Timesheets" $qp)
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -849,12 +868,13 @@ export def "timesheets create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Timesheets")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a timesheet by using a unique timesheet id
@@ -875,11 +895,11 @@ export def "timesheets get" [
 ]: nothing -> record<Timesheet: record<EmployeeID: string, EndDate: string, Hours: float, StartDate: string, Status: string, TimesheetID: string, TimesheetLines: list<record>, UpdatedDateUTC: string, ValidationErrors: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({timesheet_id: $timesheet_id} | format pattern "/Timesheets/{timesheet_id}"))
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({timesheet_id: (encode-path-segment $timesheet_id)} | format pattern "/Timesheets/{timesheet_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -903,11 +923,12 @@ export def "timesheets update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({timesheet_id: $timesheet_id} | format pattern "/Timesheets/{timesheet_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({timesheet_id: (encode-path-segment $timesheet_id)} | format pattern "/Timesheets/{timesheet_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Xero-Tenant-Id": $xero_tenant_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

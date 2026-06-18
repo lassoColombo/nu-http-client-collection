@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "locations-global-metrics-scopes-list-metrics-scopes-by-monitored-project monitoringlocationsglobalmetricsScopeslistMetricsScopesByMonitoredProject" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "locations-global-metrics-scopes-list-metrics-scopes-by-monitored-project list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/locations/global/metricsScopes:listMetricsScopesByMonitoredProject
 # operationId: monitoring.locations.global.metricsScopes.listMetricsScopesByMonitoredProject
-export def "locations-global-metrics-scopes-list-metrics-scopes-by-monitored-project monitoringlocationsglobalmetricsScopeslistMetricsScopesByMonitoredProject" [
+export def "locations-global-metrics-scopes-list-metrics-scopes-by-monitored-project list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,7 +140,7 @@ export def "locations-global-metrics-scopes-list-metrics-scopes-by-monitored-pro
 #
 # DELETE /v1/{name}
 # operationId: monitoring.projects.dashboards.delete
-export def "projects monitoringprojectsdashboardsdelete" [
+export def "projects delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -156,7 +165,7 @@ export def "projects monitoringprojectsdashboardsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -166,7 +175,7 @@ export def "projects monitoringprojectsdashboardsdelete" [
 #
 # GET /v1/{name}
 # operationId: monitoring.projects.dashboards.get
-export def "projects monitoringprojectsdashboardsget" [
+export def "projects get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -191,7 +200,7 @@ export def "projects monitoringprojectsdashboardsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -206,7 +215,7 @@ export def "projects monitoringprojectsdashboardsget" [
 # --gridLayout shape: {columns?: string, widgets?: list}
 # --mosaicLayout shape: {columns?: int, tiles?: list}
 # --rowLayout shape: {rows?: list}
-export def "projects monitoringprojectsdashboardspatch" [
+export def "projects update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -242,19 +251,19 @@ export def "projects monitoringprojectsdashboardspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
-  let body = {"columnLayout": $column_layout, "dashboardFilters": $dashboard_filters, "displayName": $display_name, "etag": $etag, "gridLayout": $grid_layout, "labels": $labels, "mosaicLayout": $mosaic_layout, "name": $body_name, "rowLayout": $row_layout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"columnLayout": $column_layout, "dashboardFilters": $dashboard_filters, "displayName": $display_name, "etag": $etag, "gridLayout": $grid_layout, "labels": $labels, "mosaicLayout": $mosaic_layout, "name": $body_name, "rowLayout": $row_layout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists possible values for a given label name.
 #
 # GET /v1/{name}/location/{location}/prometheus/api/v1/label/{label}/values
 # operationId: monitoring.projects.location.prometheus.api.v1.label.values
-export def "location-prometheus-label-values monitoringprojectslocationprometheusapiv1labelvalues" [
+export def "location-prometheus-label-values get" [
   name: string
   location: string
   label: string
@@ -284,7 +293,7 @@ export def "location-prometheus-label-values monitoringprojectslocationprometheu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "match" $qp_match "scalar") (serialize-qp "start" $start "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name, location: $location, label: $label} | format pattern "/v1/{name}/location/{location}/prometheus/api/v1/label/{label}/values") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name), location: (encode-path-segment $location), label: (encode-path-segment $label)} | format pattern "/v1/{name}/location/{location}/prometheus/api/v1/label/{label}/values") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -294,7 +303,7 @@ export def "location-prometheus-label-values monitoringprojectslocationprometheu
 #
 # GET /v1/{name}/location/{location}/prometheus/api/v1/labels
 # operationId: monitoring.projects.location.prometheus.api.v1.labels.list
-export def "location-prometheus-labels monitoringprojectslocationprometheusapiv1labelslist" [
+export def "location-prometheus-labels list" [
   name: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -323,7 +332,7 @@ export def "location-prometheus-labels monitoringprojectslocationprometheusapiv1
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "match" $qp_match "scalar") (serialize-qp "start" $start "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name, location: $location} | format pattern "/v1/{name}/location/{location}/prometheus/api/v1/labels") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name), location: (encode-path-segment $location)} | format pattern "/v1/{name}/location/{location}/prometheus/api/v1/labels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -333,7 +342,7 @@ export def "location-prometheus-labels monitoringprojectslocationprometheusapiv1
 #
 # POST /v1/{name}/location/{location}/prometheus/api/v1/labels
 # operationId: monitoring.projects.location.prometheus.api.v1.labels
-export def "location-prometheus-labels monitoringprojectslocationprometheusapiv1labels" [
+export def "location-prometheus-labels create" [
   name: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -363,19 +372,19 @@ export def "location-prometheus-labels monitoringprojectslocationprometheusapiv1
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name, location: $location} | format pattern "/v1/{name}/location/{location}/prometheus/api/v1/labels") $qp)
-  let body = {"end": $end, "match": $body_match, "start": $start} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name), location: (encode-path-segment $location)} | format pattern "/v1/{name}/location/{location}/prometheus/api/v1/labels") $qp)
+  let req_body = {"end": $end, "match": $body_match, "start": $start} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists metadata for metrics.
 #
 # GET /v1/{name}/location/{location}/prometheus/api/v1/metadata
 # operationId: monitoring.projects.location.prometheus.api.v1.metadata.list
-export def "location-prometheus-metadata monitoringprojectslocationprometheusapiv1metadatalist" [
+export def "location-prometheus-metadata list" [
   name: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -403,7 +412,7 @@ export def "location-prometheus-metadata monitoringprojectslocationprometheusapi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "metric" $metric "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name, location: $location} | format pattern "/v1/{name}/location/{location}/prometheus/api/v1/metadata") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name), location: (encode-path-segment $location)} | format pattern "/v1/{name}/location/{location}/prometheus/api/v1/metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -413,7 +422,7 @@ export def "location-prometheus-metadata monitoringprojectslocationprometheusapi
 #
 # POST /v1/{name}/location/{location}/prometheus/api/v1/query
 # operationId: monitoring.projects.location.prometheus.api.v1.query
-export def "location-prometheus-query monitoringprojectslocationprometheusapiv1query" [
+export def "location-prometheus-query list" [
   name: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -443,19 +452,19 @@ export def "location-prometheus-query monitoringprojectslocationprometheusapiv1q
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name, location: $location} | format pattern "/v1/{name}/location/{location}/prometheus/api/v1/query") $qp)
-  let body = {"query": $query, "time": $time, "timeout": $timeout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name), location: (encode-path-segment $location)} | format pattern "/v1/{name}/location/{location}/prometheus/api/v1/query") $qp)
+  let req_body = {"query": $query, "time": $time, "timeout": $timeout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists exemplars relevant to a given PromQL query,
 #
 # POST /v1/{name}/location/{location}/prometheus/api/v1/query_exemplars
 # operationId: monitoring.projects.location.prometheus.api.v1.query_exemplars
-export def "location-prometheus-query-exemplars exemplars" [
+export def "location-prometheus-query-exemplars list" [
   name: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -485,19 +494,19 @@ export def "location-prometheus-query-exemplars exemplars" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name, location: $location} | format pattern "/v1/{name}/location/{location}/prometheus/api/v1/query_exemplars") $qp)
-  let body = {"end": $end, "query": $query, "start": $start} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name), location: (encode-path-segment $location)} | format pattern "/v1/{name}/location/{location}/prometheus/api/v1/query_exemplars") $qp)
+  let req_body = {"end": $end, "query": $query, "start": $start} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Evaluate a PromQL query with start, end time range.
 #
 # POST /v1/{name}/location/{location}/prometheus/api/v1/query_range
 # operationId: monitoring.projects.location.prometheus.api.v1.query_range
-export def "location-prometheus-query-range range" [
+export def "location-prometheus-query-range list" [
   name: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -529,19 +538,19 @@ export def "location-prometheus-query-range range" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name, location: $location} | format pattern "/v1/{name}/location/{location}/prometheus/api/v1/query_range") $qp)
-  let body = {"end": $end, "query": $query, "start": $start, "step": $step, "timeout": $timeout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name), location: (encode-path-segment $location)} | format pattern "/v1/{name}/location/{location}/prometheus/api/v1/query_range") $qp)
+  let req_body = {"end": $end, "query": $query, "start": $start, "step": $step, "timeout": $timeout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists metadata for metrics.
 #
 # POST /v1/{name}/location/{location}/prometheus/api/v1/series
 # operationId: monitoring.projects.location.prometheus.api.v1.series
-export def "location-prometheus-series monitoringprojectslocationprometheusapiv1series" [
+export def "location-prometheus-series create" [
   name: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -570,19 +579,19 @@ export def "location-prometheus-series monitoringprojectslocationprometheusapiv1
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name, location: $location} | format pattern "/v1/{name}/location/{location}/prometheus/api/v1/series") $qp)
-  let body = {"end": $end, "start": $start} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name), location: (encode-path-segment $location)} | format pattern "/v1/{name}/location/{location}/prometheus/api/v1/series") $qp)
+  let req_body = {"end": $end, "start": $start} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the existing dashboards.This method requires the monitoring.dashboards.list permission on the specified project. For more information, see Cloud Identity and Access Management (https://cloud.google.com/iam).
 #
 # GET /v1/{parent}/dashboards
 # operationId: monitoring.projects.dashboards.list
-export def "dashboards monitoringprojectsdashboardslist" [
+export def "dashboards list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -609,7 +618,7 @@ export def "dashboards monitoringprojectsdashboardslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/dashboards") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/dashboards") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -624,7 +633,7 @@ export def "dashboards monitoringprojectsdashboardslist" [
 # --gridLayout shape: {columns?: string, widgets?: list}
 # --mosaicLayout shape: {columns?: int, tiles?: list}
 # --rowLayout shape: {rows?: list}
-export def "dashboards monitoringprojectsdashboardscreate" [
+export def "dashboards create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -660,19 +669,19 @@ export def "dashboards monitoringprojectsdashboardscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/dashboards") $qp)
-  let body = {"columnLayout": $column_layout, "dashboardFilters": $dashboard_filters, "displayName": $display_name, "etag": $etag, "gridLayout": $grid_layout, "labels": $labels, "mosaicLayout": $mosaic_layout, "name": $name, "rowLayout": $row_layout} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/dashboards") $qp)
+  let req_body = {"columnLayout": $column_layout, "dashboardFilters": $dashboard_filters, "displayName": $display_name, "etag": $etag, "gridLayout": $grid_layout, "labels": $labels, "mosaicLayout": $mosaic_layout, "name": $name, "rowLayout": $row_layout} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a MonitoredProject with the given project ID to the specified Metrics Scope.
 #
 # POST /v1/{parent}/projects
 # operationId: monitoring.locations.global.metricsScopes.projects.create
-export def "projects monitoringlocationsglobalmetricsScopesprojectscreate" [
+export def "projects create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -699,10 +708,10 @@ export def "projects monitoringlocationsglobalmetricsScopesprojectscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/projects") $qp)
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/projects") $qp)
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

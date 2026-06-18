@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -62,8 +72,35 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
 def base-url-completer [] { ["https://api.callfire.com/v2"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def default-voice-completer [] { ["FEMALE1" "FEMALE2" "FRENCHCANADIAN1" "MALE1" "SPANISH1"] }
@@ -83,7 +120,7 @@ def big-message-strategy-completer [] { ["DO_NOT_SEND" "MMS" "SEND_MULTIPLE" "TR
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "calls findCalls" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "calls find" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -107,7 +144,7 @@ export def commands []: nothing -> table {
 #
 # GET /calls
 # operationId: findCalls
-export def "calls findCalls" [
+export def "calls find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,7 +156,7 @@ export def "calls findCalls" [
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
-  --id: list # Lists the Call ids to search for. If calls ids are specified then other query parameters can be ignored
+  --id: list<int> # Lists the Call ids to search for. If calls ids are specified then other query parameters can be ignored
   --campaign-id: int # An id of a campaign, queries for calls included to a particular campaign. Specify null for all campaigns and 0 for default campaign (format: int64)
   --batch-id: int # An id of a contact batch, queries for calls of a particular contact batch (format: int64)
   --from-number: string # Phone number in E.164 format (11-digit) that call was from. Example: 12132000384
@@ -168,17 +205,18 @@ export def "calls send" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "campaignId" $campaign_id "scalar") (serialize-qp "defaultLiveMessage" $default_live_message "scalar") (serialize-qp "defaultMachineMessage" $default_machine_message "scalar") (serialize-qp "defaultLiveMessageSoundId" $default_live_message_sound_id "scalar") (serialize-qp "defaultMachineMessageSoundId" $default_machine_message_sound_id "scalar") (serialize-qp "defaultVoice" $default_voice "scalar") (serialize-qp "strictValidation" $strict_validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/calls" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find call broadcasts
 #
 # GET /calls/broadcasts
 # operationId: findCallBroadcasts
-export def "calls-broadcasts findCallBroadcasts" [
+export def "calls-broadcasts find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,9 +250,9 @@ export def "calls-broadcasts findCallBroadcasts" [
 # operationId: createCallBroadcast
 # --localTimeRestriction shape: {beginHour?: int, beginMinute?: int, enabled?: bool, endHour?: int, endMinute?: int}
 # --recipients item shape: {attributes?: record, contactId?: int, fromNumber?: string, phoneNumber?: string}
-# --retryConfig shape: {maxAttempts?: int, minutesBetweenAttempts?: int, retryPhoneTypes?: list, retryResults?: list}
-# --schedules item shape: {campaignId?: int, daysOfWeek?: list, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
-# --sounds shape: {dncDigit?: string, dncSoundId?: int, dncSoundText?: string, dncSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", liveSoundId?: int, liveSoundText?: string, liveSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", machineSoundId?: int, machineSoundText?: string, machineSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", transferDigit?: string, transferNumber?: string, transferSoundId?: int, transferSoundText?: string, transferSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1"}
+# --retryConfig shape: {maxAttempts?: int, minutesBetweenAttempts?: int, retryPhoneTypes?: list<string>, retryResults?: list<string>}
+# --schedules item shape: {campaignId?: int, daysOfWeek?: list<string>, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
+# --sounds shape: {dncDigit?: string, dncSoundId?: int, dncSoundText?: string, dncSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", liveSoundId?: int, liveSoundText?: string, liveSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", machineSoundId?: int, machineSoundText?: string, machineSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", transferDigit?: string, transferNumber?: string, transferSoundId?: int, transferSoundText?: string, ... (1 more fields)}
 export def "calls-broadcasts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -230,27 +268,27 @@ export def "calls-broadcasts create" [
   --dialplan-xml: string # IVR xml is a document which describes the dialplan to setup the IVR broadcast
   --from-number: string # Phone number in E.164 format (11-digit) or short code for text. Example: 12132000384, 67076
   --id: int # A unique id of broadcast (readonly) (format: int64)
-  --labels: list # Labels of a broadcast
+  --labels: list<string> # Labels of a broadcast
   --local-time-restriction: record # Represents a range of time during which CallFire will send a call or text to recipients. Timeframe uses the local timezone of recipient's number — shape: {beginHour?: int, beginMinute?: int, enabled?: bool, endHour?: int, endMinute?: int}
   --max-active: int # Sets a maximum number of calls to be dialed by CallFire at once (format: int32)
   --max-active-transfers: int # A maximum number of active transfers (format: int32)
   --name: string # A name of a broadcast
   --recipients: list # Recipients of a call broadcast, can be either existing contacts or a new ones — item shape: {attributes?: record, contactId?: int, fromNumber?: string, phoneNumber?: string}
   --resume-next-day: oneof<nothing, bool> # If true resumes the unfinished campaign to the next day
-  --retry-config: record # Retry configuration will help you to resend a call or text if it was not delivered first time — shape: {maxAttempts?: int, minutesBetweenAttempts?: int, retryPhoneTypes?: list, retryResults?: list}
-  --schedules: list # A list of schedule objects which specifies a range of time when broadcast should be started and stopped. Supports the scheduling per day of week — item shape: {campaignId?: int, daysOfWeek?: list, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
-  --sounds: record # A set of sounds assigned to a voice broadcast to play according to an answering machine configuration. You can add the existing sounds from the account's sound library or to provide a text which will be converted into a speech. There are four sound options available for a Voice Broadcast campaign — shape: {dncDigit?: string, dncSoundId?: int, dncSoundText?: string, dncSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", liveSoundId?: int, liveSoundText?: string, liveSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", machineSoundId?: int, machineSoundText?: string, machineSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", transferDigit?: string, transferNumber?: string, transferSoundId?: int, transferSoundText?: string, transferSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1"}
+  --retry-config: record # Retry configuration will help you to resend a call or text if it was not delivered first time — shape: {maxAttempts?: int, minutesBetweenAttempts?: int, retryPhoneTypes?: list<string>, retryResults?: list<string>}
+  --schedules: list # A list of schedule objects which specifies a range of time when broadcast should be started and stopped. Supports the scheduling per day of week — item shape: {campaignId?: int, daysOfWeek?: list<string>, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
+  --sounds: record # A set of sounds assigned to a voice broadcast to play according to an answering machine configuration. You can add the existing sounds from the account's sound library or to provide a text which will be converted into a speech. There are four sound options available for a Voice Broadcast campaign — shape: {dncDigit?: string, dncSoundId?: int, dncSoundText?: string, dncSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", liveSoundId?: int, liveSoundText?: string, liveSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", machineSoundId?: int, machineSoundText?: string, machineSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", transferDigit?: string, transferNumber?: string, transferSoundId?: int, transferSoundText?: string, ... (1 more fields)}
 ]: any -> record<id: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "strictValidation" $strict_validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/calls/broadcasts" $qp)
-  let body = {"answeringMachineConfig": $answering_machine_config, "dialplanXml": $dialplan_xml, "fromNumber": $from_number, "id": $id, "labels": $labels, "localTimeRestriction": $local_time_restriction, "maxActive": $max_active, "maxActiveTransfers": $max_active_transfers, "name": $name, "recipients": $recipients, "resumeNextDay": $resume_next_day, "retryConfig": $retry_config, "schedules": $schedules, "sounds": $sounds} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"answeringMachineConfig": $answering_machine_config, "dialplanXml": $dialplan_xml, "fromNumber": $from_number, "id": $id, "labels": $labels, "localTimeRestriction": $local_time_restriction, "maxActive": $max_active, "maxActiveTransfers": $max_active_transfers, "name": $name, "recipients": $recipients, "resumeNextDay": $resume_next_day, "retryConfig": $retry_config, "schedules": $schedules, "sounds": $sounds} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find a specific call broadcast
@@ -272,7 +310,7 @@ export def "calls-broadcasts get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/calls/broadcasts/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/calls/broadcasts/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -284,9 +322,9 @@ export def "calls-broadcasts get" [
 # operationId: updateCallBroadcast
 # --localTimeRestriction shape: {beginHour?: int, beginMinute?: int, enabled?: bool, endHour?: int, endMinute?: int}
 # --recipients item shape: {attributes?: record, contactId?: int, fromNumber?: string, phoneNumber?: string}
-# --retryConfig shape: {maxAttempts?: int, minutesBetweenAttempts?: int, retryPhoneTypes?: list, retryResults?: list}
-# --schedules item shape: {campaignId?: int, daysOfWeek?: list, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
-# --sounds shape: {dncDigit?: string, dncSoundId?: int, dncSoundText?: string, dncSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", liveSoundId?: int, liveSoundText?: string, liveSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", machineSoundId?: int, machineSoundText?: string, machineSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", transferDigit?: string, transferNumber?: string, transferSoundId?: int, transferSoundText?: string, transferSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1"}
+# --retryConfig shape: {maxAttempts?: int, minutesBetweenAttempts?: int, retryPhoneTypes?: list<string>, retryResults?: list<string>}
+# --schedules item shape: {campaignId?: int, daysOfWeek?: list<string>, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
+# --sounds shape: {dncDigit?: string, dncSoundId?: int, dncSoundText?: string, dncSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", liveSoundId?: int, liveSoundText?: string, liveSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", machineSoundId?: int, machineSoundText?: string, machineSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", transferDigit?: string, transferNumber?: string, transferSoundId?: int, transferSoundText?: string, ... (1 more fields)}
 export def "calls-broadcasts update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -302,27 +340,27 @@ export def "calls-broadcasts update" [
   --dialplan-xml: string # IVR xml is a document which describes the dialplan to setup the IVR broadcast
   --from-number: string # Phone number in E.164 format (11-digit) or short code for text. Example: 12132000384, 67076
   --body-id: int # A unique id of broadcast (readonly) (format: int64)
-  --labels: list # Labels of a broadcast
+  --labels: list<string> # Labels of a broadcast
   --local-time-restriction: record # Represents a range of time during which CallFire will send a call or text to recipients. Timeframe uses the local timezone of recipient's number — shape: {beginHour?: int, beginMinute?: int, enabled?: bool, endHour?: int, endMinute?: int}
   --max-active: int # Sets a maximum number of calls to be dialed by CallFire at once (format: int32)
   --max-active-transfers: int # A maximum number of active transfers (format: int32)
   --name: string # A name of a broadcast
   --recipients: list # Recipients of a call broadcast, can be either existing contacts or a new ones — item shape: {attributes?: record, contactId?: int, fromNumber?: string, phoneNumber?: string}
   --resume-next-day: oneof<nothing, bool> # If true resumes the unfinished campaign to the next day
-  --retry-config: record # Retry configuration will help you to resend a call or text if it was not delivered first time — shape: {maxAttempts?: int, minutesBetweenAttempts?: int, retryPhoneTypes?: list, retryResults?: list}
-  --schedules: list # A list of schedule objects which specifies a range of time when broadcast should be started and stopped. Supports the scheduling per day of week — item shape: {campaignId?: int, daysOfWeek?: list, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
-  --sounds: record # A set of sounds assigned to a voice broadcast to play according to an answering machine configuration. You can add the existing sounds from the account's sound library or to provide a text which will be converted into a speech. There are four sound options available for a Voice Broadcast campaign — shape: {dncDigit?: string, dncSoundId?: int, dncSoundText?: string, dncSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", liveSoundId?: int, liveSoundText?: string, liveSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", machineSoundId?: int, machineSoundText?: string, machineSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", transferDigit?: string, transferNumber?: string, transferSoundId?: int, transferSoundText?: string, transferSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1"}
+  --retry-config: record # Retry configuration will help you to resend a call or text if it was not delivered first time — shape: {maxAttempts?: int, minutesBetweenAttempts?: int, retryPhoneTypes?: list<string>, retryResults?: list<string>}
+  --schedules: list # A list of schedule objects which specifies a range of time when broadcast should be started and stopped. Supports the scheduling per day of week — item shape: {campaignId?: int, daysOfWeek?: list<string>, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
+  --sounds: record # A set of sounds assigned to a voice broadcast to play according to an answering machine configuration. You can add the existing sounds from the account's sound library or to provide a text which will be converted into a speech. There are four sound options available for a Voice Broadcast campaign — shape: {dncDigit?: string, dncSoundId?: int, dncSoundText?: string, dncSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", liveSoundId?: int, liveSoundText?: string, liveSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", machineSoundId?: int, machineSoundText?: string, machineSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", transferDigit?: string, transferNumber?: string, transferSoundId?: int, transferSoundText?: string, ... (1 more fields)}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "strictValidation" $strict_validation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/calls/broadcasts/{id}") $qp)
-  let body = {"answeringMachineConfig": $answering_machine_config, "dialplanXml": $dialplan_xml, "fromNumber": $from_number, "id": $body_id, "labels": $labels, "localTimeRestriction": $local_time_restriction, "maxActive": $max_active, "maxActiveTransfers": $max_active_transfers, "name": $name, "recipients": $recipients, "resumeNextDay": $resume_next_day, "retryConfig": $retry_config, "schedules": $schedules, "sounds": $sounds} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/calls/broadcasts/{id}") $qp)
+  let req_body = {"answeringMachineConfig": $answering_machine_config, "dialplanXml": $dialplan_xml, "fromNumber": $from_number, "id": $body_id, "labels": $labels, "localTimeRestriction": $local_time_restriction, "maxActive": $max_active, "maxActiveTransfers": $max_active_transfers, "name": $name, "recipients": $recipients, "resumeNextDay": $resume_next_day, "retryConfig": $retry_config, "schedules": $schedules, "sounds": $sounds} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Archive voice broadcast
@@ -342,7 +380,7 @@ export def "calls-broadcasts-archive archive-voice" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/calls/broadcasts/{id}/archive"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/calls/broadcasts/{id}/archive"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -369,7 +407,7 @@ export def "calls-broadcasts-batches get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/calls/broadcasts/{id}/batches") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/calls/broadcasts/{id}/batches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -380,7 +418,7 @@ export def "calls-broadcasts-batches get" [
 # POST /calls/broadcasts/{id}/batches
 # operationId: addCallBroadcastBatch
 # --recipients item shape: {attributes?: record, contactId?: int, fromNumber?: string, phoneNumber?: string}
-export def "calls-broadcasts-batches create-call-broadcast-batch" [
+export def "calls-broadcasts-batches create-batch" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -400,12 +438,12 @@ export def "calls-broadcasts-batches create-call-broadcast-batch" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "strictValidation" $strict_validation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/calls/broadcasts/{id}/batches") $qp)
-  let body = {"contactListId": $contact_list_id, "name": $name, "recipients": $recipients, "scrubDuplicates": $scrub_duplicates} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/calls/broadcasts/{id}/batches") $qp)
+  let req_body = {"contactListId": $contact_list_id, "name": $name, "recipients": $recipients, "scrubDuplicates": $scrub_duplicates} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find calls in a call broadcast
@@ -430,7 +468,7 @@ export def "calls-broadcasts-calls get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "batchId" $batch_id "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/calls/broadcasts/{id}/calls") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/calls/broadcasts/{id}/calls") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -458,11 +496,12 @@ export def "calls-broadcasts-recipients create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "strictValidation" $strict_validation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/calls/broadcasts/{id}/recipients") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/calls/broadcasts/{id}/recipients") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Start voice broadcast
@@ -482,7 +521,7 @@ export def "calls-broadcasts-start start-voice" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/calls/broadcasts/{id}/start"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/calls/broadcasts/{id}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -509,7 +548,7 @@ export def "calls-broadcasts-stats get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "begin" $begin "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/calls/broadcasts/{id}/stats") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/calls/broadcasts/{id}/stats") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -532,7 +571,7 @@ export def "calls-broadcasts-stop stop-voice" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/calls/broadcasts/{id}/stop"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/calls/broadcasts/{id}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -542,7 +581,7 @@ export def "calls-broadcasts-stop stop-voice" [
 #
 # POST /calls/broadcasts/{id}/toggleRecipientsStatus
 # operationId: toggleCallBroadcastRecipientsStatus
-export def "calls-broadcasts-toggle-recipients-status toggleCallBroadcastRecipientsStatus" [
+export def "calls-broadcasts-toggle-recipients-status create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,11 +598,12 @@ export def "calls-broadcasts-toggle-recipients-status toggleCallBroadcastRecipie
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "enable" $enable "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/calls/broadcasts/{id}/toggleRecipientsStatus") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/calls/broadcasts/{id}/toggleRecipientsStatus") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get call recording by id
@@ -585,7 +625,7 @@ export def "calls-recordings get-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/calls/recordings/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/calls/recordings/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -608,7 +648,7 @@ export def "calls-recordings list" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/calls/recordings/{id}.mp3"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/calls/recordings/{id}.mp3"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -633,7 +673,7 @@ export def "calls get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/calls/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/calls/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -658,7 +698,7 @@ export def "calls-recordings get-by-id-1" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/calls/{id}/recordings") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/calls/{id}/recordings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -684,7 +724,7 @@ export def "calls-recordings get-by-id-name" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/calls/{id}/recordings/{name}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/calls/{id}/recordings/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -694,7 +734,7 @@ export def "calls-recordings get-by-id-name" [
 #
 # GET /calls/{id}/recordings/{name}.mp3
 # operationId: getCallRecordingMp3ByName
-export def "calls-recordings get-call-recording-mp3" [
+export def "calls-recordings get-mp3" [
   id: int
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -708,7 +748,7 @@ export def "calls-recordings get-call-recording-mp3" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/calls/{id}/recordings/{name}.mp3"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), name: (encode-path-segment $name)} | format pattern "/calls/{id}/recordings/{name}.mp3"))
   let accept_val = "audio/mpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -718,7 +758,7 @@ export def "calls-recordings get-call-recording-mp3" [
 #
 # GET /campaigns/batches/{id}
 # operationId: getCampaignBatch
-export def "campaigns-batches get-campaign-batch" [
+export def "campaigns-batches get-batch" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -733,7 +773,7 @@ export def "campaigns-batches get-campaign-batch" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/campaigns/batches/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/batches/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -743,7 +783,7 @@ export def "campaigns-batches get-campaign-batch" [
 #
 # PUT /campaigns/batches/{id}
 # operationId: updateCampaignBatch
-export def "campaigns-batches update-campaign-batch" [
+export def "campaigns-batches update-batch" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -762,19 +802,19 @@ export def "campaigns-batches update-campaign-batch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/campaigns/batches/{id}"))
-  let body = {"broadcastId": $broadcast_id, "enabled": $enabled, "id": $body_id, "name": $name, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/batches/{id}"))
+  let req_body = {"broadcastId": $broadcast_id, "enabled": $enabled, "id": $body_id, "name": $name, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find sounds
 #
 # GET /campaigns/sounds
 # operationId: findCampaignSounds
-export def "campaigns-sounds findCampaignSounds" [
+export def "campaigns-sounds find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -815,18 +855,18 @@ export def "campaigns-sounds-calls create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --name: string # Name of a sound to create
-  --to-number: string # Phone number in E.164 11-digit format to call to record a sound.  Example: 12132000384
+  --to-number: string # Phone number in E.164 11-digit format to call to record a sound. Example: 12132000384
 ]: any -> record<created: int, duplicate: bool, id: int, lengthInSeconds: int, name: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/campaigns/sounds/calls" $qp)
-  let body = {"name": $name, "toNumber": $to_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "toNumber": $to_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add sound via file
@@ -851,11 +891,12 @@ export def "campaigns-sounds-files create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/campaigns/sounds/files" $qp)
-  let body = {"file": $file, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"file": $file, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["file"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Add sound via text-to-speech
@@ -880,11 +921,11 @@ export def "campaigns-sounds-tts create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/campaigns/sounds/tts" $qp)
-  let body = {"message": $message, "voice": $voice} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"message": $message, "voice": $voice} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a specific sound
@@ -904,7 +945,7 @@ export def "campaigns-sounds delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/campaigns/sounds/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/sounds/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -929,7 +970,7 @@ export def "campaigns-sounds get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/campaigns/sounds/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/sounds/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -939,7 +980,7 @@ export def "campaigns-sounds get" [
 #
 # GET /campaigns/sounds/{id}.mp3
 # operationId: getCampaignSoundDataMp3
-export def "campaigns-sounds get-campaign-sound-data-mp3" [
+export def "campaigns-sounds get-data-mp3" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -952,7 +993,7 @@ export def "campaigns-sounds get-campaign-sound-data-mp3" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/campaigns/sounds/{id}.mp3"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/sounds/{id}.mp3"))
   let accept_val = "audio/mpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -962,7 +1003,7 @@ export def "campaigns-sounds get-campaign-sound-data-mp3" [
 #
 # GET /campaigns/sounds/{id}.wav
 # operationId: getCampaignSoundDataWav
-export def "campaigns-sounds get-campaign-sound-data-wav" [
+export def "campaigns-sounds get-data-wav" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -975,7 +1016,7 @@ export def "campaigns-sounds get-campaign-sound-data-wav" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/campaigns/sounds/{id}.wav"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/sounds/{id}.wav"))
   let accept_val = "audio/wav"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -985,7 +1026,7 @@ export def "campaigns-sounds get-campaign-sound-data-wav" [
 #
 # GET /contacts
 # operationId: findContacts
-export def "contacts findContacts" [
+export def "contacts find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -997,8 +1038,8 @@ export def "contacts findContacts" [
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
-  --id: list # A list of contact IDs. If the id parameter is included, the other query parameters are ignored.
-  --number: list # Multiple contact numbers can be specified. If the number parameter is included, the other query parameters are ignored.
+  --id: list<int> # A list of contact IDs. If the id parameter is included, the other query parameters are ignored.
+  --number: list<string> # Multiple contact numbers can be specified. If the number parameter is included, the other query parameters are ignored.
   --contact-list-id: int # Filters contacts by a particular contact list (format: int64)
   --property-name: string # Name of a contact property to search by
   --property-value: string # Value of a contact property to search by
@@ -1031,17 +1072,18 @@ export def "contacts create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contacts")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find do not contact (dnc) items
 #
 # GET /contacts/dncs
 # operationId: findDoNotContacts
-export def "contacts-dncs findDoNotContacts" [
+export def "contacts-dncs find-do-not" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1060,7 +1102,7 @@ export def "contacts-dncs findDoNotContacts" [
   --text: oneof<nothing, bool> # Show only Do-Not-Text numbers
   --inbound-call: oneof<nothing, bool> # ~
   --inbound-text: oneof<nothing, bool> # ~
-  --number: list # ~
+  --number: list<string> # ~
 ]: nothing -> record<items: table<call: bool, campaignId: int, created: int, inboundCall: bool, inboundText: bool, number: string, source: string, text: bool>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1087,7 +1129,7 @@ export def "contacts-dncs create-do-not" [
   --call: oneof<nothing, bool> # If set to true add all given numbers to Do-Not-Call list. Default value: true
   --inbound-call: oneof<nothing, bool> # ~
   --inbound-text: oneof<nothing, bool> # ~
-  --numbers: list # A list of phone numbers in E.164 format (11-digit), example: 12132000384, 14142777322
+  --numbers: list<string> # A list of phone numbers in E.164 format (11-digit), example: 12132000384, 14142777322
   --body-source: string # A list of new contact objects which need to be added. Default value: Api V2
   --text: oneof<nothing, bool> # If set to true add all given numbers to Do-Not-Text list. Default value: true
 ]: any -> any {
@@ -1095,11 +1137,11 @@ export def "contacts-dncs create-do-not" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contacts/dncs")
-  let body = {"call": $call, "inboundCall": $inbound_call, "inboundText": $inbound_text, "numbers": $numbers, "source": $body_source, "text": $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"call": $call, "inboundCall": $inbound_call, "inboundText": $inbound_text, "numbers": $numbers, "source": $body_source, "text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete do not contact (dnc) numbers contained in source.
@@ -1119,7 +1161,7 @@ export def "contacts-dncs-sources delete-do-not" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source: $source} | format pattern "/contacts/dncs/sources/{source}"))
+  let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/contacts/dncs/sources/{source}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1129,7 +1171,7 @@ export def "contacts-dncs-sources delete-do-not" [
 #
 # GET /contacts/dncs/universals/{toNumber}
 # operationId: getUniversalDoNotContacts
-export def "contacts-dncs-universals get-universal-do-not" [
+export def "contacts-dncs-universals get-do-not" [
   to_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1145,7 +1187,7 @@ export def "contacts-dncs-universals get-universal-do-not" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fromNumber" $from_number "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({to_number: $to_number} | format pattern "/contacts/dncs/universals/{to_number}") $qp)
+  let full_url = (build-url $base ({to_number: (encode-path-segment $to_number)} | format pattern "/contacts/dncs/universals/{to_number}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1168,7 +1210,7 @@ export def "contacts-dncs delete-do-not" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({number: $number} | format pattern "/contacts/dncs/{number}"))
+  let full_url = (build-url $base ({number: (encode-path-segment $number)} | format pattern "/contacts/dncs/{number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1191,7 +1233,7 @@ export def "contacts-dncs get-do-not" [
 ]: nothing -> record<call: bool, campaignId: int, created: int, inboundCall: bool, inboundText: bool, number: string, source: string, text: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({number: $number} | format pattern "/contacts/dncs/{number}"))
+  let full_url = (build-url $base ({number: (encode-path-segment $number)} | format pattern "/contacts/dncs/{number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1221,19 +1263,19 @@ export def "contacts-dncs update-do-not" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({number: $number} | format pattern "/contacts/dncs/{number}"))
-  let body = {"call": $call, "inboundCall": $inbound_call, "inboundText": $inbound_text, "number": $body_number, "source": $body_source, "text": $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({number: (encode-path-segment $number)} | format pattern "/contacts/dncs/{number}"))
+  let req_body = {"call": $call, "inboundCall": $inbound_call, "inboundText": $inbound_text, "number": $body_number, "source": $body_source, "text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find contact lists
 #
 # GET /contacts/lists
 # operationId: findContactLists
-export def "contacts-lists findContactLists" [
+export def "contacts-lists find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1274,8 +1316,8 @@ export def "contacts-lists create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-  --contact-ids: list # A list of ids of existing contacts in CallFire system
-  --contact-numbers: list # List of numbers in E.164 format (11-digit). Example: 12132000384
+  --contact-ids: list<int> # A list of ids of existing contacts in CallFire system
+  --contact-numbers: list<string> # List of numbers in E.164 format (11-digit). Example: 12132000384
   --contact-numbers-field: string # A type of a phone number (homePhone, workPhone, mobilePhone). This parameter is used with contactNumbers and specifies which types of phone numbers are included to a contact list
   --contacts: list # A list of new contact objects to be added — item shape: {deleted?: bool, externalId?: string, externalSystem?: string, extraPhone1?: string, extraPhone2?: string, extraPhone3?: string, firstName?: string, homePhone?: string, id?: int, lastName?: string, mobilePhone?: string, properties?: record, workPhone?: string, zipcode?: string}
   --name: string # A name of a contact list
@@ -1286,18 +1328,18 @@ export def "contacts-lists create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contacts/lists" $qp)
-  let body = {"contactIds": $contact_ids, "contactNumbers": $contact_numbers, "contactNumbersField": $contact_numbers_field, "contacts": $contacts, "name": $name, "useCustomFields": $use_custom_fields} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contactIds": $contact_ids, "contactNumbers": $contact_numbers, "contactNumbersField": $contact_numbers_field, "contacts": $contacts, "name": $name, "useCustomFields": $use_custom_fields} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create contact list from file
 #
 # POST /contacts/lists/upload
 # operationId: createContactListFromFile
-export def "contacts-lists-upload create-contact-list-from-file" [
+export def "contacts-lists-upload create-from-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1314,11 +1356,12 @@ export def "contacts-lists-upload create-contact-list-from-file" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contacts/lists/upload")
-  let body = {"file": $file, "name": $name, "useCustomFields": $use_custom_fields} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"file": $file, "name": $name, "useCustomFields": $use_custom_fields} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["file"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Delete a contact list
@@ -1338,7 +1381,7 @@ export def "contacts-lists delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/lists/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/lists/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1363,7 +1406,7 @@ export def "contacts-lists get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/lists/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/lists/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1388,12 +1431,12 @@ export def "contacts-lists update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/lists/{id}"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/lists/{id}"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete contacts from a contact list
@@ -1410,12 +1453,12 @@ export def "contacts-lists-items delete-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contact-id: list # An id of a contact entity in the CallFire system
+  --contact-id: list<int> # An id of a contact entity in the CallFire system
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "contactId" $contact_id "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/lists/{id}/items") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/lists/{id}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1442,7 +1485,7 @@ export def "contacts-lists-items get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/lists/{id}/items") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/lists/{id}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1463,8 +1506,8 @@ export def "contacts-lists-items create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contact-ids: list # A list of ids of existing contacts in CallFire system
-  --contact-numbers: list # A phone number in E.164 format (11-digit). Examples: 12132000384
+  --contact-ids: list<int> # A list of ids of existing contacts in CallFire system
+  --contact-numbers: list<string> # A phone number in E.164 format (11-digit). Examples: 12132000384
   --contact-numbers-field: string # A type of phone number (homePhone, workPhone, mobilePhone). This parameter works together with contactNumbers and specifies which types of numbers are included to a list
   --contacts: list # A list of new contact objects which need to be added — item shape: {deleted?: bool, externalId?: string, externalSystem?: string, extraPhone1?: string, extraPhone2?: string, extraPhone3?: string, firstName?: string, homePhone?: string, id?: int, lastName?: string, mobilePhone?: string, properties?: record, workPhone?: string, zipcode?: string}
   --use-custom-fields: oneof<nothing, bool> # A flag to indicate how to define property names for contacts. If true, uses the field and property names exactly as defined. If false will assign custom properties and fields to A, B, C, etc
@@ -1472,12 +1515,12 @@ export def "contacts-lists-items create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/lists/{id}/items"))
-  let body = {"contactIds": $contact_ids, "contactNumbers": $contact_numbers, "contactNumbersField": $contact_numbers_field, "contacts": $contacts, "useCustomFields": $use_custom_fields} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/lists/{id}/items"))
+  let req_body = {"contactIds": $contact_ids, "contactNumbers": $contact_numbers, "contactNumbersField": $contact_numbers_field, "contacts": $contacts, "useCustomFields": $use_custom_fields} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a contact from a contact list
@@ -1498,7 +1541,7 @@ export def "contacts-lists-items delete-by-id-contactId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, contact_id: $contact_id} | format pattern "/contacts/lists/{id}/items/{contact_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), contact_id: (encode-path-segment $contact_id)} | format pattern "/contacts/lists/{id}/items/{contact_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1521,7 +1564,7 @@ export def "contacts delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1546,7 +1589,7 @@ export def "contacts get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1584,12 +1627,12 @@ export def "contacts update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/{id}"))
-  let body = {"deleted": $deleted, "externalId": $external_id, "externalSystem": $external_system, "extraPhone1": $extra_phone1, "extraPhone2": $extra_phone2, "extraPhone3": $extra_phone3, "firstName": $first_name, "homePhone": $home_phone, "id": $body_id, "lastName": $last_name, "mobilePhone": $mobile_phone, "properties": $properties, "workPhone": $work_phone, "zipcode": $zipcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/{id}"))
+  let req_body = {"deleted": $deleted, "externalId": $external_id, "externalSystem": $external_system, "extraPhone1": $extra_phone1, "extraPhone2": $extra_phone2, "extraPhone3": $extra_phone3, "firstName": $first_name, "homePhone": $home_phone, "id": $body_id, "lastName": $last_name, "mobilePhone": $mobile_phone, "properties": $properties, "workPhone": $work_phone, "zipcode": $zipcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find a contact's history
@@ -1613,7 +1656,7 @@ export def "contacts-history get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/contacts/{id}/history") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/{id}/history") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1623,7 +1666,7 @@ export def "contacts-history get" [
 #
 # GET /keywords
 # operationId: findKeywords
-export def "keywords findKeywords" [
+export def "keywords find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1632,7 +1675,7 @@ export def "keywords findKeywords" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --keywords: list # A keyword to search for
+  --keywords: list<string> # A keyword to search for
 ]: nothing -> record<items: table<keyword: string, number: string, shortCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1647,7 +1690,7 @@ export def "keywords findKeywords" [
 #
 # GET /keywords/leases
 # operationId: findKeywordLeases
-export def "keywords-leases findKeywordLeases" [
+export def "keywords-leases find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1675,7 +1718,7 @@ export def "keywords-leases findKeywordLeases" [
 #
 # GET /keywords/leases/configs
 # operationId: findKeywordLeaseConfigs
-export def "keywords-leases-configs findKeywordLeaseConfigs" [
+export def "keywords-leases-configs find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1718,7 +1761,7 @@ export def "keywords-leases-configs get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({keyword: $keyword} | format pattern "/keywords/leases/configs/{keyword}") $qp)
+  let full_url = (build-url $base ({keyword: (encode-path-segment $keyword)} | format pattern "/keywords/leases/configs/{keyword}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1745,12 +1788,12 @@ export def "keywords-leases-configs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({keyword: $keyword} | format pattern "/keywords/leases/configs/{keyword}"))
-  let body = {"keyword": $body_keyword, "textInboundConfig": $text_inbound_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({keyword: (encode-path-segment $keyword)} | format pattern "/keywords/leases/configs/{keyword}"))
+  let req_body = {"keyword": $body_keyword, "textInboundConfig": $text_inbound_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find a keyword by id
@@ -1772,7 +1815,7 @@ export def "keywords-leases-id get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/keywords/leases/id/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/keywords/leases/id/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1797,7 +1840,7 @@ export def "keywords-leases get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({keyword: $keyword} | format pattern "/keywords/leases/{keyword}") $qp)
+  let full_url = (build-url $base ({keyword: (encode-path-segment $keyword)} | format pattern "/keywords/leases/{keyword}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1821,7 +1864,7 @@ export def "keywords-leases update" [
   --contact-list-id: int # Existing contact list ID (format: int64)
   --double-opt-in-enabled: oneof<nothing, bool> # Enable/disable double opt in feature
   --body-keyword: string # A text used as a keyword
-  --labels: list # ~
+  --labels: list<string> # ~
   --lease-begin: int # A time of a lease timestamp, formatted in unix time milliseconds (read only). Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
   --lease-end: int # A date and time when the keyword lease is finishes. Timestamp, formatted in unix time milliseconds (read only). Example: 1473781817000 (format: int64)
   --number: string # A number assigned to keyword. Example: 12132212344
@@ -1833,19 +1876,19 @@ export def "keywords-leases update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({keyword: $keyword} | format pattern "/keywords/leases/{keyword}"))
-  let body = {"autoRenew": $auto_renew, "contactListId": $contact_list_id, "doubleOptInEnabled": $double_opt_in_enabled, "keyword": $body_keyword, "labels": $labels, "leaseBegin": $lease_begin, "leaseEnd": $lease_end, "number": $number, "optInConfirmationMessage": $opt_in_confirmation_message, "shortCode": $short_code, "status": $status, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({keyword: (encode-path-segment $keyword)} | format pattern "/keywords/leases/{keyword}"))
+  let req_body = {"autoRenew": $auto_renew, "contactListId": $contact_list_id, "doubleOptInEnabled": $double_opt_in_enabled, "keyword": $body_keyword, "labels": $labels, "leaseBegin": $lease_begin, "leaseEnd": $lease_end, "number": $number, "optInConfirmationMessage": $opt_in_confirmation_message, "shortCode": $short_code, "status": $status, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Check for a specific keyword
 #
 # GET /keywords/{keyword}/available
 # operationId: isKeywordAvailable
-export def "keywords-available isKeywordAvailable" [
+export def "keywords-available get-is" [
   keyword: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1858,7 +1901,7 @@ export def "keywords-available isKeywordAvailable" [
 ]: nothing -> bool {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({keyword: $keyword} | format pattern "/keywords/{keyword}/available"))
+  let full_url = (build-url $base ({keyword: (encode-path-segment $keyword)} | format pattern "/keywords/{keyword}/available"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1892,7 +1935,7 @@ export def "me-account get" [
 #
 # GET /me/api/credentials
 # operationId: findApiCredentials
-export def "me-credentials findApiCredentials" [
+export def "me-credentials find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1919,7 +1962,7 @@ export def "me-credentials findApiCredentials" [
 #
 # POST /me/api/credentials
 # operationId: createApiCredential
-export def "me-credentials create-api" [
+export def "me-credentials create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1936,18 +1979,18 @@ export def "me-credentials create-api" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/api/credentials")
-  let body = {"enabled": $enabled, "id": $id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"enabled": $enabled, "id": $id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete api credentials
 #
 # DELETE /me/api/credentials/{id}
 # operationId: deleteApiCredential
-export def "me-credentials delete-api" [
+export def "me-credentials delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1960,7 +2003,7 @@ export def "me-credentials delete-api" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/me/api/credentials/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/me/api/credentials/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1970,7 +2013,7 @@ export def "me-credentials delete-api" [
 #
 # GET /me/api/credentials/{id}
 # operationId: getApiCredential
-export def "me-credentials get-api" [
+export def "me-credentials get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1985,7 +2028,7 @@ export def "me-credentials get-api" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/me/api/credentials/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/me/api/credentials/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1995,7 +2038,7 @@ export def "me-credentials get-api" [
 #
 # POST /me/api/credentials/{id}/disable
 # operationId: disableApiCredentials
-export def "me-credentials-disable disable-api" [
+export def "me-credentials-disable disable" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2008,7 +2051,7 @@ export def "me-credentials-disable disable-api" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/me/api/credentials/{id}/disable"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/me/api/credentials/{id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2018,7 +2061,7 @@ export def "me-credentials-disable disable-api" [
 #
 # POST /me/api/credentials/{id}/enable
 # operationId: enableApiCredentials
-export def "me-credentials-enable enable-api" [
+export def "me-credentials-enable enable" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2031,7 +2074,7 @@ export def "me-credentials-enable enable-api" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/me/api/credentials/{id}/enable"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/me/api/credentials/{id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2123,7 +2166,7 @@ export def "me-callerids send-verification-code-to-caller" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({callerid: $callerid} | format pattern "/me/callerids/{callerid}"))
+  let full_url = (build-url $base ({callerid: (encode-path-segment $callerid)} | format pattern "/me/callerids/{callerid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2148,19 +2191,19 @@ export def "me-callerids-verification-code verify-caller" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({callerid: $callerid} | format pattern "/me/callerids/{callerid}/verification-code"))
-  let body = {"verificationCode": $verification_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({callerid: (encode-path-segment $callerid)} | format pattern "/me/callerids/{callerid}/verification-code"))
+  let req_body = {"verificationCode": $verification_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find media
 #
 # GET /media
 # operationId: findMedia
-export def "media findMedia" [
+export def "media find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2203,18 +2246,19 @@ export def "media create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/media")
-  let body = {"file": $file, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"file": $file, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["file"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Download media by extension
 #
 # GET /media/public/{key}.{extension}
 # operationId: getMediaDataByKey
-export def "media-public get-media-data" [
+export def "media-public get-data" [
   key: string
   extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2229,7 +2273,7 @@ export def "media-public get-media-data" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key, extension: $extension} | format pattern "/media/public/{key}.{extension}"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key), extension: (encode-path-segment $extension)} | format pattern "/media/public/{key}.{extension}"))
   let accept_val = ($accept | default "audio/m4a")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2254,7 +2298,7 @@ export def "media get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/media/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/media/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2264,7 +2308,7 @@ export def "media get" [
 #
 # GET /media/{id}.{extension}
 # operationId: getMediaData
-export def "media get-media-data" [
+export def "media get-data" [
   id: int
   extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2279,7 +2323,7 @@ export def "media get-media-data" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, extension: $extension} | format pattern "/media/{id}.{extension}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), extension: (encode-path-segment $extension)} | format pattern "/media/{id}.{extension}"))
   let accept_val = ($accept | default "audio/m4a")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2289,7 +2333,7 @@ export def "media get-media-data" [
 #
 # GET /media/{id}/file
 # operationId: getMediaDataBinary
-export def "media-file get-media-data-binary" [
+export def "media-file get-data-binary" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2302,7 +2346,7 @@ export def "media-file get-media-data-binary" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/media/{id}/file"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/media/{id}/file"))
   let accept_val = "application/binary"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2312,7 +2356,7 @@ export def "media-file get-media-data-binary" [
 #
 # GET /numbers/leases
 # operationId: findNumberLeases
-export def "numbers-leases findNumberLeases" [
+export def "numbers-leases find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2344,7 +2388,7 @@ export def "numbers-leases findNumberLeases" [
 #
 # GET /numbers/leases/configs
 # operationId: findNumberLeaseConfigs
-export def "numbers-leases-configs findNumberLeaseConfigs" [
+export def "numbers-leases-configs find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2390,7 +2434,7 @@ export def "numbers-leases-configs get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({number: $number} | format pattern "/numbers/leases/configs/{number}") $qp)
+  let full_url = (build-url $base ({number: (encode-path-segment $number)} | format pattern "/numbers/leases/configs/{number}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2400,7 +2444,7 @@ export def "numbers-leases-configs get" [
 #
 # PUT /numbers/leases/configs/{number}
 # operationId: updateNumberLeaseConfig
-# --callTrackingConfig shape: {failedTransferSoundId?: int, googleAnalytics?: record, introSoundId?: int, recorded?: bool, screen?: bool, transferNumbers?: list, voicemail?: bool, voicemailSoundId?: int, weeklySchedule?: record, whisperSoundId?: int}
+# --callTrackingConfig shape: {failedTransferSoundId?: int, googleAnalytics?: record, introSoundId?: int, recorded?: bool, screen?: bool, transferNumbers?: list<string>, voicemail?: bool, voicemailSoundId?: int, weeklySchedule?: record, whisperSoundId?: int}
 # --ivrInboundConfig shape: {dialplanXml?: string}
 # --textInboundConfig shape: {forwardEnabled?: bool, forwardNumber?: string}
 export def "numbers-leases-configs update" [
@@ -2413,7 +2457,7 @@ export def "numbers-leases-configs update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --call-tracking-config: record # Call tracking configuration allows you track incoming calls, analyze, respond to customers using sms or voice replies. For more information see [call tracking page](https://www.callfire.com/products/call-tracking) — shape: {failedTransferSoundId?: int, googleAnalytics?: record, introSoundId?: int, recorded?: bool, screen?: bool, transferNumbers?: list, voicemail?: bool, voicemailSoundId?: int, weeklySchedule?: record, whisperSoundId?: int}
+  --call-tracking-config: record # Call tracking configuration allows you track incoming calls, analyze, respond to customers using sms or voice replies. For more information see [call tracking page](https://www.callfire.com/products/call-tracking) — shape: {failedTransferSoundId?: int, googleAnalytics?: record, introSoundId?: int, recorded?: bool, screen?: bool, transferNumbers?: list<string>, voicemail?: bool, voicemailSoundId?: int, weeklySchedule?: record, whisperSoundId?: int}
   --config-type: string@config-type-completer # A type of config. Available values: TRACKING, IVR
   --ivr-inbound-config: record # ~ — shape: {dialplanXml?: string}
   --body-number: string # Phone number in E.164 format (11-digit). Example: 12132000384
@@ -2422,12 +2466,12 @@ export def "numbers-leases-configs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({number: $number} | format pattern "/numbers/leases/configs/{number}"))
-  let body = {"callTrackingConfig": $call_tracking_config, "configType": $config_type, "ivrInboundConfig": $ivr_inbound_config, "number": $body_number, "textInboundConfig": $text_inbound_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({number: (encode-path-segment $number)} | format pattern "/numbers/leases/configs/{number}"))
+  let req_body = {"callTrackingConfig": $call_tracking_config, "configType": $config_type, "ivrInboundConfig": $ivr_inbound_config, "number": $body_number, "textInboundConfig": $text_inbound_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find a specific lease
@@ -2449,7 +2493,7 @@ export def "numbers-leases get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({number: $number} | format pattern "/numbers/leases/{number}") $qp)
+  let full_url = (build-url $base ({number: (encode-path-segment $number)} | format pattern "/numbers/leases/{number}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2472,7 +2516,7 @@ export def "numbers-leases update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --auto-renew: oneof<nothing, bool> # Enables the auto renewal of number lease at end of each billing cycle
   --call-feature-status: string@call-feature-status-completer # A status of a call feature. Available values: DISABLED, ENABLED
-  --labels: list # ~
+  --labels: list<string> # ~
   --lease-begin: int # A date and time of a lease start. Timestamp, formatted in unix time milliseconds (read only). Example: 1473781817000 (format: int64)
   --lease-end: int # A data and time of a lease finish. Timestamp, formatted in unix time milliseconds (read only). Example: 1473781817000 (format: int64)
   --national-format: string # Formatted number with a country code
@@ -2480,25 +2524,25 @@ export def "numbers-leases update" [
   --region: record # Every local number associated with a region. You can query regions to use them in subsequent purchase requests — shape: {city?: string, country?: string, latitude?: float, longitude?: float, prefix?: string, state?: string, timeZone?: string, zipcode?: string}
   --send-email-on-create: oneof<nothing, bool> # ~
   --text-feature-status: string@text-feature-status-completer # A status of a text feature. Available values: DISABLED, ENABLED
-  --toll-free: oneof<nothing, bool> # A  toll-free number
+  --toll-free: oneof<nothing, bool> # A toll-free number
   --type: string@type-completer # ~
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({number: $number} | format pattern "/numbers/leases/{number}"))
-  let body = {"autoRenew": $auto_renew, "callFeatureStatus": $call_feature_status, "labels": $labels, "leaseBegin": $lease_begin, "leaseEnd": $lease_end, "nationalFormat": $national_format, "number": $body_number, "region": $region, "sendEmailOnCreate": $send_email_on_create, "textFeatureStatus": $text_feature_status, "tollFree": $toll_free, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({number: (encode-path-segment $number)} | format pattern "/numbers/leases/{number}"))
+  let req_body = {"autoRenew": $auto_renew, "callFeatureStatus": $call_feature_status, "labels": $labels, "leaseBegin": $lease_begin, "leaseEnd": $lease_end, "nationalFormat": $national_format, "number": $body_number, "region": $region, "sendEmailOnCreate": $send_email_on_create, "textFeatureStatus": $text_feature_status, "tollFree": $toll_free, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find local numbers
 #
 # GET /numbers/local
 # operationId: findNumbersLocal
-export def "numbers-local findNumbersLocal" [
+export def "numbers-local find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2527,7 +2571,7 @@ export def "numbers-local findNumbersLocal" [
 #
 # GET /numbers/regions
 # operationId: findNumberRegions
-export def "numbers-regions findNumberRegions" [
+export def "numbers-regions find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2559,7 +2603,7 @@ export def "numbers-regions findNumberRegions" [
 #
 # GET /numbers/tollfree
 # operationId: findNumbersTollfree
-export def "numbers-tollfree findNumbersTollfree" [
+export def "numbers-tollfree find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2585,7 +2629,7 @@ export def "numbers-tollfree findNumbersTollfree" [
 #
 # GET /orders
 # operationId: findOrders
-export def "orders findOrders" [
+export def "orders find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2597,7 +2641,7 @@ export def "orders findOrders" [
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 20)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-  --status: list # Filter by order status, accepts multiple values in comma separated string, available values: [PROCESSING, FINISHED, PAYMENT_ERROR, VOID, WAIT_FOR_PAYMENT, PARTIALLY_ADJUSTED, ADJUSTED]
+  --status: list<string> # Filter by order status, accepts multiple values in comma separated string, available values: [PROCESSING, FINISHED, PAYMENT_ERROR, VOID, WAIT_FOR_PAYMENT, PARTIALLY_ADJUSTED, ADJUSTED]
   --interval-begin: int # Start of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 (format: int64)
   --interval-end: int # End of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 (format: int64)
 ]: nothing -> record<items: table<created: int, id: int, keywords: record, localNumbers: record, salesTax: float, status: string, summary: float, tollFreeNumbers: record, total: float, totalCost: float>, limit: int, offset: int, totalCount: int> {
@@ -2614,7 +2658,7 @@ export def "orders findOrders" [
 #
 # POST /orders/keywords
 # operationId: orderKeywords
-export def "orders-keywords orderKeywords" [
+export def "orders-keywords create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2624,25 +2668,25 @@ export def "orders-keywords orderKeywords" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-  --keywords: list # A list of keywords
+  --keywords: list<string> # A list of keywords
 ]: any -> record<id: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/keywords" $qp)
-  let body = {"keywords": $keywords} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"keywords": $keywords} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Purchase numbers
 #
 # POST /orders/numbers
 # operationId: orderNumbers
-export def "orders-numbers orderNumbers" [
+export def "orders-numbers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2654,7 +2698,7 @@ export def "orders-numbers orderNumbers" [
   --fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --city: string # City of requested numbers
   --local-count: int # Total count of local numbers requested (format: int32)
-  --numbers: list # A list of phone numbers in E.164 format (11-digit) to buy. Example: 12132000384
+  --numbers: list<string> # A list of phone numbers in E.164 format (11-digit) to buy. Example: 12132000384
   --prefix: string # Country prefix of requested numbers
   --promo: string # ~
   --state: string # A two-letter state code of requested numbers
@@ -2666,11 +2710,11 @@ export def "orders-numbers orderNumbers" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/numbers" $qp)
-  let body = {"city": $city, "localCount": $local_count, "numbers": $numbers, "prefix": $prefix, "promo": $promo, "state": $state, "tollFreeCount": $toll_free_count, "zipcode": $zipcode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"city": $city, "localCount": $local_count, "numbers": $numbers, "prefix": $prefix, "promo": $promo, "state": $state, "tollFreeCount": $toll_free_count, "zipcode": $zipcode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find a specific order
@@ -2692,7 +2736,7 @@ export def "orders get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/orders/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2736,7 +2780,7 @@ export def "reports-delivery get" [
 #
 # GET /texts
 # operationId: findTexts
-export def "texts findTexts" [
+export def "texts find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2745,7 +2789,7 @@ export def "texts findTexts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list # List of Text ids to search for, if ids specified other query params ignored
+  --id: list<int> # List of Text ids to search for, if ids specified other query params ignored
   --campaign-id: int # An id of a campaign, queries for texts inside a particular campaign. Specify null to list texts of all campaigns or 0 for a default campaign (format: int64)
   --batch-id: int # An Id of a contact batch, queries for texts which are used in the particular contact batch (format: int64)
   --from-number: string # A phone number in E.164 format (11-digit). Example: 12132000384, 67076
@@ -2793,17 +2837,18 @@ export def "texts send" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "campaignId" $campaign_id "scalar") (serialize-qp "defaultMessage" $default_message "scalar") (serialize-qp "strictValidation" $strict_validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/texts" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find auto replies
 #
 # GET /texts/auto-replys
 # operationId: findTextAutoReplys
-export def "texts-auto-replys findTextAutoReplys" [
+export def "texts-auto-replys find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2849,11 +2894,11 @@ export def "texts-auto-replys create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/texts/auto-replys")
-  let body = {"id": $id, "keyword": $keyword, "match": $body_match, "message": $message, "number": $number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"id": $id, "keyword": $keyword, "match": $body_match, "message": $message, "number": $number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an auto reply
@@ -2873,7 +2918,7 @@ export def "texts-auto-replys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/texts/auto-replys/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/texts/auto-replys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2898,7 +2943,7 @@ export def "texts-auto-replys get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/texts/auto-replys/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/texts/auto-replys/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2908,7 +2953,7 @@ export def "texts-auto-replys get" [
 #
 # GET /texts/broadcasts
 # operationId: findTextBroadcasts
-export def "texts-broadcasts findTextBroadcasts" [
+export def "texts-broadcasts find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2943,7 +2988,7 @@ export def "texts-broadcasts findTextBroadcasts" [
 # --localTimeRestriction shape: {beginHour?: int, beginMinute?: int, enabled?: bool, endHour?: int, endMinute?: int}
 # --media item shape: {accountId?: int, created?: int, id?: int, lengthInBytes?: int, mediaType?: string, name?: string, publicUrl?: string}
 # --recipients item shape: {attributes?: record, contactId?: int, fromNumber?: string, media?: list, message?: string, phoneNumber?: string}
-# --schedules item shape: {campaignId?: int, daysOfWeek?: list, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
+# --schedules item shape: {campaignId?: int, daysOfWeek?: list<string>, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
 export def "texts-broadcasts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2958,7 +3003,7 @@ export def "texts-broadcasts create" [
   --big-message-strategy: string@big-message-strategy-completer # If message length exceeds 160 characters, multiple messages will be sent, SEND_MULTIPLE strategy is chosen by default. Available values: SEND_MULTIPLE - send text as multiple messages, DO_NOT_SEND - do not send text if it exceeds 160 characters, TRIM - trims text message to 160 characters
   --from-number: string # A phone number in E.164 format (11-digit) or short code. Example: 12132000384, 67076, etc
   --id: int # A unique id of a broadcast (format: int64)
-  --labels: list # A labels of a broadcast
+  --labels: list<string> # A labels of a broadcast
   --local-time-restriction: record # Represents a range of time during which CallFire will send a call or text to recipients. Timeframe uses the local timezone of recipient's number — shape: {beginHour?: int, beginMinute?: int, enabled?: bool, endHour?: int, endMinute?: int}
   --max-active: int # A maximum number of texts that CallFire dials at once (format: int32)
   --media: list # ~ — item shape: {accountId?: int, created?: int, id?: int, lengthInBytes?: int, mediaType?: string, name?: string, publicUrl?: string}
@@ -2966,18 +3011,18 @@ export def "texts-broadcasts create" [
   --name: string # A name of a broadcast
   --recipients: list # Recipients of a text campaign, can be an existing contacts or a new one — item shape: {attributes?: record, contactId?: int, fromNumber?: string, media?: list, message?: string, phoneNumber?: string}
   --resume-next-day: oneof<nothing, bool> # ~
-  --schedules: list # ~ — item shape: {campaignId?: int, daysOfWeek?: list, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
+  --schedules: list # ~ — item shape: {campaignId?: int, daysOfWeek?: list<string>, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
 ]: any -> record<id: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "strictValidation" $strict_validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/texts/broadcasts" $qp)
-  let body = {"bigMessageStrategy": $big_message_strategy, "fromNumber": $from_number, "id": $id, "labels": $labels, "localTimeRestriction": $local_time_restriction, "maxActive": $max_active, "media": $media, "message": $message, "name": $name, "recipients": $recipients, "resumeNextDay": $resume_next_day, "schedules": $schedules} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"bigMessageStrategy": $big_message_strategy, "fromNumber": $from_number, "id": $id, "labels": $labels, "localTimeRestriction": $local_time_restriction, "maxActive": $max_active, "media": $media, "message": $message, "name": $name, "recipients": $recipients, "resumeNextDay": $resume_next_day, "schedules": $schedules} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find a specific text broadcast
@@ -2999,7 +3044,7 @@ export def "texts-broadcasts get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/texts/broadcasts/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/texts/broadcasts/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3012,7 +3057,7 @@ export def "texts-broadcasts get" [
 # --localTimeRestriction shape: {beginHour?: int, beginMinute?: int, enabled?: bool, endHour?: int, endMinute?: int}
 # --media item shape: {accountId?: int, created?: int, id?: int, lengthInBytes?: int, mediaType?: string, name?: string, publicUrl?: string}
 # --recipients item shape: {attributes?: record, contactId?: int, fromNumber?: string, media?: list, message?: string, phoneNumber?: string}
-# --schedules item shape: {campaignId?: int, daysOfWeek?: list, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
+# --schedules item shape: {campaignId?: int, daysOfWeek?: list<string>, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
 export def "texts-broadcasts update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3027,7 +3072,7 @@ export def "texts-broadcasts update" [
   --big-message-strategy: string@big-message-strategy-completer # If message length exceeds 160 characters, multiple messages will be sent, SEND_MULTIPLE strategy is chosen by default. Available values: SEND_MULTIPLE - send text as multiple messages, DO_NOT_SEND - do not send text if it exceeds 160 characters, TRIM - trims text message to 160 characters
   --from-number: string # A phone number in E.164 format (11-digit) or short code. Example: 12132000384, 67076, etc
   --body-id: int # A unique id of a broadcast (format: int64)
-  --labels: list # A labels of a broadcast
+  --labels: list<string> # A labels of a broadcast
   --local-time-restriction: record # Represents a range of time during which CallFire will send a call or text to recipients. Timeframe uses the local timezone of recipient's number — shape: {beginHour?: int, beginMinute?: int, enabled?: bool, endHour?: int, endMinute?: int}
   --max-active: int # A maximum number of texts that CallFire dials at once (format: int32)
   --media: list # ~ — item shape: {accountId?: int, created?: int, id?: int, lengthInBytes?: int, mediaType?: string, name?: string, publicUrl?: string}
@@ -3035,18 +3080,18 @@ export def "texts-broadcasts update" [
   --name: string # A name of a broadcast
   --recipients: list # Recipients of a text campaign, can be an existing contacts or a new one — item shape: {attributes?: record, contactId?: int, fromNumber?: string, media?: list, message?: string, phoneNumber?: string}
   --resume-next-day: oneof<nothing, bool> # ~
-  --schedules: list # ~ — item shape: {campaignId?: int, daysOfWeek?: list, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
+  --schedules: list # ~ — item shape: {campaignId?: int, daysOfWeek?: list<string>, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
 ]: any -> record<id: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "strictValidation" $strict_validation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/texts/broadcasts/{id}") $qp)
-  let body = {"bigMessageStrategy": $big_message_strategy, "fromNumber": $from_number, "id": $body_id, "labels": $labels, "localTimeRestriction": $local_time_restriction, "maxActive": $max_active, "media": $media, "message": $message, "name": $name, "recipients": $recipients, "resumeNextDay": $resume_next_day, "schedules": $schedules} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/texts/broadcasts/{id}") $qp)
+  let req_body = {"bigMessageStrategy": $big_message_strategy, "fromNumber": $from_number, "id": $body_id, "labels": $labels, "localTimeRestriction": $local_time_restriction, "maxActive": $max_active, "media": $media, "message": $message, "name": $name, "recipients": $recipients, "resumeNextDay": $resume_next_day, "schedules": $schedules} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Archive text broadcast
@@ -3066,7 +3111,7 @@ export def "texts-broadcasts-archive archive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/texts/broadcasts/{id}/archive"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/texts/broadcasts/{id}/archive"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3093,7 +3138,7 @@ export def "texts-broadcasts-batches get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/texts/broadcasts/{id}/batches") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/texts/broadcasts/{id}/batches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3104,7 +3149,7 @@ export def "texts-broadcasts-batches get" [
 # POST /texts/broadcasts/{id}/batches
 # operationId: addTextBroadcastBatch
 # --recipients item shape: {attributes?: record, contactId?: int, fromNumber?: string, phoneNumber?: string}
-export def "texts-broadcasts-batches create-text-broadcast-batch" [
+export def "texts-broadcasts-batches create-batch" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3124,12 +3169,12 @@ export def "texts-broadcasts-batches create-text-broadcast-batch" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "strictValidation" $strict_validation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/texts/broadcasts/{id}/batches") $qp)
-  let body = {"contactListId": $contact_list_id, "name": $name, "recipients": $recipients, "scrubDuplicates": $scrub_duplicates} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/texts/broadcasts/{id}/batches") $qp)
+  let req_body = {"contactListId": $contact_list_id, "name": $name, "recipients": $recipients, "scrubDuplicates": $scrub_duplicates} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add recipients to a text broadcast
@@ -3154,11 +3199,12 @@ export def "texts-broadcasts-recipients create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "strictValidation" $strict_validation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/texts/broadcasts/{id}/recipients") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/texts/broadcasts/{id}/recipients") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Start text broadcast
@@ -3178,7 +3224,7 @@ export def "texts-broadcasts-start start" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/texts/broadcasts/{id}/start"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/texts/broadcasts/{id}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3205,7 +3251,7 @@ export def "texts-broadcasts-stats get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "begin" $begin "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/texts/broadcasts/{id}/stats") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/texts/broadcasts/{id}/stats") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3228,7 +3274,7 @@ export def "texts-broadcasts-stop stop" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/texts/broadcasts/{id}/stop"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/texts/broadcasts/{id}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3256,7 +3302,7 @@ export def "texts-broadcasts-texts get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "batchId" $batch_id "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/texts/broadcasts/{id}/texts") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/texts/broadcasts/{id}/texts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3266,7 +3312,7 @@ export def "texts-broadcasts-texts get" [
 #
 # POST /texts/broadcasts/{id}/toggleRecipientsStatus
 # operationId: toggleTextBroadcastRecipientsStatus
-export def "texts-broadcasts-toggle-recipients-status toggleTextBroadcastRecipientsStatus" [
+export def "texts-broadcasts-toggle-recipients-status create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3283,11 +3329,12 @@ export def "texts-broadcasts-toggle-recipients-status toggleTextBroadcastRecipie
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "enable" $enable "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/texts/broadcasts/{id}/toggleRecipientsStatus") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/texts/broadcasts/{id}/toggleRecipientsStatus") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find a specific text
@@ -3309,7 +3356,7 @@ export def "texts get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/texts/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/texts/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3319,7 +3366,7 @@ export def "texts get" [
 #
 # GET /webhooks
 # operationId: findWebhooks
-export def "webhooks findWebhooks" [
+export def "webhooks find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3332,7 +3379,7 @@ export def "webhooks findWebhooks" [
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --name: string # A name of a webhook
-  --resource: string # A name of a resource, available values: 'CccCampaign', 'CallBroadcast', 'TextBroadcast',  'OutboundCall', 'OutboundText', 'InboundCall', 'InboundText', 'ContactList'
+  --resource: string # A name of a resource, available values: 'CccCampaign', 'CallBroadcast', 'TextBroadcast', 'OutboundCall', 'OutboundText', 'InboundCall', 'InboundText', 'ContactList'
   --event: string # A name of event, available values: 'started', 'stopped', 'finished'
   --callback: string # A callback URL
   --enabled: oneof<nothing, bool> # Specifies whether webhook is enabled
@@ -3361,7 +3408,7 @@ export def "webhooks create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # URL that webhook will send POST to on resource event trigger
   --enabled: oneof<nothing, bool> # A parameter which allows the webhook to send requests to unknown ssl endpoints (ssl certificate verification is disabled)
-  --events: list # Comma separated list of events on resource that will trigger callbacks (ex: STARTED, STOPPED, FINISHED, etc...). 
+  --events: list<string> # Comma separated list of events on resource that will trigger callbacks (ex: STARTED, STOPPED, FINISHED, etc...).
   --expires-at: int # ~ (format: int64)
   --fields: string # A limit callback response to a particular fields
   --id: int # An id of a webhook (format: int64)
@@ -3375,18 +3422,18 @@ export def "webhooks create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks")
-  let body = {"callback": $callback, "enabled": $enabled, "events": $events, "expiresAt": $expires_at, "fields": $fields, "id": $id, "name": $name, "nonStrictSsl": $non_strict_ssl, "resource": $resource, "secret": $secret, "singleUse": $single_use} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"callback": $callback, "enabled": $enabled, "events": $events, "expiresAt": $expires_at, "fields": $fields, "id": $id, "name": $name, "nonStrictSsl": $non_strict_ssl, "resource": $resource, "secret": $secret, "singleUse": $single_use} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find webhook resources
 #
 # GET /webhooks/resources
 # operationId: findWebhookResources
-export def "webhooks-resources findWebhookResources" [
+export def "webhooks-resources find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3425,7 +3472,7 @@ export def "webhooks-resources get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/webhooks/resources/{resource}") $qp)
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/webhooks/resources/{resource}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3448,7 +3495,7 @@ export def "webhooks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/webhooks/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3473,7 +3520,7 @@ export def "webhooks get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/webhooks/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3495,7 +3542,7 @@ export def "webhooks update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --callback: string # URL that webhook will send POST to on resource event trigger
   --enabled: oneof<nothing, bool> # A parameter which allows the webhook to send requests to unknown ssl endpoints (ssl certificate verification is disabled)
-  --events: list # Comma separated list of events on resource that will trigger callbacks (ex: STARTED, STOPPED, FINISHED, etc...). 
+  --events: list<string> # Comma separated list of events on resource that will trigger callbacks (ex: STARTED, STOPPED, FINISHED, etc...).
   --expires-at: int # ~ (format: int64)
   --fields: string # A limit callback response to a particular fields
   --body-id: int # An id of a webhook (format: int64)
@@ -3508,10 +3555,10 @@ export def "webhooks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/webhooks/{id}"))
-  let body = {"callback": $callback, "enabled": $enabled, "events": $events, "expiresAt": $expires_at, "fields": $fields, "id": $body_id, "name": $name, "nonStrictSsl": $non_strict_ssl, "resource": $resource, "secret": $secret, "singleUse": $single_use} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/{id}"))
+  let req_body = {"callback": $callback, "enabled": $enabled, "events": $events, "expiresAt": $expires_at, "fields": $fields, "id": $body_id, "name": $name, "nonStrictSsl": $non_strict_ssl, "resource": $resource, "secret": $secret, "singleUse": $single_use} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

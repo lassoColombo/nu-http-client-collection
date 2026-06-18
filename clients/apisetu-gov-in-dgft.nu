@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def auth-scheme-completer [] { ["x-apisetu-apikey" "x-apisetu-clientid"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "iec import-er-exporter-code-verification-api" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "iec get-importer-exporter-code-verification" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/iec/{iec}
 # operationId: Importer-Exporter Code Verification API
-export def "iec import-er-exporter-code-verification-api" [
+export def "iec get-importer-exporter-code-verification" [
   iec: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -107,7 +116,7 @@ export def "iec import-er-exporter-code-verification-api" [
 ]: nothing -> record<addressLine1: string, addressLine2: string, branch: table<badd1: string, badd2: string, branchCode: string, city: string, pin: string, state: string>, city: string, dataAsOn: string, directors: table<name: string>, entityName: string, exporterType: string, iec: string, iecIssueDate: string, iecModificationDate: string, iecStatus: string, natureOfConcern: string, pan: string, pin: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({iec: $iec} | format pattern "/v1/iec/{iec}"))
+  let full_url = (build-url $base ({iec: (encode-path-segment $iec)} | format pattern "/v1/iec/{iec}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -104,7 +113,7 @@ export def "agreements get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --keys: list # Keys for Agreements whose details are to be retrieved
+  --keys: list<string> # Keys for Agreements whose details are to be retrieved
   --x-private-label-id: int # PrivateLabelId to operate as, if different from JWT
   --x-market-id: string # Unique identifier of the Market used to retrieve/translate Legal Agreements
 ]: nothing -> table<agreementKey: string, content: string, title: string, url: string> {
@@ -112,9 +121,9 @@ export def "agreements get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "keys" $keys "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/agreements" $qp)
-  let extra_headers = {"X-Private-Label-Id": $x_private_label_id, "X-Market-Id": $x_market_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Private-Label-Id": $x_private_label_id, "X-Market-Id": $x_market_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

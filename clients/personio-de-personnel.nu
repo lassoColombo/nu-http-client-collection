@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -107,7 +116,7 @@ export def "company-attendances get" [
   --end-date: string # Last day of the period to be queried. It is inclusive, so the day specified as end_date will also be considered on the results. (format: date)
   --updated-from: string # Datetime from when the queried periods have been updated. Same format as updated_at. It is inclusive, so the day specified as updated_from will also be considered on the results. Can be just the date, or the date and the time, with or without the timezone. (format: datetime)
   --updated-to: string # Datetime until when the queried periods have been updated. Same format as updated_at. It is inclusive, so the day specified as updated_to will also be considered on the results. Can be just the date, or the date and the time, with or without the timezone. (format: datetime)
-  --employees: list # A list of Personio employee identifiers to filter the results. Only those employees specified here will be returned.
+  --employees: list<int> # A list of Personio employee identifiers to filter the results. Only those employees specified here will be returned.
   --limit: int # Pagination attribute to limit how many attendances will be returned per page (default: 200)
   --offset: int # Pagination attribute to identify which page you are requesting, by the form of telling an offset from the first record that would be returned. (default: 0)
 ]: nothing -> record {
@@ -124,7 +133,7 @@ export def "company-attendances get" [
 #
 # POST /company/attendances
 # --attendances item shape: {break: int, comment: string, date: string, employee: int, end_time: string, start_time: string}
-export def "company-attendances post" [
+export def "company-attendances create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,11 +148,11 @@ export def "company-attendances post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/company/attendances")
-  let body = {"attendances": $attendances} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"attendances": $attendances} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # This endpoint is responsible for deleting attendance data for the company employees.
@@ -162,7 +171,7 @@ export def "company-attendances delete" [
 ]: nothing -> record<data: record, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/company/attendances/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/company/attendances/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,7 +180,7 @@ export def "company-attendances delete" [
 # This endpoint is responsible for updating attendance data for the company employees. Attributes are not required and if not specified, the current value will be used. It is not possible to change the employee id.
 #
 # PATCH /company/attendances/{id}
-export def "company-attendances patch" [
+export def "company-attendances update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -190,12 +199,12 @@ export def "company-attendances patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/company/attendances/{id}"))
-  let body = {"break": $body_break, "comment": $comment, "date": $date, "end_time": $end_time, "start_time": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/company/attendances/{id}"))
+  let req_body = {"break": $body_break, "comment": $comment, "date": $date, "end_time": $end_time, "start_time": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Employees
@@ -222,7 +231,7 @@ export def "company-employees list" [
 # Create an employee
 #
 # POST /company/employees
-export def "company-employees post" [
+export def "company-employees create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,11 +253,12 @@ export def "company-employees post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/company/employees")
-  let body = {"employee[department]": $employee_department, "employee[email]": $employee_email, "employee[first_name]": $employee_first_name, "employee[gender]": $employee_gender, "employee[hire_date]": $employee_hire_date, "employee[last_name]": $employee_last_name, "employee[position]": $employee_position, "employee[weekly_hours]": $employee_weekly_hours} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"employee[department]": $employee_department, "employee[email]": $employee_email, "employee[first_name]": $employee_first_name, "employee[gender]": $employee_gender, "employee[hire_date]": $employee_hire_date, "employee[last_name]": $employee_last_name, "employee[position]": $employee_position, "employee[weekly_hours]": $employee_weekly_hours} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Show employee by ID
@@ -267,7 +277,7 @@ export def "company-employees get" [
 ]: nothing -> record<data: record, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employee_id: $employee_id} | format pattern "/company/employees/{employee_id}"))
+  let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/company/employees/{employee_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -290,7 +300,7 @@ export def "company-employees-profile-picture get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({employee_id: $employee_id, width: $width} | format pattern "/company/employees/{employee_id}/profile-picture/{width}"))
+  let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id), width: (encode-path-segment $width)} | format pattern "/company/employees/{employee_id}/profile-picture/{width}"))
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -336,7 +346,7 @@ export def "company-time-offs list" [
   --end-date: string # Last day of the period to be queried. It is inclusive, so the day specified as end_date will also be considered on the results. (format: date)
   --updated-from: string # Datetime from when the queried periods have been updated. It is inclusive, so the day specified as updated_from will also be considered on the results. (format: datetime)
   --updated-to: string # Datetime until when the queried periods have been updated. It is inclusive, so the day specified as updated_to will also be considered on the results. (format: datetime)
-  --employees: list # A list of Personio employee identifiers to filter the results. Only those employees specified here will be returned.
+  --employees: list<int> # A list of Personio employee identifiers to filter the results. Only those employees specified here will be returned.
   --limit: int # Pagination attribute to limit how many attendances will be returned per page (default: 200)
   --offset: int # Pagination attribute to identify which page you are requesting, by the form of telling an offset from the first record that would be returned. (default: 0)
 ]: nothing -> record {
@@ -352,7 +362,7 @@ export def "company-time-offs list" [
 # This endpoint is responsible for adding absence data for the company employees.
 #
 # POST /company/time-offs
-export def "company-time-offs post" [
+export def "company-time-offs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,11 +383,11 @@ export def "company-time-offs post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/company/time-offs")
-  let body = {"comment": $comment, "employee_id": $employee_id, "end_date": $end_date, "half_day_end": $half_day_end, "half_day_start": $half_day_start, "start_date": $start_date, "time_off_type_id": $time_off_type_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"comment": $comment, "employee_id": $employee_id, "end_date": $end_date, "half_day_end": $half_day_end, "half_day_start": $half_day_start, "start_date": $start_date, "time_off_type_id": $time_off_type_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # This endpoint is responsible for deleting absence period data for the company employees.
@@ -396,7 +406,7 @@ export def "company-time-offs delete" [
 ]: nothing -> record<data: record, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/company/time-offs/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/company/time-offs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -418,7 +428,7 @@ export def "company-time-offs get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/company/time-offs/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/company/time-offs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

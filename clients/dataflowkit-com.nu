@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -79,7 +88,7 @@ def accept-completer-3 [] { ["application/json" "application/x-ndjson" "text/csv
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "convert-url-pdf url-to-pdf" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "convert-url-pdf create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -104,7 +113,7 @@ export def commands []: nothing -> table {
 # POST /convert/url/pdf
 # operationId: url-to-pdf
 # --initialCookies item shape: {domain?: string, expirationDate?: float, hostOnly?: bool, httpOnly?: bool, id?: float, name?: string, path?: string, sameSite?: "unspecified"|"strict"|"lax"|"no_restriction", secure?: bool, session?: bool, storeID?: string, value?: string}
-export def "convert-url-pdf url-to-pdf" [
+export def "convert-url-pdf create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -126,21 +135,21 @@ export def "convert-url-pdf url-to-pdf" [
   --page-ranges: string # Specify page ranges to convert. Defaults to the empty value, which means convert all pages. (e.g. 1-4, 6, 10-12)
   --paper-size: string@paper-size-completer # Page size parameter consists of the most popular page formats. (default: A4)
   --print-background: oneof<nothing, bool> # Print background graphics in the PDF. (default: false)
-  --print-header-footer: oneof<nothing, bool> # printHeaderFooter  parameter consists of the date, name of the web page, the page URL, and how many pages the document you are printing. (default: false)
+  --print-header-footer: oneof<nothing, bool> # printHeaderFooter parameter consists of the date, name of the web page, the page URL, and how many pages the document you are printing. (default: false)
   --proxy: string # Specify proxy by adding [country ISO code](https://en.wikipedia.org/wiki/ISO_3166-2) to `country-` value to send requests through a proxy in the specified country. Use `country-any` to use random geo-targets. (e.g. country-any)
   --scale: float # By default, PDF document content is generated according to dimensions of the original web page content. Using the `scale` parameter, you can specify a custom zoom factor from 0.1 to 5.0 of the webpage rendering. (default: 1)
-  --body-url: string # The full URL address (including HTTP/HTTPS) of a web page that you want to save as PDF
+  url: string # The full URL address (including HTTP/HTTPS) of a web page that you want to save as PDF
   --wait-delay: float # Specify a wait delay (in seconds). This may be useful if certain elements of the web site need to be rendered after the initial page load. (default: 0.5)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/convert/url/pdf")
-  let body = {"actions": $actions, "ignoreHTTPStatusErrCodes": $ignore_http_status_err_codes, "initialCookies": $initial_cookies, "landscape": $landscape, "marginBottom": $margin_bottom, "marginLeft": $margin_left, "marginRight": $margin_right, "marginTop": $margin_top, "output": $output, "pageRanges": $page_ranges, "paperSize": $paper_size, "printBackground": $print_background, "printHeaderFooter": $print_header_footer, "proxy": $proxy, "scale": $scale, "url": $body_url, "waitDelay": $wait_delay} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"actions": $actions, "ignoreHTTPStatusErrCodes": $ignore_http_status_err_codes, "initialCookies": $initial_cookies, "landscape": $landscape, "marginBottom": $margin_bottom, "marginLeft": $margin_left, "marginRight": $margin_right, "marginTop": $margin_top, "output": $output, "pageRanges": $page_ranges, "paperSize": $paper_size, "printBackground": $print_background, "printHeaderFooter": $print_header_footer, "proxy": $proxy, "scale": $scale, "url": $url, "waitDelay": $wait_delay} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Capture web page Screenshots.
@@ -148,7 +157,7 @@ export def "convert-url-pdf url-to-pdf" [
 # POST /convert/url/screenshot
 # operationId: url-to-screenshot
 # --initialCookies item shape: {domain?: string, expirationDate?: float, hostOnly?: bool, httpOnly?: bool, id?: float, name?: string, path?: string, sameSite?: "unspecified"|"strict"|"lax"|"no_restriction", secure?: bool, session?: bool, storeID?: string, value?: string}
-export def "convert-url-screenshot url-to-screenshot" [
+export def "convert-url-screenshot create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,7 +181,7 @@ export def "convert-url-screenshot url-to-screenshot" [
   --proxy: string # Specify proxy by adding [country ISO code](https://en.wikipedia.org/wiki/ISO_3166-2) to `country-` value to send requests through a proxy in the specified country. Use `country-any` to use random geo-targets. (e.g. country-any)
   --quality: int # Sets the Quality of output image. Compression quality from range [0..100] (jpeg only). (default: 80)
   --scale: float # Image scale factor. range [0.1 .. 3] (default: 1)
-  --body-url: string # The full URL address (including HTTP/HTTPS) of a web page that you want to capture
+  url: string # The full URL address (including HTTP/HTTPS) of a web page that you want to capture
   --wait-delay: float # Specify a wait delay (in seconds). This may be useful if certain elements of the web site need to be rendered after the initial page load. (default: 0.5)
   --width: int # Rectangle width in device independent pixels (dip). (default: 800)
 ]: any -> any {
@@ -180,11 +189,11 @@ export def "convert-url-screenshot url-to-screenshot" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/convert/url/screenshot")
-  let body = {"actions": $actions, "clipSelector": $clip_selector, "format": $format, "fullPage": $full_page, "height": $height, "ignoreHTTPStatusErrCodes": $ignore_http_status_err_codes, "initialCookies": $initial_cookies, "offsetx": $offsetx, "offsety": $offsety, "output": $output, "printBackground": $print_background, "proxy": $proxy, "quality": $quality, "scale": $scale, "url": $body_url, "waitDelay": $wait_delay, "width": $width} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"actions": $actions, "clipSelector": $clip_selector, "format": $format, "fullPage": $full_page, "height": $height, "ignoreHTTPStatusErrCodes": $ignore_http_status_err_codes, "initialCookies": $initial_cookies, "offsetx": $offsetx, "offsety": $offsety, "output": $output, "printBackground": $print_background, "proxy": $proxy, "quality": $quality, "scale": $scale, "url": $url, "waitDelay": $wait_delay, "width": $width} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Download web page content
@@ -192,7 +201,7 @@ export def "convert-url-screenshot url-to-screenshot" [
 # POST /fetch
 # operationId: fetch
 # --initialCookies item shape: {domain?: string, expirationDate?: float, hostOnly?: bool, httpOnly?: bool, id?: float, name?: string, path?: string, sameSite?: "unspecified"|"strict"|"lax"|"no_restriction", secure?: bool, session?: bool, storeID?: string, value?: string}
-export def "fetch post" [
+export def "fetch get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,28 +217,28 @@ export def "fetch post" [
   --output: string@output-completer # If set to _file_, the content of downloaded HTML is uploaded to Dataflow Kit Storage first. Then the link to this file is returned. Overwise, downloaded content is returned in the response body. (default: buffer)
   --proxy: string # Specify proxy by adding [country ISO code](https://en.wikipedia.org/wiki/ISO_3166-2) to `country-` value to send requests through a proxy in the specified country. Use `country-any` to use random geo-targets. (e.g. country-sk)
   type: string@type-completer # If set to `base`, the Base fetcher is used for downloading web page content. Use `chrome` for fetching content with a Headless chrome browser. If omitted `base` fetcher is used by default.
-  --body-url: string # Specify URL to download.
+  url: string # Specify URL to download.
   --wait-delay: float # Specify a wait delay (in seconds). This may be useful if certain elements of the web site need to be rendered after the initial page load. _(Chrome fetcher type only)_
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fetch")
-  let body = {"actions": $actions, "ignoreHTTPStatusErrCodes": $ignore_http_status_err_codes, "initialCookies": $initial_cookies, "output": $output, "proxy": $proxy, "type": $type, "url": $body_url, "waitDelay": $wait_delay} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"actions": $actions, "ignoreHTTPStatusErrCodes": $ignore_http_status_err_codes, "initialCookies": $initial_cookies, "output": $output, "proxy": $proxy, "type": $type, "url": $url, "waitDelay": $wait_delay} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "text/html; charset=utf-8")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Extract structured data from web pages
 #
 # POST /parse
 # operationId: parse
-# --fields item shape: {attrs: list, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
+# --fields item shape: {attrs: list<string>, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
 # --paginator shape: {nextPageSelector?: string, pageNum?: int}
 # --request shape: {actions?: list, ignoreHTTPStatusErrCodes?: bool, initialCookies?: list, output?: "buffer"|"file", proxy?: string, type: "base"|"chrome", url: string, waitDelay?: float}
-export def "parse post" [
+export def "parse create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +248,7 @@ export def "parse post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --common-parent: string # Specifies common ancestor block for a set of fields used to extract data from a web page. _(CSS Selector)_ (e.g. .common-block)
-  fields: list # Define a  set of fields used to extract data from a web page. A Field represents a given chunk of extracted data from every block on each page. — item shape: {attrs: list, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
+  fields: list # Define a set of fields used to extract data from a web page. A Field represents a given chunk of extracted data from every block on each page. — item shape: {attrs: list<string>, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
   format: string@format-completer-1 # Extracted data is returned either in CSV, MS Excel, JSON, JSON(Lines) or XML format.
   name: string # Collection name.
   --paginator: record # Specify _Next link_ paginator on pages containing a link pointing to the next page. The next page link is extracted from a document by querying href attribute of a given element's CSS selector. — shape: {nextPageSelector?: string, pageNum?: int}
@@ -250,19 +259,19 @@ export def "parse post" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/parse")
-  let body = {"commonParent": $common_parent, "fields": $fields, "format": $format, "name": $name, "paginator": $paginator, "path": $path, "request": $request} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"commonParent": $common_parent, "fields": $fields, "format": $format, "name": $name, "paginator": $paginator, "path": $path, "request": $request} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Collect search results from search engines
 #
 # POST /serp
 # operationId: serp
-# --fields item shape: {attrs: list, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
-export def "serp post" [
+# --fields item shape: {attrs: list<string>, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
+export def "serp create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,21 +281,21 @@ export def "serp post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-3 # Response content type
-  --fields: list # Specify CSS selectors (patterns) used to gather data from Search Engine Result Pages.  Ready-to-use payloads for collecting search results from the most popular Search Engines are available. These payloads are customizable, though. — item shape: {attrs: list, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
+  --fields: list # Specify CSS selectors (patterns) used to gather data from Search Engine Result Pages. Ready-to-use payloads for collecting search results from the most popular Search Engines are available. These payloads are customizable, though. — item shape: {attrs: list<string>, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
   format: string@format-completer-1 # Extracted data is returned either in CSV, MS Excel, JSON, JSON(Lines) or XML format.
   name: string # Collection name.
   --page-num: int # Specify number of pages to crawl. (default: 1)
   proxy: string # Always specify proxy for sending SERP requests. Add choosen [country ISO code](https://en.wikipedia.org/wiki/ISO_3166-2) to `country-` value to send requests through a proxy in the specified country. Use `country-any` to use random geo-targets. (e.g. country-any)
   type: string # For SERP requests you should _always_ use `chrome` type to fetch content with a Headless chrome browser (e.g. chrome)
-  --body-url: string # url holds the link to a Search Engine to use, and other optional parameters like languages or country.
+  url: string # url holds the link to a Search Engine to use, and other optional parameters like languages or country.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/serp")
-  let body = {"fields": $fields, "format": $format, "name": $name, "pageNum": $page_num, "proxy": $proxy, "type": $type, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"fields": $fields, "format": $format, "name": $name, "pageNum": $page_num, "proxy": $proxy, "type": $type, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

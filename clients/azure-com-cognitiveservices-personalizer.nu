@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -153,11 +162,11 @@ export def "configurations-policy update" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configurations/policy")
-  let body = {"arguments": $arguments, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"arguments": $arguments, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Service Configuration.
@@ -208,11 +217,11 @@ export def "configurations-service update" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configurations/service")
-  let body = {"defaultReward": $default_reward, "explorationPercentage": $exploration_percentage, "logMirrorEnabled": $log_mirror_enabled, "logMirrorSasUri": $log_mirror_sas_uri, "logRetentionDays": $log_retention_days, "modelExportFrequency": $model_export_frequency, "rewardAggregation": $reward_aggregation, "rewardWaitTime": $reward_wait_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"defaultReward": $default_reward, "explorationPercentage": $exploration_percentage, "logMirrorEnabled": $log_mirror_enabled, "logMirrorSasUri": $log_mirror_sas_uri, "logRetentionDays": $log_retention_days, "modelExportFrequency": $model_export_frequency, "rewardAggregation": $reward_aggregation, "rewardWaitTime": $reward_wait_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Evaluations.
@@ -261,11 +270,11 @@ export def "evaluations create" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/evaluations")
-  let body = {"enableOfflineExperimentation": $enable_offline_experimentation, "endTime": $end_time, "name": $name, "policies": $policies, "startTime": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"enableOfflineExperimentation": $enable_offline_experimentation, "endTime": $end_time, "name": $name, "policies": $policies, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Evaluation.
@@ -285,7 +294,7 @@ export def "evaluations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({evaluation_id: $evaluation_id} | format pattern "/evaluations/{evaluation_id}"))
+  let full_url = (build-url $base ({evaluation_id: (encode-path-segment $evaluation_id)} | format pattern "/evaluations/{evaluation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -308,7 +317,7 @@ export def "evaluations get" [
 ]: nothing -> record<endTime: string, featureImportance: list<list<string>>, id: string, jobId: string, name: string, policyResults: table<arguments: string, name: string, summary: list, totalSummary: record>, startTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({evaluation_id: $evaluation_id} | format pattern "/evaluations/{evaluation_id}"))
+  let full_url = (build-url $base ({evaluation_id: (encode-path-segment $evaluation_id)} | format pattern "/evaluations/{evaluation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -318,7 +327,7 @@ export def "evaluations get" [
 #
 # POST /events/{eventId}/activate
 # operationId: Events_Activate
-export def "events-activate post" [
+export def "events-activate create" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -331,7 +340,7 @@ export def "events-activate post" [
 ]: nothing -> record<error: record<code: string, details: list<any>, innerError: record<code: string, innererror: any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_id: $event_id} | format pattern "/events/{event_id}/activate"))
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/activate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -341,7 +350,7 @@ export def "events-activate post" [
 #
 # POST /events/{eventId}/reward
 # operationId: Events_Reward
-export def "events-reward post" [
+export def "events-reward create" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -356,12 +365,12 @@ export def "events-reward post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({event_id: $event_id} | format pattern "/events/{event_id}/reward"))
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/reward"))
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes Logs.
@@ -479,7 +488,7 @@ export def "model-properties get" [
 # POST /rank
 # operationId: Rank
 # --actions item shape: {features: list, id: string}
-export def "rank post" [
+export def "rank create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -492,15 +501,15 @@ export def "rank post" [
   --context-features: list # Features of the context used for Personalizer as a dictionary of dictionaries. This depends on the application, and typically includes features about the current user, their device, profile information, aggregated data about time and date, etc. Features should not include personally identifiable information (PII), unique UserIDs, or precise timestamps.
   --defer-activation: oneof<nothing, bool> # Send false if it is certain the rewardActionId in rank results will be shown to the user, therefore Personalizer will expect a Reward call, otherwise it will assign the default Reward to the event. Send true if it is possible the user will not see the action specified in the rank results, because the page is rendering later, or the Rank results may be overridden by code further downstream. (default: false)
   --event-id: string # Optionally pass an eventId that uniquely identifies this Rank event. If null, the service generates a unique eventId. The eventId will be used for associating this request with its reward, as well as seeding the pseudo-random generator when making a Personalizer call.
-  --excluded-actions: list # The set of action ids to exclude from ranking.
+  --excluded-actions: list<string> # The set of action ids to exclude from ranking.
 ]: any -> record<eventId: string, ranking: table<id: string, probability: float>, rewardActionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rank")
-  let body = {"actions": $actions, "contextFeatures": $context_features, "deferActivation": $defer_activation, "eventId": $event_id, "excludedActions": $excluded_actions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"actions": $actions, "contextFeatures": $context_features, "deferActivation": $defer_activation, "eventId": $event_id, "excludedActions": $excluded_actions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

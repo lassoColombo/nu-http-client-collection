@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "open-banking-v22-business-current-accounts get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "open-banking-v2-2-business-current-accounts get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -91,7 +100,7 @@ export def commands []: nothing -> table {
 # This API will return data about all BCA products and is prepared to the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. It is regulated by the UK Competition and Markets Authority (CMA). Data is only available for the United Kingdom.
 #
 # GET /open-banking/v2.2/business-current-accounts
-export def "open-banking-v22-business-current-accounts get" [
+export def "open-banking-v2-2-business-current-accounts get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,7 +121,7 @@ export def "open-banking-v22-business-current-accounts get" [
 # This API will return data about all commercial credit cards products and is prepared to the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. It is regulated by the UK Competition and Markets Authority (CMA). Data is only available for the United Kingdom.
 #
 # GET /open-banking/v2.2/commercial-credit-cards
-export def "open-banking-v22-commercial-credit-cards get" [
+export def "open-banking-v2-2-commercial-credit-cards get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,7 +142,7 @@ export def "open-banking-v22-commercial-credit-cards get" [
 # This API will return data about all PCA products and is prepared to the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. It is regulated by the UK Competition and Markets Authority (CMA). Data is only available for the United Kingdom.
 #
 # GET /open-banking/v2.2/personal-current-accounts
-export def "open-banking-v22-personal-current-accounts get" [
+export def "open-banking-v2-2-personal-current-accounts get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -154,7 +163,7 @@ export def "open-banking-v22-personal-current-accounts get" [
 # This API will return data about all SME lending products and is prepared to the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. It is regulated by the UK Competition and Markets Authority (CMA). Data is only available for the United Kingdom.
 #
 # GET /open-banking/v2.2/unsecured-sme-loans
-export def "open-banking-v22-unsecured-sme-loans get" [
+export def "open-banking-v2-2-unsecured-sme-loans get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +184,7 @@ export def "open-banking-v22-unsecured-sme-loans get" [
 # This extended API will return data about all BCA products for the specified segment. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/business-current-accounts/segment/{segment}
-export def "x-open-banking-v22-business-current-accounts-segment get" [
+export def "x-open-banking-v2-2-business-current-accounts-segment get" [
   segment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -188,7 +197,7 @@ export def "x-open-banking-v22-business-current-accounts-segment get" [
 ]: nothing -> record<data: table<Brand: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({segment: $segment} | format pattern "/x-open-banking/v2.2/business-current-accounts/segment/{segment}"))
+  let full_url = (build-url $base ({segment: (encode-path-segment $segment)} | format pattern "/x-open-banking/v2.2/business-current-accounts/segment/{segment}"))
   let accept_val = "application/prs.openbanking.opendata.v2.2+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -197,7 +206,7 @@ export def "x-open-banking-v22-business-current-accounts-segment get" [
 # This extended API will return data about all commercial credit cards products for the specified segment. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/commercial-credit-cards/segment/{segment}
-export def "x-open-banking-v22-commercial-credit-cards-segment get" [
+export def "x-open-banking-v2-2-commercial-credit-cards-segment get" [
   segment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -210,7 +219,7 @@ export def "x-open-banking-v22-commercial-credit-cards-segment get" [
 ]: nothing -> record<data: table<Brand: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({segment: $segment} | format pattern "/x-open-banking/v2.2/commercial-credit-cards/segment/{segment}"))
+  let full_url = (build-url $base ({segment: (encode-path-segment $segment)} | format pattern "/x-open-banking/v2.2/commercial-credit-cards/segment/{segment}"))
   let accept_val = "application/prs.openbanking.opendata.v2.2+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -219,7 +228,7 @@ export def "x-open-banking-v22-commercial-credit-cards-segment get" [
 # This extended API will return data about all PCA products for the specified segment. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/personal-current-accounts/segment/{segment}
-export def "x-open-banking-v22-personal-current-accounts-segment get" [
+export def "x-open-banking-v2-2-personal-current-accounts-segment get" [
   segment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,7 +241,7 @@ export def "x-open-banking-v22-personal-current-accounts-segment get" [
 ]: nothing -> record<data: table<Brand: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({segment: $segment} | format pattern "/x-open-banking/v2.2/personal-current-accounts/segment/{segment}"))
+  let full_url = (build-url $base ({segment: (encode-path-segment $segment)} | format pattern "/x-open-banking/v2.2/personal-current-accounts/segment/{segment}"))
   let accept_val = "application/prs.openbanking.opendata.v2.2+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -241,7 +250,7 @@ export def "x-open-banking-v22-personal-current-accounts-segment get" [
 # This extended API will return data about all SME lending products for the specified segment. It is based-on the Open Banking standards as defined by the Open Banking Implementation Entity (OBIE) in data dictionary version 2.2. The extended functionality may not fully adhere to the non-functional requirements of the regulator. Data is only available for the United Kingdom.
 #
 # GET /x-open-banking/v2.2/unsecured-sme-loans/segment/{segment}
-export def "x-open-banking-v22-unsecured-sme-loans-segment get" [
+export def "x-open-banking-v2-2-unsecured-sme-loans-segment get" [
   segment: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -254,7 +263,7 @@ export def "x-open-banking-v22-unsecured-sme-loans-segment get" [
 ]: nothing -> record<data: table<Brand: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({segment: $segment} | format pattern "/x-open-banking/v2.2/unsecured-sme-loans/segment/{segment}"))
+  let full_url = (build-url $base ({segment: (encode-path-segment $segment)} | format pattern "/x-open-banking/v2.2/unsecured-sme-loans/segment/{segment}"))
   let accept_val = "application/prs.openbanking.opendata.v2.2+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

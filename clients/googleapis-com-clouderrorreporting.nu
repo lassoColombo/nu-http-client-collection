@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -76,7 +85,7 @@ def order-completer [] { ["AFFECTED_USERS_DESC" "COUNT_DESC" "CREATED_DESC" "GRO
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 clouderrorreportingprojectsgroupsget" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -100,7 +109,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1beta1/{groupName}
 # operationId: clouderrorreporting.projects.groups.get
-export def "v1beta1 clouderrorreportingprojectsgroupsget" [
+export def "v1beta1 get" [
   group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -125,7 +134,7 @@ export def "v1beta1 clouderrorreportingprojectsgroupsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group_name: $group_name} | format pattern "/v1beta1/{group_name}") $qp)
+  let full_url = (build-url $base ({group_name: (encode-path-segment $group_name)} | format pattern "/v1beta1/{group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -136,7 +145,7 @@ export def "v1beta1 clouderrorreportingprojectsgroupsget" [
 # PUT /v1beta1/{name}
 # operationId: clouderrorreporting.projects.groups.update
 # --trackingIssues item shape: {url?: string}
-export def "v1beta1 clouderrorreportingprojectsgroupsupdate" [
+export def "v1beta1 update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -166,19 +175,19 @@ export def "v1beta1 clouderrorreportingprojectsgroupsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta1/{name}") $qp)
-  let body = {"groupId": $group_id, "name": $body_name, "resolutionStatus": $resolution_status, "trackingIssues": $tracking_issues} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp)
+  let req_body = {"groupId": $group_id, "name": $body_name, "resolutionStatus": $resolution_status, "trackingIssues": $tracking_issues} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes all error events of a given project.
 #
 # DELETE /v1beta1/{projectName}/events
 # operationId: clouderrorreporting.projects.deleteEvents
-export def "v1beta1-events clouderrorreportingprojectsdeleteEvents" [
+export def "v1beta1-events delete" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -203,7 +212,7 @@ export def "v1beta1-events clouderrorreportingprojectsdeleteEvents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_name: $project_name} | format pattern "/v1beta1/{project_name}/events") $qp)
+  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name)} | format pattern "/v1beta1/{project_name}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -213,7 +222,7 @@ export def "v1beta1-events clouderrorreportingprojectsdeleteEvents" [
 #
 # GET /v1beta1/{projectName}/events
 # operationId: clouderrorreporting.projects.events.list
-export def "v1beta1-events clouderrorreportingprojectseventslist" [
+export def "v1beta1-events list" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -245,7 +254,7 @@ export def "v1beta1-events clouderrorreportingprojectseventslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "serviceFilter.resourceType" $service_filter_resource_type "scalar") (serialize-qp "serviceFilter.service" $service_filter_service "scalar") (serialize-qp "serviceFilter.version" $service_filter_version "scalar") (serialize-qp "timeRange.period" $time_range_period "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_name: $project_name} | format pattern "/v1beta1/{project_name}/events") $qp)
+  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name)} | format pattern "/v1beta1/{project_name}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -257,7 +266,7 @@ export def "v1beta1-events clouderrorreportingprojectseventslist" [
 # operationId: clouderrorreporting.projects.events.report
 # --context shape: {httpRequest?: record, reportLocation?: record, sourceReferences?: list, user?: string}
 # --serviceContext shape: {resourceType?: string, service?: string, version?: string}
-export def "v1beta1-events-report clouderrorreportingprojectseventsreport" [
+export def "v1beta1-events-report create" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,19 +296,19 @@ export def "v1beta1-events-report clouderrorreportingprojectseventsreport" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_name: $project_name} | format pattern "/v1beta1/{project_name}/events:report") $qp)
-  let body = {"context": $context, "eventTime": $event_time, "message": $message, "serviceContext": $service_context} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name)} | format pattern "/v1beta1/{project_name}/events:report") $qp)
+  let req_body = {"context": $context, "eventTime": $event_time, "message": $message, "serviceContext": $service_context} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the specified groups.
 #
 # GET /v1beta1/{projectName}/groupStats
 # operationId: clouderrorreporting.projects.groupStats.list
-export def "v1beta1-group-stats clouderrorreportingprojectsgroupStatslist" [
+export def "v1beta1-group-stats list" [
   project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -322,7 +331,7 @@ export def "v1beta1-group-stats clouderrorreportingprojectsgroupStatslist" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --alignment: string@alignment-completer # Optional. The alignment of the timed counts to be returned. Default is `ALIGNMENT_EQUAL_AT_END`.
   --alignment-time: string # Optional. Time where the timed counts shall be aligned if rounded alignment is chosen. Default is 00:00 UTC.
-  --group-id: list # Optional. List all ErrorGroupStats with these IDs.
+  --group-id: list<string> # Optional. List all ErrorGroupStats with these IDs.
   --order: string@order-completer # Optional. The sort order in which the results are returned. Default is `COUNT_DESC`.
   --page-size: int # Optional. The maximum number of results to return per response. Default is 20.
   --page-token: string # Optional. A next_page_token provided by a previous response. To view additional results, pass this token along with the identical query parameters as the first request.
@@ -335,7 +344,7 @@ export def "v1beta1-group-stats clouderrorreportingprojectsgroupStatslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "alignment" $alignment "scalar") (serialize-qp "alignmentTime" $alignment_time "scalar") (serialize-qp "groupId" $group_id "multi") (serialize-qp "order" $order "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "serviceFilter.resourceType" $service_filter_resource_type "scalar") (serialize-qp "serviceFilter.service" $service_filter_service "scalar") (serialize-qp "serviceFilter.version" $service_filter_version "scalar") (serialize-qp "timeRange.period" $time_range_period "scalar") (serialize-qp "timedCountDuration" $timed_count_duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_name: $project_name} | format pattern "/v1beta1/{project_name}/groupStats") $qp)
+  let full_url = (build-url $base ({project_name: (encode-path-segment $project_name)} | format pattern "/v1beta1/{project_name}/groupStats") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

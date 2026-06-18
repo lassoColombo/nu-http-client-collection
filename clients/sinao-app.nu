@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
     "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,7 +74,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.sinao.app/v1" "https://api.sinao.dev/v1" "https://api.sinao.test/v1"] }
-def auth-scheme-completer [] { ["basic" "bearer"] }
+def auth-scheme-completer [] { ["basic" "bearer" "basic-credentials"] }
 
 # Completers for enum parameters
 def type-completer [] { ["invoice" "none" "purchase" "quote" "relationship" "transaction"] }
@@ -92,7 +102,7 @@ def type-completer-5 [] { ["contact" "invoice" "quote"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps applist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -116,7 +126,7 @@ export def commands []: nothing -> table {
 #
 # GET /apps
 # operationId: app.list
-export def "apps applist" [
+export def "apps list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,7 +153,7 @@ export def "apps applist" [
 #
 # POST /apps
 # operationId: app.create
-export def "apps appcreate" [
+export def "apps create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +177,7 @@ export def "apps appcreate" [
 #
 # DELETE /apps/access/invite/{accessToken}
 # operationId: app.policies.registration.delete
-export def "apps-access-invite apppoliciesregistrationdelete" [
+export def "apps-access-invite delete-by-accessToken" [
   access_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -180,7 +190,7 @@ export def "apps-access-invite apppoliciesregistrationdelete" [
 ]: nothing -> record<code: int, message: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token} | format pattern "/apps/access/invite/{access_token}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token)} | format pattern "/apps/access/invite/{access_token}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -190,7 +200,7 @@ export def "apps-access-invite apppoliciesregistrationdelete" [
 #
 # GET /apps/access/invite/{accessToken}
 # operationId: app.policies.registration.get
-export def "apps-access-invite apppoliciesregistrationget" [
+export def "apps-access-invite get" [
   access_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -203,7 +213,7 @@ export def "apps-access-invite apppoliciesregistrationget" [
 ]: nothing -> record<app: record<admin: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, config: list<any>, hostname_alias: string, id: int, last_access_at: string, last_user: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, organization: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string, app: any>, policies: list<record>, subscription: record<access_level: string, id: int, payment_card: string, payment_failed_count: int, period_ending_date: string, period_remaining_days: int, period_starting_date: string, plan_color: string, plan_name: string, status: string, stripe_customer_id: string, stripe_plan_id: string, stripe_subscription_id: string>, url: string>, id: int, profile: record<description: string, homepage: string, name: string, restricted: bool, rights: list<string>, visible: int>, recipient_user: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, sender_user: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, used_at: string, validity: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({access_token: $access_token} | format pattern "/apps/access/invite/{access_token}"))
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token)} | format pattern "/apps/access/invite/{access_token}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -213,7 +223,7 @@ export def "apps-access-invite apppoliciesregistrationget" [
 #
 # POST /apps/access/invite/{accessToken}/register
 # operationId: app.policies.registration.register
-export def "apps-access-invite-register apppoliciesregistrationregister" [
+export def "apps-access-invite-register create" [
   access_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -231,7 +241,7 @@ export def "apps-access-invite-register apppoliciesregistrationregister" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "password" $password "scalar") (serialize-qp "firstname" $firstname "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "cgu" $cgu "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({access_token: $access_token} | format pattern "/apps/access/invite/{access_token}/register") $qp)
+  let full_url = (build-url $base ({access_token: (encode-path-segment $access_token)} | format pattern "/apps/access/invite/{access_token}/register") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -241,7 +251,7 @@ export def "apps-access-invite-register apppoliciesregistrationregister" [
 #
 # GET /apps/{appId}
 # operationId: app.get
-export def "apps appget" [
+export def "apps get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -254,7 +264,7 @@ export def "apps appget" [
 ]: nothing -> record<admin: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, config: list<any>, hostname_alias: string, id: int, last_access_at: string, last_user: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, organization: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list<record>, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string, app: any>, policies: table<app: any, policy_profile: record, user: record>, subscription: record<access_level: string, id: int, payment_card: string, payment_failed_count: int, period_ending_date: string, period_remaining_days: int, period_starting_date: string, plan_color: string, plan_name: string, status: string, stripe_customer_id: string, stripe_plan_id: string, stripe_subscription_id: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -264,7 +274,7 @@ export def "apps appget" [
 #
 # GET /apps/{appId}/access
 # operationId: app.policies.list
-export def "apps-access apppolicieslist" [
+export def "apps-access list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -282,7 +292,7 @@ export def "apps-access apppolicieslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/access") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/access") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -292,7 +302,7 @@ export def "apps-access apppolicieslist" [
 #
 # GET /apps/{appId}/access/invite
 # operationId: app.policies.invitations.list
-export def "apps-access-invite apppoliciesinvitationslist" [
+export def "apps-access-invite list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -310,7 +320,7 @@ export def "apps-access-invite apppoliciesinvitationslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/access/invite") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/access/invite") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -320,7 +330,7 @@ export def "apps-access-invite apppoliciesinvitationslist" [
 #
 # POST /apps/{appId}/access/invite
 # operationId: app.policies.invitations.create
-export def "apps-access-invite apppoliciesinvitationscreate" [
+export def "apps-access-invite create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -340,7 +350,7 @@ export def "apps-access-invite apppoliciesinvitationscreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "policy_profile_id" $policy_profile_id "scalar") (serialize-qp "firstname" $firstname "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "civility" $civility "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/access/invite") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/access/invite") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -350,7 +360,7 @@ export def "apps-access-invite apppoliciesinvitationscreate" [
 #
 # DELETE /apps/{appId}/access/invite/{id}
 # operationId: app.policies.invitations.delete
-export def "apps-access-invite apppoliciesinvitationsdelete" [
+export def "apps-access-invite delete-by-appId-id" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -364,7 +374,7 @@ export def "apps-access-invite apppoliciesinvitationsdelete" [
 ]: nothing -> record<code: int, message: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/access/invite/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/access/invite/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -374,7 +384,7 @@ export def "apps-access-invite apppoliciesinvitationsdelete" [
 #
 # GET /apps/{appId}/access/profiles
 # operationId: app.policies.profiles.list
-export def "apps-access-profiles apppoliciesprofileslist" [
+export def "apps-access-profiles list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -387,7 +397,7 @@ export def "apps-access-profiles apppoliciesprofileslist" [
 ]: nothing -> table<description: string, homepage: string, name: string, restricted: bool, rights: list<string>, visible: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/access/profiles"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/access/profiles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -397,7 +407,7 @@ export def "apps-access-profiles apppoliciesprofileslist" [
 #
 # DELETE /apps/{appId}/access/{userId}
 # operationId: app.policies.delete
-export def "apps-access apppoliciesdelete" [
+export def "apps-access delete" [
   app_id: int
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -411,7 +421,7 @@ export def "apps-access apppoliciesdelete" [
 ]: nothing -> record<code: int, message: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, user_id: $user_id} | format pattern "/apps/{app_id}/access/{user_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), user_id: (encode-path-segment $user_id)} | format pattern "/apps/{app_id}/access/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -421,7 +431,7 @@ export def "apps-access apppoliciesdelete" [
 #
 # GET /apps/{appId}/access/{userId}
 # operationId: app.policies.get
-export def "apps-access apppoliciesget" [
+export def "apps-access get" [
   app_id: int
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -435,7 +445,7 @@ export def "apps-access apppoliciesget" [
 ]: nothing -> record<description: string, homepage: string, name: string, restricted: bool, rights: list<string>, visible: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, user_id: $user_id} | format pattern "/apps/{app_id}/access/{user_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), user_id: (encode-path-segment $user_id)} | format pattern "/apps/{app_id}/access/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -445,7 +455,7 @@ export def "apps-access apppoliciesget" [
 #
 # POST /apps/{appId}/access/{userId}
 # operationId: app.policies.update
-export def "apps-access apppoliciesupdate" [
+export def "apps-access update" [
   app_id: int
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -461,7 +471,7 @@ export def "apps-access apppoliciesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "policy_profile_id" $policy_profile_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, user_id: $user_id} | format pattern "/apps/{app_id}/access/{user_id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), user_id: (encode-path-segment $user_id)} | format pattern "/apps/{app_id}/access/{user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -471,7 +481,7 @@ export def "apps-access apppoliciesupdate" [
 #
 # GET /apps/{appId}/accountcategories/
 # operationId: app.accounting.categories.list
-export def "apps-accountcategories appaccountingcategorieslist" [
+export def "apps-accountcategories list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -490,7 +500,7 @@ export def "apps-accountcategories appaccountingcategorieslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/accountcategories/") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/accountcategories/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -500,7 +510,7 @@ export def "apps-accountcategories appaccountingcategorieslist" [
 #
 # POST /apps/{appId}/accountcategories/
 # operationId: app.accounting.categories.create
-export def "apps-accountcategories appaccountingcategoriescreate" [
+export def "apps-accountcategories create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -517,7 +527,7 @@ export def "apps-accountcategories appaccountingcategoriescreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/accountcategories/") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/accountcategories/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -527,7 +537,7 @@ export def "apps-accountcategories appaccountingcategoriescreate" [
 #
 # DELETE /apps/{appId}/accountcategories/{id}
 # operationId: app.accounting.categories.delete
-export def "apps-accountcategories appaccountingcategoriesdelete" [
+export def "apps-accountcategories delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -541,7 +551,7 @@ export def "apps-accountcategories appaccountingcategoriesdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/accountcategories/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/accountcategories/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -551,7 +561,7 @@ export def "apps-accountcategories appaccountingcategoriesdelete" [
 #
 # GET /apps/{appId}/accountcategories/{id}
 # operationId: app.accounting.categories.get
-export def "apps-accountcategories appaccountingcategoriesget" [
+export def "apps-accountcategories get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -565,7 +575,7 @@ export def "apps-accountcategories appaccountingcategoriesget" [
 ]: nothing -> record<description: string, id: int, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/accountcategories/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/accountcategories/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -575,7 +585,7 @@ export def "apps-accountcategories appaccountingcategoriesget" [
 #
 # POST /apps/{appId}/accountcategories/{id}
 # operationId: app.accounting.categories.update
-export def "apps-accountcategories appaccountingcategoriesupdate" [
+export def "apps-accountcategories update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -593,7 +603,7 @@ export def "apps-accountcategories appaccountingcategoriesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/accountcategories/{id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/accountcategories/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -603,7 +613,7 @@ export def "apps-accountcategories appaccountingcategoriesupdate" [
 #
 # GET /apps/{appId}/accounting_entries/
 # operationId: app.accounting.entries.list
-export def "apps-accounting-entries appaccountingentrieslist" [
+export def "apps-accounting-entries list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -622,7 +632,7 @@ export def "apps-accounting-entries appaccountingentrieslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/accounting_entries/") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/accounting_entries/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -632,7 +642,7 @@ export def "apps-accounting-entries appaccountingentrieslist" [
 #
 # GET /apps/{appId}/accounts/
 # operationId: app.accounting.accounts.list
-export def "apps-accounts appaccountingaccountslist" [
+export def "apps-accounts list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -651,7 +661,7 @@ export def "apps-accounts appaccountingaccountslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/accounts/") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/accounts/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -661,7 +671,7 @@ export def "apps-accounts appaccountingaccountslist" [
 #
 # POST /apps/{appId}/accounts/
 # operationId: app.accounting.accounts.create
-export def "apps-accounts appaccountingaccountscreate" [
+export def "apps-accounts create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -683,7 +693,7 @@ export def "apps-accounts appaccountingaccountscreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "journalcode" $journalcode "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "keywords" $keywords "scalar") (serialize-qp "accounting_number" $accounting_number "scalar") (serialize-qp "is_cashflow" $is_cashflow "scalar") (serialize-qp "is_sales" $is_sales "scalar") (serialize-qp "is_purchase" $is_purchase "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/accounts/") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/accounts/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -693,7 +703,7 @@ export def "apps-accounts appaccountingaccountscreate" [
 #
 # POST /apps/{appId}/accounts/batch
 # operationId: app.accounting.accounts.batch
-export def "apps-accounts-batch appaccountingaccountsbatch" [
+export def "apps-accounts-batch create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -708,7 +718,7 @@ export def "apps-accounts-batch appaccountingaccountsbatch" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/accounts/batch") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/accounts/batch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -718,7 +728,7 @@ export def "apps-accounts-batch appaccountingaccountsbatch" [
 #
 # DELETE /apps/{appId}/accounts/{id}
 # operationId: app.accounting.accounts.delete
-export def "apps-accounts appaccountingaccountsdelete" [
+export def "apps-accounts delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -732,7 +742,7 @@ export def "apps-accounts appaccountingaccountsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/accounts/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/accounts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -742,7 +752,7 @@ export def "apps-accounts appaccountingaccountsdelete" [
 #
 # GET /apps/{appId}/accounts/{id}
 # operationId: app.accounting.accounts.get
-export def "apps-accounts appaccountingaccountsget" [
+export def "apps-accounts get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -756,7 +766,7 @@ export def "apps-accounts appaccountingaccountsget" [
 ]: nothing -> record<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/accounts/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/accounts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -766,7 +776,7 @@ export def "apps-accounts appaccountingaccountsget" [
 #
 # POST /apps/{appId}/accounts/{id}
 # operationId: app.accounting.accounts.update
-export def "apps-accounts appaccountingaccountsupdate" [
+export def "apps-accounts update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -789,7 +799,7 @@ export def "apps-accounts appaccountingaccountsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "journalcode" $journalcode "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "keywords" $keywords "scalar") (serialize-qp "accounting_number" $accounting_number "scalar") (serialize-qp "is_cashflow" $is_cashflow "scalar") (serialize-qp "is_sales" $is_sales "scalar") (serialize-qp "is_purchase" $is_purchase "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/accounts/{id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/accounts/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -799,7 +809,7 @@ export def "apps-accounts appaccountingaccountsupdate" [
 #
 # GET /apps/{appId}/apikeys
 # operationId: app.apikeys.list
-export def "apps-apikeys appapikeyslist" [
+export def "apps-apikeys list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -817,7 +827,7 @@ export def "apps-apikeys appapikeyslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/apikeys") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/apikeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -827,7 +837,7 @@ export def "apps-apikeys appapikeyslist" [
 #
 # POST /apps/{appId}/apikeys
 # operationId: app.apikeys.create
-export def "apps-apikeys appapikeyscreate" [
+export def "apps-apikeys create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -843,7 +853,7 @@ export def "apps-apikeys appapikeyscreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "api_partner_id" $api_partner_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/apikeys") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/apikeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -853,7 +863,7 @@ export def "apps-apikeys appapikeyscreate" [
 #
 # DELETE /apps/{appId}/apikeys/{id}
 # operationId: app.apikeys.delete
-export def "apps-apikeys appapikeysdelete" [
+export def "apps-apikeys delete" [
   app_id: int
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -867,7 +877,7 @@ export def "apps-apikeys appapikeysdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/apikeys/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/apikeys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -877,7 +887,7 @@ export def "apps-apikeys appapikeysdelete" [
 #
 # GET /apps/{appId}/apipartners
 # operationId: app.apipartners.list
-export def "apps-apipartners appapipartnerslist" [
+export def "apps-apipartners list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -895,7 +905,7 @@ export def "apps-apipartners appapipartnerslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/apipartners") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/apipartners") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -905,7 +915,7 @@ export def "apps-apipartners appapipartnerslist" [
 #
 # GET /apps/{appId}/attachments
 # operationId: app.attachments.list
-export def "apps-attachments appattachmentslist" [
+export def "apps-attachments list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -924,7 +934,7 @@ export def "apps-attachments appattachmentslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/attachments") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/attachments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -934,7 +944,7 @@ export def "apps-attachments appattachmentslist" [
 #
 # POST /apps/{appId}/attachments
 # operationId: app.attachments.create
-export def "apps-attachments appattachmentscreate" [
+export def "apps-attachments create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -951,7 +961,7 @@ export def "apps-attachments appattachmentscreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "attachable_id" $attachable_id "scalar") (serialize-qp "file" $file "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/attachments") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/attachments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -961,7 +971,7 @@ export def "apps-attachments appattachmentscreate" [
 #
 # PUT /apps/{appId}/attachments
 # operationId: app.sapAttestations.generateSapAttestations
-export def "apps-attachments appsapAttestationsgenerateSapAttestations" [
+export def "apps-attachments generate-sap-attestations" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -974,7 +984,7 @@ export def "apps-attachments appsapAttestationsgenerateSapAttestations" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/attachments"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -984,7 +994,7 @@ export def "apps-attachments appsapAttestationsgenerateSapAttestations" [
 #
 # GET /apps/{appId}/attachments/download
 # operationId: app.attachments.download
-export def "apps-attachments-download appattachmentsdownload" [
+export def "apps-attachments-download download" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1000,7 +1010,7 @@ export def "apps-attachments-download appattachmentsdownload" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/attachments/download") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/attachments/download") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1010,7 +1020,7 @@ export def "apps-attachments-download appattachmentsdownload" [
 #
 # GET /apps/{appId}/attachments/sap-download
 # operationId: app.sapAttestations.download
-export def "apps-attachments-sap-download appsapAttestationsdownload" [
+export def "apps-attachments-sap-download download" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1026,7 +1036,7 @@ export def "apps-attachments-sap-download appsapAttestationsdownload" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/attachments/sap-download") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/attachments/sap-download") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1036,7 +1046,7 @@ export def "apps-attachments-sap-download appsapAttestationsdownload" [
 #
 # DELETE /apps/{appId}/attachments/{id}
 # operationId: app.attachments.delete
-export def "apps-attachments appattachmentsdelete" [
+export def "apps-attachments delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1050,7 +1060,7 @@ export def "apps-attachments appattachmentsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/attachments/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/attachments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1060,7 +1070,7 @@ export def "apps-attachments appattachmentsdelete" [
 #
 # GET /apps/{appId}/attachments/{id}
 # operationId: app.attachments.get
-export def "apps-attachments appattachmentsget" [
+export def "apps-attachments get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1074,7 +1084,7 @@ export def "apps-attachments appattachmentsget" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/attachments/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/attachments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1084,7 +1094,7 @@ export def "apps-attachments appattachmentsget" [
 #
 # GET /apps/{appId}/attachments/{id}/pdf
 # operationId: app.attachments.RedirectToPublicUrl
-export def "apps-attachments-pdf appattachmentsRedirectToPublicUrl" [
+export def "apps-attachments-pdf get-redirect-to-public-url" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1100,7 +1110,7 @@ export def "apps-attachments-pdf appattachmentsRedirectToPublicUrl" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "random" $random "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/attachments/{id}/pdf") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/attachments/{id}/pdf") $qp)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1110,7 +1120,7 @@ export def "apps-attachments-pdf appattachmentsRedirectToPublicUrl" [
 #
 # GET /apps/{appId}/bankdetails
 # operationId: app.documents.sales.bankdetails.list
-export def "apps-bankdetails appdocumentssalesbankdetailslist" [
+export def "apps-bankdetails list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1129,7 +1139,7 @@ export def "apps-bankdetails appdocumentssalesbankdetailslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/bankdetails") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/bankdetails") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1139,7 +1149,7 @@ export def "apps-bankdetails appdocumentssalesbankdetailslist" [
 #
 # POST /apps/{appId}/bankdetails
 # operationId: app.documents.sales.bankdetails.create
-export def "apps-bankdetails appdocumentssalesbankdetailscreate" [
+export def "apps-bankdetails create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1156,7 +1166,7 @@ export def "apps-bankdetails appdocumentssalesbankdetailscreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "iban" $iban "scalar") (serialize-qp "bic" $bic "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/bankdetails") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/bankdetails") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1166,7 +1176,7 @@ export def "apps-bankdetails appdocumentssalesbankdetailscreate" [
 #
 # DELETE /apps/{appId}/bankdetails/{id}
 # operationId: app.documents.sales.bankdetails.delete
-export def "apps-bankdetails appdocumentssalesbankdetailsdelete" [
+export def "apps-bankdetails delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1180,7 +1190,7 @@ export def "apps-bankdetails appdocumentssalesbankdetailsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/bankdetails/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/bankdetails/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1190,7 +1200,7 @@ export def "apps-bankdetails appdocumentssalesbankdetailsdelete" [
 #
 # GET /apps/{appId}/bankdetails/{id}
 # operationId: app.documents.sales.bankdetails.get
-export def "apps-bankdetails appdocumentssalesbankdetailsget" [
+export def "apps-bankdetails get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1204,7 +1214,7 @@ export def "apps-bankdetails appdocumentssalesbankdetailsget" [
 ]: nothing -> record<bic: string, iban: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/bankdetails/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/bankdetails/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1214,7 +1224,7 @@ export def "apps-bankdetails appdocumentssalesbankdetailsget" [
 #
 # POST /apps/{appId}/bankdetails/{id}
 # operationId: app.documents.sales.bankdetails.update
-export def "apps-bankdetails appdocumentssalesbankdetailsupdate" [
+export def "apps-bankdetails update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1232,7 +1242,7 @@ export def "apps-bankdetails appdocumentssalesbankdetailsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "iban" $iban "scalar") (serialize-qp "bic" $bic "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/bankdetails/{id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/bankdetails/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1242,7 +1252,7 @@ export def "apps-bankdetails appdocumentssalesbankdetailsupdate" [
 #
 # DELETE /apps/{appId}/banks/
 # operationId: app.cashflow.banks.delete
-export def "apps-banks appcashflowbanksdelete" [
+export def "apps-banks delete" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1257,7 +1267,7 @@ export def "apps-banks appcashflowbanksdelete" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "item_id" $item_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/banks/") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/banks/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1267,7 +1277,7 @@ export def "apps-banks appcashflowbanksdelete" [
 #
 # GET /apps/{appId}/banks/
 # operationId: app.cashflow.banks.list
-export def "apps-banks appcashflowbankslist" [
+export def "apps-banks list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1280,7 +1290,7 @@ export def "apps-banks appcashflowbankslist" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/banks/"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/banks/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1290,7 +1300,7 @@ export def "apps-banks appcashflowbankslist" [
 #
 # GET /apps/{appId}/banks/connect
 # operationId: app.cashflow.banks.connect
-export def "apps-banks-connect appcashflowbanksconnect" [
+export def "apps-banks-connect get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1303,7 +1313,7 @@ export def "apps-banks-connect appcashflowbanksconnect" [
 ]: nothing -> record<url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/banks/connect"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/banks/connect"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1313,7 +1323,7 @@ export def "apps-banks-connect appcashflowbanksconnect" [
 #
 # POST /apps/{appId}/banks/synchronize
 # operationId: app.cashflow.banks.synchronize
-export def "apps-banks-synchronize appcashflowbankssynchronize" [
+export def "apps-banks-synchronize create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1329,7 +1339,7 @@ export def "apps-banks-synchronize appcashflowbankssynchronize" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "is_incremential" $is_incremential "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/banks/synchronize") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/banks/synchronize") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1339,7 +1349,7 @@ export def "apps-banks-synchronize appcashflowbankssynchronize" [
 #
 # GET /apps/{appId}/banks/{id}/funnel/edit
 # operationId: app.cashflow.banks.url_edit
-export def "apps-banks-funnel-edit edit" [
+export def "apps-banks-funnel-edit get-url" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1353,7 +1363,7 @@ export def "apps-banks-funnel-edit edit" [
 ]: nothing -> record<url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/banks/{id}/funnel/edit"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/banks/{id}/funnel/edit"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1363,7 +1373,7 @@ export def "apps-banks-funnel-edit edit" [
 #
 # GET /apps/{appId}/banks/{id}/funnel/sync
 # operationId: app.cashflow.banks.url_sync
-export def "apps-banks-funnel-sync sync" [
+export def "apps-banks-funnel-sync sync-url" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1377,7 +1387,7 @@ export def "apps-banks-funnel-sync sync" [
 ]: nothing -> record<url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/banks/{id}/funnel/sync"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/banks/{id}/funnel/sync"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1387,7 +1397,7 @@ export def "apps-banks-funnel-sync sync" [
 #
 # GET /apps/{appId}/banks/{id}/funnel/validate
 # operationId: app.cashflow.banks.url_validate
-export def "apps-banks-funnel-validate validate" [
+export def "apps-banks-funnel-validate validate-url" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1401,7 +1411,7 @@ export def "apps-banks-funnel-validate validate" [
 ]: nothing -> record<url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/banks/{id}/funnel/validate"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/banks/{id}/funnel/validate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1411,7 +1421,7 @@ export def "apps-banks-funnel-validate validate" [
 #
 # POST /apps/{appId}/banks/{id}/select_accounts
 # operationId: app.cashflow.banks.select_accounts
-export def "apps-banks-select-accounts accounts" [
+export def "apps-banks-select-accounts create" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1422,12 +1432,12 @@ export def "apps-banks-select-accounts accounts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --bank-account-ids: list # List of enables accounts (nullable)
+  --bank-account-ids: list<int> # List of enables accounts (nullable)
 ]: nothing -> record<account_type: string, balance_amount: int, created_at: string, disabled: int, id: int, identifiant: string, name: string, parent_cashflow_source: any, status: string, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "bank_account_ids" $bank_account_ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/banks/{id}/select_accounts") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/banks/{id}/select_accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1437,7 +1447,7 @@ export def "apps-banks-select-accounts accounts" [
 #
 # GET /apps/{appId}/cashflowsources/
 # operationId: app.cashflow.cashflowsources.list
-export def "apps-cashflowsources appcashflowcashflowsourceslist" [
+export def "apps-cashflowsources list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1456,7 +1466,7 @@ export def "apps-cashflowsources appcashflowcashflowsourceslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/cashflowsources/") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/cashflowsources/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1466,7 +1476,7 @@ export def "apps-cashflowsources appcashflowcashflowsourceslist" [
 #
 # POST /apps/{appId}/cashflowsources/
 # operationId: app.cashflow.cashflowsources.create
-export def "apps-cashflowsources appcashflowcashflowsourcescreate" [
+export def "apps-cashflowsources create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1486,7 +1496,7 @@ export def "apps-cashflowsources appcashflowcashflowsourcescreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "identifiant" $identifiant "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "balance_amount" $balance_amount "scalar") (serialize-qp "account_type" $account_type "scalar") (serialize-qp "parent_cashflow_source_id" $parent_cashflow_source_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/cashflowsources/") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/cashflowsources/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1496,7 +1506,7 @@ export def "apps-cashflowsources appcashflowcashflowsourcescreate" [
 #
 # DELETE /apps/{appId}/cashflowsources/{id}
 # operationId: app.cashflow.cashflowsources.delete
-export def "apps-cashflowsources appcashflowcashflowsourcesdelete" [
+export def "apps-cashflowsources delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1510,7 +1520,7 @@ export def "apps-cashflowsources appcashflowcashflowsourcesdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/cashflowsources/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/cashflowsources/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1520,7 +1530,7 @@ export def "apps-cashflowsources appcashflowcashflowsourcesdelete" [
 #
 # GET /apps/{appId}/cashflowsources/{id}
 # operationId: app.cashflow.cashflowsources.get
-export def "apps-cashflowsources appcashflowcashflowsourcesget" [
+export def "apps-cashflowsources get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1534,7 +1544,7 @@ export def "apps-cashflowsources appcashflowcashflowsourcesget" [
 ]: nothing -> record<account_type: string, balance_amount: int, created_at: string, disabled: int, id: int, identifiant: string, name: string, parent_cashflow_source: any, status: string, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/cashflowsources/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/cashflowsources/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1544,7 +1554,7 @@ export def "apps-cashflowsources appcashflowcashflowsourcesget" [
 #
 # POST /apps/{appId}/cashflowsources/{id}
 # operationId: app.cashflow.cashflowsources.update
-export def "apps-cashflowsources appcashflowcashflowsourcesupdate" [
+export def "apps-cashflowsources update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1565,7 +1575,7 @@ export def "apps-cashflowsources appcashflowcashflowsourcesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "identifiant" $identifiant "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "balance_amount" $balance_amount "scalar") (serialize-qp "account_type" $account_type "scalar") (serialize-qp "parent_cashflow_source_id" $parent_cashflow_source_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/cashflowsources/{id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/cashflowsources/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1575,7 +1585,7 @@ export def "apps-cashflowsources appcashflowcashflowsourcesupdate" [
 #
 # POST /apps/{appId}/contacts/merge
 # operationId: app.contacts.transform.merge
-export def "apps-contacts-merge appcontactstransformmerge" [
+export def "apps-contacts-merge create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1590,7 +1600,7 @@ export def "apps-contacts-merge appcontactstransformmerge" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "contacts" $contacts "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/contacts/merge") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/contacts/merge") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1600,7 +1610,7 @@ export def "apps-contacts-merge appcontactstransformmerge" [
 #
 # POST /apps/{appId}/email/batch
 # operationId: app.contacts.email.batch
-export def "apps-email-batch appcontactsemailbatch" [
+export def "apps-email-batch create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1617,7 +1627,7 @@ export def "apps-email-batch appcontactsemailbatch" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "messages" $messages "multi") (serialize-qp "need_copy_bcc" $need_copy_bcc "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/email/batch") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/email/batch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1627,7 +1637,7 @@ export def "apps-email-batch appcontactsemailbatch" [
 #
 # POST /apps/{appId}/email/document
 # operationId: app.contacts.email.send
-export def "apps-email-document appcontactsemailsend" [
+export def "apps-email-document send" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1638,18 +1648,18 @@ export def "apps-email-document appcontactsemailsend" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # format: email
-  --recipients: list
-  --recipients-cc: list
-  --recipients-bcc: list
+  --recipients: list<string>
+  --recipients-cc: list<string>
+  --recipients-bcc: list<string>
   --title: string
-  --qp-body: string
+  --body: string
   --documents: list
   --need-copy-bcc: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "recipients" $recipients "multi") (serialize-qp "recipients_cc" $recipients_cc "multi") (serialize-qp "recipients_bcc" $recipients_bcc "multi") (serialize-qp "title" $title "scalar") (serialize-qp "body" $qp_body "scalar") (serialize-qp "documents" $documents "multi") (serialize-qp "need_copy_bcc" $need_copy_bcc "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/email/document") $qp)
+  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "recipients" $recipients "multi") (serialize-qp "recipients_cc" $recipients_cc "multi") (serialize-qp "recipients_bcc" $recipients_bcc "multi") (serialize-qp "title" $title "scalar") (serialize-qp "body" $body "scalar") (serialize-qp "documents" $documents "multi") (serialize-qp "need_copy_bcc" $need_copy_bcc "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/email/document") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1659,7 +1669,7 @@ export def "apps-email-document appcontactsemailsend" [
 #
 # DELETE /apps/{appId}/establishments/{id}
 # operationId: app.contacts.establishments.delete
-export def "apps-establishments appcontactsestablishmentsdelete" [
+export def "apps-establishments delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1673,7 +1683,7 @@ export def "apps-establishments appcontactsestablishmentsdelete" [
 ]: nothing -> record<code: int, message: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/establishments/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/establishments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1683,7 +1693,7 @@ export def "apps-establishments appcontactsestablishmentsdelete" [
 #
 # GET /apps/{appId}/establishments/{id}
 # operationId: app.contacts.establishments.get
-export def "apps-establishments appcontactsestablishmentsget" [
+export def "apps-establishments get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1697,7 +1707,7 @@ export def "apps-establishments appcontactsestablishmentsget" [
 ]: nothing -> record<emails: list<string>, id: int, name: string, nic: string, phones: list<string>, place: record<administrative_area_level1: string, administrative_area_level2: string, administrative_area_level3: string, country: string, countryiso2: string, formatted_address: string, id: int, latitude: int, locality: string, longitude: int, postal_code: string, route: string, route2: string, street_number: string, sublocality: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/establishments/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/establishments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1707,7 +1717,7 @@ export def "apps-establishments appcontactsestablishmentsget" [
 #
 # POST /apps/{appId}/establishments/{id}
 # operationId: app.contacts.establishments.update
-export def "apps-establishments appcontactsestablishmentsupdate" [
+export def "apps-establishments update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1719,15 +1729,15 @@ export def "apps-establishments appcontactsestablishmentsupdate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
-  --phones: list
-  --emails: list
+  --phones: list<string>
+  --emails: list<string>
   --nic: string # Establishment number (french NIC) (nullable)
   --place: record
 ]: nothing -> record<emails: list<string>, id: int, name: string, nic: string, phones: list<string>, place: record<administrative_area_level1: string, administrative_area_level2: string, administrative_area_level3: string, country: string, countryiso2: string, formatted_address: string, id: int, latitude: int, locality: string, longitude: int, postal_code: string, route: string, route2: string, street_number: string, sublocality: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "phones" $phones "multi") (serialize-qp "emails" $emails "multi") (serialize-qp "nic" $nic "scalar") (serialize-qp "place" $place "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/establishments/{id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/establishments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1737,7 +1747,7 @@ export def "apps-establishments appcontactsestablishmentsupdate" [
 #
 # GET /apps/{appId}/exports
 # operationId: app.accounting.export.list
-export def "apps-exports appaccountingexportlist" [
+export def "apps-exports list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1756,7 +1766,7 @@ export def "apps-exports appaccountingexportlist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/exports") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/exports") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1766,7 +1776,7 @@ export def "apps-exports appaccountingexportlist" [
 #
 # POST /apps/{appId}/exports
 # operationId: app.accounting.export.create
-export def "apps-exports appaccountingexportcreate" [
+export def "apps-exports create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1781,7 +1791,7 @@ export def "apps-exports appaccountingexportcreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "until" $until "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/exports") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/exports") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1791,7 +1801,7 @@ export def "apps-exports appaccountingexportcreate" [
 #
 # GET /apps/{appId}/exports/acd_compta
 # operationId: app.accounting.export.AcdComptaGetUuid
-export def "apps-exports-acd-compta appaccountingexportAcdComptaGetUuid" [
+export def "apps-exports-acd-compta get-uuid" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1804,7 +1814,7 @@ export def "apps-exports-acd-compta appaccountingexportAcdComptaGetUuid" [
 ]: nothing -> record<uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/exports/acd_compta"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/exports/acd_compta"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1814,7 +1824,7 @@ export def "apps-exports-acd-compta appaccountingexportAcdComptaGetUuid" [
 #
 # POST /apps/{appId}/exports/acd_compta
 # operationId: app.accounting.export.AcdComptaSetUuid
-export def "apps-exports-acd-compta appaccountingexportAcdComptaSetUuid" [
+export def "apps-exports-acd-compta update-uuid" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1832,7 +1842,7 @@ export def "apps-exports-acd-compta appaccountingexportAcdComptaSetUuid" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "base" $qp_base "scalar") (serialize-qp "cnx" $cnx "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/exports/acd_compta") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/exports/acd_compta") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1842,7 +1852,7 @@ export def "apps-exports-acd-compta appaccountingexportAcdComptaSetUuid" [
 #
 # GET /apps/{appId}/exports/download
 # operationId: app.accounting.export.download
-export def "apps-exports-download appaccountingexportdownload" [
+export def "apps-exports-download download" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1853,7 +1863,7 @@ export def "apps-exports-download appaccountingexportdownload" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer # The export format can be a FEC (universal - similar to the French legal file 'Fichier des Ecritures Comptables') or specific for accounting software
-  --export-entities-ids: list
+  --export-entities-ids: list<int>
   --start-at: string # Automatically find export entities from a date range (format: date-time)
   --end-at: string # Automatically find export entities from a date range (format: date-time)
   --since: string # Automatically find export entities since a date (format: date-time)
@@ -1862,7 +1872,7 @@ export def "apps-exports-download appaccountingexportdownload" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "export_entities_ids" $export_entities_ids "multi") (serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "since_last" $since_last "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/exports/download") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/exports/download") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1872,7 +1882,7 @@ export def "apps-exports-download appaccountingexportdownload" [
 #
 # GET /apps/{appId}/exports/months
 # operationId: app.accounting.export.list_by_months
-export def "apps-exports-months months" [
+export def "apps-exports-months list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1885,7 +1895,7 @@ export def "apps-exports-months months" [
 ]: nothing -> table<created_at: string, entries_count: int, id: int, period_end: string, period_start: string, status: string, total_credit: int, total_debit: int, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/exports/months"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/exports/months"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1895,7 +1905,7 @@ export def "apps-exports-months months" [
 #
 # DELETE /apps/{appId}/exports/{id}
 # operationId: app.accounting.export.delete
-export def "apps-exports appaccountingexportdelete" [
+export def "apps-exports delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1909,7 +1919,7 @@ export def "apps-exports appaccountingexportdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/exports/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/exports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1919,7 +1929,7 @@ export def "apps-exports appaccountingexportdelete" [
 #
 # GET /apps/{appId}/exports/{id}
 # operationId: app.accounting.export.get
-export def "apps-exports appaccountingexportget" [
+export def "apps-exports get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1933,7 +1943,7 @@ export def "apps-exports appaccountingexportget" [
 ]: nothing -> record<created_at: string, entries_count: int, id: int, period_end: string, period_start: string, status: string, total_credit: int, total_debit: int, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/exports/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/exports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1943,7 +1953,7 @@ export def "apps-exports appaccountingexportget" [
 #
 # GET /apps/{appId}/invoices
 # operationId: app.documents.sales.invoices.list
-export def "apps-invoices appdocumentssalesinvoiceslist" [
+export def "apps-invoices list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1962,7 +1972,7 @@ export def "apps-invoices appdocumentssalesinvoiceslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/invoices") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/invoices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1972,7 +1982,7 @@ export def "apps-invoices appdocumentssalesinvoiceslist" [
 #
 # POST /apps/{appId}/invoices
 # operationId: app.documents.sales.invoices.create
-export def "apps-invoices appdocumentssalesinvoicescreate" [
+export def "apps-invoices create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1995,7 +2005,7 @@ export def "apps-invoices appdocumentssalesinvoicescreate" [
   --vat-exemption: record
   --tags: list # nullable
   --metadata: list # nullable
-  --downpayments: list # nullable
+  --downpayments: list<int> # nullable
   --downpayment-cash: int # nullable
   --avoid-of: int # nullable
   --delivered-at: string # nullable, format: date-time
@@ -2006,7 +2016,7 @@ export def "apps-invoices appdocumentssalesinvoicescreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "contact_infos" $contact_infos "multi") (serialize-qp "third_account" $third_account "multi") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi") (serialize-qp "reference" $reference "scalar") (serialize-qp "discount" $discount "multi") (serialize-qp "currency" $currency "scalar") (serialize-qp "legal_notice" $legal_notice "scalar") (serialize-qp "bank_details_id" $bank_details_id "scalar") (serialize-qp "vat_exemption" $vat_exemption "multi") (serialize-qp "tags" $tags "multi") (serialize-qp "metadata" $metadata "multi") (serialize-qp "downpayments" $downpayments "multi") (serialize-qp "downpayment_cash" $downpayment_cash "scalar") (serialize-qp "avoid_of" $avoid_of "scalar") (serialize-qp "delivered_at" $delivered_at "scalar") (serialize-qp "payment_period" $payment_period "scalar") (serialize-qp "payment_methods" $payment_methods "scalar") (serialize-qp "number_from_other_software" $number_from_other_software "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/invoices") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/invoices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2026,12 +2036,12 @@ export def "apps-invoices-batch delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # List of invoices ID
+  --ids: list<int> # List of invoices ID
 ]: nothing -> record<code: int, message: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/invoices/batch") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/invoices/batch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2041,7 +2051,7 @@ export def "apps-invoices-batch delete" [
 #
 # POST /apps/{appId}/invoices/batch
 # operationId: app.documents.sales.invoices.batch
-export def "apps-invoices-batch appdocumentssalesinvoicesbatch" [
+export def "apps-invoices-batch create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2056,7 +2066,7 @@ export def "apps-invoices-batch appdocumentssalesinvoicesbatch" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/invoices/batch") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/invoices/batch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2066,7 +2076,7 @@ export def "apps-invoices-batch appdocumentssalesinvoicesbatch" [
 #
 # GET /apps/{appId}/invoices/download
 # operationId: app.documents.sales.invoices.download
-export def "apps-invoices-download appdocumentssalesinvoicesdownload" [
+export def "apps-invoices-download download" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2076,13 +2086,13 @@ export def "apps-invoices-download appdocumentssalesinvoicesdownload" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # Array of invoices id
+  --ids: list<int> # Array of invoices id
   --template: string@template-completer # Template name to generate document (nullable)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "multi") (serialize-qp "template" $template "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/invoices/download") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/invoices/download") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2092,7 +2102,7 @@ export def "apps-invoices-download appdocumentssalesinvoicesdownload" [
 #
 # POST /apps/{appId}/invoices/fresh
 # operationId: app.documents.sales.invoices.fresh
-export def "apps-invoices-fresh appdocumentssalesinvoicesfresh" [
+export def "apps-invoices-fresh create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2102,12 +2112,12 @@ export def "apps-invoices-fresh appdocumentssalesinvoicesfresh" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # Array of invoices id
+  --ids: list<int> # Array of invoices id
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/invoices/fresh") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/invoices/fresh") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2117,7 +2127,7 @@ export def "apps-invoices-fresh appdocumentssalesinvoicesfresh" [
 #
 # GET /apps/{appId}/invoices/nextnumber
 # operationId: app.documents.sales.invoices.nextnumber
-export def "apps-invoices-nextnumber appdocumentssalesinvoicesnextnumber" [
+export def "apps-invoices-nextnumber get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2132,7 +2142,7 @@ export def "apps-invoices-nextnumber appdocumentssalesinvoicesnextnumber" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "written_at" $written_at "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/invoices/nextnumber") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/invoices/nextnumber") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2142,7 +2152,7 @@ export def "apps-invoices-nextnumber appdocumentssalesinvoicesnextnumber" [
 #
 # GET /apps/{appId}/invoices/statistics
 # operationId: app.documents.sales.invoices.statistics
-export def "apps-invoices-statistics appdocumentssalesinvoicesstatistics" [
+export def "apps-invoices-statistics get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2158,7 +2168,7 @@ export def "apps-invoices-statistics appdocumentssalesinvoicesstatistics" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/invoices/statistics") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/invoices/statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2168,7 +2178,7 @@ export def "apps-invoices-statistics appdocumentssalesinvoicesstatistics" [
 #
 # DELETE /apps/{appId}/invoices/{id}
 # operationId: app.documents.sales.invoices.delete
-export def "apps-invoices appdocumentssalesinvoicesdelete" [
+export def "apps-invoices delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2182,7 +2192,7 @@ export def "apps-invoices appdocumentssalesinvoicesdelete" [
 ]: nothing -> record<code: int, message: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/invoices/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2192,7 +2202,7 @@ export def "apps-invoices appdocumentssalesinvoicesdelete" [
 #
 # GET /apps/{appId}/invoices/{id}
 # operationId: app.documents.sales.invoices.get
-export def "apps-invoices appdocumentssalesinvoicesget" [
+export def "apps-invoices get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2206,7 +2216,7 @@ export def "apps-invoices appdocumentssalesinvoicesget" [
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, avoid_of: any, delivered_at: string, downpayments: list<any>, invoice_of: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, commercialvalidity_deadline: string, status: string>, paid_at: string, payment_methods: string, payment_period: int, related_recurring_invoice: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: int, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, discount_end_at: string, discount_mode: string, discount_start_at: string, end_at: string, frequency_count: int, frequency_duration: string, next_invoice_at: string, orders_plan: list<record>, saving_status: string>, sepa_direct_debit_exported_at: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/invoices/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2216,7 +2226,7 @@ export def "apps-invoices appdocumentssalesinvoicesget" [
 #
 # POST /apps/{appId}/invoices/{id}
 # operationId: app.documents.sales.invoices.update
-export def "apps-invoices appdocumentssalesinvoicesupdate" [
+export def "apps-invoices update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2240,7 +2250,7 @@ export def "apps-invoices appdocumentssalesinvoicesupdate" [
   --vat-exemption: record
   --tags: list # nullable
   --metadata: list # nullable
-  --downpayments: list # nullable
+  --downpayments: list<int> # nullable
   --downpayment-cash: int # nullable
   --avoid-of: int # nullable
   --delivered-at: string # nullable, format: date-time
@@ -2250,7 +2260,7 @@ export def "apps-invoices appdocumentssalesinvoicesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "contact_infos" $contact_infos "multi") (serialize-qp "third_account" $third_account "multi") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi") (serialize-qp "reference" $reference "scalar") (serialize-qp "discount" $discount "multi") (serialize-qp "currency" $currency "scalar") (serialize-qp "legal_notice" $legal_notice "scalar") (serialize-qp "bank_details_id" $bank_details_id "scalar") (serialize-qp "vat_exemption" $vat_exemption "multi") (serialize-qp "tags" $tags "multi") (serialize-qp "metadata" $metadata "multi") (serialize-qp "downpayments" $downpayments "multi") (serialize-qp "downpayment_cash" $downpayment_cash "scalar") (serialize-qp "avoid_of" $avoid_of "scalar") (serialize-qp "delivered_at" $delivered_at "scalar") (serialize-qp "payment_period" $payment_period "scalar") (serialize-qp "payment_methods" $payment_methods "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/invoices/{id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2260,7 +2270,7 @@ export def "apps-invoices appdocumentssalesinvoicesupdate" [
 #
 # DELETE /apps/{appId}/invoices/{id}/attach
 # operationId: app.documents.sales.invoices.detach
-export def "apps-invoices-attach appdocumentssalesinvoicesdetach" [
+export def "apps-invoices-attach delete-detach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2276,7 +2286,7 @@ export def "apps-invoices-attach appdocumentssalesinvoicesdetach" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file_id" $file_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/invoices/{id}/attach") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/attach") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2286,7 +2296,7 @@ export def "apps-invoices-attach appdocumentssalesinvoicesdetach" [
 #
 # POST /apps/{appId}/invoices/{id}/attach
 # operationId: app.documents.sales.invoices.attach
-export def "apps-invoices-attach appdocumentssalesinvoicesattach" [
+export def "apps-invoices-attach attach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2302,7 +2312,7 @@ export def "apps-invoices-attach appdocumentssalesinvoicesattach" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file" $file "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/invoices/{id}/attach") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/attach") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2312,7 +2322,7 @@ export def "apps-invoices-attach appdocumentssalesinvoicesattach" [
 #
 # POST /apps/{appId}/invoices/{id}/avoid
 # operationId: app.documents.sales.invoices.avoid
-export def "apps-invoices-avoid appdocumentssalesinvoicesavoid" [
+export def "apps-invoices-avoid create" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2326,7 +2336,7 @@ export def "apps-invoices-avoid appdocumentssalesinvoicesavoid" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/invoices/{id}/avoid"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/avoid"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2336,7 +2346,7 @@ export def "apps-invoices-avoid appdocumentssalesinvoicesavoid" [
 #
 # POST /apps/{appId}/invoices/{id}/duplicate
 # operationId: app.documents.sales.invoices.duplicate
-export def "apps-invoices-duplicate appdocumentssalesinvoicesduplicate" [
+export def "apps-invoices-duplicate create" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2350,7 +2360,7 @@ export def "apps-invoices-duplicate appdocumentssalesinvoicesduplicate" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/invoices/{id}/duplicate"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/duplicate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2360,7 +2370,7 @@ export def "apps-invoices-duplicate appdocumentssalesinvoicesduplicate" [
 #
 # POST /apps/{appId}/invoices/{id}/finalize
 # operationId: app.documents.sales.invoices.finalize
-export def "apps-invoices-finalize appdocumentssalesinvoicesfinalize" [
+export def "apps-invoices-finalize finalize" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2376,7 +2386,7 @@ export def "apps-invoices-finalize appdocumentssalesinvoicesfinalize" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force_date" $force_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/invoices/{id}/finalize") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/finalize") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2386,7 +2396,7 @@ export def "apps-invoices-finalize appdocumentssalesinvoicesfinalize" [
 #
 # GET /apps/{appId}/invoices/{id}/pdf
 # operationId: app.documents.sales.invoices.pdf
-export def "apps-invoices-pdf appdocumentssalesinvoicespdf" [
+export def "apps-invoices-pdf get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2402,7 +2412,7 @@ export def "apps-invoices-pdf appdocumentssalesinvoicespdf" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "template" $template "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/invoices/{id}/pdf") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/pdf") $qp)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2412,7 +2422,7 @@ export def "apps-invoices-pdf appdocumentssalesinvoicespdf" [
 #
 # GET /apps/{appId}/invoices/{id}/preview.jpg
 # operationId: app.documents.sales.invoices.preview
-export def "apps-invoices-previewjpg appdocumentssalesinvoicespreview" [
+export def "apps-invoices-preview-jpg get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2430,7 +2440,7 @@ export def "apps-invoices-previewjpg appdocumentssalesinvoicespreview" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "template" $template "scalar") (serialize-qp "disable_cache" $disable_cache "scalar") (serialize-qp "base64" $base64 "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/invoices/{id}/preview.jpg") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/preview.jpg") $qp)
   let accept_val = "application/jpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2440,7 +2450,7 @@ export def "apps-invoices-previewjpg appdocumentssalesinvoicespreview" [
 #
 # DELETE /apps/{appId}/invoices/{id}/tag
 # operationId: app.documents.sales.invoices.untag
-export def "apps-invoices-tag appdocumentssalesinvoicesuntag" [
+export def "apps-invoices-tag untag" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2456,7 +2466,7 @@ export def "apps-invoices-tag appdocumentssalesinvoicesuntag" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/invoices/{id}/tag") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/tag") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2466,7 +2476,7 @@ export def "apps-invoices-tag appdocumentssalesinvoicesuntag" [
 #
 # POST /apps/{appId}/invoices/{id}/tag
 # operationId: app.documents.sales.invoices.tag
-export def "apps-invoices-tag appdocumentssalesinvoicestag" [
+export def "apps-invoices-tag tag" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2482,7 +2492,7 @@ export def "apps-invoices-tag appdocumentssalesinvoicestag" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/invoices/{id}/tag") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/tag") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2492,7 +2502,7 @@ export def "apps-invoices-tag appdocumentssalesinvoicestag" [
 #
 # POST /apps/{appId}/invoices/{id}/updatestatus
 # operationId: app.documents.sales.invoices.updatestatus
-export def "apps-invoices-updatestatus appdocumentssalesinvoicesupdatestatus" [
+export def "apps-invoices-updatestatus create" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2508,7 +2518,7 @@ export def "apps-invoices-updatestatus appdocumentssalesinvoicesupdatestatus" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/invoices/{id}/updatestatus") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/updatestatus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2518,7 +2528,7 @@ export def "apps-invoices-updatestatus appdocumentssalesinvoicesupdatestatus" [
 #
 # DELETE /apps/{appId}/logs/autoreconcile/
 # operationId: app.cashflow.logsautoreconciliations.clear
-export def "apps-logs-autoreconcile appcashflowlogsautoreconciliationsclear" [
+export def "apps-logs-autoreconcile delete-clear" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2531,7 +2541,7 @@ export def "apps-logs-autoreconcile appcashflowlogsautoreconciliationsclear" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/logs/autoreconcile/"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/logs/autoreconcile/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2541,7 +2551,7 @@ export def "apps-logs-autoreconcile appcashflowlogsautoreconciliationsclear" [
 #
 # GET /apps/{appId}/logs/autoreconcile/
 # operationId: app.cashflow.logsautoreconciliations.list
-export def "apps-logs-autoreconcile appcashflowlogsautoreconciliationslist" [
+export def "apps-logs-autoreconcile list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2560,7 +2570,7 @@ export def "apps-logs-autoreconcile appcashflowlogsautoreconciliationslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/logs/autoreconcile/") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/logs/autoreconcile/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2570,7 +2580,7 @@ export def "apps-logs-autoreconcile appcashflowlogsautoreconciliationslist" [
 #
 # POST /apps/{appId}/logs/autoreconcile/
 # operationId: app.cashflow.logsautoreconciliations.start
-export def "apps-logs-autoreconcile appcashflowlogsautoreconciliationsstart" [
+export def "apps-logs-autoreconcile start" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2583,7 +2593,7 @@ export def "apps-logs-autoreconcile appcashflowlogsautoreconciliationsstart" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/logs/autoreconcile/"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/logs/autoreconcile/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2593,7 +2603,7 @@ export def "apps-logs-autoreconcile appcashflowlogsautoreconciliationsstart" [
 #
 # GET /apps/{appId}/organization
 # operationId: app.organization.get
-export def "apps-organization apporganizationget" [
+export def "apps-organization get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2606,7 +2616,7 @@ export def "apps-organization apporganizationget" [
 ]: nothing -> table<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list<record>, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string, app: record<admin: record, config: list, hostname_alias: string, id: int, last_access_at: string, last_user: record, organization: any, policies: list, subscription: record, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/organization"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/organization"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2616,7 +2626,7 @@ export def "apps-organization apporganizationget" [
 #
 # POST /apps/{appId}/organization
 # operationId: app.organization.update
-export def "apps-organization apporganizationupdate" [
+export def "apps-organization update" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2652,7 +2662,7 @@ export def "apps-organization apporganizationupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "billing_name" $billing_name "scalar") (serialize-qp "logo" $logo "scalar") (serialize-qp "legal_form" $legal_form "scalar") (serialize-qp "country_iso2" $country_iso2 "scalar") (serialize-qp "founding_date" $founding_date "scalar") (serialize-qp "founding_location" $founding_location "scalar") (serialize-qp "dissolution_date" $dissolution_date "scalar") (serialize-qp "closeaccounting_period" $closeaccounting_period "scalar") (serialize-qp "national_id" $national_id "scalar") (serialize-qp "trade_directory_registration" $trade_directory_registration "scalar") (serialize-qp "vat_id" $vat_id "scalar") (serialize-qp "code_naf" $code_naf "scalar") (serialize-qp "number_of_employees" $number_of_employees "scalar") (serialize-qp "industry" $industry "scalar") (serialize-qp "slogan" $slogan "scalar") (serialize-qp "rcs" $rcs "scalar") (serialize-qp "greffe" $greffe "scalar") (serialize-qp "sap_number_registration" $sap_number_registration "scalar") (serialize-qp "sap_activities" $sap_activities "scalar") (serialize-qp "sap_date_registration" $sap_date_registration "scalar") (serialize-qp "capital" $capital "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/organization") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/organization") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2662,7 +2672,7 @@ export def "apps-organization apporganizationupdate" [
 #
 # GET /apps/{appId}/organizations
 # operationId: app.contacts.organizations.list
-export def "apps-organizations appcontactsorganizationslist" [
+export def "apps-organizations list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2680,7 +2690,7 @@ export def "apps-organizations appcontactsorganizationslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/organizations") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/organizations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2690,7 +2700,7 @@ export def "apps-organizations appcontactsorganizationslist" [
 #
 # POST /apps/{appId}/organizations
 # operationId: app.contacts.organizations.create
-export def "apps-organizations appcontactsorganizationscreate" [
+export def "apps-organizations create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2723,7 +2733,7 @@ export def "apps-organizations appcontactsorganizationscreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "billing_name" $billing_name "scalar") (serialize-qp "logo" $logo "scalar") (serialize-qp "legal_form" $legal_form "scalar") (serialize-qp "country_iso2" $country_iso2 "scalar") (serialize-qp "founding_date" $founding_date "scalar") (serialize-qp "founding_location" $founding_location "scalar") (serialize-qp "dissolution_date" $dissolution_date "scalar") (serialize-qp "vat_system" $vat_system "scalar") (serialize-qp "closeaccounting_period" $closeaccounting_period "scalar") (serialize-qp "national_id" $national_id "scalar") (serialize-qp "vat_id" $vat_id "scalar") (serialize-qp "code_naf" $code_naf "scalar") (serialize-qp "number_of_employees" $number_of_employees "scalar") (serialize-qp "slogan" $slogan "scalar") (serialize-qp "rcs" $rcs "scalar") (serialize-qp "greffe" $greffe "scalar") (serialize-qp "capital" $capital "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/organizations") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/organizations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2733,7 +2743,7 @@ export def "apps-organizations appcontactsorganizationscreate" [
 #
 # POST /apps/{appId}/organizations/batch
 # operationId: app.contacts.organizations.batch
-export def "apps-organizations-batch appcontactsorganizationsbatch" [
+export def "apps-organizations-batch create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2748,7 +2758,7 @@ export def "apps-organizations-batch appcontactsorganizationsbatch" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/organizations/batch") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/organizations/batch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2758,7 +2768,7 @@ export def "apps-organizations-batch appcontactsorganizationsbatch" [
 #
 # DELETE /apps/{appId}/organizations/{id}
 # operationId: app.contacts.organizations.delete
-export def "apps-organizations appcontactsorganizationsdelete" [
+export def "apps-organizations delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2772,7 +2782,7 @@ export def "apps-organizations appcontactsorganizationsdelete" [
 ]: nothing -> record<code: int, message: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/organizations/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/organizations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2782,7 +2792,7 @@ export def "apps-organizations appcontactsorganizationsdelete" [
 #
 # GET /apps/{appId}/organizations/{id}
 # operationId: app.contacts.organizations.get
-export def "apps-organizations appcontactsorganizationsget" [
+export def "apps-organizations get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2796,7 +2806,7 @@ export def "apps-organizations appcontactsorganizationsget" [
 ]: nothing -> record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: table<emails: list, id: int, name: string, nic: string, phones: list, place: record>, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/organizations/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/organizations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2806,7 +2816,7 @@ export def "apps-organizations appcontactsorganizationsget" [
 #
 # POST /apps/{appId}/organizations/{id}
 # operationId: app.contacts.organizations.update
-export def "apps-organizations appcontactsorganizationsupdate" [
+export def "apps-organizations update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2840,7 +2850,7 @@ export def "apps-organizations appcontactsorganizationsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "billing_name" $billing_name "scalar") (serialize-qp "logo" $logo "scalar") (serialize-qp "legal_form" $legal_form "scalar") (serialize-qp "country_iso2" $country_iso2 "scalar") (serialize-qp "founding_date" $founding_date "scalar") (serialize-qp "founding_location" $founding_location "scalar") (serialize-qp "dissolution_date" $dissolution_date "scalar") (serialize-qp "vat_system" $vat_system "scalar") (serialize-qp "closeaccounting_period" $closeaccounting_period "scalar") (serialize-qp "national_id" $national_id "scalar") (serialize-qp "vat_id" $vat_id "scalar") (serialize-qp "code_naf" $code_naf "scalar") (serialize-qp "number_of_employees" $number_of_employees "scalar") (serialize-qp "slogan" $slogan "scalar") (serialize-qp "rcs" $rcs "scalar") (serialize-qp "greffe" $greffe "scalar") (serialize-qp "capital" $capital "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/organizations/{id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/organizations/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2850,7 +2860,7 @@ export def "apps-organizations appcontactsorganizationsupdate" [
 #
 # GET /apps/{appId}/organizations/{id}/restore
 # operationId: app.contacts.organizations.restore
-export def "apps-organizations-restore appcontactsorganizationsrestore" [
+export def "apps-organizations-restore get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2864,7 +2874,7 @@ export def "apps-organizations-restore appcontactsorganizationsrestore" [
 ]: nothing -> record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: table<emails: list, id: int, name: string, nic: string, phones: list, place: record>, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/organizations/{id}/restore"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/organizations/{id}/restore"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2874,7 +2884,7 @@ export def "apps-organizations-restore appcontactsorganizationsrestore" [
 #
 # GET /apps/{appId}/payments
 # operationId: app.payments.payments.list
-export def "apps-payments apppaymentspaymentslist" [
+export def "apps-payments list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2893,7 +2903,7 @@ export def "apps-payments apppaymentspaymentslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/payments") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/payments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2903,7 +2913,7 @@ export def "apps-payments apppaymentspaymentslist" [
 #
 # GET /apps/{appId}/payments/recipe_book
 # operationId: app.payments.payments.recipe_book
-export def "apps-payments-recipe-book book" [
+export def "apps-payments-recipe-book get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2916,7 +2926,7 @@ export def "apps-payments-recipe-book book" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/payments/recipe_book"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/payments/recipe_book"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2926,7 +2936,7 @@ export def "apps-payments-recipe-book book" [
 #
 # DELETE /apps/{appId}/payments/{id}
 # operationId: app.payments.payments.delete
-export def "apps-payments apppaymentspaymentsdelete" [
+export def "apps-payments delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2940,7 +2950,7 @@ export def "apps-payments apppaymentspaymentsdelete" [
 ]: nothing -> record<code: int, message: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/payments/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/payments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2950,7 +2960,7 @@ export def "apps-payments apppaymentspaymentsdelete" [
 #
 # GET /apps/{appId}/payments/{id}
 # operationId: app.payments.payments.get
-export def "apps-payments apppaymentspaymentsget" [
+export def "apps-payments get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2964,7 +2974,7 @@ export def "apps-payments apppaymentspaymentsget" [
 ]: nothing -> record<amount: int, date: string, document: any, document_type: string, id: int, source: string, transaction: record<amount: int, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, cashflow_source: record<account_type: string, balance_amount: int, created_at: string, disabled: int, id: int, identifiant: string, name: string, parent_cashflow_source: any, status: string, type: string, updated_at: string>, contact: any, created_at: string, deleted_at: string, details: int, id: int, label: int, lettered_at: string, metadata: list<any>, method: int, received_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/payments/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/payments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2974,7 +2984,7 @@ export def "apps-payments apppaymentspaymentsget" [
 #
 # GET /apps/{appId}/persons
 # operationId: app.contacts.persons.list
-export def "apps-persons appcontactspersonslist" [
+export def "apps-persons list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2992,7 +3002,7 @@ export def "apps-persons appcontactspersonslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/persons") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/persons") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3002,7 +3012,7 @@ export def "apps-persons appcontactspersonslist" [
 #
 # POST /apps/{appId}/persons
 # operationId: app.contacts.persons.create
-export def "apps-persons appcontactspersonscreate" [
+export def "apps-persons create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3021,7 +3031,7 @@ export def "apps-persons appcontactspersonscreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "civility" $civility "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "firstname" $firstname "scalar") (serialize-qp "picture" $picture "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/persons") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/persons") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3031,7 +3041,7 @@ export def "apps-persons appcontactspersonscreate" [
 #
 # POST /apps/{appId}/persons/batch
 # operationId: app.contacts.persons.batch
-export def "apps-persons-batch appcontactspersonsbatch" [
+export def "apps-persons-batch create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3046,7 +3056,7 @@ export def "apps-persons-batch appcontactspersonsbatch" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/persons/batch") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/persons/batch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3056,7 +3066,7 @@ export def "apps-persons-batch appcontactspersonsbatch" [
 #
 # DELETE /apps/{appId}/persons/{id}
 # operationId: app.contacts.persons.delete
-export def "apps-persons appcontactspersonsdelete" [
+export def "apps-persons delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3070,7 +3080,7 @@ export def "apps-persons appcontactspersonsdelete" [
 ]: nothing -> record<code: int, message: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/persons/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/persons/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3080,7 +3090,7 @@ export def "apps-persons appcontactspersonsdelete" [
 #
 # GET /apps/{appId}/persons/{id}
 # operationId: app.contacts.persons.get
-export def "apps-persons appcontactspersonsget" [
+export def "apps-persons get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3094,7 +3104,7 @@ export def "apps-persons appcontactspersonsget" [
 ]: nothing -> record<civility: string, establishments: table<emails: list, id: int, name: string, nic: string, phones: list, place: record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/persons/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/persons/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3104,7 +3114,7 @@ export def "apps-persons appcontactspersonsget" [
 #
 # POST /apps/{appId}/persons/{id}
 # operationId: app.contacts.persons.update
-export def "apps-persons appcontactspersonsupdate" [
+export def "apps-persons update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3124,7 +3134,7 @@ export def "apps-persons appcontactspersonsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "civility" $civility "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "firstname" $firstname "scalar") (serialize-qp "picture" $picture "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/persons/{id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/persons/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3134,7 +3144,7 @@ export def "apps-persons appcontactspersonsupdate" [
 #
 # GET /apps/{appId}/persons/{id}/restore
 # operationId: app.contacts.persons.restore
-export def "apps-persons-restore appcontactspersonsrestore" [
+export def "apps-persons-restore get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3148,7 +3158,7 @@ export def "apps-persons-restore appcontactspersonsrestore" [
 ]: nothing -> record<civility: string, establishments: table<emails: list, id: int, name: string, nic: string, phones: list, place: record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/persons/{id}/restore"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/persons/{id}/restore"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3158,7 +3168,7 @@ export def "apps-persons-restore appcontactspersonsrestore" [
 #
 # GET /apps/{appId}/ping
 # operationId: app.ping
-export def "apps-ping appping" [
+export def "apps-ping ping" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3171,7 +3181,7 @@ export def "apps-ping appping" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/ping"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/ping"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3181,7 +3191,7 @@ export def "apps-ping appping" [
 #
 # GET /apps/{appId}/productcategory
 # operationId: app.catalog.categories.list
-export def "apps-productcategory appcatalogcategorieslist" [
+export def "apps-productcategory list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3200,7 +3210,7 @@ export def "apps-productcategory appcatalogcategorieslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/productcategory") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/productcategory") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3210,7 +3220,7 @@ export def "apps-productcategory appcatalogcategorieslist" [
 #
 # POST /apps/{appId}/productcategory
 # operationId: app.catalog.categories.create
-export def "apps-productcategory appcatalogcategoriescreate" [
+export def "apps-productcategory create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3227,7 +3237,7 @@ export def "apps-productcategory appcatalogcategoriescreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "image" $image "scalar") (serialize-qp "parent_category_id" $parent_category_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/productcategory") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/productcategory") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3237,7 +3247,7 @@ export def "apps-productcategory appcatalogcategoriescreate" [
 #
 # DELETE /apps/{appId}/productcategory/{id}
 # operationId: app.catalog.categories.delete
-export def "apps-productcategory appcatalogcategoriesdelete" [
+export def "apps-productcategory delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3251,7 +3261,7 @@ export def "apps-productcategory appcatalogcategoriesdelete" [
 ]: nothing -> record<code: int, message: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/productcategory/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/productcategory/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3261,7 +3271,7 @@ export def "apps-productcategory appcatalogcategoriesdelete" [
 #
 # GET /apps/{appId}/productcategory/{id}
 # operationId: app.catalog.categories.get
-export def "apps-productcategory appcatalogcategoriesget" [
+export def "apps-productcategory get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3275,7 +3285,7 @@ export def "apps-productcategory appcatalogcategoriesget" [
 ]: nothing -> record<id: int, image: any, name: string, parent: any, products: record<accounting_number: string, amount_accurately: int, category: any, currency: string, description: string, id: int, image: any, intangible: bool, lifetime: int, metadata: list<any>, name: string, quantity_name: string, reference: string, tags: list<string>, unity: string, vat_percent: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/productcategory/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/productcategory/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3285,7 +3295,7 @@ export def "apps-productcategory appcatalogcategoriesget" [
 #
 # POST /apps/{appId}/productcategory/{id}
 # operationId: app.catalog.categories.update
-export def "apps-productcategory appcatalogcategoriesupdate" [
+export def "apps-productcategory update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3303,7 +3313,7 @@ export def "apps-productcategory appcatalogcategoriesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "image" $image "scalar") (serialize-qp "parent_category_id" $parent_category_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/productcategory/{id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/productcategory/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3313,7 +3323,7 @@ export def "apps-productcategory appcatalogcategoriesupdate" [
 #
 # GET /apps/{appId}/products
 # operationId: app.catalog.products.list
-export def "apps-products appcatalogproductslist" [
+export def "apps-products list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3332,7 +3342,7 @@ export def "apps-products appcatalogproductslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/products") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/products") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3342,7 +3352,7 @@ export def "apps-products appcatalogproductslist" [
 #
 # POST /apps/{appId}/products
 # operationId: app.catalog.products.create
-export def "apps-products appcatalogproductscreate" [
+export def "apps-products create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3370,7 +3380,7 @@ export def "apps-products appcatalogproductscreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "amount_accurately" $amount_accurately "scalar") (serialize-qp "vat_percent" $vat_percent "scalar") (serialize-qp "image" $image "scalar") (serialize-qp "lifetime" $lifetime "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "quantity_name" $quantity_name "scalar") (serialize-qp "reference" $reference "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/products") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/products") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3380,7 +3390,7 @@ export def "apps-products appcatalogproductscreate" [
 #
 # POST /apps/{appId}/products/batch
 # operationId: app.catalog.products.batch
-export def "apps-products-batch appcatalogproductsbatch" [
+export def "apps-products-batch create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3395,7 +3405,7 @@ export def "apps-products-batch appcatalogproductsbatch" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/products/batch") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/products/batch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3405,7 +3415,7 @@ export def "apps-products-batch appcatalogproductsbatch" [
 #
 # DELETE /apps/{appId}/products/{id}
 # operationId: app.catalog.products.delete
-export def "apps-products appcatalogproductsdelete" [
+export def "apps-products delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3419,7 +3429,7 @@ export def "apps-products appcatalogproductsdelete" [
 ]: nothing -> record<code: int, message: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/products/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/products/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3429,7 +3439,7 @@ export def "apps-products appcatalogproductsdelete" [
 #
 # GET /apps/{appId}/products/{id}
 # operationId: app.catalog.products.get
-export def "apps-products appcatalogproductsget" [
+export def "apps-products get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3443,7 +3453,7 @@ export def "apps-products appcatalogproductsget" [
 ]: nothing -> record<accounting_number: string, amount_accurately: int, category: record<id: int, image: any, name: string, parent: any, products: any>, currency: string, description: string, id: int, image: any, intangible: bool, lifetime: int, metadata: list<any>, name: string, quantity_name: string, reference: string, tags: list<string>, unity: string, vat_percent: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/products/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/products/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3453,7 +3463,7 @@ export def "apps-products appcatalogproductsget" [
 #
 # POST /apps/{appId}/products/{id}
 # operationId: app.catalog.products.update
-export def "apps-products appcatalogproductsupdate" [
+export def "apps-products update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3482,7 +3492,7 @@ export def "apps-products appcatalogproductsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "amount_accurately" $amount_accurately "scalar") (serialize-qp "vat_percent" $vat_percent "scalar") (serialize-qp "image" $image "scalar") (serialize-qp "lifetime" $lifetime "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "quantity_name" $quantity_name "scalar") (serialize-qp "reference" $reference "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/products/{id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/products/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3492,7 +3502,7 @@ export def "apps-products appcatalogproductsupdate" [
 #
 # DELETE /apps/{appId}/products/{id}/attach
 # operationId: app.catalog.products.detach
-export def "apps-products-attach appcatalogproductsdetach" [
+export def "apps-products-attach delete-detach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3508,7 +3518,7 @@ export def "apps-products-attach appcatalogproductsdetach" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file_id" $file_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/products/{id}/attach") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/products/{id}/attach") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3518,7 +3528,7 @@ export def "apps-products-attach appcatalogproductsdetach" [
 #
 # POST /apps/{appId}/products/{id}/attach
 # operationId: app.catalog.products.attach
-export def "apps-products-attach appcatalogproductsattach" [
+export def "apps-products-attach attach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3534,7 +3544,7 @@ export def "apps-products-attach appcatalogproductsattach" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file" $file "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/products/{id}/attach") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/products/{id}/attach") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3544,7 +3554,7 @@ export def "apps-products-attach appcatalogproductsattach" [
 #
 # GET /apps/{appId}/productstocks
 # operationId: app.catalog.stocks.list
-export def "apps-productstocks appcatalogstockslist" [
+export def "apps-productstocks list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3563,7 +3573,7 @@ export def "apps-productstocks appcatalogstockslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/productstocks") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/productstocks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3573,7 +3583,7 @@ export def "apps-productstocks appcatalogstockslist" [
 #
 # POST /apps/{appId}/productstocks
 # operationId: app.catalog.stocks.create
-export def "apps-productstocks appcatalogstockscreate" [
+export def "apps-productstocks create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3596,7 +3606,7 @@ export def "apps-productstocks appcatalogstockscreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "purchase_id" $purchase_id "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "bar_code" $bar_code "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "entered_at" $entered_at "scalar") (serialize-qp "expired_at" $expired_at "scalar") (serialize-qp "cost_amount" $cost_amount "scalar") (serialize-qp "use_duration" $use_duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/productstocks") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/productstocks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3606,7 +3616,7 @@ export def "apps-productstocks appcatalogstockscreate" [
 #
 # DELETE /apps/{appId}/productstocks/{id}
 # operationId: app.catalog.stocks.delete
-export def "apps-productstocks appcatalogstocksdelete" [
+export def "apps-productstocks delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3620,7 +3630,7 @@ export def "apps-productstocks appcatalogstocksdelete" [
 ]: nothing -> record<code: int, message: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/productstocks/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/productstocks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3630,7 +3640,7 @@ export def "apps-productstocks appcatalogstocksdelete" [
 #
 # GET /apps/{appId}/productstocks/{id}
 # operationId: app.catalog.stocks.get
-export def "apps-productstocks appcatalogstocksget" [
+export def "apps-productstocks get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3644,7 +3654,7 @@ export def "apps-productstocks appcatalogstocksget" [
 ]: nothing -> record<bar_code: int, cost_amount: int, entered_at: int, expired_at: int, id: int, initial_quantity: int, location: int, product: record<accounting_number: string, amount_accurately: int, category: record<id: int, image: any, name: string, parent: any, products: any>, currency: string, description: string, id: int, image: any, intangible: bool, lifetime: int, metadata: list<any>, name: string, quantity_name: string, reference: string, tags: list<string>, unity: string, vat_percent: int>, product_stocks_movements: table<description: string, future_return_date: string, id: int, invoice: record, moved_at: string, product_stock: any, quantity: int, type: string, use_duration: int>, purchase: record<account: record<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string>, accounted_at: string, amount: int, amount_net_foreign_currency: int, amount_tax: int, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, billed_at: string, comment: string, completed_at: string, foreign_currency: string, id: int, is_late: bool, md5: string, paid_at: string, payment_account_number: string, payment_deadline_at: string, payment_iban: string, payment_routing_number: string, payment_swift: string, picture: string, status: string, supplier: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string>, supplier_name: string, tags: list<string>, title: string, vat_detail: record, vat_repayment: string, will_be_late_at: string>, quantity_in: int, quantity_out: int, sales_lines: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: any, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, use_duration: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/productstocks/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/productstocks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3654,7 +3664,7 @@ export def "apps-productstocks appcatalogstocksget" [
 #
 # POST /apps/{appId}/productstocks/{id}
 # operationId: app.catalog.stocks.update
-export def "apps-productstocks appcatalogstocksupdate" [
+export def "apps-productstocks update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3676,7 +3686,7 @@ export def "apps-productstocks appcatalogstocksupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "purchase_id" $purchase_id "scalar") (serialize-qp "bar_code" $bar_code "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "entered_at" $entered_at "scalar") (serialize-qp "expired_at" $expired_at "scalar") (serialize-qp "cost_amount" $cost_amount "scalar") (serialize-qp "use_duration" $use_duration "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/productstocks/{id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/productstocks/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3686,7 +3696,7 @@ export def "apps-productstocks appcatalogstocksupdate" [
 #
 # POST /apps/{appId}/productstocks/{id}/destruct
 # operationId: app.catalog.stocks.destruct
-export def "apps-productstocks-destruct appcatalogstocksdestruct" [
+export def "apps-productstocks-destruct create" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3703,7 +3713,7 @@ export def "apps-productstocks-destruct appcatalogstocksdestruct" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quantity" $quantity "scalar") (serialize-qp "comment" $comment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/productstocks/{id}/destruct") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/productstocks/{id}/destruct") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3713,7 +3723,7 @@ export def "apps-productstocks-destruct appcatalogstocksdestruct" [
 #
 # POST /apps/{appId}/productstocks/{id}/rental/back
 # operationId: app.catalog.stocks.rental_back
-export def "apps-productstocks-rental-back back" [
+export def "apps-productstocks-rental-back create" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3732,7 +3742,7 @@ export def "apps-productstocks-rental-back back" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quantity" $quantity "scalar") (serialize-qp "current_return_date" $current_return_date "scalar") (serialize-qp "use_duration" $use_duration "scalar") (serialize-qp "comment" $comment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/productstocks/{id}/rental/back") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/productstocks/{id}/rental/back") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3742,7 +3752,7 @@ export def "apps-productstocks-rental-back back" [
 #
 # POST /apps/{appId}/productstocks/{id}/rental/exit
 # operationId: app.catalog.stocks.rental_exit
-export def "apps-productstocks-rental-exit exit" [
+export def "apps-productstocks-rental-exit create" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3760,7 +3770,7 @@ export def "apps-productstocks-rental-exit exit" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "quantity" $quantity "scalar") (serialize-qp "future_return_date" $future_return_date "scalar") (serialize-qp "comment" $comment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/productstocks/{id}/rental/exit") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/productstocks/{id}/rental/exit") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3770,7 +3780,7 @@ export def "apps-productstocks-rental-exit exit" [
 #
 # GET /apps/{appId}/purchases
 # operationId: app.documents.purchases.purchases.list
-export def "apps-purchases appdocumentspurchasespurchaseslist" [
+export def "apps-purchases list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3785,12 +3795,12 @@ export def "apps-purchases appdocumentspurchasespurchaseslist" [
   --search: string # A string to search for in objects.
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
-  --expand: list
+  --expand: list<string>
 ]: nothing -> table<account: record<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string>, accounted_at: string, amount: int, amount_net_foreign_currency: int, amount_tax: int, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, billed_at: string, comment: string, completed_at: string, foreign_currency: string, id: int, is_late: bool, md5: string, paid_at: string, payment_account_number: string, payment_deadline_at: string, payment_iban: string, payment_routing_number: string, payment_swift: string, picture: string, status: string, supplier: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string>, supplier_name: string, tags: list<string>, title: string, vat_detail: record, vat_repayment: string, will_be_late_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/purchases") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/purchases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3800,7 +3810,7 @@ export def "apps-purchases appdocumentspurchasespurchaseslist" [
 #
 # POST /apps/{appId}/purchases
 # operationId: app.documents.purchases.purchases.create
-export def "apps-purchases appdocumentspurchasespurchasescreate" [
+export def "apps-purchases create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3832,7 +3842,7 @@ export def "apps-purchases appdocumentspurchasespurchasescreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "invoice" $invoice "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "supplier_organization_id" $supplier_organization_id "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "supplier_name" $supplier_name "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "amount_tax" $amount_tax "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "vat_detail" $vat_detail "multi") (serialize-qp "billed_at" $billed_at "scalar") (serialize-qp "comment" $comment "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "vat_repayment" $vat_repayment "scalar") (serialize-qp "payment_deadline_at" $payment_deadline_at "scalar") (serialize-qp "payment_account_number" $payment_account_number "scalar") (serialize-qp "payment_routing_number" $payment_routing_number "scalar") (serialize-qp "payment_swift" $payment_swift "scalar") (serialize-qp "payment_iban" $payment_iban "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/purchases") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/purchases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3852,12 +3862,12 @@ export def "apps-purchases-batch delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # List of purchases ID
+  --ids: list<int> # List of purchases ID
 ]: nothing -> record<code: int, message: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/purchases/batch") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/purchases/batch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3867,7 +3877,7 @@ export def "apps-purchases-batch delete" [
 #
 # POST /apps/{appId}/purchases/batch
 # operationId: app.documents.purchases.purchases.batch
-export def "apps-purchases-batch appdocumentspurchasespurchasesbatch" [
+export def "apps-purchases-batch create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3882,7 +3892,7 @@ export def "apps-purchases-batch appdocumentspurchasespurchasesbatch" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/purchases/batch") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/purchases/batch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3892,7 +3902,7 @@ export def "apps-purchases-batch appdocumentspurchasespurchasesbatch" [
 #
 # GET /apps/{appId}/purchases/download
 # operationId: app.documents.purchases.purchases.download
-export def "apps-purchases-download appdocumentspurchasespurchasesdownload" [
+export def "apps-purchases-download download" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3902,12 +3912,12 @@ export def "apps-purchases-download appdocumentspurchasespurchasesdownload" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # Array of purchases id
+  --ids: list<int> # Array of purchases id
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/purchases/download") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/purchases/download") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3917,7 +3927,7 @@ export def "apps-purchases-download appdocumentspurchasespurchasesdownload" [
 #
 # GET /apps/{appId}/purchases/statistics
 # operationId: app.documents.purchases.purchases.statistics
-export def "apps-purchases-statistics appdocumentspurchasespurchasesstatistics" [
+export def "apps-purchases-statistics get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3933,7 +3943,7 @@ export def "apps-purchases-statistics appdocumentspurchasespurchasesstatistics" 
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/purchases/statistics") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/purchases/statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3943,7 +3953,7 @@ export def "apps-purchases-statistics appdocumentspurchasespurchasesstatistics" 
 #
 # DELETE /apps/{appId}/purchases/{id}
 # operationId: app.documents.purchases.purchases.delete
-export def "apps-purchases appdocumentspurchasespurchasesdelete" [
+export def "apps-purchases delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3957,7 +3967,7 @@ export def "apps-purchases appdocumentspurchasespurchasesdelete" [
 ]: nothing -> record<code: int, message: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/purchases/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3967,7 +3977,7 @@ export def "apps-purchases appdocumentspurchasespurchasesdelete" [
 #
 # GET /apps/{appId}/purchases/{id}
 # operationId: app.documents.purchases.purchases.get
-export def "apps-purchases appdocumentspurchasespurchasesget" [
+export def "apps-purchases get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3981,7 +3991,7 @@ export def "apps-purchases appdocumentspurchasespurchasesget" [
 ]: nothing -> record<account: record<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string>, accounted_at: string, amount: int, amount_net_foreign_currency: int, amount_tax: int, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, billed_at: string, comment: string, completed_at: string, foreign_currency: string, id: int, is_late: bool, md5: string, paid_at: string, payment_account_number: string, payment_deadline_at: string, payment_iban: string, payment_routing_number: string, payment_swift: string, picture: string, status: string, supplier: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list<record>, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string>, supplier_name: string, tags: list<string>, title: string, vat_detail: record, vat_repayment: string, will_be_late_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/purchases/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3991,7 +4001,7 @@ export def "apps-purchases appdocumentspurchasespurchasesget" [
 #
 # POST /apps/{appId}/purchases/{id}
 # operationId: app.documents.purchases.purchases.update
-export def "apps-purchases appdocumentspurchasespurchasesupdate" [
+export def "apps-purchases update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4024,7 +4034,7 @@ export def "apps-purchases appdocumentspurchasespurchasesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "account_id" $account_id "scalar") (serialize-qp "supplier_organization_id" $supplier_organization_id "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "supplier_name" $supplier_name "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "amount_tax" $amount_tax "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "vat_detail" $vat_detail "multi") (serialize-qp "billed_at" $billed_at "scalar") (serialize-qp "comment" $comment "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "vat_repayment" $vat_repayment "scalar") (serialize-qp "payment_deadline_at" $payment_deadline_at "scalar") (serialize-qp "payment_account_number" $payment_account_number "scalar") (serialize-qp "payment_routing_number" $payment_routing_number "scalar") (serialize-qp "payment_swift" $payment_swift "scalar") (serialize-qp "payment_iban" $payment_iban "scalar") (serialize-qp "purchase_lines" $purchase_lines "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/purchases/{id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4034,7 +4044,7 @@ export def "apps-purchases appdocumentspurchasespurchasesupdate" [
 #
 # DELETE /apps/{appId}/purchases/{id}/attach
 # operationId: app.documents.purchases.purchases.detach
-export def "apps-purchases-attach appdocumentspurchasespurchasesdetach" [
+export def "apps-purchases-attach delete-detach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4050,7 +4060,7 @@ export def "apps-purchases-attach appdocumentspurchasespurchasesdetach" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file_id" $file_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/purchases/{id}/attach") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}/attach") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4060,7 +4070,7 @@ export def "apps-purchases-attach appdocumentspurchasespurchasesdetach" [
 #
 # POST /apps/{appId}/purchases/{id}/attach
 # operationId: app.documents.purchases.purchases.attach
-export def "apps-purchases-attach appdocumentspurchasespurchasesattach" [
+export def "apps-purchases-attach attach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4076,7 +4086,7 @@ export def "apps-purchases-attach appdocumentspurchasespurchasesattach" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file" $file "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/purchases/{id}/attach") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}/attach") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4086,7 +4096,7 @@ export def "apps-purchases-attach appdocumentspurchasespurchasesattach" [
 #
 # GET /apps/{appId}/purchases/{id}/original
 # operationId: app.documents.purchases.purchases.original
-export def "apps-purchases-original appdocumentspurchasespurchasesoriginal" [
+export def "apps-purchases-original get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4100,7 +4110,7 @@ export def "apps-purchases-original appdocumentspurchasespurchasesoriginal" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/purchases/{id}/original"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}/original"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4110,7 +4120,7 @@ export def "apps-purchases-original appdocumentspurchasespurchasesoriginal" [
 #
 # GET /apps/{appId}/purchases/{id}/preview.jpg
 # operationId: app.documents.purchases.purchases.preview
-export def "apps-purchases-previewjpg appdocumentspurchasespurchasespreview" [
+export def "apps-purchases-preview-jpg get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4124,7 +4134,7 @@ export def "apps-purchases-previewjpg appdocumentspurchasespurchasespreview" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/purchases/{id}/preview.jpg"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}/preview.jpg"))
   let accept_val = "application/jpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4134,7 +4144,7 @@ export def "apps-purchases-previewjpg appdocumentspurchasespurchasespreview" [
 #
 # DELETE /apps/{appId}/purchases/{id}/tag
 # operationId: app.documents.purchases.purchases.untag
-export def "apps-purchases-tag appdocumentspurchasespurchasesuntag" [
+export def "apps-purchases-tag untag" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4150,7 +4160,7 @@ export def "apps-purchases-tag appdocumentspurchasespurchasesuntag" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/purchases/{id}/tag") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}/tag") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4160,7 +4170,7 @@ export def "apps-purchases-tag appdocumentspurchasespurchasesuntag" [
 #
 # POST /apps/{appId}/purchases/{id}/tag
 # operationId: app.documents.purchases.purchases.tag
-export def "apps-purchases-tag appdocumentspurchasespurchasestag" [
+export def "apps-purchases-tag tag" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4176,7 +4186,7 @@ export def "apps-purchases-tag appdocumentspurchasespurchasestag" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/purchases/{id}/tag") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}/tag") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4186,7 +4196,7 @@ export def "apps-purchases-tag appdocumentspurchasespurchasestag" [
 #
 # GET /apps/{appId}/purchases/{id}/thumbnail.jpg
 # operationId: app.documents.purchases.purchases.thumbnail
-export def "apps-purchases-thumbnailjpg appdocumentspurchasespurchasesthumbnail" [
+export def "apps-purchases-thumbnail-jpg get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4200,7 +4210,7 @@ export def "apps-purchases-thumbnailjpg appdocumentspurchasespurchasesthumbnail"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/purchases/{id}/thumbnail.jpg"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}/thumbnail.jpg"))
   let accept_val = "application/jpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4210,7 +4220,7 @@ export def "apps-purchases-thumbnailjpg appdocumentspurchasespurchasesthumbnail"
 #
 # POST /apps/{appId}/purchases/{id}/updatestatus
 # operationId: app.documents.purchases.purchases.updatestatus
-export def "apps-purchases-updatestatus appdocumentspurchasespurchasesupdatestatus" [
+export def "apps-purchases-updatestatus create" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4226,7 +4236,7 @@ export def "apps-purchases-updatestatus appdocumentspurchasespurchasesupdatestat
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/purchases/{id}/updatestatus") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}/updatestatus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4236,7 +4246,7 @@ export def "apps-purchases-updatestatus appdocumentspurchasespurchasesupdatestat
 #
 # GET /apps/{appId}/quotes
 # operationId: app.documents.sales.quotes.list
-export def "apps-quotes appdocumentssalesquoteslist" [
+export def "apps-quotes list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4255,7 +4265,7 @@ export def "apps-quotes appdocumentssalesquoteslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/quotes") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/quotes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4265,7 +4275,7 @@ export def "apps-quotes appdocumentssalesquoteslist" [
 #
 # POST /apps/{appId}/quotes
 # operationId: app.documents.sales.quotes.create
-export def "apps-quotes appdocumentssalesquotescreate" [
+export def "apps-quotes create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4295,7 +4305,7 @@ export def "apps-quotes appdocumentssalesquotescreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "contact_infos" $contact_infos "multi") (serialize-qp "third_account" $third_account "multi") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi") (serialize-qp "reference" $reference "scalar") (serialize-qp "discount" $discount "multi") (serialize-qp "currency" $currency "scalar") (serialize-qp "legal_notice" $legal_notice "scalar") (serialize-qp "bank_details_id" $bank_details_id "scalar") (serialize-qp "vat_exemption" $vat_exemption "multi") (serialize-qp "tags" $tags "multi") (serialize-qp "metadata" $metadata "multi") (serialize-qp "downpayment_request" $downpayment_request "multi") (serialize-qp "commercialvalidity_deadline" $commercialvalidity_deadline "scalar") (serialize-qp "number_from_other_software" $number_from_other_software "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/quotes") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/quotes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4315,12 +4325,12 @@ export def "apps-quotes-batch delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # List of quotes ID
+  --ids: list<int> # List of quotes ID
 ]: nothing -> record<code: int, message: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/quotes/batch") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/quotes/batch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4330,7 +4340,7 @@ export def "apps-quotes-batch delete" [
 #
 # POST /apps/{appId}/quotes/batch
 # operationId: app.documents.sales.quotes.batch
-export def "apps-quotes-batch appdocumentssalesquotesbatch" [
+export def "apps-quotes-batch create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4345,7 +4355,7 @@ export def "apps-quotes-batch appdocumentssalesquotesbatch" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/quotes/batch") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/quotes/batch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4355,7 +4365,7 @@ export def "apps-quotes-batch appdocumentssalesquotesbatch" [
 #
 # GET /apps/{appId}/quotes/download
 # operationId: app.documents.sales.quotes.download
-export def "apps-quotes-download appdocumentssalesquotesdownload" [
+export def "apps-quotes-download download" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4365,13 +4375,13 @@ export def "apps-quotes-download appdocumentssalesquotesdownload" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # Array of quotes id
+  --ids: list<int> # Array of quotes id
   --template: string@template-completer # Template name to generate document (nullable)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "multi") (serialize-qp "template" $template "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/quotes/download") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/quotes/download") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4381,7 +4391,7 @@ export def "apps-quotes-download appdocumentssalesquotesdownload" [
 #
 # POST /apps/{appId}/quotes/fresh
 # operationId: app.documents.sales.quotes.fresh
-export def "apps-quotes-fresh appdocumentssalesquotesfresh" [
+export def "apps-quotes-fresh create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4391,12 +4401,12 @@ export def "apps-quotes-fresh appdocumentssalesquotesfresh" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # Array of quotes id
+  --ids: list<int> # Array of quotes id
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/quotes/fresh") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/quotes/fresh") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4406,7 +4416,7 @@ export def "apps-quotes-fresh appdocumentssalesquotesfresh" [
 #
 # POST /apps/{appId}/quotes/invoice
 # operationId: app.documents.sales.quotes.invoices
-export def "apps-quotes-invoice appdocumentssalesquotesinvoices" [
+export def "apps-quotes-invoice create-by-appId" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4416,12 +4426,12 @@ export def "apps-quotes-invoice appdocumentssalesquotesinvoices" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # Array of quotes id
+  --ids: list<int> # Array of quotes id
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, avoid_of: any, delivered_at: string, downpayments: list<any>, invoice_of: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, commercialvalidity_deadline: string, status: string>, paid_at: string, payment_methods: string, payment_period: int, related_recurring_invoice: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: int, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, discount_end_at: string, discount_mode: string, discount_start_at: string, end_at: string, frequency_count: int, frequency_duration: string, next_invoice_at: string, orders_plan: list<record>, saving_status: string>, sepa_direct_debit_exported_at: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/quotes/invoice") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/quotes/invoice") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4431,7 +4441,7 @@ export def "apps-quotes-invoice appdocumentssalesquotesinvoices" [
 #
 # GET /apps/{appId}/quotes/nextnumber
 # operationId: app.documents.sales.quotes.nextnumber
-export def "apps-quotes-nextnumber appdocumentssalesquotesnextnumber" [
+export def "apps-quotes-nextnumber get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4446,7 +4456,7 @@ export def "apps-quotes-nextnumber appdocumentssalesquotesnextnumber" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "written_at" $written_at "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/quotes/nextnumber") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/quotes/nextnumber") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4456,7 +4466,7 @@ export def "apps-quotes-nextnumber appdocumentssalesquotesnextnumber" [
 #
 # GET /apps/{appId}/quotes/statistics
 # operationId: app.documents.sales.quotes.statistics
-export def "apps-quotes-statistics appdocumentssalesquotesstatistics" [
+export def "apps-quotes-statistics get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4472,7 +4482,7 @@ export def "apps-quotes-statistics appdocumentssalesquotesstatistics" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/quotes/statistics") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/quotes/statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4482,7 +4492,7 @@ export def "apps-quotes-statistics appdocumentssalesquotesstatistics" [
 #
 # DELETE /apps/{appId}/quotes/{id}
 # operationId: app.documents.sales.quotes.delete
-export def "apps-quotes appdocumentssalesquotesdelete" [
+export def "apps-quotes delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4496,7 +4506,7 @@ export def "apps-quotes appdocumentssalesquotesdelete" [
 ]: nothing -> record<code: int, message: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/quotes/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4506,7 +4516,7 @@ export def "apps-quotes appdocumentssalesquotesdelete" [
 #
 # GET /apps/{appId}/quotes/{id}
 # operationId: app.documents.sales.quotes.get
-export def "apps-quotes appdocumentssalesquotesget" [
+export def "apps-quotes get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4520,7 +4530,7 @@ export def "apps-quotes appdocumentssalesquotesget" [
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, commercialvalidity_deadline: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/quotes/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4530,7 +4540,7 @@ export def "apps-quotes appdocumentssalesquotesget" [
 #
 # POST /apps/{appId}/quotes/{id}
 # operationId: app.documents.sales.quotes.update
-export def "apps-quotes appdocumentssalesquotesupdate" [
+export def "apps-quotes update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4560,7 +4570,7 @@ export def "apps-quotes appdocumentssalesquotesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "contact_infos" $contact_infos "multi") (serialize-qp "third_account" $third_account "multi") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi") (serialize-qp "reference" $reference "scalar") (serialize-qp "discount" $discount "multi") (serialize-qp "currency" $currency "scalar") (serialize-qp "legal_notice" $legal_notice "scalar") (serialize-qp "bank_details_id" $bank_details_id "scalar") (serialize-qp "vat_exemption" $vat_exemption "multi") (serialize-qp "tags" $tags "multi") (serialize-qp "metadata" $metadata "multi") (serialize-qp "downpayment_request" $downpayment_request "multi") (serialize-qp "commercialvalidity_deadline" $commercialvalidity_deadline "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/quotes/{id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4570,7 +4580,7 @@ export def "apps-quotes appdocumentssalesquotesupdate" [
 #
 # DELETE /apps/{appId}/quotes/{id}/attach
 # operationId: app.documents.sales.quotes.detach
-export def "apps-quotes-attach appdocumentssalesquotesdetach" [
+export def "apps-quotes-attach delete-detach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4586,7 +4596,7 @@ export def "apps-quotes-attach appdocumentssalesquotesdetach" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file_id" $file_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/quotes/{id}/attach") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/attach") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4596,7 +4606,7 @@ export def "apps-quotes-attach appdocumentssalesquotesdetach" [
 #
 # POST /apps/{appId}/quotes/{id}/attach
 # operationId: app.documents.sales.quotes.attach
-export def "apps-quotes-attach appdocumentssalesquotesattach" [
+export def "apps-quotes-attach attach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4612,7 +4622,7 @@ export def "apps-quotes-attach appdocumentssalesquotesattach" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file" $file "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/quotes/{id}/attach") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/attach") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4622,7 +4632,7 @@ export def "apps-quotes-attach appdocumentssalesquotesattach" [
 #
 # POST /apps/{appId}/quotes/{id}/downpayment
 # operationId: app.documents.sales.quotes.downpayment
-export def "apps-quotes-downpayment appdocumentssalesquotesdownpayment" [
+export def "apps-quotes-downpayment create" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4638,7 +4648,7 @@ export def "apps-quotes-downpayment appdocumentssalesquotesdownpayment" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "percent" $percent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/quotes/{id}/downpayment") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/downpayment") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4648,7 +4658,7 @@ export def "apps-quotes-downpayment appdocumentssalesquotesdownpayment" [
 #
 # POST /apps/{appId}/quotes/{id}/duplicate
 # operationId: app.documents.sales.quotes.duplicate
-export def "apps-quotes-duplicate appdocumentssalesquotesduplicate" [
+export def "apps-quotes-duplicate create" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4662,7 +4672,7 @@ export def "apps-quotes-duplicate appdocumentssalesquotesduplicate" [
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, commercialvalidity_deadline: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/quotes/{id}/duplicate"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/duplicate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4672,7 +4682,7 @@ export def "apps-quotes-duplicate appdocumentssalesquotesduplicate" [
 #
 # POST /apps/{appId}/quotes/{id}/finalize
 # operationId: app.documents.sales.quotes.finalize
-export def "apps-quotes-finalize appdocumentssalesquotesfinalize" [
+export def "apps-quotes-finalize finalize" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4686,7 +4696,7 @@ export def "apps-quotes-finalize appdocumentssalesquotesfinalize" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/quotes/{id}/finalize"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/finalize"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4696,7 +4706,7 @@ export def "apps-quotes-finalize appdocumentssalesquotesfinalize" [
 #
 # POST /apps/{appId}/quotes/{id}/invoice
 # operationId: app.documents.sales.quotes.invoice
-export def "apps-quotes-invoice appdocumentssalesquotesinvoice" [
+export def "apps-quotes-invoice create-by-appId-id" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4710,7 +4720,7 @@ export def "apps-quotes-invoice appdocumentssalesquotesinvoice" [
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, avoid_of: any, delivered_at: string, downpayments: list<any>, invoice_of: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, commercialvalidity_deadline: string, status: string>, paid_at: string, payment_methods: string, payment_period: int, related_recurring_invoice: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: int, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, discount_end_at: string, discount_mode: string, discount_start_at: string, end_at: string, frequency_count: int, frequency_duration: string, next_invoice_at: string, orders_plan: list<record>, saving_status: string>, sepa_direct_debit_exported_at: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/quotes/{id}/invoice"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/invoice"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4720,7 +4730,7 @@ export def "apps-quotes-invoice appdocumentssalesquotesinvoice" [
 #
 # GET /apps/{appId}/quotes/{id}/pdf
 # operationId: app.documents.sales.quotes.pdf
-export def "apps-quotes-pdf appdocumentssalesquotespdf" [
+export def "apps-quotes-pdf get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4736,7 +4746,7 @@ export def "apps-quotes-pdf appdocumentssalesquotespdf" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "template" $template "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/quotes/{id}/pdf") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/pdf") $qp)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4746,7 +4756,7 @@ export def "apps-quotes-pdf appdocumentssalesquotespdf" [
 #
 # GET /apps/{appId}/quotes/{id}/preview.jpg
 # operationId: app.documents.sales.quotes.preview
-export def "apps-quotes-previewjpg appdocumentssalesquotespreview" [
+export def "apps-quotes-preview-jpg get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4762,7 +4772,7 @@ export def "apps-quotes-previewjpg appdocumentssalesquotespreview" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "template" $template "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/quotes/{id}/preview.jpg") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/preview.jpg") $qp)
   let accept_val = "application/jpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4772,7 +4782,7 @@ export def "apps-quotes-previewjpg appdocumentssalesquotespreview" [
 #
 # POST /apps/{appId}/quotes/{id}/situation_invoice
 # operationId: app.documents.sales.quotes.situation_invoice
-export def "apps-quotes-situation-invoice invoice" [
+export def "apps-quotes-situation-invoice create" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4788,7 +4798,7 @@ export def "apps-quotes-situation-invoice invoice" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "progress" $progress "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/quotes/{id}/situation_invoice") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/situation_invoice") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4798,7 +4808,7 @@ export def "apps-quotes-situation-invoice invoice" [
 #
 # DELETE /apps/{appId}/quotes/{id}/tag
 # operationId: app.documents.sales.quotes.untag
-export def "apps-quotes-tag appdocumentssalesquotesuntag" [
+export def "apps-quotes-tag untag" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4814,7 +4824,7 @@ export def "apps-quotes-tag appdocumentssalesquotesuntag" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/quotes/{id}/tag") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/tag") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4824,7 +4834,7 @@ export def "apps-quotes-tag appdocumentssalesquotesuntag" [
 #
 # POST /apps/{appId}/quotes/{id}/tag
 # operationId: app.documents.sales.quotes.tag
-export def "apps-quotes-tag appdocumentssalesquotestag" [
+export def "apps-quotes-tag tag" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4840,7 +4850,7 @@ export def "apps-quotes-tag appdocumentssalesquotestag" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/quotes/{id}/tag") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/tag") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4850,7 +4860,7 @@ export def "apps-quotes-tag appdocumentssalesquotestag" [
 #
 # POST /apps/{appId}/quotes/{id}/updatestatus
 # operationId: app.documents.sales.quotes.updatestatus
-export def "apps-quotes-updatestatus appdocumentssalesquotesupdatestatus" [
+export def "apps-quotes-updatestatus create" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4866,7 +4876,7 @@ export def "apps-quotes-updatestatus appdocumentssalesquotesupdatestatus" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/quotes/{id}/updatestatus") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/updatestatus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4876,7 +4886,7 @@ export def "apps-quotes-updatestatus appdocumentssalesquotesupdatestatus" [
 #
 # GET /apps/{appId}/quotes/{id}/yousign/preview.jpg
 # operationId: app.documents.sales.quotes.yousign_preview
-export def "apps-quotes-yousign-previewjpg preview" [
+export def "apps-quotes-yousign-preview-jpg get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4892,7 +4902,7 @@ export def "apps-quotes-yousign-previewjpg preview" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "template" $template "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/quotes/{id}/yousign/preview.jpg") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/yousign/preview.jpg") $qp)
   let accept_val = "application/jpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4902,7 +4912,7 @@ export def "apps-quotes-yousign-previewjpg preview" [
 #
 # DELETE /apps/{appId}/reconcile
 # operationId: app.payments.reconciliation.unreconcile
-export def "apps-reconcile apppaymentsreconciliationunreconcile" [
+export def "apps-reconcile delete-unreconcile" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4918,7 +4928,7 @@ export def "apps-reconcile apppaymentsreconciliationunreconcile" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/reconcile") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/reconcile") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4928,7 +4938,7 @@ export def "apps-reconcile apppaymentsreconciliationunreconcile" [
 #
 # POST /apps/{appId}/reconcile
 # operationId: app.payments.reconciliation.reconcile
-export def "apps-reconcile apppaymentsreconciliationreconcile" [
+export def "apps-reconcile create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4948,7 +4958,7 @@ export def "apps-reconcile apppaymentsreconciliationreconcile" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "replace_all" $replace_all "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "movements" $movements "multi") (serialize-qp "paid_at" $paid_at "scalar") (serialize-qp "rule" $rule "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/reconcile") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/reconcile") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4958,7 +4968,7 @@ export def "apps-reconcile apppaymentsreconciliationreconcile" [
 #
 # POST /apps/{appId}/reconcile/batch
 # operationId: app.payments.reconciliation.batch
-export def "apps-reconcile-batch apppaymentsreconciliationbatch" [
+export def "apps-reconcile-batch create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4973,7 +4983,7 @@ export def "apps-reconcile-batch apppaymentsreconciliationbatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/reconcile/batch") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/reconcile/batch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4983,7 +4993,7 @@ export def "apps-reconcile-batch apppaymentsreconciliationbatch" [
 #
 # GET /apps/{appId}/recurringinvoices
 # operationId: app.documents.sales.recurringinvoices.list
-export def "apps-recurringinvoices appdocumentssalesrecurringinvoiceslist" [
+export def "apps-recurringinvoices list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5002,7 +5012,7 @@ export def "apps-recurringinvoices appdocumentssalesrecurringinvoiceslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/recurringinvoices") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/recurringinvoices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5012,7 +5022,7 @@ export def "apps-recurringinvoices appdocumentssalesrecurringinvoiceslist" [
 #
 # POST /apps/{appId}/recurringinvoices
 # operationId: app.documents.sales.recurringinvoices.create
-export def "apps-recurringinvoices appdocumentssalesrecurringinvoicescreate" [
+export def "apps-recurringinvoices create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5047,7 +5057,7 @@ export def "apps-recurringinvoices appdocumentssalesrecurringinvoicescreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "contact_infos" $contact_infos "multi") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi") (serialize-qp "currency" $currency "scalar") (serialize-qp "legal_notice" $legal_notice "scalar") (serialize-qp "bank_details_id" $bank_details_id "scalar") (serialize-qp "vat_exemption" $vat_exemption "multi") (serialize-qp "tags" $tags "multi") (serialize-qp "metadata" $metadata "multi") (serialize-qp "payment_period" $payment_period "scalar") (serialize-qp "next_invoice_at" $next_invoice_at "scalar") (serialize-qp "end_at" $end_at "scalar") (serialize-qp "frequency_count" $frequency_count "scalar") (serialize-qp "frequency_duration" $frequency_duration "scalar") (serialize-qp "discount" $discount "scalar") (serialize-qp "discount_mode" $discount_mode "scalar") (serialize-qp "discount_start_at" $discount_start_at "scalar") (serialize-qp "discount_end_at" $discount_end_at "scalar") (serialize-qp "details" $details "scalar") (serialize-qp "orders_plan" $orders_plan "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/recurringinvoices") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/recurringinvoices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5067,12 +5077,12 @@ export def "apps-recurringinvoices-batch delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # List of RecurringInvoice ID
+  --ids: list<int> # List of RecurringInvoice ID
 ]: nothing -> record<code: int, message: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/recurringinvoices/batch") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/recurringinvoices/batch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5082,7 +5092,7 @@ export def "apps-recurringinvoices-batch delete" [
 #
 # POST /apps/{appId}/recurringinvoices/batch
 # operationId: app.documents.sales.recurringinvoices.batch
-export def "apps-recurringinvoices-batch appdocumentssalesrecurringinvoicesbatch" [
+export def "apps-recurringinvoices-batch create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5097,7 +5107,7 @@ export def "apps-recurringinvoices-batch appdocumentssalesrecurringinvoicesbatch
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/recurringinvoices/batch") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/recurringinvoices/batch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5107,7 +5117,7 @@ export def "apps-recurringinvoices-batch appdocumentssalesrecurringinvoicesbatch
 #
 # GET /apps/{appId}/recurringinvoices/periods
 # operationId: app.documents.sales.recurringinvoices.getPeriods
-export def "apps-recurringinvoices-periods appdocumentssalesrecurringinvoicesgetPeriods" [
+export def "apps-recurringinvoices-periods get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5122,7 +5132,7 @@ export def "apps-recurringinvoices-periods appdocumentssalesrecurringinvoicesget
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date" $date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/recurringinvoices/periods") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/recurringinvoices/periods") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5132,7 +5142,7 @@ export def "apps-recurringinvoices-periods appdocumentssalesrecurringinvoicesget
 #
 # DELETE /apps/{appId}/recurringinvoices/{id}
 # operationId: app.documents.sales.recurringinvoices.delete
-export def "apps-recurringinvoices appdocumentssalesrecurringinvoicesdelete" [
+export def "apps-recurringinvoices delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5146,7 +5156,7 @@ export def "apps-recurringinvoices appdocumentssalesrecurringinvoicesdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/recurringinvoices/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/recurringinvoices/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5156,7 +5166,7 @@ export def "apps-recurringinvoices appdocumentssalesrecurringinvoicesdelete" [
 #
 # GET /apps/{appId}/recurringinvoices/{id}
 # operationId: app.documents.sales.recurringinvoices.get
-export def "apps-recurringinvoices appdocumentssalesrecurringinvoicesget" [
+export def "apps-recurringinvoices get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5170,7 +5180,7 @@ export def "apps-recurringinvoices appdocumentssalesrecurringinvoicesget" [
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: int, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, discount_end_at: string, discount_mode: string, discount_start_at: string, end_at: string, frequency_count: int, frequency_duration: string, next_invoice_at: string, orders_plan: table<end_at: string, model: int>, saving_status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/recurringinvoices/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/recurringinvoices/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5180,7 +5190,7 @@ export def "apps-recurringinvoices appdocumentssalesrecurringinvoicesget" [
 #
 # POST /apps/{appId}/recurringinvoices/{id}
 # operationId: app.documents.sales.recurringinvoices.update
-export def "apps-recurringinvoices appdocumentssalesrecurringinvoicesupdate" [
+export def "apps-recurringinvoices update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5216,7 +5226,7 @@ export def "apps-recurringinvoices appdocumentssalesrecurringinvoicesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "contact_infos" $contact_infos "multi") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi") (serialize-qp "currency" $currency "scalar") (serialize-qp "legal_notice" $legal_notice "scalar") (serialize-qp "bank_details_id" $bank_details_id "scalar") (serialize-qp "vat_exemption" $vat_exemption "multi") (serialize-qp "tags" $tags "multi") (serialize-qp "metadata" $metadata "multi") (serialize-qp "payment_period" $payment_period "scalar") (serialize-qp "next_invoice_at" $next_invoice_at "scalar") (serialize-qp "end_at" $end_at "scalar") (serialize-qp "frequency_count" $frequency_count "scalar") (serialize-qp "frequency_duration" $frequency_duration "scalar") (serialize-qp "discount" $discount "scalar") (serialize-qp "discount_mode" $discount_mode "scalar") (serialize-qp "discount_start_at" $discount_start_at "scalar") (serialize-qp "discount_end_at" $discount_end_at "scalar") (serialize-qp "details" $details "scalar") (serialize-qp "orders_plan" $orders_plan "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/recurringinvoices/{id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/recurringinvoices/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5226,7 +5236,7 @@ export def "apps-recurringinvoices appdocumentssalesrecurringinvoicesupdate" [
 #
 # GET /apps/{appId}/recurringinvoices/{id}/plan
 # operationId: app.documents.sales.recurringinvoices.plan
-export def "apps-recurringinvoices-plan appdocumentssalesrecurringinvoicesplan" [
+export def "apps-recurringinvoices-plan get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5242,7 +5252,7 @@ export def "apps-recurringinvoices-plan appdocumentssalesrecurringinvoicesplan" 
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "until" $until "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/recurringinvoices/{id}/plan") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/recurringinvoices/{id}/plan") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5252,7 +5262,7 @@ export def "apps-recurringinvoices-plan appdocumentssalesrecurringinvoicesplan" 
 #
 # GET /apps/{appId}/relationships
 # operationId: app.contacts.relationships.list
-export def "apps-relationships appcontactsrelationshipslist" [
+export def "apps-relationships list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5270,7 +5280,7 @@ export def "apps-relationships appcontactsrelationshipslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/relationships") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/relationships") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5280,7 +5290,7 @@ export def "apps-relationships appcontactsrelationshipslist" [
 #
 # GET /apps/{appId}/relationships/{id}
 # operationId: app.contacts.relationships.get
-export def "apps-relationships appcontactsrelationshipsget" [
+export def "apps-relationships get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5294,7 +5304,7 @@ export def "apps-relationships appcontactsrelationshipsget" [
 ]: nothing -> record<accounting_infos: record<balance_initial_amount: int, customer_id: string, reference: string, supplier_id: string>, id: int, importance_level: int, is_customer: bool, is_notifying: bool, is_prospect: bool, is_supplier: bool, metadata: list<any>, note: string, rating: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/relationships/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/relationships/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5304,7 +5314,7 @@ export def "apps-relationships appcontactsrelationshipsget" [
 #
 # POST /apps/{appId}/relationships/{id}
 # operationId: app.contacts.relationships.update
-export def "apps-relationships appcontactsrelationshipsupdate" [
+export def "apps-relationships update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5332,7 +5342,7 @@ export def "apps-relationships appcontactsrelationshipsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "is_customer" $is_customer "scalar") (serialize-qp "is_supplier" $is_supplier "scalar") (serialize-qp "is_prospect" $is_prospect "scalar") (serialize-qp "importance_level" $importance_level "scalar") (serialize-qp "rating" $rating "scalar") (serialize-qp "balance_initial_amount" $balance_initial_amount "scalar") (serialize-qp "is_notifying" $is_notifying "scalar") (serialize-qp "note" $note "scalar") (serialize-qp "reference" $reference "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "discount" $discount "scalar") (serialize-qp "details" $details "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/relationships/{id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/relationships/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5342,7 +5352,7 @@ export def "apps-relationships appcontactsrelationshipsupdate" [
 #
 # DELETE /apps/{appId}/relationships/{id}/attach
 # operationId: app.contacts.relationships.detach
-export def "apps-relationships-attach appcontactsrelationshipsdetach" [
+export def "apps-relationships-attach delete-detach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5358,7 +5368,7 @@ export def "apps-relationships-attach appcontactsrelationshipsdetach" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file_id" $file_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/relationships/{id}/attach") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/relationships/{id}/attach") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5368,7 +5378,7 @@ export def "apps-relationships-attach appcontactsrelationshipsdetach" [
 #
 # POST /apps/{appId}/relationships/{id}/attach
 # operationId: app.contacts.relationships.attach
-export def "apps-relationships-attach appcontactsrelationshipsattach" [
+export def "apps-relationships-attach attach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5384,7 +5394,7 @@ export def "apps-relationships-attach appcontactsrelationshipsattach" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file" $file "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/relationships/{id}/attach") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/relationships/{id}/attach") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5394,7 +5404,7 @@ export def "apps-relationships-attach appcontactsrelationshipsattach" [
 #
 # POST /apps/{appId}/reset
 # operationId: app.reset
-export def "apps-reset appreset" [
+export def "apps-reset reset" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5407,7 +5417,7 @@ export def "apps-reset appreset" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/reset"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/reset"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5417,7 +5427,7 @@ export def "apps-reset appreset" [
 #
 # GET /apps/{appId}/rules/
 # operationId: app.rules.list
-export def "apps-rules appruleslist" [
+export def "apps-rules list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5436,7 +5446,7 @@ export def "apps-rules appruleslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/rules/") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/rules/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5446,7 +5456,7 @@ export def "apps-rules appruleslist" [
 #
 # POST /apps/{appId}/rules/
 # operationId: app.rules.create
-export def "apps-rules apprulescreate" [
+export def "apps-rules create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5465,7 +5475,7 @@ export def "apps-rules apprulescreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "conditions" $conditions "multi") (serialize-qp "on_event" $on_event "scalar") (serialize-qp "parameter" $parameter "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "priority" $priority "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/rules/") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/rules/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5475,7 +5485,7 @@ export def "apps-rules apprulescreate" [
 #
 # POST /apps/{appId}/rules/execute_on
 # operationId: app.rules.execute_on
-export def "apps-rules-execute-on on" [
+export def "apps-rules-execute-on create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5490,7 +5500,7 @@ export def "apps-rules-execute-on on" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "model" $model "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/rules/execute_on") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/rules/execute_on") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5500,7 +5510,7 @@ export def "apps-rules-execute-on on" [
 #
 # DELETE /apps/{appId}/rules/{id}
 # operationId: app.rules.delete
-export def "apps-rules apprulesdelete" [
+export def "apps-rules delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5514,7 +5524,7 @@ export def "apps-rules apprulesdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/rules/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/rules/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5524,7 +5534,7 @@ export def "apps-rules apprulesdelete" [
 #
 # GET /apps/{appId}/rules/{id}
 # operationId: app.rules.get
-export def "apps-rules apprulesget" [
+export def "apps-rules get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5538,7 +5548,7 @@ export def "apps-rules apprulesget" [
 ]: nothing -> record<conditions: list<list<string>>, id: int, on_event: string, parameter: string, priority: int, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/rules/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/rules/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5548,7 +5558,7 @@ export def "apps-rules apprulesget" [
 #
 # POST /apps/{appId}/rules/{id}
 # operationId: app.rules.update
-export def "apps-rules apprulesupdate" [
+export def "apps-rules update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5568,7 +5578,7 @@ export def "apps-rules apprulesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "conditions" $conditions "multi") (serialize-qp "on_event" $on_event "scalar") (serialize-qp "parameter" $parameter "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "priority" $priority "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/rules/{id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/rules/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5578,7 +5588,7 @@ export def "apps-rules apprulesupdate" [
 #
 # GET /apps/{appId}/salesdocumentmodels
 # operationId: app.documents.sales.models.list
-export def "apps-salesdocumentmodels appdocumentssalesmodelslist" [
+export def "apps-salesdocumentmodels list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5597,7 +5607,7 @@ export def "apps-salesdocumentmodels appdocumentssalesmodelslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/salesdocumentmodels") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/salesdocumentmodels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5607,7 +5617,7 @@ export def "apps-salesdocumentmodels appdocumentssalesmodelslist" [
 #
 # POST /apps/{appId}/salesdocumentmodels
 # operationId: app.documents.sales.models.create
-export def "apps-salesdocumentmodels appdocumentssalesmodelscreate" [
+export def "apps-salesdocumentmodels create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5625,7 +5635,7 @@ export def "apps-salesdocumentmodels appdocumentssalesmodelscreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/salesdocumentmodels") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/salesdocumentmodels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5635,7 +5645,7 @@ export def "apps-salesdocumentmodels appdocumentssalesmodelscreate" [
 #
 # DELETE /apps/{appId}/salesdocumentmodels/{id}
 # operationId: app.documents.sales.models.delete
-export def "apps-salesdocumentmodels appdocumentssalesmodelsdelete" [
+export def "apps-salesdocumentmodels delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5649,7 +5659,7 @@ export def "apps-salesdocumentmodels appdocumentssalesmodelsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/salesdocumentmodels/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/salesdocumentmodels/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5659,7 +5669,7 @@ export def "apps-salesdocumentmodels appdocumentssalesmodelsdelete" [
 #
 # GET /apps/{appId}/salesdocumentmodels/{id}
 # operationId: app.documents.sales.models.get
-export def "apps-salesdocumentmodels appdocumentssalesmodelsget" [
+export def "apps-salesdocumentmodels get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5673,7 +5683,7 @@ export def "apps-salesdocumentmodels appdocumentssalesmodelsget" [
 ]: nothing -> record<id: int, json: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, name: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/salesdocumentmodels/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/salesdocumentmodels/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5683,7 +5693,7 @@ export def "apps-salesdocumentmodels appdocumentssalesmodelsget" [
 #
 # POST /apps/{appId}/salesdocumentmodels/{id}
 # operationId: app.documents.sales.models.update
-export def "apps-salesdocumentmodels appdocumentssalesmodelsupdate" [
+export def "apps-salesdocumentmodels update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5702,7 +5712,7 @@ export def "apps-salesdocumentmodels appdocumentssalesmodelsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/salesdocumentmodels/{id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/salesdocumentmodels/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5712,7 +5722,7 @@ export def "apps-salesdocumentmodels appdocumentssalesmodelsupdate" [
 #
 # GET /apps/{appId}/sepamandates/
 # operationId: app.payments.sepamandates.list
-export def "apps-sepamandates apppaymentssepamandateslist" [
+export def "apps-sepamandates list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5731,7 +5741,7 @@ export def "apps-sepamandates apppaymentssepamandateslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/sepamandates/") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/sepamandates/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5741,7 +5751,7 @@ export def "apps-sepamandates apppaymentssepamandateslist" [
 #
 # POST /apps/{appId}/sepamandates/
 # operationId: app.payments.sepamandates.create
-export def "apps-sepamandates apppaymentssepamandatescreate" [
+export def "apps-sepamandates create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5765,7 +5775,7 @@ export def "apps-sepamandates apppaymentssepamandatescreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "customer_organization_id" $customer_organization_id "scalar") (serialize-qp "customer_person_id" $customer_person_id "scalar") (serialize-qp "old_mandate_id" $old_mandate_id "scalar") (serialize-qp "mandate_id" $mandate_id "scalar") (serialize-qp "signed_at" $signed_at "scalar") (serialize-qp "electronic_signature" $electronic_signature "scalar") (serialize-qp "customer_name" $customer_name "scalar") (serialize-qp "iban" $iban "scalar") (serialize-qp "bic" $bic "scalar") (serialize-qp "is_first" $is_first "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/sepamandates/") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/sepamandates/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5775,7 +5785,7 @@ export def "apps-sepamandates apppaymentssepamandatescreate" [
 #
 # GET /apps/{appId}/sepamandates/credittransfer
 # operationId: app.payments.sepacredittransfer.preview
-export def "apps-sepamandates-credittransfer apppaymentssepacredittransferpreview" [
+export def "apps-sepamandates-credittransfer get-preview" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5785,12 +5795,12 @@ export def "apps-sepamandates-credittransfer apppaymentssepacredittransferprevie
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list
+  --ids: list<int>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/sepamandates/credittransfer") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/sepamandates/credittransfer") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5800,7 +5810,7 @@ export def "apps-sepamandates-credittransfer apppaymentssepacredittransferprevie
 #
 # POST /apps/{appId}/sepamandates/credittransfer
 # operationId: app.payments.sepacredittransfer.download
-export def "apps-sepamandates-credittransfer apppaymentssepacredittransferdownload" [
+export def "apps-sepamandates-credittransfer download" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5810,8 +5820,8 @@ export def "apps-sepamandates-credittransfer apppaymentssepacredittransferdownlo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list
-  --amounts: list # Optional array with amounts (keys must to correspond to ids)
+  --ids: list<int>
+  --amounts: list<int> # Optional array with amounts (keys must to correspond to ids)
   --debtor-name: string
   --debtor-iban: string
   --debtor-bic: string
@@ -5820,7 +5830,7 @@ export def "apps-sepamandates-credittransfer apppaymentssepacredittransferdownlo
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "multi") (serialize-qp "amounts" $amounts "multi") (serialize-qp "debtor_name" $debtor_name "scalar") (serialize-qp "debtor_iban" $debtor_iban "scalar") (serialize-qp "debtor_bic" $debtor_bic "scalar") (serialize-qp "btchBookg" $btch_bookg "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/sepamandates/credittransfer") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/sepamandates/credittransfer") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5830,7 +5840,7 @@ export def "apps-sepamandates-credittransfer apppaymentssepacredittransferdownlo
 #
 # GET /apps/{appId}/sepamandates/directdebit
 # operationId: app.payments.sepadirectdebit.preview
-export def "apps-sepamandates-directdebit apppaymentssepadirectdebitpreview" [
+export def "apps-sepamandates-directdebit get-preview" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5840,12 +5850,12 @@ export def "apps-sepamandates-directdebit apppaymentssepadirectdebitpreview" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --invoices-ids: list
+  --invoices-ids: list<int>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "invoices_ids" $invoices_ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/sepamandates/directdebit") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/sepamandates/directdebit") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5855,7 +5865,7 @@ export def "apps-sepamandates-directdebit apppaymentssepadirectdebitpreview" [
 #
 # POST /apps/{appId}/sepamandates/directdebit
 # operationId: app.payments.sepadirectdebit.download
-export def "apps-sepamandates-directdebit apppaymentssepadirectdebitdownload" [
+export def "apps-sepamandates-directdebit download" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5865,8 +5875,8 @@ export def "apps-sepamandates-directdebit apppaymentssepadirectdebitdownload" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --invoices-ids: list
-  --amounts: list # Optional array with amounts (keys must to correspond to invoices_ids)
+  --invoices-ids: list<int>
+  --amounts: list<int> # Optional array with amounts (keys must to correspond to invoices_ids)
   --creditor-name: string
   --creditor-iban: string
   --creditor-bic: string
@@ -5876,7 +5886,7 @@ export def "apps-sepamandates-directdebit apppaymentssepadirectdebitdownload" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "invoices_ids" $invoices_ids "multi") (serialize-qp "amounts" $amounts "multi") (serialize-qp "creditor_name" $creditor_name "scalar") (serialize-qp "creditor_iban" $creditor_iban "scalar") (serialize-qp "creditor_bic" $creditor_bic "scalar") (serialize-qp "creditor_ics" $creditor_ics "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/sepamandates/directdebit") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/sepamandates/directdebit") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5886,7 +5896,7 @@ export def "apps-sepamandates-directdebit apppaymentssepadirectdebitdownload" [
 #
 # DELETE /apps/{appId}/sepamandates/{id}
 # operationId: app.payments.sepamandates.delete
-export def "apps-sepamandates apppaymentssepamandatesdelete" [
+export def "apps-sepamandates delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5900,7 +5910,7 @@ export def "apps-sepamandates apppaymentssepamandatesdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/sepamandates/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/sepamandates/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5910,7 +5920,7 @@ export def "apps-sepamandates apppaymentssepamandatesdelete" [
 #
 # GET /apps/{appId}/sepamandates/{id}
 # operationId: app.payments.sepamandates.get
-export def "apps-sepamandates apppaymentssepamandatesget" [
+export def "apps-sepamandates get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5924,7 +5934,7 @@ export def "apps-sepamandates apppaymentssepamandatesget" [
 ]: nothing -> record<author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, bic: string, created_at: string, customer: any, customer_name: string, electronic_signature: string, iban: string, id: int, is_first: int, last_debit_amount: int, last_debit_at: string, last_debit_id: int, logs_sepa_direct_debits: string, mandate_id: int, old_mandate_id: int, signed_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/sepamandates/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/sepamandates/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5934,7 +5944,7 @@ export def "apps-sepamandates apppaymentssepamandatesget" [
 #
 # POST /apps/{appId}/sepamandates/{id}
 # operationId: app.payments.sepamandates.update
-export def "apps-sepamandates apppaymentssepamandatesupdate" [
+export def "apps-sepamandates update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5959,7 +5969,7 @@ export def "apps-sepamandates apppaymentssepamandatesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "customer_organization_id" $customer_organization_id "scalar") (serialize-qp "customer_person_id" $customer_person_id "scalar") (serialize-qp "old_mandate_id" $old_mandate_id "scalar") (serialize-qp "mandate_id" $mandate_id "scalar") (serialize-qp "signed_at" $signed_at "scalar") (serialize-qp "electronic_signature" $electronic_signature "scalar") (serialize-qp "customer_name" $customer_name "scalar") (serialize-qp "iban" $iban "scalar") (serialize-qp "bic" $bic "scalar") (serialize-qp "is_first" $is_first "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/sepamandates/{id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/sepamandates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5969,7 +5979,7 @@ export def "apps-sepamandates apppaymentssepamandatesupdate" [
 #
 # GET /apps/{appId}/services/stripe/webhook
 # operationId: app.services.stripe.webhook.ping
-export def "apps-services-stripe-webhook appservicesstripewebhookping" [
+export def "apps-services-stripe-webhook ping" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5982,7 +5992,7 @@ export def "apps-services-stripe-webhook appservicesstripewebhookping" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/services/stripe/webhook"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/services/stripe/webhook"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5992,7 +6002,7 @@ export def "apps-services-stripe-webhook appservicesstripewebhookping" [
 #
 # POST /apps/{appId}/services/stripe/webhook
 # operationId: app.services.stripe.webhook.handle
-export def "apps-services-stripe-webhook appservicesstripewebhookhandle" [
+export def "apps-services-stripe-webhook create-handle" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6005,7 +6015,7 @@ export def "apps-services-stripe-webhook appservicesstripewebhookhandle" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/services/stripe/webhook"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/services/stripe/webhook"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6015,7 +6025,7 @@ export def "apps-services-stripe-webhook appservicesstripewebhookhandle" [
 #
 # POST /apps/{appId}/services/yousign/webhook
 # operationId: app.services.yousign.webhook.handle
-export def "apps-services-yousign-webhook appservicesyousignwebhookhandle" [
+export def "apps-services-yousign-webhook create-handle" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6028,7 +6038,7 @@ export def "apps-services-yousign-webhook appservicesyousignwebhookhandle" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/services/yousign/webhook"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/services/yousign/webhook"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6038,7 +6048,7 @@ export def "apps-services-yousign-webhook appservicesyousignwebhookhandle" [
 #
 # GET /apps/{appId}/settings
 # operationId: app.settings.get
-export def "apps-settings appsettingsget" [
+export def "apps-settings get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6053,7 +6063,7 @@ export def "apps-settings appsettingsget" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/settings") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/settings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6063,7 +6073,7 @@ export def "apps-settings appsettingsget" [
 #
 # POST /apps/{appId}/settings
 # operationId: app.settings.update
-export def "apps-settings appsettingsupdate" [
+export def "apps-settings update" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6080,7 +6090,7 @@ export def "apps-settings appsettingsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "settings" $settings "multi") (serialize-qp "key" $key "scalar") (serialize-qp "value" $value "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/settings") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/settings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6090,7 +6100,7 @@ export def "apps-settings appsettingsupdate" [
 #
 # POST /apps/{appId}/signature
 # operationId: app.documents.sales.signature.create
-export def "apps-signature appdocumentssalessignaturecreate" [
+export def "apps-signature create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6109,7 +6119,7 @@ export def "apps-signature appdocumentssalessignaturecreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "documentId" $document_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "firstname" $firstname "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "phone" $phone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/signature") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/signature") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6119,7 +6129,7 @@ export def "apps-signature appdocumentssalessignaturecreate" [
 #
 # GET /apps/{appId}/statistics/charts/{type}
 # operationId: app.statistics.charts.get
-export def "apps-statistics-charts appstatisticschartsget" [
+export def "apps-statistics-charts get" [
   app_id: int
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6138,9 +6148,9 @@ export def "apps-statistics-charts appstatisticschartsget" [
   --calcul: string@calcul-completer
   --methods: list # Array of [object_property, calcul]
   --object-date-property: string
-  --group-by: list
+  --group-by: list<string>
   --group-by-object-name: string
-  --exclude-keys: list
+  --exclude-keys: list<int>
   --search: string
   --filters: record
   --show-details: oneof<nothing, bool> # Recovers the details of the calculations
@@ -6148,7 +6158,7 @@ export def "apps-statistics-charts appstatisticschartsget" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "start_at" $start_at "scalar") (serialize-qp "object" $object "scalar") (serialize-qp "object_property" $object_property "scalar") (serialize-qp "calcul" $calcul "scalar") (serialize-qp "methods" $methods "multi") (serialize-qp "object_date_property" $object_date_property "scalar") (serialize-qp "group_by" $group_by "multi") (serialize-qp "group_by_object_name" $group_by_object_name "scalar") (serialize-qp "exclude_keys" $exclude_keys "multi") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "show_details" $show_details "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, type: $type} | format pattern "/apps/{app_id}/statistics/charts/{type}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), type: (encode-path-segment $type)} | format pattern "/apps/{app_id}/statistics/charts/{type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6158,7 +6168,7 @@ export def "apps-statistics-charts appstatisticschartsget" [
 #
 # GET /apps/{appId}/statistics/timetable/purchases
 # operationId: app.statistics.timetable.purchases
-export def "apps-statistics-timetable-purchases appstatisticstimetablepurchases" [
+export def "apps-statistics-timetable-purchases get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6174,7 +6184,7 @@ export def "apps-statistics-timetable-purchases appstatisticstimetablepurchases"
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "detailed" $detailed "scalar") (serialize-qp "groups" $groups "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/statistics/timetable/purchases") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/statistics/timetable/purchases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6184,7 +6194,7 @@ export def "apps-statistics-timetable-purchases appstatisticstimetablepurchases"
 #
 # GET /apps/{appId}/statistics/timetable/sales
 # operationId: app.statistics.timetable.sales
-export def "apps-statistics-timetable-sales appstatisticstimetablesales" [
+export def "apps-statistics-timetable-sales get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6200,7 +6210,7 @@ export def "apps-statistics-timetable-sales appstatisticstimetablesales" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "detailed" $detailed "scalar") (serialize-qp "groups" $groups "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/statistics/timetable/sales") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/statistics/timetable/sales") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6210,7 +6220,7 @@ export def "apps-statistics-timetable-sales appstatisticstimetablesales" [
 #
 # GET /apps/{appId}/statistics/vat
 # operationId: app.statistics.vat.get
-export def "apps-statistics-vat appstatisticsvatget" [
+export def "apps-statistics-vat get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6228,7 +6238,7 @@ export def "apps-statistics-vat appstatisticsvatget" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "detailed" $detailed "scalar") (serialize-qp "start_at" $start_at "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "end_at" $end_at "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/statistics/vat") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/statistics/vat") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6238,7 +6248,7 @@ export def "apps-statistics-vat appstatisticsvatget" [
 #
 # POST /apps/{appId}/subscription/anchordate
 # operationId: app.subscription.anchordate
-export def "apps-subscription-anchordate appsubscriptionanchordate" [
+export def "apps-subscription-anchordate create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6251,7 +6261,7 @@ export def "apps-subscription-anchordate appsubscriptionanchordate" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/subscription/anchordate"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/anchordate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6261,7 +6271,7 @@ export def "apps-subscription-anchordate appsubscriptionanchordate" [
 #
 # GET /apps/{appId}/subscription/checkout_add_source
 # operationId: app.subscription.checkout_add_source
-export def "apps-subscription-checkout-add-source source" [
+export def "apps-subscription-checkout-add-source create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6274,7 +6284,7 @@ export def "apps-subscription-checkout-add-source source" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/subscription/checkout_add_source"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/checkout_add_source"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6284,7 +6294,7 @@ export def "apps-subscription-checkout-add-source source" [
 #
 # POST /apps/{appId}/subscription/coupon
 # operationId: app.subscription.coupon
-export def "apps-subscription-coupon appsubscriptioncoupon" [
+export def "apps-subscription-coupon create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6299,7 +6309,7 @@ export def "apps-subscription-coupon appsubscriptioncoupon" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "code" $code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/subscription/coupon") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/coupon") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6309,7 +6319,7 @@ export def "apps-subscription-coupon appsubscriptioncoupon" [
 #
 # POST /apps/{appId}/subscription/extend_trial
 # operationId: app.subscription.extend_trial
-export def "apps-subscription-extend-trial trial" [
+export def "apps-subscription-extend-trial create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6322,7 +6332,7 @@ export def "apps-subscription-extend-trial trial" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/subscription/extend_trial"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/extend_trial"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6346,7 +6356,7 @@ export def "apps-subscription-extra enable" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, stripe_plan: $stripe_plan} | format pattern "/apps/{app_id}/subscription/extra/{stripe_plan}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), stripe_plan: (encode-path-segment $stripe_plan)} | format pattern "/apps/{app_id}/subscription/extra/{stripe_plan}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6356,7 +6366,7 @@ export def "apps-subscription-extra enable" [
 #
 # POST /apps/{appId}/subscription/pay_all
 # operationId: app.subscription.pay_all
-export def "apps-subscription-pay-all all" [
+export def "apps-subscription-pay-all list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6369,7 +6379,7 @@ export def "apps-subscription-pay-all all" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/subscription/pay_all"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/pay_all"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6379,7 +6389,7 @@ export def "apps-subscription-pay-all all" [
 #
 # DELETE /apps/{appId}/subscription/plan
 # operationId: app.subscription.end
-export def "apps-subscription-plan appsubscriptionend" [
+export def "apps-subscription-plan delete-end" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6392,7 +6402,7 @@ export def "apps-subscription-plan appsubscriptionend" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/subscription/plan"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/plan"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6402,7 +6412,7 @@ export def "apps-subscription-plan appsubscriptionend" [
 #
 # GET /apps/{appId}/subscription/plan
 # operationId: app.subscription.get
-export def "apps-subscription-plan appsubscriptionget" [
+export def "apps-subscription-plan get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6415,7 +6425,7 @@ export def "apps-subscription-plan appsubscriptionget" [
 ]: nothing -> record<extras: list<string>, plans: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/subscription/plan"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/plan"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6425,7 +6435,7 @@ export def "apps-subscription-plan appsubscriptionget" [
 #
 # GET /apps/{appId}/subscription/plans
 # operationId: app.subscription.list
-export def "apps-subscription-plans appsubscriptionlist" [
+export def "apps-subscription-plans list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6438,7 +6448,7 @@ export def "apps-subscription-plans appsubscriptionlist" [
 ]: nothing -> record<extras: list<string>, plans: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/subscription/plans"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/plans"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6448,7 +6458,7 @@ export def "apps-subscription-plans appsubscriptionlist" [
 #
 # GET /apps/{appId}/subscription/plans/{stripe_plan}
 # operationId: app.subscription.upcoming
-export def "apps-subscription-plans appsubscriptionupcoming" [
+export def "apps-subscription-plans get-upcoming" [
   app_id: int
   stripe_plan: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6464,7 +6474,7 @@ export def "apps-subscription-plans appsubscriptionupcoming" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stripe_coupon" $stripe_coupon "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, stripe_plan: $stripe_plan} | format pattern "/apps/{app_id}/subscription/plans/{stripe_plan}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), stripe_plan: (encode-path-segment $stripe_plan)} | format pattern "/apps/{app_id}/subscription/plans/{stripe_plan}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6474,7 +6484,7 @@ export def "apps-subscription-plans appsubscriptionupcoming" [
 #
 # POST /apps/{appId}/subscription/plans/{stripe_plan}
 # operationId: app.subscription.pay
-export def "apps-subscription-plans appsubscriptionpay" [
+export def "apps-subscription-plans create-pay" [
   app_id: int
   stripe_plan: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6491,7 +6501,7 @@ export def "apps-subscription-plans appsubscriptionpay" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stripe_source" $stripe_source "scalar") (serialize-qp "stripe_coupon" $stripe_coupon "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, stripe_plan: $stripe_plan} | format pattern "/apps/{app_id}/subscription/plans/{stripe_plan}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), stripe_plan: (encode-path-segment $stripe_plan)} | format pattern "/apps/{app_id}/subscription/plans/{stripe_plan}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6501,7 +6511,7 @@ export def "apps-subscription-plans appsubscriptionpay" [
 #
 # GET /apps/{appId}/subscription/plans/{stripe_plan}/checkout
 # operationId: app.subscription.checkout
-export def "apps-subscription-plans-checkout appsubscriptioncheckout" [
+export def "apps-subscription-plans-checkout get" [
   app_id: int
   stripe_plan: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6517,7 +6527,7 @@ export def "apps-subscription-plans-checkout appsubscriptioncheckout" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stripe_coupon" $stripe_coupon "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, stripe_plan: $stripe_plan} | format pattern "/apps/{app_id}/subscription/plans/{stripe_plan}/checkout") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), stripe_plan: (encode-path-segment $stripe_plan)} | format pattern "/apps/{app_id}/subscription/plans/{stripe_plan}/checkout") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6527,7 +6537,7 @@ export def "apps-subscription-plans-checkout appsubscriptioncheckout" [
 #
 # DELETE /apps/{appId}/subscription/source
 # operationId: app.subscription.remove_source
-export def "apps-subscription-source source-by-appId" [
+export def "apps-subscription-source delete" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6542,7 +6552,7 @@ export def "apps-subscription-source source-by-appId" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stripe_source" $stripe_source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/subscription/source") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/source") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6552,7 +6562,7 @@ export def "apps-subscription-source source-by-appId" [
 #
 # POST /apps/{appId}/subscription/source
 # operationId: app.subscription.add_source
-export def "apps-subscription-source source-by-appId-1" [
+export def "apps-subscription-source create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6567,7 +6577,7 @@ export def "apps-subscription-source source-by-appId-1" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stripe_source" $stripe_source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/subscription/source") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/source") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6577,7 +6587,7 @@ export def "apps-subscription-source source-by-appId-1" [
 #
 # POST /apps/{appId}/subscription/source/default
 # operationId: app.subscription.set_default
-export def "apps-subscription-source-default default" [
+export def "apps-subscription-source-default update" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6592,7 +6602,7 @@ export def "apps-subscription-source-default default" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stripe_source" $stripe_source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/subscription/source/default") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/source/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6602,7 +6612,7 @@ export def "apps-subscription-source-default default" [
 #
 # GET /apps/{appId}/tags
 # operationId: app.statistics.tags.get
-export def "apps-tags appstatisticstagsget" [
+export def "apps-tags get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6617,7 +6627,7 @@ export def "apps-tags appstatisticstagsget" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "object" $object "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/tags") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6627,7 +6637,7 @@ export def "apps-tags appstatisticstagsget" [
 #
 # GET /apps/{appId}/templates
 # operationId: app.settings.templates.list
-export def "apps-templates appsettingstemplateslist" [
+export def "apps-templates list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6640,7 +6650,7 @@ export def "apps-templates appsettingstemplateslist" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/templates"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/templates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6650,7 +6660,7 @@ export def "apps-templates appsettingstemplateslist" [
 #
 # POST /apps/{appId}/templates
 # operationId: app.settings.templates.create
-export def "apps-templates appsettingstemplatescreate" [
+export def "apps-templates create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6663,7 +6673,7 @@ export def "apps-templates appsettingstemplatescreate" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/templates"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/templates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6673,7 +6683,7 @@ export def "apps-templates appsettingstemplatescreate" [
 #
 # POST /apps/{appId}/templates/batch
 # operationId: app.settings.templates.batch
-export def "apps-templates-batch appsettingstemplatesbatch" [
+export def "apps-templates-batch create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6688,7 +6698,7 @@ export def "apps-templates-batch appsettingstemplatesbatch" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/templates/batch") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/templates/batch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6698,7 +6708,7 @@ export def "apps-templates-batch appsettingstemplatesbatch" [
 #
 # GET /apps/{appId}/templates/default
 # operationId: app.settings.templates.default_template
-export def "apps-templates-default template" [
+export def "apps-templates-default get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6711,7 +6721,7 @@ export def "apps-templates-default template" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/templates/default"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/templates/default"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6721,7 +6731,7 @@ export def "apps-templates-default template" [
 #
 # GET /apps/{appId}/templates/{id}
 # operationId: app.settings.templates.get
-export def "apps-templates appsettingstemplatesget" [
+export def "apps-templates get" [
   app_id: int
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6735,7 +6745,7 @@ export def "apps-templates appsettingstemplatesget" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/templates/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/templates/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6745,7 +6755,7 @@ export def "apps-templates appsettingstemplatesget" [
 #
 # POST /apps/{appId}/templates/{id}
 # operationId: app.settings.templates.update
-export def "apps-templates appsettingstemplatesupdate" [
+export def "apps-templates update" [
   app_id: int
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6759,7 +6769,7 @@ export def "apps-templates appsettingstemplatesupdate" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/templates/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/templates/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6769,7 +6779,7 @@ export def "apps-templates appsettingstemplatesupdate" [
 #
 # GET /apps/{appId}/transactions/
 # operationId: app.cashflow.transactions.list
-export def "apps-transactions appcashflowtransactionslist" [
+export def "apps-transactions list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6788,7 +6798,7 @@ export def "apps-transactions appcashflowtransactionslist" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/transactions/") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/transactions/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6798,7 +6808,7 @@ export def "apps-transactions appcashflowtransactionslist" [
 #
 # POST /apps/{appId}/transactions/
 # operationId: app.cashflow.transactions.create
-export def "apps-transactions appcashflowtransactionscreate" [
+export def "apps-transactions create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6822,7 +6832,7 @@ export def "apps-transactions appcashflowtransactionscreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "contact_organization_id" $contact_organization_id "scalar") (serialize-qp "contact_person_id" $contact_person_id "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "cashflow_source_id" $cashflow_source_id "scalar") (serialize-qp "contact_name" $contact_name "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "method" $method "scalar") (serialize-qp "received_at" $received_at "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "details" $details "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/transactions/") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/transactions/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6832,7 +6842,7 @@ export def "apps-transactions appcashflowtransactionscreate" [
 #
 # POST /apps/{appId}/transactions/batch
 # operationId: app.cashflow.transactions.batch
-export def "apps-transactions-batch appcashflowtransactionsbatch" [
+export def "apps-transactions-batch create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6847,7 +6857,7 @@ export def "apps-transactions-batch appcashflowtransactionsbatch" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/transactions/batch") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/transactions/batch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6857,7 +6867,7 @@ export def "apps-transactions-batch appcashflowtransactionsbatch" [
 #
 # DELETE /apps/{appId}/transactions/{id}
 # operationId: app.cashflow.transactions.delete
-export def "apps-transactions appcashflowtransactionsdelete" [
+export def "apps-transactions delete" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6871,7 +6881,7 @@ export def "apps-transactions appcashflowtransactionsdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/transactions/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/transactions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6881,7 +6891,7 @@ export def "apps-transactions appcashflowtransactionsdelete" [
 #
 # GET /apps/{appId}/transactions/{id}
 # operationId: app.cashflow.transactions.get
-export def "apps-transactions appcashflowtransactionsget" [
+export def "apps-transactions get" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6895,7 +6905,7 @@ export def "apps-transactions appcashflowtransactionsget" [
 ]: nothing -> record<amount: int, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, cashflow_source: record<account_type: string, balance_amount: int, created_at: string, disabled: int, id: int, identifiant: string, name: string, parent_cashflow_source: any, status: string, type: string, updated_at: string>, contact: any, created_at: string, deleted_at: string, details: int, id: int, label: int, lettered_at: string, metadata: list<any>, method: int, received_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/transactions/{id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/transactions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6905,7 +6915,7 @@ export def "apps-transactions appcashflowtransactionsget" [
 #
 # POST /apps/{appId}/transactions/{id}
 # operationId: app.cashflow.transactions.update
-export def "apps-transactions appcashflowtransactionsupdate" [
+export def "apps-transactions update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6930,7 +6940,7 @@ export def "apps-transactions appcashflowtransactionsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "contact_organization_id" $contact_organization_id "scalar") (serialize-qp "contact_person_id" $contact_person_id "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "cashflow_source_id" $cashflow_source_id "scalar") (serialize-qp "contact_name" $contact_name "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "method" $method "scalar") (serialize-qp "received_at" $received_at "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "details" $details "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/transactions/{id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/transactions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6940,7 +6950,7 @@ export def "apps-transactions appcashflowtransactionsupdate" [
 #
 # DELETE /apps/{appId}/transactions/{id}/attach
 # operationId: app.cashflow.transactions.detach
-export def "apps-transactions-attach appcashflowtransactionsdetach" [
+export def "apps-transactions-attach delete-detach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6956,7 +6966,7 @@ export def "apps-transactions-attach appcashflowtransactionsdetach" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file_id" $file_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/transactions/{id}/attach") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/transactions/{id}/attach") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6966,7 +6976,7 @@ export def "apps-transactions-attach appcashflowtransactionsdetach" [
 #
 # POST /apps/{appId}/transactions/{id}/attach
 # operationId: app.cashflow.transactions.attach
-export def "apps-transactions-attach appcashflowtransactionsattach" [
+export def "apps-transactions-attach attach" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6982,7 +6992,7 @@ export def "apps-transactions-attach appcashflowtransactionsattach" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file" $file "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, id: $id} | format pattern "/apps/{app_id}/transactions/{id}/attach") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/transactions/{id}/attach") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6992,7 +7002,7 @@ export def "apps-transactions-attach appcashflowtransactionsattach" [
 #
 # POST /apps/{appId}/urssaf/auth
 # operationId: app.payments.urssaftiers.auth
-export def "apps-urssaf-auth apppaymentsurssaftiersauth" [
+export def "apps-urssaf-auth create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7008,7 +7018,7 @@ export def "apps-urssaf-auth apppaymentsurssaftiersauth" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "client_secret" $client_secret "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/urssaf/auth") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/urssaf/auth") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7018,7 +7028,7 @@ export def "apps-urssaf-auth apppaymentsurssaftiersauth" [
 #
 # GET /apps/{appId}/urssaf/payment
 # operationId: app.payments.urssaftiers.get_status
-export def "apps-urssaf-payment status" [
+export def "apps-urssaf-payment get-status" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7028,12 +7038,12 @@ export def "apps-urssaf-payment status" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --invoices-ids: list
+  --invoices-ids: list<int>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "invoices_ids" $invoices_ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/urssaf/payment") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/urssaf/payment") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7043,7 +7053,7 @@ export def "apps-urssaf-payment status" [
 #
 # POST /apps/{appId}/urssaf/payment
 # operationId: app.payments.urssaftiers.send_payments
-export def "apps-urssaf-payment payments" [
+export def "apps-urssaf-payment send" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7056,7 +7066,7 @@ export def "apps-urssaf-payment payments" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/urssaf/payment"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/urssaf/payment"))
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7066,7 +7076,7 @@ export def "apps-urssaf-payment payments" [
 #
 # GET /apps/{appId}/urssaf/preview
 # operationId: app.payments.urssaftiers.preview
-export def "apps-urssaf-preview apppaymentsurssaftierspreview" [
+export def "apps-urssaf-preview get" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7077,12 +7087,12 @@ export def "apps-urssaf-preview apppaymentsurssaftierspreview" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-5
-  --ids: list
+  --ids: list<int>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "ids" $ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/urssaf/preview") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/urssaf/preview") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7092,7 +7102,7 @@ export def "apps-urssaf-preview apppaymentsurssaftierspreview" [
 #
 # POST /apps/{appId}/urssaf/register_customer
 # operationId: app.payments.urssaftiers.register_customer
-export def "apps-urssaf-register-customer customer" [
+export def "apps-urssaf-register-customer create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7105,7 +7115,7 @@ export def "apps-urssaf-register-customer customer" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/urssaf/register_customer"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/urssaf/register_customer"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7115,7 +7125,7 @@ export def "apps-urssaf-register-customer customer" [
 #
 # POST /changepassword
 # operationId: auth.changepassword
-export def "changepassword authchangepassword" [
+export def "changepassword create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7140,7 +7150,7 @@ export def "changepassword authchangepassword" [
 #
 # POST /login
 # operationId: auth.login
-export def "login authlogin" [
+export def "login create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7165,7 +7175,7 @@ export def "login authlogin" [
 #
 # POST /logout
 # operationId: auth.logout
-export def "logout authlogout" [
+export def "logout create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7187,7 +7197,7 @@ export def "logout authlogout" [
 #
 # GET /me
 # operationId: account.get
-export def "me accountget" [
+export def "me get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7209,7 +7219,7 @@ export def "me accountget" [
 #
 # POST /me
 # operationId: account.update
-export def "me accountupdate" [
+export def "me update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7239,7 +7249,7 @@ export def "me accountupdate" [
 #
 # GET /ping
 # operationId: auth.ping
-export def "ping authping" [
+export def "ping get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7261,7 +7271,7 @@ export def "ping authping" [
 #
 # GET /refresh
 # operationId: auth.refresh
-export def "refresh authrefresh" [
+export def "refresh get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7283,7 +7293,7 @@ export def "refresh authrefresh" [
 #
 # POST /register
 # operationId: account.create
-export def "register accountcreate" [
+export def "register create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7312,7 +7322,7 @@ export def "register accountcreate" [
 #
 # POST /sendpassword
 # operationId: auth.sendpassword
-export def "sendpassword authsendpassword" [
+export def "sendpassword create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7336,7 +7346,7 @@ export def "sendpassword authsendpassword" [
 #
 # POST /services/collector
 # operationId: admin.purchaseCollector.push
-export def "services-collector adminpurchaseCollectorpush" [
+export def "services-collector push" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7362,7 +7372,7 @@ export def "services-collector adminpurchaseCollectorpush" [
 #
 # GET /services/vies/{siren}
 # operationId: services.vies.get
-export def "services-vies servicesviesget" [
+export def "services-vies get" [
   siren: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7375,7 +7385,7 @@ export def "services-vies servicesviesget" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({siren: $siren} | format pattern "/services/vies/{siren}"))
+  let full_url = (build-url $base ({siren: (encode-path-segment $siren)} | format pattern "/services/vies/{siren}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

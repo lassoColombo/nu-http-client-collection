@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -114,17 +123,17 @@ export def "orders list" [
   --offset: int # Number of results to skip for pagination (default: 0)
   --limit: int # Maximum number of items to return (default: 25)
   --qp-sort: string@sort-completer # Property name that will be used to sort results. '-' indicates descending (default: -createdAt)
-  --x-shopper-id: string # Shopper ID to be operated on, if different from JWT<br/><b>Reseller subaccounts are not supported</b>
+  --x-shopper-id: string # Shopper ID to be operated on, if different from JWTReseller subaccounts are not supported
   --x-market-id: string # Unique identifier of the Market in which the request is happening
 ]: nothing -> record<orders: table<createdAt: string, currency: string, items: list, orderId: string, parentOrderId: string, pricing: record>, pagination: record<first: string, last: string, next: string, previous: string, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "periodStart" $period_start "scalar") (serialize-qp "periodEnd" $period_end "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "productGroupId" $product_group_id "scalar") (serialize-qp "paymentProfileId" $payment_profile_id "scalar") (serialize-qp "parentOrderId" $parent_order_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/orders" $qp)
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id, "X-Market-Id": $x_market_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id, "X-Market-Id": $x_market_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -143,15 +152,15 @@ export def "orders get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --x-shopper-id: string # Shopper ID to be operated on, if different from JWT<br/><b>Reseller subaccounts are not supported</b>
+  --x-shopper-id: string # Shopper ID to be operated on, if different from JWTReseller subaccounts are not supported
   --x-market-id: string # Unique identifier of the Market in which the request is happening
 ]: nothing -> record<billTo: record<contact: record<addressMailing: record, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, taxId: string>, createdAt: string, currency: string, items: table<domains: list, label: string, period: float, periodUnit: string, pfid: int, pricing: record, quantity: int, taxCollector: record>, orderId: string, parentOrderId: string, payments: table<amount: int, category: string, paymentProfileId: string, subcategory: string>, pricing: record<discount: int, fees: record<icann: int, total: int>, id: float, list: int, savings: int, subtotal: int, taxDetails: list<record>, taxes: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/v1/orders/{order_id}"))
-  let extra_headers = {"X-Shopper-Id": $x_shopper_id, "X-Market-Id": $x_market_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/v1/orders/{order_id}"))
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Shopper-Id": $x_shopper_id, "X-Market-Id": $x_market_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

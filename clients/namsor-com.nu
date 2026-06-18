@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["x-api-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api2-json-anonymize anonymize" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api2-json-anonymize get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # GET /api2/json/anonymize/{source}/{anonymized}/{token}
 # operationId: anonymize
-export def "api2-json-anonymize anonymize" [
+export def "api2-json-anonymize get" [
   source: string
   anonymized: bool
   token_arg: string
@@ -108,7 +117,7 @@ export def "api2-json-anonymize anonymize" [
 ]: nothing -> record<admin: bool, anonymized: bool, apiKey: string, corporate: bool, disabled: bool, learnable: bool, partner: bool, striped: bool, userId: string, vetted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source: $source, anonymized: $anonymized, token_arg: $token_arg} | format pattern "/api2/json/anonymize/{source}/{anonymized}/{token_arg}"))
+  let full_url = (build-url $base ({source: (encode-path-segment $source), anonymized: (encode-path-segment $anonymized), token_arg: (encode-path-segment $token_arg)} | format pattern "/api2/json/anonymize/{source}/{anonymized}/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,7 +127,7 @@ export def "api2-json-anonymize anonymize" [
 #
 # GET /api2/json/apiKeyInfo
 # operationId: apiKeyInfo
-export def "api2-json-api-key-info apiKeyInfo" [
+export def "api2-json-api-key-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,7 +149,7 @@ export def "api2-json-api-key-info apiKeyInfo" [
 #
 # GET /api2/json/apiServices
 # operationId: availableServices
-export def "api2-json-api-services availableServices" [
+export def "api2-json-api-services get-available" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +171,7 @@ export def "api2-json-api-services availableServices" [
 #
 # GET /api2/json/apiStatus
 # operationId: apiStatus
-export def "api2-json-api-status apiStatus" [
+export def "api2-json-api-status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +193,7 @@ export def "api2-json-api-status apiStatus" [
 #
 # GET /api2/json/apiUsage
 # operationId: apiUsage
-export def "api2-json-api-usage apiUsage" [
+export def "api2-json-api-usage get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +215,7 @@ export def "api2-json-api-usage apiUsage" [
 #
 # GET /api2/json/apiUsageHistory
 # operationId: apiUsageHistory
-export def "api2-json-api-usage-history apiUsageHistory" [
+export def "api2-json-api-usage-history get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +237,7 @@ export def "api2-json-api-usage-history apiUsageHistory" [
 #
 # GET /api2/json/apiUsageHistoryAggregate
 # operationId: apiUsageHistoryAggregate
-export def "api2-json-api-usage-history-aggregate apiUsageHistoryAggregate" [
+export def "api2-json-api-usage-history-aggregate get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,7 +259,7 @@ export def "api2-json-api-usage-history-aggregate apiUsageHistoryAggregate" [
 #
 # GET /api2/json/castegroupIndianFull/{subDivisionIso31662}/{personalNameFull}
 # operationId: castegroupIndianFull
-export def "api2-json-castegroup-indian-full castegroupIndianFull" [
+export def "api2-json-castegroup-indian-full get" [
   sub_division_iso31662: string
   personal_name_full: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -264,19 +273,19 @@ export def "api2-json-castegroup-indian-full castegroupIndianFull" [
 ]: nothing -> record<castegroup: string, castegroupAlt: string, castegroupTop: list<string>, id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({sub_division_iso31662: $sub_division_iso31662, personal_name_full: $personal_name_full} | format pattern "/api2/json/castegroupIndianFull/{sub_division_iso31662}/{personal_name_full}"))
+  let full_url = (build-url $base ({sub_division_iso31662: (encode-path-segment $sub_division_iso31662), personal_name_full: (encode-path-segment $personal_name_full)} | format pattern "/api2/json/castegroupIndianFull/{sub_division_iso31662}/{personal_name_full}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# [USES 10 UNITS PER NAME] Infer the likely Indian name castegroup of up to 100 personal full names. 
+# [USES 10 UNITS PER NAME] Infer the likely Indian name castegroup of up to 100 personal full names.
 #
 # POST /api2/json/castegroupIndianFullBatch
 # operationId: castegroupIndianFullBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string, subdivisionIso?: string}
-export def "api2-json-castegroup-indian-full-batch castegroupIndianFullBatch" [
+export def "api2-json-castegroup-indian-full-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,18 +301,18 @@ export def "api2-json-castegroup-indian-full-batch castegroupIndianFullBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/castegroupIndianFullBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Identify Chinese name candidates, based on the romanized name ex. Wang Xiaoming
 #
 # GET /api2/json/chineseNameCandidates/{chineseSurnameLatin}/{chineseGivenNameLatin}
 # operationId: chineseNameCandidates
-export def "api2-json-chinese-name-candidates chineseNameCandidates" [
+export def "api2-json-chinese-name-candidates get" [
   chinese_surname_latin: string
   chinese_given_name_latin: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -317,7 +326,7 @@ export def "api2-json-chinese-name-candidates chineseNameCandidates" [
 ]: nothing -> record<firstName: string, id: string, lastName: string, matchCandidates: table<candidateName: string, predScoreFamilyName: float, predScoreGivenName: float, probability: float>, orderOption: string, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({chinese_surname_latin: $chinese_surname_latin, chinese_given_name_latin: $chinese_given_name_latin} | format pattern "/api2/json/chineseNameCandidates/{chinese_surname_latin}/{chinese_given_name_latin}"))
+  let full_url = (build-url $base ({chinese_surname_latin: (encode-path-segment $chinese_surname_latin), chinese_given_name_latin: (encode-path-segment $chinese_given_name_latin)} | format pattern "/api2/json/chineseNameCandidates/{chinese_surname_latin}/{chinese_given_name_latin}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -329,7 +338,7 @@ export def "api2-json-chinese-name-candidates chineseNameCandidates" [
 # operationId: chineseNameCandidatesBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
-export def "api2-json-chinese-name-candidates-batch chineseNameCandidatesBatch" [
+export def "api2-json-chinese-name-candidates-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,11 +354,11 @@ export def "api2-json-chinese-name-candidates-batch chineseNameCandidatesBatch" 
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/chineseNameCandidatesBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Identify Chinese name candidates, based on the romanized name (firstName = chineseGivenName; lastName=chineseSurname) ex. Wang Xiaoming.
@@ -358,7 +367,7 @@ export def "api2-json-chinese-name-candidates-batch chineseNameCandidatesBatch" 
 # operationId: chineseNameCandidatesGenderBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {firstName?: string, gender?: string, id?: string, lastName?: string}
-export def "api2-json-chinese-name-candidates-gender-batch chineseNameCandidatesGenderBatch" [
+export def "api2-json-chinese-name-candidates-gender-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,18 +383,18 @@ export def "api2-json-chinese-name-candidates-gender-batch chineseNameCandidates
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/chineseNameCandidatesGenderBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Identify Chinese name candidates, based on the romanized name ex. Wang Xiaoming - having a known gender ('male' or 'female')
 #
 # GET /api2/json/chineseNameGenderCandidates/{chineseSurnameLatin}/{chineseGivenNameLatin}/{knownGender}
 # operationId: chineseNameGenderCandidates
-export def "api2-json-chinese-name-gender-candidates chineseNameGenderCandidates" [
+export def "api2-json-chinese-name-gender-candidates get" [
   chinese_surname_latin: string
   chinese_given_name_latin: string
   known_gender: string
@@ -400,7 +409,7 @@ export def "api2-json-chinese-name-gender-candidates chineseNameGenderCandidates
 ]: nothing -> record<firstName: string, id: string, lastName: string, matchCandidates: table<candidateName: string, predScoreFamilyName: float, predScoreGivenName: float, probability: float>, orderOption: string, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({chinese_surname_latin: $chinese_surname_latin, chinese_given_name_latin: $chinese_given_name_latin, known_gender: $known_gender} | format pattern "/api2/json/chineseNameGenderCandidates/{chinese_surname_latin}/{chinese_given_name_latin}/{known_gender}"))
+  let full_url = (build-url $base ({chinese_surname_latin: (encode-path-segment $chinese_surname_latin), chinese_given_name_latin: (encode-path-segment $chinese_given_name_latin), known_gender: (encode-path-segment $known_gender)} | format pattern "/api2/json/chineseNameGenderCandidates/{chinese_surname_latin}/{chinese_given_name_latin}/{known_gender}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -410,7 +419,7 @@ export def "api2-json-chinese-name-gender-candidates chineseNameGenderCandidates
 #
 # GET /api2/json/chineseNameMatch/{chineseSurnameLatin}/{chineseGivenNameLatin}/{chineseName}
 # operationId: chineseNameMatch
-export def "api2-json-chinese-name-match chineseNameMatch" [
+export def "api2-json-chinese-name-match get" [
   chinese_surname_latin: string
   chinese_given_name_latin: string
   chinese_name: string
@@ -425,7 +434,7 @@ export def "api2-json-chinese-name-match chineseNameMatch" [
 ]: nothing -> record<id: string, matchStatus: string, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({chinese_surname_latin: $chinese_surname_latin, chinese_given_name_latin: $chinese_given_name_latin, chinese_name: $chinese_name} | format pattern "/api2/json/chineseNameMatch/{chinese_surname_latin}/{chinese_given_name_latin}/{chinese_name}"))
+  let full_url = (build-url $base ({chinese_surname_latin: (encode-path-segment $chinese_surname_latin), chinese_given_name_latin: (encode-path-segment $chinese_given_name_latin), chinese_name: (encode-path-segment $chinese_name)} | format pattern "/api2/json/chineseNameMatch/{chinese_surname_latin}/{chinese_given_name_latin}/{chinese_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -437,7 +446,7 @@ export def "api2-json-chinese-name-match chineseNameMatch" [
 # operationId: chineseNameMatchBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name1?: record, name2?: record}
-export def "api2-json-chinese-name-match-batch chineseNameMatchBatch" [
+export def "api2-json-chinese-name-match-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,18 +462,18 @@ export def "api2-json-chinese-name-match-batch chineseNameMatchBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/chineseNameMatchBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # [USES 20 UNITS PER NAME COUPLE] Infer several classifications for a cross border interaction between names (ex. remit, travel, intl com)
 #
 # GET /api2/json/corridor/{countryIso2From}/{firstNameFrom}/{lastNameFrom}/{countryIso2To}/{firstNameTo}/{lastNameTo}
 # operationId: corridor
-export def "api2-json-corridor corridor" [
+export def "api2-json-corridor get" [
   country_iso2_from: string
   first_name_from: string
   last_name_from: string
@@ -482,7 +491,7 @@ export def "api2-json-corridor corridor" [
 ]: nothing -> record<FirstLastNameDiasporaedOut: record<countryIso2: string, ethnicitiesTop: list<string>, ethnicity: string, ethnicityAlt: string, firstName: string, id: string, lastName: string, lifted: bool, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string>, FirstLastNameGenderedOut: record<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string>, FirstLastNameOriginedOut: record<countriesOriginTop: list<string>, countryOrigin: string, countryOriginAlt: string, firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, regionOrigin: string, score: float, script: string, subRegionOrigin: string, topRegionOrigin: string>, id: string, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({country_iso2_from: $country_iso2_from, first_name_from: $first_name_from, last_name_from: $last_name_from, country_iso2_to: $country_iso2_to, first_name_to: $first_name_to, last_name_to: $last_name_to} | format pattern "/api2/json/corridor/{country_iso2_from}/{first_name_from}/{last_name_from}/{country_iso2_to}/{first_name_to}/{last_name_to}"))
+  let full_url = (build-url $base ({country_iso2_from: (encode-path-segment $country_iso2_from), first_name_from: (encode-path-segment $first_name_from), last_name_from: (encode-path-segment $last_name_from), country_iso2_to: (encode-path-segment $country_iso2_to), first_name_to: (encode-path-segment $first_name_to), last_name_to: (encode-path-segment $last_name_to)} | format pattern "/api2/json/corridor/{country_iso2_from}/{first_name_from}/{last_name_from}/{country_iso2_to}/{first_name_to}/{last_name_to}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -494,7 +503,7 @@ export def "api2-json-corridor corridor" [
 # operationId: corridorBatch
 # --corridorFromTo item shape: {firstLastNameGeoFrom?: record, firstLastNameGeoTo?: record, id?: string}
 # --facts item shape: {id?: string, name?: string}
-export def "api2-json-corridor-batch corridorBatch" [
+export def "api2-json-corridor-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,18 +519,18 @@ export def "api2-json-corridor-batch corridorBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/corridorBatch")
-  let body = {"corridorFromTo": $corridor_from_to, "facts": $facts} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"corridorFromTo": $corridor_from_to, "facts": $facts} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # [USES 10 UNITS PER NAME] Infer the likely country of residence of a personal full name, or one surname. Assumes names as they are in the country of residence OR the country of origin.
 #
 # GET /api2/json/country/{personalNameFull}
 # operationId: country
-export def "api2-json-country country" [
+export def "api2-json-country get" [
   personal_name_full: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -534,7 +543,7 @@ export def "api2-json-country country" [
 ]: nothing -> record<countriesTop: list<string>, country: string, countryAlt: string, id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, region: string, score: float, script: string, subRegion: string, topRegion: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({personal_name_full: $personal_name_full} | format pattern "/api2/json/country/{personal_name_full}"))
+  let full_url = (build-url $base ({personal_name_full: (encode-path-segment $personal_name_full)} | format pattern "/api2/json/country/{personal_name_full}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -546,7 +555,7 @@ export def "api2-json-country country" [
 # operationId: countryBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string}
-export def "api2-json-country-batch countryBatch" [
+export def "api2-json-country-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,18 +571,18 @@ export def "api2-json-country-batch countryBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/countryBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # [USES 20 UNITS PER NAME] Infer the likely ethnicity/diaspora of a personal name, given a country of residence ISO2 code (ex. US, CA, AU, NZ etc.)
 #
 # GET /api2/json/diaspora/{countryIso2}/{firstName}/{lastName}
 # operationId: diaspora
-export def "api2-json-diaspora diaspora" [
+export def "api2-json-diaspora get" [
   country_iso2: string
   first_name: string
   last_name: string
@@ -588,7 +597,7 @@ export def "api2-json-diaspora diaspora" [
 ]: nothing -> record<countryIso2: string, ethnicitiesTop: list<string>, ethnicity: string, ethnicityAlt: string, firstName: string, id: string, lastName: string, lifted: bool, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({country_iso2: $country_iso2, first_name: $first_name, last_name: $last_name} | format pattern "/api2/json/diaspora/{country_iso2}/{first_name}/{last_name}"))
+  let full_url = (build-url $base ({country_iso2: (encode-path-segment $country_iso2), first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name)} | format pattern "/api2/json/diaspora/{country_iso2}/{first_name}/{last_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -600,7 +609,7 @@ export def "api2-json-diaspora diaspora" [
 # operationId: diasporaBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
-export def "api2-json-diaspora-batch diasporaBatch" [
+export def "api2-json-diaspora-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -616,18 +625,18 @@ export def "api2-json-diaspora-batch diasporaBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/diasporaBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Infer the likely gender of a just a fiven name, assuming default 'US' local context. Please use preferably full names and local geographic context for better accuracy.
 #
 # GET /api2/json/gender/{firstName}
 # operationId: gender
-export def "api2-json-gender gender" [
+export def "api2-json-gender get" [
   first_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -640,7 +649,7 @@ export def "api2-json-gender gender" [
 ]: nothing -> record<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({first_name: $first_name} | format pattern "/api2/json/gender/{first_name}"))
+  let full_url = (build-url $base ({first_name: (encode-path-segment $first_name)} | format pattern "/api2/json/gender/{first_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -650,7 +659,7 @@ export def "api2-json-gender gender" [
 #
 # GET /api2/json/gender/{firstName}/{lastName}
 # operationId: gender_1
-export def "api2-json-gender gender-by-firstName-lastName" [
+export def "api2-json-gender get-by-firstName-lastName" [
   first_name: string
   last_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -664,7 +673,7 @@ export def "api2-json-gender gender-by-firstName-lastName" [
 ]: nothing -> record<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({first_name: $first_name, last_name: $last_name} | format pattern "/api2/json/gender/{first_name}/{last_name}"))
+  let full_url = (build-url $base ({first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name)} | format pattern "/api2/json/gender/{first_name}/{last_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -676,7 +685,7 @@ export def "api2-json-gender gender-by-firstName-lastName" [
 # operationId: genderBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
-export def "api2-json-gender-batch genderBatch" [
+export def "api2-json-gender-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -692,18 +701,18 @@ export def "api2-json-gender-batch genderBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/genderBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Infer the likely gender of a Chinese full name ex. 王晓明
 #
 # GET /api2/json/genderChineseName/{chineseName}
 # operationId: genderChineseName
-export def "api2-json-gender-chinese-name genderChineseName" [
+export def "api2-json-gender-chinese-name get" [
   chinese_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -716,7 +725,7 @@ export def "api2-json-gender-chinese-name genderChineseName" [
 ]: nothing -> record<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({chinese_name: $chinese_name} | format pattern "/api2/json/genderChineseName/{chinese_name}"))
+  let full_url = (build-url $base ({chinese_name: (encode-path-segment $chinese_name)} | format pattern "/api2/json/genderChineseName/{chinese_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -728,7 +737,7 @@ export def "api2-json-gender-chinese-name genderChineseName" [
 # operationId: genderChineseNameBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string}
-export def "api2-json-gender-chinese-name-batch genderChineseNameBatch" [
+export def "api2-json-gender-chinese-name-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -744,18 +753,18 @@ export def "api2-json-gender-chinese-name-batch genderChineseNameBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/genderChineseNameBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Infer the likely gender of a Chinese name in LATIN (Pinyin).
 #
 # GET /api2/json/genderChineseNamePinyin/{chineseSurnameLatin}/{chineseGivenNameLatin}
 # operationId: genderChineseNamePinyin
-export def "api2-json-gender-chinese-name-pinyin genderChineseNamePinyin" [
+export def "api2-json-gender-chinese-name-pinyin get" [
   chinese_surname_latin: string
   chinese_given_name_latin: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -769,7 +778,7 @@ export def "api2-json-gender-chinese-name-pinyin genderChineseNamePinyin" [
 ]: nothing -> record<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({chinese_surname_latin: $chinese_surname_latin, chinese_given_name_latin: $chinese_given_name_latin} | format pattern "/api2/json/genderChineseNamePinyin/{chinese_surname_latin}/{chinese_given_name_latin}"))
+  let full_url = (build-url $base ({chinese_surname_latin: (encode-path-segment $chinese_surname_latin), chinese_given_name_latin: (encode-path-segment $chinese_given_name_latin)} | format pattern "/api2/json/genderChineseNamePinyin/{chinese_surname_latin}/{chinese_given_name_latin}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -781,7 +790,7 @@ export def "api2-json-gender-chinese-name-pinyin genderChineseNamePinyin" [
 # operationId: genderChineseNamePinyinBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
-export def "api2-json-gender-chinese-name-pinyin-batch genderChineseNamePinyinBatch" [
+export def "api2-json-gender-chinese-name-pinyin-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -797,18 +806,18 @@ export def "api2-json-gender-chinese-name-pinyin-batch genderChineseNamePinyinBa
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/genderChineseNamePinyinBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Infer the likely gender of a full name, ex. John H. Smith
 #
 # GET /api2/json/genderFull/{fullName}
 # operationId: genderFull
-export def "api2-json-gender-full genderFull" [
+export def "api2-json-gender-full get" [
   full_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -821,7 +830,7 @@ export def "api2-json-gender-full genderFull" [
 ]: nothing -> record<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({full_name: $full_name} | format pattern "/api2/json/genderFull/{full_name}"))
+  let full_url = (build-url $base ({full_name: (encode-path-segment $full_name)} | format pattern "/api2/json/genderFull/{full_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -833,7 +842,7 @@ export def "api2-json-gender-full genderFull" [
 # operationId: genderFullBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string}
-export def "api2-json-gender-full-batch genderFullBatch" [
+export def "api2-json-gender-full-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -849,18 +858,18 @@ export def "api2-json-gender-full-batch genderFullBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/genderFullBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Infer the likely gender of a full name, given a local context (ISO2 country code).
 #
 # GET /api2/json/genderFullGeo/{fullName}/{countryIso2}
 # operationId: genderFullGeo
-export def "api2-json-gender-full-geo genderFullGeo" [
+export def "api2-json-gender-full-geo get" [
   full_name: string
   country_iso2: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -874,7 +883,7 @@ export def "api2-json-gender-full-geo genderFullGeo" [
 ]: nothing -> record<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({full_name: $full_name, country_iso2: $country_iso2} | format pattern "/api2/json/genderFullGeo/{full_name}/{country_iso2}"))
+  let full_url = (build-url $base ({full_name: (encode-path-segment $full_name), country_iso2: (encode-path-segment $country_iso2)} | format pattern "/api2/json/genderFullGeo/{full_name}/{country_iso2}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -886,7 +895,7 @@ export def "api2-json-gender-full-geo genderFullGeo" [
 # operationId: genderFullGeoBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {countryIso2?: string, id?: string, name?: string}
-export def "api2-json-gender-full-geo-batch genderFullGeoBatch" [
+export def "api2-json-gender-full-geo-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -902,18 +911,18 @@ export def "api2-json-gender-full-geo-batch genderFullGeoBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/genderFullGeoBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Infer the likely gender of a name, given a local context (ISO2 country code).
 #
 # GET /api2/json/genderGeo/{firstName}/{lastName}/{countryIso2}
 # operationId: genderGeo
-export def "api2-json-gender-geo genderGeo" [
+export def "api2-json-gender-geo get" [
   first_name: string
   last_name: string
   country_iso2: string
@@ -928,7 +937,7 @@ export def "api2-json-gender-geo genderGeo" [
 ]: nothing -> record<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({first_name: $first_name, last_name: $last_name, country_iso2: $country_iso2} | format pattern "/api2/json/genderGeo/{first_name}/{last_name}/{country_iso2}"))
+  let full_url = (build-url $base ({first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name), country_iso2: (encode-path-segment $country_iso2)} | format pattern "/api2/json/genderGeo/{first_name}/{last_name}/{country_iso2}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -940,7 +949,7 @@ export def "api2-json-gender-geo genderGeo" [
 # operationId: genderGeoBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
-export def "api2-json-gender-geo-batch genderGeoBatch" [
+export def "api2-json-gender-geo-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -956,18 +965,18 @@ export def "api2-json-gender-geo-batch genderGeoBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/genderGeoBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Infer the likely gender of a Japanese name in LATIN (Pinyin).
 #
 # GET /api2/json/genderJapaneseName/{japaneseSurname}/{japaneseGivenName}
 # operationId: genderJapaneseNamePinyin
-export def "api2-json-gender-japanese-name genderJapaneseNamePinyin" [
+export def "api2-json-gender-japanese-name get-pinyin" [
   japanese_surname: string
   japanese_given_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -981,7 +990,7 @@ export def "api2-json-gender-japanese-name genderJapaneseNamePinyin" [
 ]: nothing -> record<firstName: string, genderScale: float, id: string, lastName: string, likelyGender: string, probabilityCalibrated: float, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({japanese_surname: $japanese_surname, japanese_given_name: $japanese_given_name} | format pattern "/api2/json/genderJapaneseName/{japanese_surname}/{japanese_given_name}"))
+  let full_url = (build-url $base ({japanese_surname: (encode-path-segment $japanese_surname), japanese_given_name: (encode-path-segment $japanese_given_name)} | format pattern "/api2/json/genderJapaneseName/{japanese_surname}/{japanese_given_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -993,7 +1002,7 @@ export def "api2-json-gender-japanese-name genderJapaneseNamePinyin" [
 # operationId: genderJapaneseNamePinyinBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
-export def "api2-json-gender-japanese-name-batch genderJapaneseNamePinyinBatch" [
+export def "api2-json-gender-japanese-name-batch create-pinyin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1009,18 +1018,18 @@ export def "api2-json-gender-japanese-name-batch genderJapaneseNamePinyinBatch" 
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/genderJapaneseNameBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Infer the likely gender of a Japanese full name ex. 王晓明
 #
 # GET /api2/json/genderJapaneseNameFull/{japaneseName}
 # operationId: genderJapaneseNameFull
-export def "api2-json-gender-japanese-name-full genderJapaneseNameFull" [
+export def "api2-json-gender-japanese-name-full get" [
   japanese_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1033,7 +1042,7 @@ export def "api2-json-gender-japanese-name-full genderJapaneseNameFull" [
 ]: nothing -> record<genderScale: float, id: string, likelyGender: string, name: string, probabilityCalibrated: float, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({japanese_name: $japanese_name} | format pattern "/api2/json/genderJapaneseNameFull/{japanese_name}"))
+  let full_url = (build-url $base ({japanese_name: (encode-path-segment $japanese_name)} | format pattern "/api2/json/genderJapaneseNameFull/{japanese_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1045,7 +1054,7 @@ export def "api2-json-gender-japanese-name-full genderJapaneseNameFull" [
 # operationId: genderJapaneseNameFullBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string}
-export def "api2-json-gender-japanese-name-full-batch genderJapaneseNameFullBatch" [
+export def "api2-json-gender-japanese-name-full-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1061,11 +1070,11 @@ export def "api2-json-gender-japanese-name-full-batch genderJapaneseNameFullBatc
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/genderJapaneseNameFullBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Identify japanese name candidates in KANJI, based on the romanized name (firstName = japaneseGivenName; lastName=japaneseSurname) with KNOWN gender, ex. Yamamoto Sanae
@@ -1074,7 +1083,7 @@ export def "api2-json-gender-japanese-name-full-batch genderJapaneseNameFullBatc
 # operationId: japaneseNameGenderKanjiCandidatesBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {firstName?: string, gender?: string, id?: string, lastName?: string}
-export def "api2-json-japanese-name-gender-kanji-candidates-batch japaneseNameGenderKanjiCandidatesBatch" [
+export def "api2-json-japanese-name-gender-kanji-candidates-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1090,18 +1099,18 @@ export def "api2-json-japanese-name-gender-kanji-candidates-batch japaneseNameGe
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/japaneseNameGenderKanjiCandidatesBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Identify japanese name candidates in KANJI, based on the romanized name ex. Yamamoto Sanae
 #
 # GET /api2/json/japaneseNameKanjiCandidates/{japaneseSurnameLatin}/{japaneseGivenNameLatin}
 # operationId: japaneseNameKanjiCandidates
-export def "api2-json-japanese-name-kanji-candidates japaneseNameKanjiCandidates" [
+export def "api2-json-japanese-name-kanji-candidates get" [
   japanese_surname_latin: string
   japanese_given_name_latin: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1115,7 +1124,7 @@ export def "api2-json-japanese-name-kanji-candidates japaneseNameKanjiCandidates
 ]: nothing -> record<firstName: string, id: string, lastName: string, matchCandidates: table<candidateName: string, predScoreFamilyName: float, predScoreGivenName: float, probability: float>, orderOption: string, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({japanese_surname_latin: $japanese_surname_latin, japanese_given_name_latin: $japanese_given_name_latin} | format pattern "/api2/json/japaneseNameKanjiCandidates/{japanese_surname_latin}/{japanese_given_name_latin}"))
+  let full_url = (build-url $base ({japanese_surname_latin: (encode-path-segment $japanese_surname_latin), japanese_given_name_latin: (encode-path-segment $japanese_given_name_latin)} | format pattern "/api2/json/japaneseNameKanjiCandidates/{japanese_surname_latin}/{japanese_given_name_latin}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1125,7 +1134,7 @@ export def "api2-json-japanese-name-kanji-candidates japaneseNameKanjiCandidates
 #
 # GET /api2/json/japaneseNameKanjiCandidates/{japaneseSurnameLatin}/{japaneseGivenNameLatin}/{knownGender}
 # operationId: japaneseNameKanjiCandidates_1
-export def "api2-json-japanese-name-kanji-candidates japaneseNameKanjiCandidates-by-japaneseSurnameLatin-japaneseGivenNameLatin-knownGender" [
+export def "api2-json-japanese-name-kanji-candidates get-by-japaneseSurnameLatin-japaneseGivenNameLatin-knownGender" [
   japanese_surname_latin: string
   japanese_given_name_latin: string
   known_gender: string
@@ -1140,7 +1149,7 @@ export def "api2-json-japanese-name-kanji-candidates japaneseNameKanjiCandidates
 ]: nothing -> record<firstName: string, id: string, lastName: string, matchCandidates: table<candidateName: string, predScoreFamilyName: float, predScoreGivenName: float, probability: float>, orderOption: string, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({japanese_surname_latin: $japanese_surname_latin, japanese_given_name_latin: $japanese_given_name_latin, known_gender: $known_gender} | format pattern "/api2/json/japaneseNameKanjiCandidates/{japanese_surname_latin}/{japanese_given_name_latin}/{known_gender}"))
+  let full_url = (build-url $base ({japanese_surname_latin: (encode-path-segment $japanese_surname_latin), japanese_given_name_latin: (encode-path-segment $japanese_given_name_latin), known_gender: (encode-path-segment $known_gender)} | format pattern "/api2/json/japaneseNameKanjiCandidates/{japanese_surname_latin}/{japanese_given_name_latin}/{known_gender}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1152,7 +1161,7 @@ export def "api2-json-japanese-name-kanji-candidates japaneseNameKanjiCandidates
 # operationId: japaneseNameKanjiCandidatesBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
-export def "api2-json-japanese-name-kanji-candidates-batch japaneseNameKanjiCandidatesBatch" [
+export def "api2-json-japanese-name-kanji-candidates-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1168,18 +1177,18 @@ export def "api2-json-japanese-name-kanji-candidates-batch japaneseNameKanjiCand
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/japaneseNameKanjiCandidatesBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Romanize japanese name, based on the name in Kanji.
 #
 # GET /api2/json/japaneseNameLatinCandidates/{japaneseSurnameKanji}/{japaneseGivenNameKanji}
 # operationId: japaneseNameLatinCandidates
-export def "api2-json-japanese-name-latin-candidates japaneseNameLatinCandidates" [
+export def "api2-json-japanese-name-latin-candidates get" [
   japanese_surname_kanji: string
   japanese_given_name_kanji: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1193,7 +1202,7 @@ export def "api2-json-japanese-name-latin-candidates japaneseNameLatinCandidates
 ]: nothing -> record<firstName: string, id: string, lastName: string, matchCandidates: table<candidateName: string, predScoreFamilyName: float, predScoreGivenName: float, probability: float>, orderOption: string, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({japanese_surname_kanji: $japanese_surname_kanji, japanese_given_name_kanji: $japanese_given_name_kanji} | format pattern "/api2/json/japaneseNameLatinCandidates/{japanese_surname_kanji}/{japanese_given_name_kanji}"))
+  let full_url = (build-url $base ({japanese_surname_kanji: (encode-path-segment $japanese_surname_kanji), japanese_given_name_kanji: (encode-path-segment $japanese_given_name_kanji)} | format pattern "/api2/json/japaneseNameLatinCandidates/{japanese_surname_kanji}/{japanese_given_name_kanji}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1205,7 +1214,7 @@ export def "api2-json-japanese-name-latin-candidates japaneseNameLatinCandidates
 # operationId: japaneseNameLatinCandidatesBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
-export def "api2-json-japanese-name-latin-candidates-batch japaneseNameLatinCandidatesBatch" [
+export def "api2-json-japanese-name-latin-candidates-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1221,18 +1230,18 @@ export def "api2-json-japanese-name-latin-candidates-batch japaneseNameLatinCand
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/japaneseNameLatinCandidatesBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Return a score for matching Japanese name in KANJI ex. 山本 早苗 with a romanized name ex. Yamamoto Sanae
 #
 # GET /api2/json/japaneseNameMatch/{japaneseSurnameLatin}/{japaneseGivenNameLatin}/{japaneseName}
 # operationId: japaneseNameMatch
-export def "api2-json-japanese-name-match japaneseNameMatch" [
+export def "api2-json-japanese-name-match get" [
   japanese_surname_latin: string
   japanese_given_name_latin: string
   japanese_name: string
@@ -1247,7 +1256,7 @@ export def "api2-json-japanese-name-match japaneseNameMatch" [
 ]: nothing -> record<id: string, matchStatus: string, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({japanese_surname_latin: $japanese_surname_latin, japanese_given_name_latin: $japanese_given_name_latin, japanese_name: $japanese_name} | format pattern "/api2/json/japaneseNameMatch/{japanese_surname_latin}/{japanese_given_name_latin}/{japanese_name}"))
+  let full_url = (build-url $base ({japanese_surname_latin: (encode-path-segment $japanese_surname_latin), japanese_given_name_latin: (encode-path-segment $japanese_given_name_latin), japanese_name: (encode-path-segment $japanese_name)} | format pattern "/api2/json/japaneseNameMatch/{japanese_surname_latin}/{japanese_given_name_latin}/{japanese_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1259,7 +1268,7 @@ export def "api2-json-japanese-name-match japaneseNameMatch" [
 # operationId: japaneseNameMatchBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name1?: record, name2?: record}
-export def "api2-json-japanese-name-match-batch japaneseNameMatchBatch" [
+export def "api2-json-japanese-name-match-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1275,18 +1284,18 @@ export def "api2-json-japanese-name-match-batch japaneseNameMatchBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/japaneseNameMatchBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # [CREDITS 1 UNIT] Feedback loop to better perform matching Japanese name in KANJI ex. 山本 早苗 with a romanized name ex. Yamamoto Sanae
 #
 # GET /api2/json/japaneseNameMatchFeedbackLoop/{japaneseSurnameLatin}/{japaneseGivenNameLatin}/{japaneseName}
 # operationId: japaneseNameMatchFeedbackLoop
-export def "api2-json-japanese-name-match-feedback-loop japaneseNameMatchFeedbackLoop" [
+export def "api2-json-japanese-name-match-feedback-loop get" [
   japanese_surname_latin: string
   japanese_given_name_latin: string
   japanese_name: string
@@ -1301,7 +1310,7 @@ export def "api2-json-japanese-name-match-feedback-loop japaneseNameMatchFeedbac
 ]: nothing -> record<feedbackCredits: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({japanese_surname_latin: $japanese_surname_latin, japanese_given_name_latin: $japanese_given_name_latin, japanese_name: $japanese_name} | format pattern "/api2/json/japaneseNameMatchFeedbackLoop/{japanese_surname_latin}/{japanese_given_name_latin}/{japanese_name}"))
+  let full_url = (build-url $base ({japanese_surname_latin: (encode-path-segment $japanese_surname_latin), japanese_given_name_latin: (encode-path-segment $japanese_given_name_latin), japanese_name: (encode-path-segment $japanese_name)} | format pattern "/api2/json/japaneseNameMatchFeedbackLoop/{japanese_surname_latin}/{japanese_given_name_latin}/{japanese_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1311,7 +1320,7 @@ export def "api2-json-japanese-name-match-feedback-loop japaneseNameMatchFeedbac
 #
 # GET /api2/json/learnable/{source}/{learnable}/{token}
 # operationId: learnable
-export def "api2-json-learnable learnable" [
+export def "api2-json-learnable get" [
   source: string
   learnable: bool
   token_arg: string
@@ -1326,7 +1335,7 @@ export def "api2-json-learnable learnable" [
 ]: nothing -> record<admin: bool, anonymized: bool, apiKey: string, corporate: bool, disabled: bool, learnable: bool, partner: bool, striped: bool, userId: string, vetted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source: $source, learnable: $learnable, token_arg: $token_arg} | format pattern "/api2/json/learnable/{source}/{learnable}/{token_arg}"))
+  let full_url = (build-url $base ({source: (encode-path-segment $source), learnable: (encode-path-segment $learnable), token_arg: (encode-path-segment $token_arg)} | format pattern "/api2/json/learnable/{source}/{learnable}/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1336,7 +1345,7 @@ export def "api2-json-learnable learnable" [
 #
 # GET /api2/json/nameType/{properNoun}
 # operationId: nameType
-export def "api2-json-name-type nameType" [
+export def "api2-json-name-type get" [
   proper_noun: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1349,7 +1358,7 @@ export def "api2-json-name-type nameType" [
 ]: nothing -> record<commonType: string, commonTypeAlt: string, id: string, name: string, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({proper_noun: $proper_noun} | format pattern "/api2/json/nameType/{proper_noun}"))
+  let full_url = (build-url $base ({proper_noun: (encode-path-segment $proper_noun)} | format pattern "/api2/json/nameType/{proper_noun}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1361,7 +1370,7 @@ export def "api2-json-name-type nameType" [
 # operationId: nameTypeBatch
 # --facts item shape: {id?: string, name?: string}
 # --properNouns item shape: {id?: string, name?: string}
-export def "api2-json-name-type-batch nameTypeBatch" [
+export def "api2-json-name-type-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1377,18 +1386,18 @@ export def "api2-json-name-type-batch nameTypeBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/nameTypeBatch")
-  let body = {"facts": $facts, "properNouns": $proper_nouns} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "properNouns": $proper_nouns} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Infer the likely type of a proper noun (personal name, brand name, place name etc.)
 #
 # GET /api2/json/nameTypeGeo/{properNoun}/{countryIso2}
 # operationId: nameTypeGeo
-export def "api2-json-name-type-geo nameTypeGeo" [
+export def "api2-json-name-type-geo get" [
   proper_noun: string
   country_iso2: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1402,7 +1411,7 @@ export def "api2-json-name-type-geo nameTypeGeo" [
 ]: nothing -> record<commonType: string, commonTypeAlt: string, id: string, name: string, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({proper_noun: $proper_noun, country_iso2: $country_iso2} | format pattern "/api2/json/nameTypeGeo/{proper_noun}/{country_iso2}"))
+  let full_url = (build-url $base ({proper_noun: (encode-path-segment $proper_noun), country_iso2: (encode-path-segment $country_iso2)} | format pattern "/api2/json/nameTypeGeo/{proper_noun}/{country_iso2}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1414,7 +1423,7 @@ export def "api2-json-name-type-geo nameTypeGeo" [
 # operationId: nameTypeGeoBatch
 # --facts item shape: {id?: string, name?: string}
 # --properNouns item shape: {countryIso2?: string, id?: string, name?: string}
-export def "api2-json-name-type-geo-batch nameTypeGeoBatch" [
+export def "api2-json-name-type-geo-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1430,18 +1439,18 @@ export def "api2-json-name-type-geo-batch nameTypeGeoBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/nameTypeGeoBatch")
-  let body = {"facts": $facts, "properNouns": $proper_nouns} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "properNouns": $proper_nouns} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # [USES 10 UNITS PER NAME] Infer the likely country of origin of a personal name. Assumes names as they are in the country of origin. For US, CA, AU, NZ and other melting-pots : use 'diaspora' instead.
 #
 # GET /api2/json/origin/{firstName}/{lastName}
 # operationId: origin
-export def "api2-json-origin origin" [
+export def "api2-json-origin get" [
   first_name: string
   last_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1455,7 +1464,7 @@ export def "api2-json-origin origin" [
 ]: nothing -> record<countriesOriginTop: list<string>, countryOrigin: string, countryOriginAlt: string, firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, regionOrigin: string, score: float, script: string, subRegionOrigin: string, topRegionOrigin: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({first_name: $first_name, last_name: $last_name} | format pattern "/api2/json/origin/{first_name}/{last_name}"))
+  let full_url = (build-url $base ({first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name)} | format pattern "/api2/json/origin/{first_name}/{last_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1467,7 +1476,7 @@ export def "api2-json-origin origin" [
 # operationId: originBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {firstName?: string, id?: string, lastName?: string}
-export def "api2-json-origin-batch originBatch" [
+export def "api2-json-origin-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1483,18 +1492,18 @@ export def "api2-json-origin-batch originBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/originBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Infer the likely first/last name structure of a name, ex. 王晓明 -> 王(surname) 晓明(given name)
 #
 # GET /api2/json/parseChineseName/{chineseName}
 # operationId: parseChineseName
-export def "api2-json-parse-chinese-name parseChineseName" [
+export def "api2-json-parse-chinese-name get" [
   chinese_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1507,7 +1516,7 @@ export def "api2-json-parse-chinese-name parseChineseName" [
 ]: nothing -> record<firstLastName: record<firstName: string, id: string, lastName: string, script: string>, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({chinese_name: $chinese_name} | format pattern "/api2/json/parseChineseName/{chinese_name}"))
+  let full_url = (build-url $base ({chinese_name: (encode-path-segment $chinese_name)} | format pattern "/api2/json/parseChineseName/{chinese_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1519,7 +1528,7 @@ export def "api2-json-parse-chinese-name parseChineseName" [
 # operationId: parseChineseNameBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string}
-export def "api2-json-parse-chinese-name-batch parseChineseNameBatch" [
+export def "api2-json-parse-chinese-name-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1535,18 +1544,18 @@ export def "api2-json-parse-chinese-name-batch parseChineseNameBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/parseChineseNameBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Infer the likely first/last name structure of a name, ex. 山本 早苗 or Yamamoto Sanae
 #
 # GET /api2/json/parseJapaneseName/{japaneseName}
 # operationId: parseJapaneseName
-export def "api2-json-parse-japanese-name parseJapaneseName" [
+export def "api2-json-parse-japanese-name get" [
   japanese_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1559,19 +1568,19 @@ export def "api2-json-parse-japanese-name parseJapaneseName" [
 ]: nothing -> record<firstLastName: record<firstName: string, id: string, lastName: string, script: string>, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({japanese_name: $japanese_name} | format pattern "/api2/json/parseJapaneseName/{japanese_name}"))
+  let full_url = (build-url $base ({japanese_name: (encode-path-segment $japanese_name)} | format pattern "/api2/json/parseJapaneseName/{japanese_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Infer the likely first/last name structure of a name, ex. 山本 早苗 or Yamamoto Sanae 
+# Infer the likely first/last name structure of a name, ex. 山本 早苗 or Yamamoto Sanae
 #
 # POST /api2/json/parseJapaneseNameBatch
 # operationId: parseJapaneseNameBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string}
-export def "api2-json-parse-japanese-name-batch parseJapaneseNameBatch" [
+export def "api2-json-parse-japanese-name-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1587,18 +1596,18 @@ export def "api2-json-parse-japanese-name-batch parseJapaneseNameBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/parseJapaneseNameBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Infer the likely first/last name structure of a name, ex. John Smith or SMITH, John or SMITH; John. 
+# Infer the likely first/last name structure of a name, ex. John Smith or SMITH, John or SMITH; John.
 #
 # GET /api2/json/parseName/{nameFull}
 # operationId: parseName
-export def "api2-json-parse-name parseName" [
+export def "api2-json-parse-name get" [
   name_full: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1611,7 +1620,7 @@ export def "api2-json-parse-name parseName" [
 ]: nothing -> record<firstLastName: record<firstName: string, id: string, lastName: string, script: string>, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name_full: $name_full} | format pattern "/api2/json/parseName/{name_full}"))
+  let full_url = (build-url $base ({name_full: (encode-path-segment $name_full)} | format pattern "/api2/json/parseName/{name_full}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1621,7 +1630,7 @@ export def "api2-json-parse-name parseName" [
 #
 # GET /api2/json/parseName/{nameFull}/{countryIso2}
 # operationId: parseNameGeo
-export def "api2-json-parse-name parseNameGeo" [
+export def "api2-json-parse-name get-geo" [
   name_full: string
   country_iso2: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1635,7 +1644,7 @@ export def "api2-json-parse-name parseNameGeo" [
 ]: nothing -> record<firstLastName: record<firstName: string, id: string, lastName: string, script: string>, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name_full: $name_full, country_iso2: $country_iso2} | format pattern "/api2/json/parseName/{name_full}/{country_iso2}"))
+  let full_url = (build-url $base ({name_full: (encode-path-segment $name_full), country_iso2: (encode-path-segment $country_iso2)} | format pattern "/api2/json/parseName/{name_full}/{country_iso2}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1647,7 +1656,7 @@ export def "api2-json-parse-name parseNameGeo" [
 # operationId: parseNameBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string}
-export def "api2-json-parse-name-batch parseNameBatch" [
+export def "api2-json-parse-name-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1663,20 +1672,20 @@ export def "api2-json-parse-name-batch parseNameBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/parseNameBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Infer the likely first/last name structure of a name, ex. John Smith or SMITH, John or SMITH; John. Giving a local context improves precision. 
+# Infer the likely first/last name structure of a name, ex. John Smith or SMITH, John or SMITH; John. Giving a local context improves precision.
 #
 # POST /api2/json/parseNameGeoBatch
 # operationId: parseNameGeoBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {countryIso2?: string, id?: string, name?: string}
-export def "api2-json-parse-name-geo-batch parseNameGeoBatch" [
+export def "api2-json-parse-name-geo-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1692,18 +1701,18 @@ export def "api2-json-parse-name-geo-batch parseNameGeoBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/parseNameGeoBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # [USES 11 UNITS PER NAME] Infer the likely country and phone prefix, given a personal name and formatted / unformatted phone number.
 #
 # GET /api2/json/phoneCode/{firstName}/{lastName}/{phoneNumber}
 # operationId: phoneCode
-export def "api2-json-phone-code phoneCode" [
+export def "api2-json-phone-code get" [
   first_name: string
   last_name: string
   phone_number: string
@@ -1718,7 +1727,7 @@ export def "api2-json-phone-code phoneCode" [
 ]: nothing -> record<countryIso2: string, firstName: string, id: string, internationalPhoneNumberVerified: string, lastName: string, originCountryIso2: string, originCountryIso2Alt: string, phoneCountryCode: int, phoneCountryCodeAlt: int, phoneCountryIso2: string, phoneCountryIso2Alt: string, phoneCountryIso2Verified: string, phoneNumber: string, score: float, script: string, verified: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({first_name: $first_name, last_name: $last_name, phone_number: $phone_number} | format pattern "/api2/json/phoneCode/{first_name}/{last_name}/{phone_number}"))
+  let full_url = (build-url $base ({first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name), phone_number: (encode-path-segment $phone_number)} | format pattern "/api2/json/phoneCode/{first_name}/{last_name}/{phone_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1730,7 +1739,7 @@ export def "api2-json-phone-code phoneCode" [
 # operationId: phoneCodeBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNamesWithPhoneNumbers item shape: {firstName?: string, id?: string, lastName?: string, phoneNumber?: string}
-export def "api2-json-phone-code-batch phoneCodeBatch" [
+export def "api2-json-phone-code-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1746,18 +1755,18 @@ export def "api2-json-phone-code-batch phoneCodeBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/phoneCodeBatch")
-  let body = {"facts": $facts, "personalNamesWithPhoneNumbers": $personal_names_with_phone_numbers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNamesWithPhoneNumbers": $personal_names_with_phone_numbers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # [USES 11 UNITS PER NAME] Infer the likely phone prefix, given a personal name and formatted / unformatted phone number, with a local context (ISO2 country of residence).
 #
 # GET /api2/json/phoneCodeGeo/{firstName}/{lastName}/{phoneNumber}/{countryIso2}
 # operationId: phoneCodeGeo
-export def "api2-json-phone-code-geo phoneCodeGeo" [
+export def "api2-json-phone-code-geo get" [
   first_name: string
   last_name: string
   phone_number: string
@@ -1773,7 +1782,7 @@ export def "api2-json-phone-code-geo phoneCodeGeo" [
 ]: nothing -> record<countryIso2: string, firstName: string, id: string, internationalPhoneNumberVerified: string, lastName: string, originCountryIso2: string, originCountryIso2Alt: string, phoneCountryCode: int, phoneCountryCodeAlt: int, phoneCountryIso2: string, phoneCountryIso2Alt: string, phoneCountryIso2Verified: string, phoneNumber: string, score: float, script: string, verified: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({first_name: $first_name, last_name: $last_name, phone_number: $phone_number, country_iso2: $country_iso2} | format pattern "/api2/json/phoneCodeGeo/{first_name}/{last_name}/{phone_number}/{country_iso2}"))
+  let full_url = (build-url $base ({first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name), phone_number: (encode-path-segment $phone_number), country_iso2: (encode-path-segment $country_iso2)} | format pattern "/api2/json/phoneCodeGeo/{first_name}/{last_name}/{phone_number}/{country_iso2}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1785,7 +1794,7 @@ export def "api2-json-phone-code-geo phoneCodeGeo" [
 # operationId: phoneCodeGeoBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNamesWithPhoneNumbers item shape: {countryIso2?: string, countryIso2Alt?: string, firstName?: string, id?: string, lastName?: string, phoneNumber?: string}
-export def "api2-json-phone-code-geo-batch phoneCodeGeoBatch" [
+export def "api2-json-phone-code-geo-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1801,18 +1810,18 @@ export def "api2-json-phone-code-geo-batch phoneCodeGeoBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/phoneCodeGeoBatch")
-  let body = {"facts": $facts, "personalNamesWithPhoneNumbers": $personal_names_with_phone_numbers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNamesWithPhoneNumbers": $personal_names_with_phone_numbers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # [CREDITS 1 UNIT] Feedback loop to better infer the likely phone prefix, given a personal name and formatted / unformatted phone number, with a local context (ISO2 country of residence).
 #
 # GET /api2/json/phoneCodeGeoFeedbackLoop/{firstName}/{lastName}/{phoneNumber}/{phoneNumberE164}/{countryIso2}
 # operationId: phoneCodeGeoFeedbackLoop
-export def "api2-json-phone-code-geo-feedback-loop phoneCodeGeoFeedbackLoop" [
+export def "api2-json-phone-code-geo-feedback-loop get" [
   first_name: string
   last_name: string
   phone_number: string
@@ -1829,7 +1838,7 @@ export def "api2-json-phone-code-geo-feedback-loop phoneCodeGeoFeedbackLoop" [
 ]: nothing -> record<countryIso2: string, firstName: string, id: string, internationalPhoneNumberVerified: string, lastName: string, originCountryIso2: string, originCountryIso2Alt: string, phoneCountryCode: int, phoneCountryCodeAlt: int, phoneCountryIso2: string, phoneCountryIso2Alt: string, phoneCountryIso2Verified: string, phoneNumber: string, score: float, script: string, verified: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({first_name: $first_name, last_name: $last_name, phone_number: $phone_number, phone_number_e164: $phone_number_e164, country_iso2: $country_iso2} | format pattern "/api2/json/phoneCodeGeoFeedbackLoop/{first_name}/{last_name}/{phone_number}/{phone_number_e164}/{country_iso2}"))
+  let full_url = (build-url $base ({first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name), phone_number: (encode-path-segment $phone_number), phone_number_e164: (encode-path-segment $phone_number_e164), country_iso2: (encode-path-segment $country_iso2)} | format pattern "/api2/json/phoneCodeGeoFeedbackLoop/{first_name}/{last_name}/{phone_number}/{phone_number_e164}/{country_iso2}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1839,7 +1848,7 @@ export def "api2-json-phone-code-geo-feedback-loop phoneCodeGeoFeedbackLoop" [
 #
 # GET /api2/json/pinyinChineseName/{chineseName}
 # operationId: pinyinChineseName
-export def "api2-json-pinyin-chinese-name pinyinChineseName" [
+export def "api2-json-pinyin-chinese-name get" [
   chinese_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1852,7 +1861,7 @@ export def "api2-json-pinyin-chinese-name pinyinChineseName" [
 ]: nothing -> record<firstLastName: record<firstName: string, id: string, lastName: string, script: string>, id: string, name: string, nameParserType: string, nameParserTypeAlt: string, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({chinese_name: $chinese_name} | format pattern "/api2/json/pinyinChineseName/{chinese_name}"))
+  let full_url = (build-url $base ({chinese_name: (encode-path-segment $chinese_name)} | format pattern "/api2/json/pinyinChineseName/{chinese_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1864,7 +1873,7 @@ export def "api2-json-pinyin-chinese-name pinyinChineseName" [
 # operationId: pinyinChineseNameBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string}
-export def "api2-json-pinyin-chinese-name-batch pinyinChineseNameBatch" [
+export def "api2-json-pinyin-chinese-name-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1880,18 +1889,18 @@ export def "api2-json-pinyin-chinese-name-batch pinyinChineseNameBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/pinyinChineseNameBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Print basic source statistics.
 #
 # GET /api2/json/regions
 # operationId: regions
-export def "api2-json-regions regions" [
+export def "api2-json-regions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1913,7 +1922,7 @@ export def "api2-json-regions regions" [
 #
 # GET /api2/json/religionFull/{countryIso2}/{subDivisionIso31662}/{personalNameFull}
 # operationId: religionFull
-export def "api2-json-religion-full religionFull" [
+export def "api2-json-religion-full get" [
   country_iso2: string
   sub_division_iso31662: string
   personal_name_full: string
@@ -1928,7 +1937,7 @@ export def "api2-json-religion-full religionFull" [
 ]: nothing -> record<id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, religion: string, religionAlt: string, religionsTop: list<string>, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({country_iso2: $country_iso2, sub_division_iso31662: $sub_division_iso31662, personal_name_full: $personal_name_full} | format pattern "/api2/json/religionFull/{country_iso2}/{sub_division_iso31662}/{personal_name_full}"))
+  let full_url = (build-url $base ({country_iso2: (encode-path-segment $country_iso2), sub_division_iso31662: (encode-path-segment $sub_division_iso31662), personal_name_full: (encode-path-segment $personal_name_full)} | format pattern "/api2/json/religionFull/{country_iso2}/{sub_division_iso31662}/{personal_name_full}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1940,7 +1949,7 @@ export def "api2-json-religion-full religionFull" [
 # operationId: religionFullBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {countryIso2?: string, id?: string, name?: string, subdivisionIso?: string}
-export def "api2-json-religion-full-batch religionFullBatch" [
+export def "api2-json-religion-full-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1956,18 +1965,18 @@ export def "api2-json-religion-full-batch religionFullBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/religionFullBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # [USES 10 UNITS PER NAME] Infer the likely religion of a personal Indian full name, provided the Indian state or Union territory (NB/ this can be inferred using the subclassification endpoint).
 #
 # GET /api2/json/religionIndianFull/{subDivisionIso31662}/{personalNameFull}
 # operationId: religion
-export def "api2-json-religion-indian-full religion" [
+export def "api2-json-religion-indian-full get" [
   sub_division_iso31662: string
   personal_name_full: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1981,7 +1990,7 @@ export def "api2-json-religion-indian-full religion" [
 ]: nothing -> record<id: string, name: string, probabilityAltCalibrated: float, probabilityCalibrated: float, religion: string, religionAlt: string, religionsTop: list<string>, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({sub_division_iso31662: $sub_division_iso31662, personal_name_full: $personal_name_full} | format pattern "/api2/json/religionIndianFull/{sub_division_iso31662}/{personal_name_full}"))
+  let full_url = (build-url $base ({sub_division_iso31662: (encode-path-segment $sub_division_iso31662), personal_name_full: (encode-path-segment $personal_name_full)} | format pattern "/api2/json/religionIndianFull/{sub_division_iso31662}/{personal_name_full}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1993,7 +2002,7 @@ export def "api2-json-religion-indian-full religion" [
 # operationId: religionIndianFullBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {id?: string, name?: string, subdivisionIso?: string}
-export def "api2-json-religion-indian-full-batch religionIndianFullBatch" [
+export def "api2-json-religion-indian-full-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2009,18 +2018,18 @@ export def "api2-json-religion-indian-full-batch religionIndianFullBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/religionIndianFullBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the current software version
 #
 # GET /api2/json/softwareVersion
 # operationId: softwareVersion
-export def "api2-json-software-version softwareVersion" [
+export def "api2-json-software-version version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2042,7 +2051,7 @@ export def "api2-json-software-version softwareVersion" [
 #
 # GET /api2/json/subclassification/{countryIso2}/{firstName}/{lastName}
 # operationId: subclassification
-export def "api2-json-subclassification subclassification" [
+export def "api2-json-subclassification get" [
   country_iso2: string
   first_name: string
   last_name: string
@@ -2057,7 +2066,7 @@ export def "api2-json-subclassification subclassification" [
 ]: nothing -> record<countryIso2: string, firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string, subClassification: string, subClassificationAlt: string, subclassificationTop: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({country_iso2: $country_iso2, first_name: $first_name, last_name: $last_name} | format pattern "/api2/json/subclassification/{country_iso2}/{first_name}/{last_name}"))
+  let full_url = (build-url $base ({country_iso2: (encode-path-segment $country_iso2), first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name)} | format pattern "/api2/json/subclassification/{country_iso2}/{first_name}/{last_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2069,7 +2078,7 @@ export def "api2-json-subclassification subclassification" [
 # operationId: subclassificationBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
-export def "api2-json-subclassification-batch subclassificationBatch" [
+export def "api2-json-subclassification-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2085,18 +2094,18 @@ export def "api2-json-subclassification-batch subclassificationBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/subclassificationBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # [USES 10 UNITS PER NAME] Infer the likely Indian state of Union territory according to ISO 3166-2:IN based on the name.
 #
 # GET /api2/json/subclassificationIndian/{firstName}/{lastName}
 # operationId: subclassificationIndian
-export def "api2-json-subclassification-indian subclassificationIndian" [
+export def "api2-json-subclassification-indian get" [
   first_name: string
   last_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2110,7 +2119,7 @@ export def "api2-json-subclassification-indian subclassificationIndian" [
 ]: nothing -> record<countryIso2: string, firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, score: float, script: string, subClassification: string, subClassificationAlt: string, subclassificationTop: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({first_name: $first_name, last_name: $last_name} | format pattern "/api2/json/subclassificationIndian/{first_name}/{last_name}"))
+  let full_url = (build-url $base ({first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name)} | format pattern "/api2/json/subclassificationIndian/{first_name}/{last_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2122,7 +2131,7 @@ export def "api2-json-subclassification-indian subclassificationIndian" [
 # operationId: subclassificationIndianBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
-export def "api2-json-subclassification-indian-batch subclassificationIndianBatch" [
+export def "api2-json-subclassification-indian-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2138,18 +2147,18 @@ export def "api2-json-subclassification-indian-batch subclassificationIndianBatc
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/subclassificationIndianBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Print the taxonomy classes valid for the given classifier.
 #
 # GET /api2/json/taxonomyClasses/{classifierName}
 # operationId: taxonomyClasses
-export def "api2-json-taxonomy-classes taxonomyClasses" [
+export def "api2-json-taxonomy-classes get" [
   classifier_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2162,17 +2171,17 @@ export def "api2-json-taxonomy-classes taxonomyClasses" [
 ]: nothing -> record<classifierName: string, classifyingScripts: list<string>, taxonomyClasses: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({classifier_name: $classifier_name} | format pattern "/api2/json/taxonomyClasses/{classifier_name}"))
+  let full_url = (build-url $base ({classifier_name: (encode-path-segment $classifier_name)} | format pattern "/api2/json/taxonomyClasses/{classifier_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# [USES 10 UNITS PER NAME] Infer a US resident's likely race/ethnicity according to US Census taxonomy W_NL (white, non latino), HL (hispano latino),  A (asian, non latino), B_NL (black, non latino). Optionally add header X-OPTION-USRACEETHNICITY-TAXONOMY: USRACEETHNICITY-6CLASSES for two additional classes, AI_AN (American Indian or Alaskan Native) and PI (Pacific Islander).
+# [USES 10 UNITS PER NAME] Infer a US resident's likely race/ethnicity according to US Census taxonomy W_NL (white, non latino), HL (hispano latino), A (asian, non latino), B_NL (black, non latino). Optionally add header X-OPTION-USRACEETHNICITY-TAXONOMY: USRACEETHNICITY-6CLASSES for two additional classes, AI_AN (American Indian or Alaskan Native) and PI (Pacific Islander).
 #
 # GET /api2/json/usRaceEthnicity/{firstName}/{lastName}
 # operationId: usRaceEthnicity
-export def "api2-json-us-race-ethnicity usRaceEthnicity" [
+export def "api2-json-us-race-ethnicity get" [
   first_name: string
   last_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2186,19 +2195,19 @@ export def "api2-json-us-race-ethnicity usRaceEthnicity" [
 ]: nothing -> record<firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, raceEthnicitiesTop: list<string>, raceEthnicity: string, raceEthnicityAlt: string, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({first_name: $first_name, last_name: $last_name} | format pattern "/api2/json/usRaceEthnicity/{first_name}/{last_name}"))
+  let full_url = (build-url $base ({first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name)} | format pattern "/api2/json/usRaceEthnicity/{first_name}/{last_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# [USES 10 UNITS PER NAME] Infer up-to 100 US resident's likely race/ethnicity according to US Census taxonomy. Output is W_NL (white, non latino), HL (hispano latino),  A (asian, non latino), B_NL (black, non latino). Optionally add header X-OPTION-USRACEETHNICITY-TAXONOMY: USRACEETHNICITY-6CLASSES for two additional classes, AI_AN (American Indian or Alaskan Native) and PI (Pacific Islander).
+# [USES 10 UNITS PER NAME] Infer up-to 100 US resident's likely race/ethnicity according to US Census taxonomy. Output is W_NL (white, non latino), HL (hispano latino), A (asian, non latino), B_NL (black, non latino). Optionally add header X-OPTION-USRACEETHNICITY-TAXONOMY: USRACEETHNICITY-6CLASSES for two additional classes, AI_AN (American Indian or Alaskan Native) and PI (Pacific Islander).
 #
 # POST /api2/json/usRaceEthnicityBatch
 # operationId: usRaceEthnicityBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string}
-export def "api2-json-us-race-ethnicity-batch usRaceEthnicityBatch" [
+export def "api2-json-us-race-ethnicity-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2214,18 +2223,18 @@ export def "api2-json-us-race-ethnicity-batch usRaceEthnicityBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/usRaceEthnicityBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# [USES 10 UNITS PER NAME] Infer a US resident's likely race/ethnicity according to US Census taxonomy, using (optional) ZIP5 code info. Output is W_NL (white, non latino), HL (hispano latino),  A (asian, non latino), B_NL (black, non latino). Optionally add header X-OPTION-USRACEETHNICITY-TAXONOMY: USRACEETHNICITY-6CLASSES for two additional classes, AI_AN (American Indian or Alaskan Native) and PI (Pacific Islander).
+# [USES 10 UNITS PER NAME] Infer a US resident's likely race/ethnicity according to US Census taxonomy, using (optional) ZIP5 code info. Output is W_NL (white, non latino), HL (hispano latino), A (asian, non latino), B_NL (black, non latino). Optionally add header X-OPTION-USRACEETHNICITY-TAXONOMY: USRACEETHNICITY-6CLASSES for two additional classes, AI_AN (American Indian or Alaskan Native) and PI (Pacific Islander).
 #
 # GET /api2/json/usRaceEthnicityZIP5/{firstName}/{lastName}/{zip5Code}
 # operationId: usRaceEthnicityZIP5
-export def "api2-json-us-race-ethnicity-zip5 usRaceEthnicityZIP5" [
+export def "api2-json-us-race-ethnicity-zip5 get" [
   first_name: string
   last_name: string
   zip5_code: string
@@ -2240,19 +2249,19 @@ export def "api2-json-us-race-ethnicity-zip5 usRaceEthnicityZIP5" [
 ]: nothing -> record<firstName: string, id: string, lastName: string, probabilityAltCalibrated: float, probabilityCalibrated: float, raceEthnicitiesTop: list<string>, raceEthnicity: string, raceEthnicityAlt: string, score: float, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({first_name: $first_name, last_name: $last_name, zip5_code: $zip5_code} | format pattern "/api2/json/usRaceEthnicityZIP5/{first_name}/{last_name}/{zip5_code}"))
+  let full_url = (build-url $base ({first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name), zip5_code: (encode-path-segment $zip5_code)} | format pattern "/api2/json/usRaceEthnicityZIP5/{first_name}/{last_name}/{zip5_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# [USES 10 UNITS PER NAME] Infer up-to 100 US resident's likely race/ethnicity according to US Census taxonomy, with (optional) ZIP code. Output is W_NL (white, non latino), HL (hispano latino),  A (asian, non latino), B_NL (black, non latino). Optionally add header X-OPTION-USRACEETHNICITY-TAXONOMY: USRACEETHNICITY-6CLASSES for two additional classes, AI_AN (American Indian or Alaskan Native) and PI (Pacific Islander).
+# [USES 10 UNITS PER NAME] Infer up-to 100 US resident's likely race/ethnicity according to US Census taxonomy, with (optional) ZIP code. Output is W_NL (white, non latino), HL (hispano latino), A (asian, non latino), B_NL (black, non latino). Optionally add header X-OPTION-USRACEETHNICITY-TAXONOMY: USRACEETHNICITY-6CLASSES for two additional classes, AI_AN (American Indian or Alaskan Native) and PI (Pacific Islander).
 #
 # POST /api2/json/usZipRaceEthnicityBatch
 # operationId: usZipRaceEthnicityBatch
 # --facts item shape: {id?: string, name?: string}
 # --personalNames item shape: {countryIso2?: string, firstName?: string, id?: string, lastName?: string, zipCode?: string}
-export def "api2-json-us-zip-race-ethnicity-batch usZipRaceEthnicityBatch" [
+export def "api2-json-us-zip-race-ethnicity-batch create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2268,9 +2277,9 @@ export def "api2-json-us-zip-race-ethnicity-batch usZipRaceEthnicityBatch" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/usZipRaceEthnicityBatch")
-  let body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

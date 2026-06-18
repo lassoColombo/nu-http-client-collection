@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -113,11 +122,11 @@ export def "domains get" [
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source_domains_language: $source_domains_language, target_domains_language: $target_domains_language} | format pattern "/domains/{source_domains_language}/{target_domains_language}"))
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_domains_language: (encode-path-segment $source_domains_language), target_domains_language: (encode-path-segment $target_domains_language)} | format pattern "/domains/{source_domains_language}/{target_domains_language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -139,11 +148,11 @@ export def "domains list" [
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source_language: $source_language} | format pattern "/domains/{source_language}"))
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_language: (encode-path-segment $source_language)} | format pattern "/domains/{source_language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -167,11 +176,11 @@ export def "entries-sentences get" [
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source_language: $source_language, word_id: $word_id} | format pattern "/entries/{source_language}/{word_id}/sentences"))
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_language: (encode-path-segment $source_language), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_language}/{word_id}/sentences"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -195,11 +204,11 @@ export def "entries list" [
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, pronunciations: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source_lang: $source_lang, word_id: $word_id} | format pattern "/entries/{source_lang}/{word_id}"))
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_lang}/{word_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -223,11 +232,11 @@ export def "entries-antonyms get" [
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source_lang: $source_lang, word_id: $word_id} | format pattern "/entries/{source_lang}/{word_id}/antonyms"))
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_lang}/{word_id}/antonyms"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -252,11 +261,11 @@ export def "entries-regions-region get" [
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, pronunciations: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source_lang: $source_lang, word_id: $word_id, region: $region} | format pattern "/entries/{source_lang}/{word_id}/regions={region}"))
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id), region: (encode-path-segment $region)} | format pattern "/entries/{source_lang}/{word_id}/regions={region}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -280,11 +289,11 @@ export def "entries-synonyms get" [
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source_lang: $source_lang, word_id: $word_id} | format pattern "/entries/{source_lang}/{word_id}/synonyms"))
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_lang}/{word_id}/synonyms"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -308,11 +317,11 @@ export def "entries-synonyms-antonyms get" [
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source_lang: $source_lang, word_id: $word_id} | format pattern "/entries/{source_lang}/{word_id}/synonyms;antonyms"))
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_lang}/{word_id}/synonyms;antonyms"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -336,11 +345,11 @@ export def "entries get" [
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, pronunciations: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source_lang: $source_lang, word_id: $word_id, filters: $filters} | format pattern "/entries/{source_lang}/{word_id}/{filters}"))
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id), filters: (encode-path-segment $filters)} | format pattern "/entries/{source_lang}/{word_id}/{filters}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -364,11 +373,11 @@ export def "entries-translations-target-translation-language get" [
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, pronunciations: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source_translation_language: $source_translation_language, word_id: $word_id, target_translation_language: $target_translation_language} | format pattern "/entries/{source_translation_language}/{word_id}/translations={target_translation_language}"))
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_translation_language: (encode-path-segment $source_translation_language), word_id: (encode-path-segment $word_id), target_translation_language: (encode-path-segment $target_translation_language)} | format pattern "/entries/{source_translation_language}/{word_id}/translations={target_translation_language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -390,10 +399,10 @@ export def "filters list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/filters")
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -415,11 +424,11 @@ export def "filters get" [
 ]: nothing -> record<metadata: record, results: record<entries: list<string>, inflections: list<string>, translations: list<string>, wordlist: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({endpoint: $endpoint} | format pattern "/filters/{endpoint}"))
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({endpoint: (encode-path-segment $endpoint)} | format pattern "/filters/{endpoint}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -441,11 +450,11 @@ export def "grammatical-features get" [
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source_language: $source_language} | format pattern "/grammaticalFeatures/{source_language}"))
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_language: (encode-path-segment $source_language)} | format pattern "/grammaticalFeatures/{source_language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -469,11 +478,11 @@ export def "inflections get" [
 ]: nothing -> record<metadata: record, results: table<id: string, language: string, lexicalEntries: list, type: string, word: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source_lang: $source_lang, word_id: $word_id, filters: $filters} | format pattern "/inflections/{source_lang}/{word_id}/{filters}"))
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id), filters: (encode-path-segment $filters)} | format pattern "/inflections/{source_lang}/{word_id}/{filters}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -498,10 +507,10 @@ export def "languages get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sourceLanguage" $source_language "scalar") (serialize-qp "targetLanguage" $target_language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/languages" $qp)
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -523,11 +532,11 @@ export def "lexicalcategories get" [
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({language: $language} | format pattern "/lexicalcategories/{language}"))
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({language: (encode-path-segment $language)} | format pattern "/lexicalcategories/{language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -549,15 +558,15 @@ export def "regions get" [
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source_language: $source_language} | format pattern "/regions/{source_language}"))
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_language: (encode-path-segment $source_language)} | format pattern "/regions/{source_language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Lists available registers in a  monolingual dataset
+# Lists available registers in a monolingual dataset
 #
 # GET /registers/{source_language}
 export def "registers list" [
@@ -575,11 +584,11 @@ export def "registers list" [
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source_language: $source_language} | format pattern "/registers/{source_language}"))
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_language: (encode-path-segment $source_language)} | format pattern "/registers/{source_language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -602,11 +611,11 @@ export def "registers get" [
 ]: nothing -> record<metadata: record, results: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({source_register_language: $source_register_language, target_register_language: $target_register_language} | format pattern "/registers/{source_register_language}/{target_register_language}"))
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_register_language: (encode-path-segment $source_register_language), target_register_language: (encode-path-segment $target_register_language)} | format pattern "/registers/{source_register_language}/{target_register_language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -635,11 +644,11 @@ export def "search get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "regions" $regions "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source_lang: $source_lang} | format pattern "/search/{source_lang}") $qp)
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang)} | format pattern "/search/{source_lang}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -669,11 +678,11 @@ export def "search-translations-target-search-language get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "regions" $regions "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source_search_language: $source_search_language, target_search_language: $target_search_language} | format pattern "/search/{source_search_language}/translations={target_search_language}") $qp)
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_search_language: (encode-path-segment $source_search_language), target_search_language: (encode-path-segment $target_search_language)} | format pattern "/search/{source_search_language}/translations={target_search_language}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -711,11 +720,11 @@ export def "stats-frequency-ngrams get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tokens" $tokens "scalar") (serialize-qp "contains" $contains "scalar") (serialize-qp "punctuation" $punctuation "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "minFrequency" $min_frequency "scalar") (serialize-qp "maxFrequency" $max_frequency "scalar") (serialize-qp "minDocumentFrequency" $min_document_frequency "scalar") (serialize-qp "maxDocumentFrequency" $max_document_frequency "scalar") (serialize-qp "collate" $collate "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source_lang: $source_lang, corpus: $corpus, ngram_size: $ngram_size} | format pattern "/stats/frequency/ngrams/{source_lang}/{corpus}/{ngram_size}/") $qp)
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), corpus: (encode-path-segment $corpus), ngram_size: (encode-path-segment $ngram_size)} | format pattern "/stats/frequency/ngrams/{source_lang}/{corpus}/{ngram_size}/") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -744,11 +753,11 @@ export def "stats-frequency-word get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "corpus" $corpus "scalar") (serialize-qp "wordform" $wordform "scalar") (serialize-qp "trueCase" $true_case "scalar") (serialize-qp "lemma" $lemma "scalar") (serialize-qp "lexicalCategory" $lexical_category "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source_lang: $source_lang} | format pattern "/stats/frequency/word/{source_lang}/") $qp)
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang)} | format pattern "/stats/frequency/word/{source_lang}/") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -786,11 +795,11 @@ export def "stats-frequency-words get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "corpus" $corpus "scalar") (serialize-qp "wordform" $wordform "scalar") (serialize-qp "trueCase" $true_case "scalar") (serialize-qp "lemma" $lemma "scalar") (serialize-qp "lexicalCategory" $lexical_category "scalar") (serialize-qp "grammaticalFeatures" $grammatical_features "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "collate" $collate "scalar") (serialize-qp "minFrequency" $min_frequency "scalar") (serialize-qp "maxFrequency" $max_frequency "scalar") (serialize-qp "minNormalizedFrequency" $min_normalized_frequency "scalar") (serialize-qp "maxNormalizedFrequency" $max_normalized_frequency "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source_lang: $source_lang} | format pattern "/stats/frequency/words/{source_lang}/") $qp)
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang)} | format pattern "/stats/frequency/words/{source_lang}/") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -822,11 +831,11 @@ export def "wordlist get-by-source_lang-filters_advanced" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "exclude" $exclude "scalar") (serialize-qp "exclude_senses" $exclude_senses "scalar") (serialize-qp "exclude_prime_senses" $exclude_prime_senses "scalar") (serialize-qp "word_length" $word_length "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "exact" $exact "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source_lang: $source_lang, filters_advanced: $filters_advanced} | format pattern "/wordlist/{source_lang}/{filters_advanced}") $qp)
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), filters_advanced: (encode-path-segment $filters_advanced)} | format pattern "/wordlist/{source_lang}/{filters_advanced}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -852,10 +861,10 @@ export def "wordlist get-by-source_lang-filters_basic" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({source_lang: $source_lang, filters_basic: $filters_basic} | format pattern "/wordlist/{source_lang}/{filters_basic}") $qp)
-  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), filters_basic: (encode-path-segment $filters_basic)} | format pattern "/wordlist/{source_lang}/{filters_basic}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -140,7 +149,7 @@ export def "account-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_account_type: $id_account_type} | format pattern "/account_types/{id_account_type}") $qp)
+  let full_url = (build-url $base ({id_account_type: (encode-path-segment $id_account_type)} | format pattern "/account_types/{id_account_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -149,7 +158,7 @@ export def "account-types get" [
 # Generate a jwt manage token
 #
 # POST /admin/jwt
-export def "admin-jwt post" [
+export def "admin-jwt create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,17 +175,18 @@ export def "admin-jwt post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/jwt")
-  let body = {"duration": $duration, "scope": $scope} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"duration": $duration, "scope": $scope} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Create a new anonymous user
 #
 # POST /auth/init
-export def "auth-init post" [
+export def "auth-init create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,17 +203,18 @@ export def "auth-init post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/init")
-  let body = {"client_id": $client_id, "client_secret": $client_secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "client_secret": $client_secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Generate a user jwt token
 #
 # POST /auth/jwt
-export def "auth-jwt post" [
+export def "auth-jwt create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,17 +234,18 @@ export def "auth-jwt post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/jwt")
-  let body = {"client_id": $client_id, "client_secret": $client_secret, "expire": $expire, "id_user": $id_user, "scope": $scope} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "client_secret": $client_secret, "expire": $expire, "id_user": $id_user, "scope": $scope} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get a new access token given an user id and client credentials
 #
 # POST /auth/renew
-export def "auth-renew post" [
+export def "auth-renew create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,11 +265,12 @@ export def "auth-renew post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/renew")
-  let body = {"client_id": $client_id, "client_secret": $client_secret, "grant_type": $grant_type, "id_user": $id_user, "revoke_previous": $revoke_previous} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "client_secret": $client_secret, "grant_type": $grant_type, "id_user": $id_user, "revoke_previous": $revoke_previous} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "access_token")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Remove user access
@@ -284,7 +297,7 @@ export def "auth-token delete" [
 # Login to API with credentials
 #
 # POST /auth/token
-export def "auth-token post" [
+export def "auth-token create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,17 +317,18 @@ export def "auth-token post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/token")
-  let body = {"application": $application, "grant_type": $grant_type, "password": $password, "scope": $scope, "username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"application": $application, "grant_type": $grant_type, "password": $password, "scope": $scope, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Transform a temporary code to a access_token
 #
 # POST /auth/token/access
-export def "auth-token-access post" [
+export def "auth-token-access create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,11 +348,12 @@ export def "auth-token-access post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/token/access")
-  let body = {"client_id": $client_id, "client_secret": $client_secret, "code": $code, "grant_type": $grant_type, "redirect_uri": $redirect_uri} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "client_secret": $client_secret, "code": $code, "grant_type": $grant_type, "redirect_uri": $redirect_uri} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "access_token")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Generate a user temporary token
@@ -389,7 +404,7 @@ export def "banks list" [
 # Create bank categories
 #
 # POST /banks/categories
-export def "banks-categories post" [
+export def "banks-categories create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -406,11 +421,12 @@ export def "banks-categories post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/banks/categories" $qp)
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Delete the supplied category
@@ -431,7 +447,7 @@ export def "banks-categories delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_category: $id_category} | format pattern "/banks/categories/{id_category}") $qp)
+  let full_url = (build-url $base ({id_category: (encode-path-segment $id_category)} | format pattern "/banks/categories/{id_category}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -440,7 +456,7 @@ export def "banks-categories delete" [
 # Edit a bank categories
 #
 # POST /banks/categories/{id_category}
-export def "banks-categories post-by-id_category" [
+export def "banks-categories create-by-id_category" [
   id_category: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -457,12 +473,13 @@ export def "banks-categories post-by-id_category" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_category: $id_category} | format pattern "/banks/categories/{id_category}") $qp)
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_category: (encode-path-segment $id_category)} | format pattern "/banks/categories/{id_category}") $qp)
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get a connector
@@ -483,7 +500,7 @@ export def "banks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_bank: $id_bank} | format pattern "/banks/{id_bank}") $qp)
+  let full_url = (build-url $base ({id_bank: (encode-path-segment $id_bank)} | format pattern "/banks/{id_bank}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -513,7 +530,7 @@ export def "banks-connections get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "method" $method "scalar") (serialize-qp "n" $n "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "occurences" $occurences "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "minutes_without_sync" $minutes_without_sync "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector} | format pattern "/banks/{id_connector}/connections") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/banks/{id_connector}/connections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -537,7 +554,7 @@ export def "banks-logos get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector} | format pattern "/banks/{id_connector}/logos") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/banks/{id_connector}/logos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -561,7 +578,7 @@ export def "banks-logos-main get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector} | format pattern "/banks/{id_connector}/logos/main") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/banks/{id_connector}/logos/main") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -585,7 +602,7 @@ export def "banks-logos-thumbnail get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector} | format pattern "/banks/{id_connector}/logos/thumbnail") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/banks/{id_connector}/logos/thumbnail") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -609,7 +626,7 @@ export def "banks-sources list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector} | format pattern "/banks/{id_connector}/sources") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/banks/{id_connector}/sources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -634,7 +651,7 @@ export def "banks-sources-fields get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector, id_connector_source: $id_connector_source} | format pattern "/banks/{id_connector}/sources/{id_connector_source}/fields") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector), id_connector_source: (encode-path-segment $id_connector_source)} | format pattern "/banks/{id_connector}/sources/{id_connector_source}/fields") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -659,7 +676,7 @@ export def "banks-sources get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector, id_source: $id_source} | format pattern "/banks/{id_connector}/sources/{id_source}") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector), id_source: (encode-path-segment $id_source)} | format pattern "/banks/{id_connector}/sources/{id_source}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -691,7 +708,7 @@ export def "categories get" [
 # Add a new keyword associated with a category in the database.
 #
 # POST /categories/keywords
-export def "categories-keywords post" [
+export def "categories-keywords create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -729,7 +746,7 @@ export def "categories-keywords delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_keyword: $id_keyword} | format pattern "/categories/keywords/{id_keyword}") $qp)
+  let full_url = (build-url $base ({id_keyword: (encode-path-segment $id_keyword)} | format pattern "/categories/keywords/{id_keyword}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -738,7 +755,7 @@ export def "categories-keywords delete" [
 # categorize transactions without storing them
 #
 # POST /categorize
-export def "categorize post" [
+export def "categorize create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -756,11 +773,12 @@ export def "categorize post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/categorize")
-  let body = {"type": $type, "value": $value, "wording": $wording} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"type": $type, "value": $value, "wording": $wording} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get the latest certificate of a type
@@ -781,7 +799,7 @@ export def "certificate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type: $type} | format pattern "/certificate/{type}") $qp)
+  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/certificate/{type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -813,7 +831,7 @@ export def "clients list" [
 # Create a client
 #
 # POST /clients
-export def "clients post" [
+export def "clients create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -833,11 +851,12 @@ export def "clients post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/clients" $qp)
-  let body = {"config": $config, "generate_keys": $generate_keys, "name": $name, "redirect_uris": $redirect_uris} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"config": $config, "generate_keys": $generate_keys, "name": $name, "redirect_uris": $redirect_uris} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Delete a client
@@ -858,7 +877,7 @@ export def "clients delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_client: $id_client} | format pattern "/clients/{id_client}") $qp)
+  let full_url = (build-url $base ({id_client: (encode-path-segment $id_client)} | format pattern "/clients/{id_client}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -882,7 +901,7 @@ export def "clients get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_client: $id_client} | format pattern "/clients/{id_client}") $qp)
+  let full_url = (build-url $base ({id_client: (encode-path-segment $id_client)} | format pattern "/clients/{id_client}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -891,7 +910,7 @@ export def "clients get" [
 # Update a client
 #
 # PUT /clients/{id_client}
-export def "clients put" [
+export def "clients update" [
   id_client: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -919,12 +938,13 @@ export def "clients put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_client: $id_client} | format pattern "/clients/{id_client}") $qp)
-  let body = {"config": $config, "description": $description, "description_banks": $description_banks, "description_providers": $description_providers, "generate_keys": $generate_keys, "name": $name, "primary_color": $primary_color, "pro": $pro, "redirect_uris": $redirect_uris, "secondary_color": $secondary_color, "secret": $secret, "update_config": $update_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_client: (encode-path-segment $id_client)} | format pattern "/clients/{id_client}") $qp)
+  let req_body = {"config": $config, "description": $description, "description_banks": $description_banks, "description_providers": $description_providers, "generate_keys": $generate_keys, "name": $name, "primary_color": $primary_color, "pro": $pro, "redirect_uris": $redirect_uris, "secondary_color": $secondary_color, "secret": $secret, "update_config": $update_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Delete the client logo
@@ -945,7 +965,7 @@ export def "clients-logo delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_client: $id_client} | format pattern "/clients/{id_client}/logo") $qp)
+  let full_url = (build-url $base ({id_client: (encode-path-segment $id_client)} | format pattern "/clients/{id_client}/logo") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -954,7 +974,7 @@ export def "clients-logo delete" [
 # Update the client logo
 #
 # POST /clients/{id_client}/logo
-export def "clients-logo post" [
+export def "clients-logo create" [
   id_client: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -969,7 +989,7 @@ export def "clients-logo post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_client: $id_client} | format pattern "/clients/{id_client}/logo") $qp)
+  let full_url = (build-url $base ({id_client: (encode-path-segment $id_client)} | format pattern "/clients/{id_client}/logo") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1001,7 +1021,7 @@ export def "config get" [
 # Insert/update configuration key(s)/value(s) on the API.
 #
 # POST /config
-export def "config post" [
+export def "config create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1099,7 +1119,7 @@ export def "connections-logs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "id_user" $id_user "scalar") (serialize-qp "id_connection" $id_connection "scalar") (serialize-qp "id_connector" $id_connector "scalar") (serialize-qp "connector_uuid" $connector_uuid "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "id_source" $id_source "scalar") (serialize-qp "id_max" $id_max "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connection: $id_connection} | format pattern "/connections/{id_connection}/logs") $qp)
+  let full_url = (build-url $base ({id_connection: (encode-path-segment $id_connection)} | format pattern "/connections/{id_connection}/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1123,7 +1143,7 @@ export def "connections-sources get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connection: $id_connection} | format pattern "/connections/{id_connection}/sources") $qp)
+  let full_url = (build-url $base ({id_connection: (encode-path-segment $id_connection)} | format pattern "/connections/{id_connection}/sources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1148,7 +1168,7 @@ export def "connections-sources delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connection: $id_connection, id_source: $id_source} | format pattern "/connections/{id_connection}/sources/{id_source}") $qp)
+  let full_url = (build-url $base ({id_connection: (encode-path-segment $id_connection), id_source: (encode-path-segment $id_source)} | format pattern "/connections/{id_connection}/sources/{id_source}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1157,7 +1177,7 @@ export def "connections-sources delete" [
 # "
 #
 # POST /connections/{id_connection}/sources/{id_source}
-export def "connections-sources post" [
+export def "connections-sources create" [
   id_connection: int
   id_source: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1177,18 +1197,19 @@ export def "connections-sources post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "background" $background "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connection: $id_connection, id_source: $id_source} | format pattern "/connections/{id_connection}/sources/{id_source}") $qp)
-  let body = {"disabled": $disabled, "synchronize": $synchronize} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_connection: (encode-path-segment $id_connection), id_source: (encode-path-segment $id_source)} | format pattern "/connections/{id_connection}/sources/{id_source}") $qp)
+  let req_body = {"disabled": $disabled, "synchronize": $synchronize} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Update connection source
 #
 # PUT /connections/{id_connection}/sources/{id_source}
-export def "connections-sources put" [
+export def "connections-sources update" [
   id_connection: int
   id_source: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1209,12 +1230,13 @@ export def "connections-sources put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "background" $background "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connection: $id_connection, id_source: $id_source} | format pattern "/connections/{id_connection}/sources/{id_source}") $qp)
-  let body = {"disabled": $disabled, "force": $force, "synchronize": $synchronize} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_connection: (encode-path-segment $id_connection), id_source: (encode-path-segment $id_source)} | format pattern "/connections/{id_connection}/sources/{id_source}") $qp)
+  let req_body = {"disabled": $disabled, "force": $force, "synchronize": $synchronize} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get list of connectors
@@ -1243,7 +1265,7 @@ export def "connectors list" [
 # Request a new connector
 #
 # POST /connectors
-export def "connectors post" [
+export def "connectors create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1260,24 +1282,25 @@ export def "connectors post" [
   password: string # Users password
   --sendmail: oneof<nothing, bool> # if set, send an email to user
   --types: string # Type of connector, eg. banks or providers
-  --body-url: string # Url of the bank
+  --url: string # Url of the bank
 ]: any -> record<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/connectors" $qp)
-  let body = {"comment": $comment, "email": $email, "login": $login, "name": $name, "password": $password, "sendmail": $sendmail, "types": $types, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"comment": $comment, "email": $email, "login": $login, "name": $name, "password": $password, "sendmail": $sendmail, "types": $types, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Enable/disable several connectors
 #
 # PUT /connectors
-export def "connectors put" [
+export def "connectors update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1287,18 +1310,19 @@ export def "connectors put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
-  --hidden: oneof<nothing, bool> # to enable  or disable connector (bank or provider)
+  --hidden: oneof<nothing, bool> # to enable or disable connector (bank or provider)
 ]: any -> record<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/connectors" $qp)
-  let body = {"hidden": $hidden} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"hidden": $hidden} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get a connector
@@ -1319,7 +1343,7 @@ export def "connectors get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector} | format pattern "/connectors/{id_connector}") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/connectors/{id_connector}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1328,7 +1352,7 @@ export def "connectors get" [
 # Edit the provided connector
 #
 # PUT /connectors/{id_connector}
-export def "connectors put-by-id_connector" [
+export def "connectors update-by-id_connector" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1341,7 +1365,7 @@ export def "connectors put-by-id_connector" [
   --accept: string@accept-completer-6 # Response content type
   --expand: string
   --auth-mechanism: string # the authentication mechanism to use for this connector
-  --hidden: oneof<nothing, bool> # to enable  or disable connector (bank or provider)
+  --hidden: oneof<nothing, bool> # to enable or disable connector (bank or provider)
   --id-categories: string # one or several comma separated categories to map to the given connector (or null to map no category)
   --sync-frequency: int # Allows you to overload global sync_frequency param
 ]: any -> record<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string> {
@@ -1349,12 +1373,13 @@ export def "connectors put-by-id_connector" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector} | format pattern "/connectors/{id_connector}") $qp)
-  let body = {"auth_mechanism": $auth_mechanism, "hidden": $hidden, "id_categories": $id_categories, "sync_frequency": $sync_frequency} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/connectors/{id_connector}") $qp)
+  let req_body = {"auth_mechanism": $auth_mechanism, "hidden": $hidden, "id_categories": $id_categories, "sync_frequency": $sync_frequency} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get all links to the files associated with this connector.
@@ -1375,7 +1400,7 @@ export def "connectors-logos get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector} | format pattern "/connectors/{id_connector}/logos") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/connectors/{id_connector}/logos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1384,7 +1409,7 @@ export def "connectors-logos get" [
 # Create a connector Logo
 #
 # POST /connectors/{id_connector}/logos
-export def "connectors-logos post" [
+export def "connectors-logos create" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1399,7 +1424,7 @@ export def "connectors-logos post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector} | format pattern "/connectors/{id_connector}/logos") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/connectors/{id_connector}/logos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1408,7 +1433,7 @@ export def "connectors-logos post" [
 # Create or Update a connector Logo
 #
 # PUT /connectors/{id_connector}/logos
-export def "connectors-logos put-by-id_connector" [
+export def "connectors-logos update-by-id_connector" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1423,7 +1448,7 @@ export def "connectors-logos put-by-id_connector" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector} | format pattern "/connectors/{id_connector}/logos") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/connectors/{id_connector}/logos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1447,7 +1472,7 @@ export def "connectors-logos-main get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector} | format pattern "/connectors/{id_connector}/logos/main") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/connectors/{id_connector}/logos/main") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1471,7 +1496,7 @@ export def "connectors-logos-thumbnail get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector} | format pattern "/connectors/{id_connector}/logos/thumbnail") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/connectors/{id_connector}/logos/thumbnail") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1496,7 +1521,7 @@ export def "connectors-logos delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector, id_logo: $id_logo} | format pattern "/connectors/{id_connector}/logos/{id_logo}") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector), id_logo: (encode-path-segment $id_logo)} | format pattern "/connectors/{id_connector}/logos/{id_logo}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1505,7 +1530,7 @@ export def "connectors-logos delete" [
 # Create or Update a connector Logo.
 #
 # PUT /connectors/{id_connector}/logos/{id_logo}
-export def "connectors-logos put-by-id_connector-id_logo" [
+export def "connectors-logos update-by-id_connector-id_logo" [
   id_connector: int
   id_logo: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1521,7 +1546,7 @@ export def "connectors-logos put-by-id_connector-id_logo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector, id_logo: $id_logo} | format pattern "/connectors/{id_connector}/logos/{id_logo}") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector), id_logo: (encode-path-segment $id_logo)} | format pattern "/connectors/{id_connector}/logos/{id_logo}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1545,7 +1570,7 @@ export def "connectors-sources list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector} | format pattern "/connectors/{id_connector}/sources") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/connectors/{id_connector}/sources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1554,7 +1579,7 @@ export def "connectors-sources list" [
 # Edit several connector sources
 #
 # PUT /connectors/{id_connector}/sources
-export def "connectors-sources put-by-id_connector" [
+export def "connectors-sources update-by-id_connector" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1572,12 +1597,13 @@ export def "connectors-sources put-by-id_connector" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector} | format pattern "/connectors/{id_connector}/sources") $qp)
-  let body = {"disabled_capabilities": $disabled_capabilities, "unavailable_capabilities": $unavailable_capabilities} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/connectors/{id_connector}/sources") $qp)
+  let req_body = {"disabled_capabilities": $disabled_capabilities, "unavailable_capabilities": $unavailable_capabilities} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get fields specific to a domain and a source
@@ -1599,7 +1625,7 @@ export def "connectors-sources-fields get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector, id_connector_source: $id_connector_source} | format pattern "/connectors/{id_connector}/sources/{id_connector_source}/fields") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector), id_connector_source: (encode-path-segment $id_connector_source)} | format pattern "/connectors/{id_connector}/sources/{id_connector_source}/fields") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1624,7 +1650,7 @@ export def "connectors-sources get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector, id_source: $id_source} | format pattern "/connectors/{id_connector}/sources/{id_source}") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector), id_source: (encode-path-segment $id_source)} | format pattern "/connectors/{id_connector}/sources/{id_source}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1633,7 +1659,7 @@ export def "connectors-sources get" [
 # Edit the provided connector source
 #
 # PUT /connectors/{id_connector}/sources/{id_source}
-export def "connectors-sources put-by-id_connector-id_source" [
+export def "connectors-sources update-by-id_connector-id_source" [
   id_connector: int
   id_source: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1655,12 +1681,13 @@ export def "connectors-sources put-by-id_connector-id_source" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector, id_source: $id_source} | format pattern "/connectors/{id_connector}/sources/{id_source}") $qp)
-  let body = {"auth_mechanism": $auth_mechanism, "disabled": $disabled, "disabled_capabilities": $disabled_capabilities, "unavailable": $unavailable, "unavailable_capabilities": $unavailable_capabilities} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector), id_source: (encode-path-segment $id_source)} | format pattern "/connectors/{id_connector}/sources/{id_source}") $qp)
+  let req_body = {"auth_mechanism": $auth_mechanism, "disabled": $disabled, "disabled_capabilities": $disabled_capabilities, "unavailable": $unavailable, "unavailable_capabilities": $unavailable_capabilities} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get incidents logs.
@@ -1708,7 +1735,7 @@ export def "invoicing get" [
   --max-date: string # maximum date (format: date)
   --users-synced: string # the number of user synchronized during the period
   --users-bank: string # the number of user of the Bank API synchronized during the period
-  --users-bill: string #  the number of user of the Bill API synchronized during the period
+  --users-bill: string # the number of user of the Bill API synchronized during the period
   --accounts-synced: string # the number of accounts synchronized during the period
   --subscriptions-synced: string # the number of subscriptions synchronized during the period
   --connections-synced: string # the number of connections synchronized during the period
@@ -1827,7 +1854,7 @@ export def "providers-connections get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "range" $range "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector} | format pattern "/providers/{id_connector}/connections") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/providers/{id_connector}/connections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1851,7 +1878,7 @@ export def "providers-logos get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector} | format pattern "/providers/{id_connector}/logos") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/providers/{id_connector}/logos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1875,7 +1902,7 @@ export def "providers-logos-main get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector} | format pattern "/providers/{id_connector}/logos/main") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/providers/{id_connector}/logos/main") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1899,7 +1926,7 @@ export def "providers-logos-thumbnail get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector} | format pattern "/providers/{id_connector}/logos/thumbnail") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/providers/{id_connector}/logos/thumbnail") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1923,7 +1950,7 @@ export def "providers-sources list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector} | format pattern "/providers/{id_connector}/sources") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/providers/{id_connector}/sources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1948,7 +1975,7 @@ export def "providers-sources-fields get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector, id_connector_source: $id_connector_source} | format pattern "/providers/{id_connector}/sources/{id_connector_source}/fields") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector), id_connector_source: (encode-path-segment $id_connector_source)} | format pattern "/providers/{id_connector}/sources/{id_connector_source}/fields") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1973,7 +2000,7 @@ export def "providers-sources get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_connector: $id_connector, id_source: $id_source} | format pattern "/providers/{id_connector}/sources/{id_source}") $qp)
+  let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector), id_source: (encode-path-segment $id_source)} | format pattern "/providers/{id_connector}/sources/{id_source}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1997,7 +2024,7 @@ export def "providers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_provider: $id_provider} | format pattern "/providers/{id_provider}") $qp)
+  let full_url = (build-url $base ({id_provider: (encode-path-segment $id_provider)} | format pattern "/providers/{id_provider}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2044,7 +2071,7 @@ export def "psd2-registrations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_psd2_registration: $id_psd2_registration} | format pattern "/psd2-registrations/{id_psd2_registration}") $qp)
+  let full_url = (build-url $base ({id_psd2_registration: (encode-path-segment $id_psd2_registration)} | format pattern "/psd2-registrations/{id_psd2_registration}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2072,7 +2099,7 @@ export def "psd2-registrations-logs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_psd2registration: $id_psd2registration} | format pattern "/psd2-registrations/{id_psd2registration}/logs") $qp)
+  let full_url = (build-url $base ({id_psd2registration: (encode-path-segment $id_psd2registration)} | format pattern "/psd2-registrations/{id_psd2registration}/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2102,7 +2129,7 @@ export def "publickey get" [
 # Test synchronization on a random connection.
 #
 # POST /test/sync
-export def "test-sync post" [
+export def "test-sync create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2123,7 +2150,7 @@ export def "test-sync post" [
 # Test synchronization on a random connection.
 #
 # POST /test/webhooks
-export def "test-webhooks post" [
+export def "test-webhooks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2183,7 +2210,7 @@ export def "users delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2207,7 +2234,7 @@ export def "users get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2231,7 +2258,7 @@ export def "users-account-types list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}/account_types") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/account_types") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2256,7 +2283,7 @@ export def "users-account-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_account_type: $id_account_type} | format pattern "/users/{id_user}/account_types/{id_account_type}") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_account_type: (encode-path-segment $id_account_type)} | format pattern "/users/{id_user}/account_types/{id_account_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2279,7 +2306,7 @@ export def "users-accounts-categories get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id_user: $id_user, id_account: $id_account} | format pattern "/users/{id_user}/accounts/{id_account}/categories"))
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/accounts/{id_account}/categories"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2304,7 +2331,7 @@ export def "users-accounts-transactionsclusters get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_account: $id_account} | format pattern "/users/{id_user}/accounts/{id_account}/transactionsclusters") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/accounts/{id_account}/transactionsclusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2313,7 +2340,7 @@ export def "users-accounts-transactionsclusters get" [
 # Create clustered transaction
 #
 # POST /users/{id_user}/accounts/{id_account}/transactionsclusters
-export def "users-accounts-transactionsclusters post" [
+export def "users-accounts-transactionsclusters create" [
   id_user: string
   id_account: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2329,7 +2356,7 @@ export def "users-accounts-transactionsclusters post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_account: $id_account} | format pattern "/users/{id_user}/accounts/{id_account}/transactionsclusters") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/accounts/{id_account}/transactionsclusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2355,7 +2382,7 @@ export def "users-accounts-transactionsclusters delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_account: $id_account, id_transactionscluster: $id_transactionscluster} | format pattern "/users/{id_user}/accounts/{id_account}/transactionsclusters/{id_transactionscluster}") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_account: (encode-path-segment $id_account), id_transactionscluster: (encode-path-segment $id_transactionscluster)} | format pattern "/users/{id_user}/accounts/{id_account}/transactionsclusters/{id_transactionscluster}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2364,7 +2391,7 @@ export def "users-accounts-transactionsclusters delete" [
 # Edit a clustered transaction
 #
 # PUT /users/{id_user}/accounts/{id_account}/transactionsclusters/{id_transactionscluster}
-export def "users-accounts-transactionsclusters put" [
+export def "users-accounts-transactionsclusters update" [
   id_user: string
   id_account: int
   id_transactionscluster: int
@@ -2381,7 +2408,7 @@ export def "users-accounts-transactionsclusters put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_account: $id_account, id_transactionscluster: $id_transactionscluster} | format pattern "/users/{id_user}/accounts/{id_account}/transactionsclusters/{id_transactionscluster}") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_account: (encode-path-segment $id_account), id_transactionscluster: (encode-path-segment $id_transactionscluster)} | format pattern "/users/{id_user}/accounts/{id_account}/transactionsclusters/{id_transactionscluster}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2405,7 +2432,7 @@ export def "users-alerts get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}/alerts") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/alerts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2427,7 +2454,7 @@ export def "users-categories get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}/categories"))
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/categories"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2451,7 +2478,7 @@ export def "users-categories-full get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}/categories/full") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/categories/full") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2460,7 +2487,7 @@ export def "users-categories-full get" [
 # Create a new transaction category
 #
 # POST /users/{id_user}/categories/full
-export def "users-categories-full post" [
+export def "users-categories-full create" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2483,12 +2510,13 @@ export def "users-categories-full post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}/categories/full") $qp)
-  let body = {"accountant_account": $accountant_account, "color": $color, "id_parent_category": $id_parent_category, "id_parent_category_in_menu": $id_parent_category_in_menu, "income": $income, "name": $name, "refundable": $refundable} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/categories/full") $qp)
+  let req_body = {"accountant_account": $accountant_account, "color": $color, "id_parent_category": $id_parent_category, "id_parent_category_in_menu": $id_parent_category_in_menu, "income": $income, "name": $name, "refundable": $refundable} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Delete a user-created transaction category
@@ -2510,7 +2538,7 @@ export def "users-categories-full delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_full: $id_full} | format pattern "/users/{id_user}/categories/full/{id_full}") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_full: (encode-path-segment $id_full)} | format pattern "/users/{id_user}/categories/full/{id_full}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2519,7 +2547,7 @@ export def "users-categories-full delete" [
 # Modify a user-created category
 #
 # PUT /users/{id_user}/categories/full/{id_full}
-export def "users-categories-full put" [
+export def "users-categories-full update" [
   id_user: string
   id_full: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2538,12 +2566,13 @@ export def "users-categories-full put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_full: $id_full} | format pattern "/users/{id_user}/categories/full/{id_full}") $qp)
-  let body = {"accountant_account": $accountant_account, "hide": $hide} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_full: (encode-path-segment $id_full)} | format pattern "/users/{id_user}/categories/full/{id_full}") $qp)
+  let req_body = {"accountant_account": $accountant_account, "hide": $hide} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Delete the given user configurations. deletions on keys prefixed by 'biapi.' (except callback_url) are ignored
@@ -2562,7 +2591,7 @@ export def "users-config delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}/config"))
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2585,7 +2614,7 @@ export def "users-config get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}/config"))
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/config"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2594,7 +2623,7 @@ export def "users-config get" [
 # Change configuration of a user. modifications on keys prefixed by 'biapi.' (except callback_url) are ignored
 #
 # POST /users/{id_user}/config
-export def "users-config post" [
+export def "users-config create" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2607,7 +2636,7 @@ export def "users-config post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}/config"))
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2631,7 +2660,7 @@ export def "users-connections delete-by-id_user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}/connections") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/connections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2655,7 +2684,7 @@ export def "users-connections get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}/connections") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/connections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2664,7 +2693,7 @@ export def "users-connections get" [
 # Add a new connection.
 #
 # POST /users/{id_user}/connections
-export def "users-connections post-by-id_user" [
+export def "users-connections create-by-id_user" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2683,12 +2712,13 @@ export def "users-connections post-by-id_user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "source" $qp_source "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}/connections") $qp)
-  let body = {"connector_uuid": $connector_uuid, "id_connector": $id_connector} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/connections") $qp)
+  let req_body = {"connector_uuid": $connector_uuid, "id_connector": $id_connector} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Delete a connection.
@@ -2710,7 +2740,7 @@ export def "users-connections delete-by-id_user-id_connection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection} | format pattern "/users/{id_user}/connections/{id_connection}") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2719,7 +2749,7 @@ export def "users-connections delete-by-id_user-id_connection" [
 # Update a connection.
 #
 # POST /users/{id_user}/connections/{id_connection}
-export def "users-connections post-by-id_user-id_connection" [
+export def "users-connections create-by-id_user-id_connection" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2744,18 +2774,19 @@ export def "users-connections post-by-id_user-id_connection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "background" $background "scalar") (serialize-qp "psu_requested" $psu_requested "scalar") (serialize-qp "refresh_psd2_auth" $refresh_psd2_auth "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection} | format pattern "/users/{id_user}/connections/{id_connection}") $qp)
-  let body = {"active": $active, "decoupled": $decoupled, "expire": $expire, "login": $login, "password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}") $qp)
+  let req_body = {"active": $active, "decoupled": $decoupled, "expire": $expire, "login": $login, "password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Force synchronisation of a connection.
 #
 # PUT /users/{id_user}/connections/{id_connection}
-export def "users-connections put" [
+export def "users-connections update" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2774,7 +2805,7 @@ export def "users-connections put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "last_update" $last_update "scalar") (serialize-qp "background" $background "scalar") (serialize-qp "psu_requested" $psu_requested "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection} | format pattern "/users/{id_user}/connections/{id_connection}") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2799,7 +2830,7 @@ export def "users-connections-accounts delete-by-id_user-id_connection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection} | format pattern "/users/{id_user}/connections/{id_connection}/accounts") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2824,7 +2855,7 @@ export def "users-connections-accounts get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection} | format pattern "/users/{id_user}/connections/{id_connection}/accounts") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2833,7 +2864,7 @@ export def "users-connections-accounts get" [
 # Create an account
 #
 # POST /users/{id_user}/connections/{id_connection}/accounts
-export def "users-connections-accounts post" [
+export def "users-connections-accounts create" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2856,18 +2887,19 @@ export def "users-connections-accounts post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection} | format pattern "/users/{id_user}/connections/{id_connection}/accounts") $qp)
-  let body = {"balance": $balance, "iban": $iban, "id_connection": $body_id_connection, "id_currency": $id_currency, "name": $name, "number": $number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts") $qp)
+  let req_body = {"balance": $balance, "iban": $iban, "id_connection": $body_id_connection, "id_currency": $id_currency, "name": $name, "number": $number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Update many accounts at once
 #
 # PUT /users/{id_user}/connections/{id_connection}/accounts
-export def "users-connections-accounts put-by-id_user-id_connection" [
+export def "users-connections-accounts update-by-id_user-id_connection" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2883,7 +2915,7 @@ export def "users-connections-accounts put-by-id_user-id_connection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection} | format pattern "/users/{id_user}/connections/{id_connection}/accounts") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2909,7 +2941,7 @@ export def "users-connections-accounts delete-by-id_user-id_connection-id_accoun
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_account: $id_account} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2918,7 +2950,7 @@ export def "users-connections-accounts delete-by-id_user-id_connection-id_accoun
 # Update an account
 #
 # PUT /users/{id_user}/connections/{id_connection}/accounts/{id_account}
-export def "users-connections-accounts put-by-id_user-id_connection-id_account" [
+export def "users-connections-accounts update-by-id_user-id_connection-id_account" [
   id_user: string
   id_connection: int
   id_account: int
@@ -2943,12 +2975,13 @@ export def "users-connections-accounts put-by-id_user-id_connection-id_account" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_account: $id_account} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}") $qp)
-  let body = {"balance": $balance, "bookmarked": $bookmarked, "disabled": $disabled, "display": $display, "iban": $iban, "name": $name, "usage": $usage} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}") $qp)
+  let req_body = {"balance": $balance, "bookmarked": $bookmarked, "disabled": $disabled, "display": $display, "iban": $iban, "name": $name, "usage": $usage} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get the category
@@ -2969,7 +3002,7 @@ export def "users-connections-accounts-categories get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_account: $id_account} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/categories"))
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/categories"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2997,7 +3030,7 @@ export def "users-connections-accounts-delta get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "period" $period "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_account: $id_account} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/delta") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/delta") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3027,7 +3060,7 @@ export def "users-connections-accounts-logs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_account: $id_account} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/logs") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3053,7 +3086,7 @@ export def "users-connections-accounts-sources get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_account: $id_account} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/sources") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/sources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3079,7 +3112,7 @@ export def "users-connections-accounts-transactions delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_account: $id_account} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3119,7 +3152,7 @@ export def "users-connections-accounts-transactions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "income" $income "scalar") (serialize-qp "deleted" $deleted "scalar") (serialize-qp "all" $all "scalar") (serialize-qp "last_update" $last_update "scalar") (serialize-qp "wording" $wording "scalar") (serialize-qp "min_value" $min_value "scalar") (serialize-qp "max_value" $max_value "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "id_category" $id_category "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_account: $id_account} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3128,7 +3161,7 @@ export def "users-connections-accounts-transactions get" [
 # Create transactions
 #
 # POST /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions
-export def "users-connections-accounts-transactions post" [
+export def "users-connections-accounts-transactions create" [
   id_user: string
   id_connection: int
   id_account: int
@@ -3156,18 +3189,19 @@ export def "users-connections-accounts-transactions post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_account: $id_account} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions") $qp)
-  let body = {"active": $active, "coming": $coming, "date": $date, "date_scraped": $date_scraped, "id_account": $body_id_account, "original_wording": $original_wording, "rdate": $rdate, "state": $state, "type": $type, "value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions") $qp)
+  let req_body = {"active": $active, "coming": $coming, "date": $date, "date_scraped": $date_scraped, "id_account": $body_id_account, "original_wording": $original_wording, "rdate": $rdate, "state": $state, "type": $type, "value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Edit a transaction meta-data
 #
 # PUT /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}
-export def "users-connections-accounts-transactions put" [
+export def "users-connections-accounts-transactions update" [
   id_user: string
   id_connection: int
   id_account: int
@@ -3191,12 +3225,13 @@ export def "users-connections-accounts-transactions put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_account: $id_account, id_transaction: $id_transaction} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}") $qp)
-  let body = {"active": $active, "application_date": $application_date, "comment": $comment, "id_category": $id_category, "wording": $wording} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account), id_transaction: (encode-path-segment $id_transaction)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}") $qp)
+  let req_body = {"active": $active, "application_date": $application_date, "comment": $comment, "id_category": $id_category, "wording": $wording} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Delete all arbitrary key-value pairs of a transaction
@@ -3220,7 +3255,7 @@ export def "users-connections-accounts-transactions-informations delete-by-id_us
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_account: $id_account, id_transaction: $id_transaction} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account), id_transaction: (encode-path-segment $id_transaction)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3247,7 +3282,7 @@ export def "users-connections-accounts-transactions-informations list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_account: $id_account, id_transaction: $id_transaction} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account), id_transaction: (encode-path-segment $id_transaction)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3256,7 +3291,7 @@ export def "users-connections-accounts-transactions-informations list" [
 # Add or edit transaction arbitrary key-value pairs
 #
 # PUT /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations
-export def "users-connections-accounts-transactions-informations put" [
+export def "users-connections-accounts-transactions-informations update" [
   id_user: string
   id_connection: int
   id_account: int
@@ -3274,7 +3309,7 @@ export def "users-connections-accounts-transactions-informations put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_account: $id_account, id_transaction: $id_transaction} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account), id_transaction: (encode-path-segment $id_transaction)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3302,7 +3337,7 @@ export def "users-connections-accounts-transactions-informations delete-by-id_us
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_account: $id_account, id_transaction: $id_transaction, id_information: $id_information} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations/{id_information}") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account), id_transaction: (encode-path-segment $id_transaction), id_information: (encode-path-segment $id_information)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations/{id_information}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3330,7 +3365,7 @@ export def "users-connections-accounts-transactions-informations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_account: $id_account, id_transaction: $id_transaction, id_information: $id_information} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations/{id_information}") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account), id_transaction: (encode-path-segment $id_transaction), id_information: (encode-path-segment $id_information)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations/{id_information}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3356,7 +3391,7 @@ export def "users-connections-accounts-transactionsclusters get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_account: $id_account} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactionsclusters") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactionsclusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3365,7 +3400,7 @@ export def "users-connections-accounts-transactionsclusters get" [
 # Create clustered transaction
 #
 # POST /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactionsclusters
-export def "users-connections-accounts-transactionsclusters post" [
+export def "users-connections-accounts-transactionsclusters create" [
   id_user: string
   id_connection: int
   id_account: int
@@ -3382,7 +3417,7 @@ export def "users-connections-accounts-transactionsclusters post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_account: $id_account} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactionsclusters") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactionsclusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3409,7 +3444,7 @@ export def "users-connections-accounts-transactionsclusters delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_account: $id_account, id_transactionscluster: $id_transactionscluster} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactionsclusters/{id_transactionscluster}") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account), id_transactionscluster: (encode-path-segment $id_transactionscluster)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactionsclusters/{id_transactionscluster}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3418,7 +3453,7 @@ export def "users-connections-accounts-transactionsclusters delete" [
 # Edit a clustered transaction
 #
 # PUT /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactionsclusters/{id_transactionscluster}
-export def "users-connections-accounts-transactionsclusters put" [
+export def "users-connections-accounts-transactionsclusters update" [
   id_user: string
   id_connection: int
   id_account: int
@@ -3436,7 +3471,7 @@ export def "users-connections-accounts-transactionsclusters put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_account: $id_account, id_transactionscluster: $id_transactionscluster} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactionsclusters/{id_transactionscluster}") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account), id_transactionscluster: (encode-path-segment $id_transactionscluster)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactionsclusters/{id_transactionscluster}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3462,7 +3497,7 @@ export def "users-connections-informations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection} | format pattern "/users/{id_user}/connections/{id_connection}/informations") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}/informations") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3499,7 +3534,7 @@ export def "users-connections-logs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "id_user" $id_user "scalar") (serialize-qp "id_connection" $id_connection "scalar") (serialize-qp "id_connector" $id_connector "scalar") (serialize-qp "connector_uuid" $connector_uuid "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "id_source" $id_source "scalar") (serialize-qp "id_max" $id_max "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection} | format pattern "/users/{id_user}/connections/{id_connection}/logs") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3524,7 +3559,7 @@ export def "users-connections-sources get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection} | format pattern "/users/{id_user}/connections/{id_connection}/sources") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}/sources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3550,7 +3585,7 @@ export def "users-connections-sources delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_source: $id_source} | format pattern "/users/{id_user}/connections/{id_connection}/sources/{id_source}") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_source: (encode-path-segment $id_source)} | format pattern "/users/{id_user}/connections/{id_connection}/sources/{id_source}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3559,7 +3594,7 @@ export def "users-connections-sources delete" [
 # "
 #
 # POST /users/{id_user}/connections/{id_connection}/sources/{id_source}
-export def "users-connections-sources post" [
+export def "users-connections-sources create" [
   id_user: string
   id_connection: int
   id_source: int
@@ -3580,18 +3615,19 @@ export def "users-connections-sources post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "background" $background "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_source: $id_source} | format pattern "/users/{id_user}/connections/{id_connection}/sources/{id_source}") $qp)
-  let body = {"disabled": $disabled, "synchronize": $synchronize} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_source: (encode-path-segment $id_source)} | format pattern "/users/{id_user}/connections/{id_connection}/sources/{id_source}") $qp)
+  let req_body = {"disabled": $disabled, "synchronize": $synchronize} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Update connection source
 #
 # PUT /users/{id_user}/connections/{id_connection}/sources/{id_source}
-export def "users-connections-sources put" [
+export def "users-connections-sources update" [
   id_user: string
   id_connection: int
   id_source: int
@@ -3613,12 +3649,13 @@ export def "users-connections-sources put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "background" $background "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_source: $id_source} | format pattern "/users/{id_user}/connections/{id_connection}/sources/{id_source}") $qp)
-  let body = {"disabled": $disabled, "force": $force, "synchronize": $synchronize} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_source: (encode-path-segment $id_source)} | format pattern "/users/{id_user}/connections/{id_connection}/sources/{id_source}") $qp)
+  let req_body = {"disabled": $disabled, "force": $force, "synchronize": $synchronize} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get clustered transactions
@@ -3640,7 +3677,7 @@ export def "users-connections-transactionsclusters get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection} | format pattern "/users/{id_user}/connections/{id_connection}/transactionsclusters") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}/transactionsclusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3649,7 +3686,7 @@ export def "users-connections-transactionsclusters get" [
 # Create clustered transaction
 #
 # POST /users/{id_user}/connections/{id_connection}/transactionsclusters
-export def "users-connections-transactionsclusters post" [
+export def "users-connections-transactionsclusters create" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3665,7 +3702,7 @@ export def "users-connections-transactionsclusters post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection} | format pattern "/users/{id_user}/connections/{id_connection}/transactionsclusters") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}/transactionsclusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3691,7 +3728,7 @@ export def "users-connections-transactionsclusters delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_transactionscluster: $id_transactionscluster} | format pattern "/users/{id_user}/connections/{id_connection}/transactionsclusters/{id_transactionscluster}") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_transactionscluster: (encode-path-segment $id_transactionscluster)} | format pattern "/users/{id_user}/connections/{id_connection}/transactionsclusters/{id_transactionscluster}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3700,7 +3737,7 @@ export def "users-connections-transactionsclusters delete" [
 # Edit a clustered transaction
 #
 # PUT /users/{id_user}/connections/{id_connection}/transactionsclusters/{id_transactionscluster}
-export def "users-connections-transactionsclusters put" [
+export def "users-connections-transactionsclusters update" [
   id_user: string
   id_connection: int
   id_transactionscluster: int
@@ -3717,7 +3754,7 @@ export def "users-connections-transactionsclusters put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_connection: $id_connection, id_transactionscluster: $id_transactionscluster} | format pattern "/users/{id_user}/connections/{id_connection}/transactionsclusters/{id_transactionscluster}") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_transactionscluster: (encode-path-segment $id_transactionscluster)} | format pattern "/users/{id_user}/connections/{id_connection}/transactionsclusters/{id_transactionscluster}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3739,7 +3776,7 @@ export def "users-forecast get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}/forecast"))
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/forecast"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3775,7 +3812,7 @@ export def "users-logs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "id_user" $id_user "scalar") (serialize-qp "id_connection" $id_connection "scalar") (serialize-qp "id_connector" $id_connector "scalar") (serialize-qp "connector_uuid" $connector_uuid "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "id_source" $id_source "scalar") (serialize-qp "id_max" $id_max "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}/logs") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3799,7 +3836,7 @@ export def "users-profiles list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}/profiles") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/profiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3823,7 +3860,7 @@ export def "users-profiles-main get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}/profiles/main") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/profiles/main") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3848,7 +3885,7 @@ export def "users-profiles get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_profile: $id_profile} | format pattern "/users/{id_user}/profiles/{id_profile}") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_profile: (encode-path-segment $id_profile)} | format pattern "/users/{id_user}/profiles/{id_profile}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3857,7 +3894,7 @@ export def "users-profiles get" [
 # Create a token
 #
 # POST /users/{id_user}/token
-export def "users-token post" [
+export def "users-token create" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3873,12 +3910,13 @@ export def "users-token post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}/token"))
-  let body = {"application": $application} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/token"))
+  let req_body = {"application": $application} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get clustered transactions
@@ -3899,7 +3937,7 @@ export def "users-transactionsclusters get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}/transactionsclusters") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/transactionsclusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3908,7 +3946,7 @@ export def "users-transactionsclusters get" [
 # Create clustered transaction
 #
 # POST /users/{id_user}/transactionsclusters
-export def "users-transactionsclusters post" [
+export def "users-transactionsclusters create" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3923,7 +3961,7 @@ export def "users-transactionsclusters post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user} | format pattern "/users/{id_user}/transactionsclusters") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/transactionsclusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3948,7 +3986,7 @@ export def "users-transactionsclusters delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_transactionscluster: $id_transactionscluster} | format pattern "/users/{id_user}/transactionsclusters/{id_transactionscluster}") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_transactionscluster: (encode-path-segment $id_transactionscluster)} | format pattern "/users/{id_user}/transactionsclusters/{id_transactionscluster}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3957,7 +3995,7 @@ export def "users-transactionsclusters delete" [
 # Edit a clustered transaction
 #
 # PUT /users/{id_user}/transactionsclusters/{id_transactionscluster}
-export def "users-transactionsclusters put" [
+export def "users-transactionsclusters update" [
   id_user: string
   id_transactionscluster: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3973,7 +4011,7 @@ export def "users-transactionsclusters put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_user: $id_user, id_transactionscluster: $id_transactionscluster} | format pattern "/users/{id_user}/transactionsclusters/{id_transactionscluster}") $qp)
+  let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_transactionscluster: (encode-path-segment $id_transactionscluster)} | format pattern "/users/{id_user}/transactionsclusters/{id_transactionscluster}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4000,11 +4038,12 @@ export def "webauth get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webauth")
-  let body = {"client_id": $client_id, "id_transfer": $id_transfer, "redirect_uri": $redirect_uri, "state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "id_transfer": $id_transfer, "redirect_uri": $redirect_uri, "state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Deletes all webhooks
@@ -4056,7 +4095,7 @@ export def "webhooks get" [
 # Adds a new webhook
 #
 # POST /webhooks
-export def "webhooks post" [
+export def "webhooks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4071,18 +4110,19 @@ export def "webhooks post" [
   --id-service: int # The service ID to associate with the webhook
   --id-user: int # The user ID to associate with the webhook
   --params: string # The webhook parameters as an object with three keys: type, key and value
-  --body-url: string # The webhook callback url
+  --url: string # The webhook callback url
 ]: any -> record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhooks" $qp)
-  let body = {"event": $event, "id_auth": $id_auth, "id_service": $id_service, "id_user": $id_user, "params": $params, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"event": $event, "id_auth": $id_auth, "id_service": $id_service, "id_user": $id_user, "params": $params, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Deletes all webhook authentication types
@@ -4134,7 +4174,7 @@ export def "webhooks-auth get" [
 # Adds a new webhook authentication type
 #
 # POST /webhooks/auth
-export def "webhooks-auth post" [
+export def "webhooks-auth create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4153,11 +4193,12 @@ export def "webhooks-auth post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhooks/auth" $qp)
-  let body = {"config": $config, "name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"config": $config, "name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Deletes the webhook authentication type
@@ -4178,7 +4219,7 @@ export def "webhooks-auth delete-by-id_auth" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_auth: $id_auth} | format pattern "/webhooks/auth/{id_auth}") $qp)
+  let full_url = (build-url $base ({id_auth: (encode-path-segment $id_auth)} | format pattern "/webhooks/auth/{id_auth}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4187,7 +4228,7 @@ export def "webhooks-auth delete-by-id_auth" [
 # Updates the webhook authentication type
 #
 # POST /webhooks/auth/{id_auth}
-export def "webhooks-auth post-by-id_auth" [
+export def "webhooks-auth create-by-id_auth" [
   id_auth: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4206,18 +4247,19 @@ export def "webhooks-auth post-by-id_auth" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_auth: $id_auth} | format pattern "/webhooks/auth/{id_auth}") $qp)
-  let body = {"config": $config, "name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_auth: (encode-path-segment $id_auth)} | format pattern "/webhooks/auth/{id_auth}") $qp)
+  let req_body = {"config": $config, "name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Updates the webhook authentication type
 #
 # PUT /webhooks/auth/{id_auth}
-export def "webhooks-auth put" [
+export def "webhooks-auth update" [
   id_auth: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4236,12 +4278,13 @@ export def "webhooks-auth put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_auth: $id_auth} | format pattern "/webhooks/auth/{id_auth}") $qp)
-  let body = {"config": $config, "name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_auth: (encode-path-segment $id_auth)} | format pattern "/webhooks/auth/{id_auth}") $qp)
+  let req_body = {"config": $config, "name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Deletes a webhook
@@ -4262,7 +4305,7 @@ export def "webhooks delete-by-id_webhook" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_webhook: $id_webhook} | format pattern "/webhooks/{id_webhook}") $qp)
+  let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4271,7 +4314,7 @@ export def "webhooks delete-by-id_webhook" [
 # Updates a webhook
 #
 # POST /webhooks/{id_webhook}
-export def "webhooks post-by-id_webhook" [
+export def "webhooks create-by-id_webhook" [
   id_webhook: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4287,24 +4330,25 @@ export def "webhooks post-by-id_webhook" [
   --id-auth: int # The webhook authentication process to use
   --id-service: int # The service ID to associate with the webhook
   --id-user: int # The user ID to associate with the webhook
-  --body-url: string # The webhook callback url
+  --url: string # The webhook callback url
 ]: any -> record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_webhook: $id_webhook} | format pattern "/webhooks/{id_webhook}") $qp)
-  let body = {"deleted": $deleted, "event": $event, "id_auth": $id_auth, "id_service": $id_service, "id_user": $id_user, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}") $qp)
+  let req_body = {"deleted": $deleted, "event": $event, "id_auth": $id_auth, "id_service": $id_service, "id_user": $id_user, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Updates a webhook
 #
 # PUT /webhooks/{id_webhook}
-export def "webhooks put" [
+export def "webhooks update" [
   id_webhook: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4320,18 +4364,19 @@ export def "webhooks put" [
   --id-auth: int # The webhook authentication process to use
   --id-service: int # The service ID to associate with the webhook
   --id-user: int # The user ID to associate with the webhook
-  --body-url: string # The webhook callback url
+  --url: string # The webhook callback url
 ]: any -> record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_webhook: $id_webhook} | format pattern "/webhooks/{id_webhook}") $qp)
-  let body = {"deleted": $deleted, "event": $event, "id_auth": $id_auth, "id_service": $id_service, "id_user": $id_user, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}") $qp)
+  let req_body = {"deleted": $deleted, "event": $event, "id_auth": $id_auth, "id_service": $id_service, "id_user": $id_user, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # delete all entries
@@ -4352,7 +4397,7 @@ export def "webhooks-add-to-data delete-by-id_webhook" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_webhook: $id_webhook} | format pattern "/webhooks/{id_webhook}/add_to_data") $qp)
+  let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}/add_to_data") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4376,7 +4421,7 @@ export def "webhooks-add-to-data list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_webhook: $id_webhook} | format pattern "/webhooks/{id_webhook}/add_to_data") $qp)
+  let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}/add_to_data") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4385,7 +4430,7 @@ export def "webhooks-add-to-data list" [
 # Setup a field to store in user config when calling the endpoint
 #
 # POST /webhooks/{id_webhook}/add_to_data
-export def "webhooks-add-to-data post-by-id_webhook" [
+export def "webhooks-add-to-data create-by-id_webhook" [
   id_webhook: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4400,7 +4445,7 @@ export def "webhooks-add-to-data post-by-id_webhook" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_webhook: $id_webhook} | format pattern "/webhooks/{id_webhook}/add_to_data") $qp)
+  let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}/add_to_data") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4425,7 +4470,7 @@ export def "webhooks-add-to-data delete-by-id_webhook-key" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_webhook: $id_webhook, key: $key} | format pattern "/webhooks/{id_webhook}/add_to_data/{key}") $qp)
+  let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook), key: (encode-path-segment $key)} | format pattern "/webhooks/{id_webhook}/add_to_data/{key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4450,7 +4495,7 @@ export def "webhooks-add-to-data get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_webhook: $id_webhook, key: $key} | format pattern "/webhooks/{id_webhook}/add_to_data/{key}") $qp)
+  let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook), key: (encode-path-segment $key)} | format pattern "/webhooks/{id_webhook}/add_to_data/{key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4459,7 +4504,7 @@ export def "webhooks-add-to-data get" [
 # upate the requested field to store in user config when calling the endpoint
 #
 # POST /webhooks/{id_webhook}/add_to_data/{key}
-export def "webhooks-add-to-data post-by-id_webhook-key" [
+export def "webhooks-add-to-data create-by-id_webhook-key" [
   id_webhook: int
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4475,7 +4520,7 @@ export def "webhooks-add-to-data post-by-id_webhook-key" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_webhook: $id_webhook, key: $key} | format pattern "/webhooks/{id_webhook}/add_to_data/{key}") $qp)
+  let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook), key: (encode-path-segment $key)} | format pattern "/webhooks/{id_webhook}/add_to_data/{key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4504,7 +4549,7 @@ export def "webhooks-logs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id_user" $id_user "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id_webhook: $id_webhook} | format pattern "/webhooks/{id_webhook}/logs") $qp)
+  let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

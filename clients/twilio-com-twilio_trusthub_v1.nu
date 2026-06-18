@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://trusthub.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def status-completer [] { ["draft" "in-review" "pending-review" "twilio-approved" "twilio-rejected"] }
@@ -142,11 +152,12 @@ export def "customer-profiles create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
   let full_url = (build-url $base "/v1/CustomerProfiles")
-  let body = {"Email": $email, "FriendlyName": $friendly_name, "PolicySid": $policy_sid, "StatusCallback": $status_callback} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Email": $email, "FriendlyName": $friendly_name, "PolicySid": $policy_sid, "StatusCallback": $status_callback} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Assigned Items for an account.
@@ -172,7 +183,7 @@ export def "customer-profiles-channel-endpoint-assignments list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
   let qp = [(serialize-qp "ChannelEndpointSid" $channel_endpoint_sid "scalar") (serialize-qp "ChannelEndpointSids" $channel_endpoint_sids "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_profile_sid: $customer_profile_sid} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/ChannelEndpointAssignments") $qp)
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/ChannelEndpointAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,12 +209,13 @@ export def "customer-profiles-channel-endpoint-assignments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({customer_profile_sid: $customer_profile_sid} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/ChannelEndpointAssignments"))
-  let body = {"ChannelEndpointSid": $channel_endpoint_sid, "ChannelEndpointType": $channel_endpoint_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/ChannelEndpointAssignments"))
+  let req_body = {"ChannelEndpointSid": $channel_endpoint_sid, "ChannelEndpointType": $channel_endpoint_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Remove an Assignment Item Instance.
@@ -224,7 +236,7 @@ export def "customer-profiles-channel-endpoint-assignments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({customer_profile_sid: $customer_profile_sid, sid: $sid} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/ChannelEndpointAssignments/{sid}"))
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/ChannelEndpointAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -248,7 +260,7 @@ export def "customer-profiles-channel-endpoint-assignments get" [
 ]: nothing -> record<account_sid: string, channel_endpoint_sid: string, channel_endpoint_type: string, customer_profile_sid: string, date_created: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({customer_profile_sid: $customer_profile_sid, sid: $sid} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/ChannelEndpointAssignments/{sid}"))
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/ChannelEndpointAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -275,7 +287,7 @@ export def "customer-profiles-entity-assignments list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_profile_sid: $customer_profile_sid} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/EntityAssignments") $qp)
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/EntityAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -300,12 +312,13 @@ export def "customer-profiles-entity-assignments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({customer_profile_sid: $customer_profile_sid} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/EntityAssignments"))
-  let body = {"ObjectSid": $object_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/EntityAssignments"))
+  let req_body = {"ObjectSid": $object_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Remove an Assignment Item Instance.
@@ -326,7 +339,7 @@ export def "customer-profiles-entity-assignments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({customer_profile_sid: $customer_profile_sid, sid: $sid} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/EntityAssignments/{sid}"))
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/EntityAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -350,7 +363,7 @@ export def "customer-profiles-entity-assignments get" [
 ]: nothing -> record<account_sid: string, customer_profile_sid: string, date_created: string, object_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({customer_profile_sid: $customer_profile_sid, sid: $sid} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/EntityAssignments/{sid}"))
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/EntityAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -377,7 +390,7 @@ export def "customer-profiles-evaluations list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({customer_profile_sid: $customer_profile_sid} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/Evaluations") $qp)
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/Evaluations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -402,12 +415,13 @@ export def "customer-profiles-evaluations create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({customer_profile_sid: $customer_profile_sid} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/Evaluations"))
-  let body = {"PolicySid": $policy_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/Evaluations"))
+  let req_body = {"PolicySid": $policy_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetch specific Evaluation Instance.
@@ -428,7 +442,7 @@ export def "customer-profiles-evaluations get" [
 ]: nothing -> record<account_sid: string, customer_profile_sid: string, date_created: string, policy_sid: string, results: list<any>, sid: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({customer_profile_sid: $customer_profile_sid, sid: $sid} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/Evaluations/{sid}"))
+  let full_url = (build-url $base ({customer_profile_sid: (encode-path-segment $customer_profile_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/CustomerProfiles/{customer_profile_sid}/Evaluations/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -451,7 +465,7 @@ export def "customer-profiles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/CustomerProfiles/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/CustomerProfiles/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -474,7 +488,7 @@ export def "customer-profiles get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, email: string, friendly_name: string, links: record, policy_sid: string, sid: string, status: string, status_callback: string, url: string, valid_until: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/CustomerProfiles/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/CustomerProfiles/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -502,12 +516,13 @@ export def "customer-profiles update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/CustomerProfiles/{sid}"))
-  let body = {"Email": $email, "FriendlyName": $friendly_name, "Status": $status, "StatusCallback": $status_callback} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/CustomerProfiles/{sid}"))
+  let req_body = {"Email": $email, "FriendlyName": $friendly_name, "Status": $status, "StatusCallback": $status_callback} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all End-User Types.
@@ -553,7 +568,7 @@ export def "end-user-types get" [
 ]: nothing -> record<fields: list<any>, friendly_name: string, machine_name: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/EndUserTypes/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/EndUserTypes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -606,11 +621,12 @@ export def "end-users create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
   let full_url = (build-url $base "/v1/EndUsers")
-  let body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "Type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "Type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific End User.
@@ -630,7 +646,7 @@ export def "end-users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/EndUsers/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/EndUsers/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -653,7 +669,7 @@ export def "end-users get" [
 ]: nothing -> record<account_sid: string, attributes: any, date_created: string, date_updated: string, friendly_name: string, sid: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/EndUsers/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/EndUsers/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -679,12 +695,13 @@ export def "end-users update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/EndUsers/{sid}"))
-  let body = {"Attributes": $attributes, "FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/EndUsers/{sid}"))
+  let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Policys.
@@ -730,7 +747,7 @@ export def "policies get" [
 ]: nothing -> record<friendly_name: string, requirements: any, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Policies/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Policies/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -779,7 +796,7 @@ export def "supporting-document-types get" [
 ]: nothing -> record<fields: list<any>, friendly_name: string, machine_name: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/SupportingDocumentTypes/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/SupportingDocumentTypes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -832,11 +849,12 @@ export def "supporting-documents create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
   let full_url = (build-url $base "/v1/SupportingDocuments")
-  let body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "Type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "Type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific Supporting Document.
@@ -856,7 +874,7 @@ export def "supporting-documents delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/SupportingDocuments/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/SupportingDocuments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -879,7 +897,7 @@ export def "supporting-documents get" [
 ]: nothing -> record<account_sid: string, attributes: any, date_created: string, date_updated: string, friendly_name: string, mime_type: string, sid: string, status: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/SupportingDocuments/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/SupportingDocuments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -905,12 +923,13 @@ export def "supporting-documents update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/SupportingDocuments/{sid}"))
-  let body = {"Attributes": $attributes, "FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/SupportingDocuments/{sid}"))
+  let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Customer-Profiles for an account.
@@ -964,11 +983,12 @@ export def "trust-products create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
   let full_url = (build-url $base "/v1/TrustProducts")
-  let body = {"Email": $email, "FriendlyName": $friendly_name, "PolicySid": $policy_sid, "StatusCallback": $status_callback} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Email": $email, "FriendlyName": $friendly_name, "PolicySid": $policy_sid, "StatusCallback": $status_callback} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific Customer-Profile.
@@ -988,7 +1008,7 @@ export def "trust-products delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/TrustProducts/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/TrustProducts/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1011,7 +1031,7 @@ export def "trust-products get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, email: string, friendly_name: string, links: record, policy_sid: string, sid: string, status: string, status_callback: string, url: string, valid_until: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/TrustProducts/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/TrustProducts/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1039,12 +1059,13 @@ export def "trust-products update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/TrustProducts/{sid}"))
-  let body = {"Email": $email, "FriendlyName": $friendly_name, "Status": $status, "StatusCallback": $status_callback} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/TrustProducts/{sid}"))
+  let req_body = {"Email": $email, "FriendlyName": $friendly_name, "Status": $status, "StatusCallback": $status_callback} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Assigned Items for an account.
@@ -1070,7 +1091,7 @@ export def "trust-products-channel-endpoint-assignments list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
   let qp = [(serialize-qp "ChannelEndpointSid" $channel_endpoint_sid "scalar") (serialize-qp "ChannelEndpointSids" $channel_endpoint_sids "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({trust_product_sid: $trust_product_sid} | format pattern "/v1/TrustProducts/{trust_product_sid}/ChannelEndpointAssignments") $qp)
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/ChannelEndpointAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1096,12 +1117,13 @@ export def "trust-products-channel-endpoint-assignments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({trust_product_sid: $trust_product_sid} | format pattern "/v1/TrustProducts/{trust_product_sid}/ChannelEndpointAssignments"))
-  let body = {"ChannelEndpointSid": $channel_endpoint_sid, "ChannelEndpointType": $channel_endpoint_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/ChannelEndpointAssignments"))
+  let req_body = {"ChannelEndpointSid": $channel_endpoint_sid, "ChannelEndpointType": $channel_endpoint_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Remove an Assignment Item Instance.
@@ -1122,7 +1144,7 @@ export def "trust-products-channel-endpoint-assignments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({trust_product_sid: $trust_product_sid, sid: $sid} | format pattern "/v1/TrustProducts/{trust_product_sid}/ChannelEndpointAssignments/{sid}"))
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/ChannelEndpointAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1146,7 +1168,7 @@ export def "trust-products-channel-endpoint-assignments get" [
 ]: nothing -> record<account_sid: string, channel_endpoint_sid: string, channel_endpoint_type: string, date_created: string, sid: string, trust_product_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({trust_product_sid: $trust_product_sid, sid: $sid} | format pattern "/v1/TrustProducts/{trust_product_sid}/ChannelEndpointAssignments/{sid}"))
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/ChannelEndpointAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1173,7 +1195,7 @@ export def "trust-products-entity-assignments list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({trust_product_sid: $trust_product_sid} | format pattern "/v1/TrustProducts/{trust_product_sid}/EntityAssignments") $qp)
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/EntityAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1198,12 +1220,13 @@ export def "trust-products-entity-assignments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({trust_product_sid: $trust_product_sid} | format pattern "/v1/TrustProducts/{trust_product_sid}/EntityAssignments"))
-  let body = {"ObjectSid": $object_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/EntityAssignments"))
+  let req_body = {"ObjectSid": $object_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Remove an Assignment Item Instance.
@@ -1224,7 +1247,7 @@ export def "trust-products-entity-assignments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({trust_product_sid: $trust_product_sid, sid: $sid} | format pattern "/v1/TrustProducts/{trust_product_sid}/EntityAssignments/{sid}"))
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/EntityAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1248,7 +1271,7 @@ export def "trust-products-entity-assignments get" [
 ]: nothing -> record<account_sid: string, date_created: string, object_sid: string, sid: string, trust_product_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({trust_product_sid: $trust_product_sid, sid: $sid} | format pattern "/v1/TrustProducts/{trust_product_sid}/EntityAssignments/{sid}"))
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/EntityAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1275,7 +1298,7 @@ export def "trust-products-evaluations list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({trust_product_sid: $trust_product_sid} | format pattern "/v1/TrustProducts/{trust_product_sid}/Evaluations") $qp)
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/Evaluations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1300,12 +1323,13 @@ export def "trust-products-evaluations create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({trust_product_sid: $trust_product_sid} | format pattern "/v1/TrustProducts/{trust_product_sid}/Evaluations"))
-  let body = {"PolicySid": $policy_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/Evaluations"))
+  let req_body = {"PolicySid": $policy_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetch specific Evaluation Instance.
@@ -1326,7 +1350,7 @@ export def "trust-products-evaluations get" [
 ]: nothing -> record<account_sid: string, date_created: string, policy_sid: string, results: list<any>, sid: string, status: string, trust_product_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://trusthub.twilio.com")
-  let full_url = (build-url $base ({trust_product_sid: $trust_product_sid, sid: $sid} | format pattern "/v1/TrustProducts/{trust_product_sid}/Evaluations/{sid}"))
+  let full_url = (build-url $base ({trust_product_sid: (encode-path-segment $trust_product_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/TrustProducts/{trust_product_sid}/Evaluations/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

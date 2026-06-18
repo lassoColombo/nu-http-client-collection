@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -104,7 +113,7 @@ export def "events list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --category: list # List of required EventCategory ids (Tier 1)
+  --category: list<string> # List of required EventCategory ids (Tier 1)
   --activity: string # List of required activity type ids (compliment to category)
   --ambience: string # List of required ambience ids
   --genre: string # List of required genre ids
@@ -116,8 +125,8 @@ export def "events list" [
   --capacity-max: float # Min capacity at location (format: integer)
   --center: string # latitude,longitude of the origin point
   --radius: int # Distance from origin in meters
-  --bbox: list # Corner of a bounding box (lat,lng). Requires 0 or 2 pairs
-  --polygon: list # Closed custom polygon. Ordered list of lat,lng pairs
+  --bbox: list<string> # Corner of a bounding box (lat,lng). Requires 0 or 2 pairs
+  --polygon: list<string> # Closed custom polygon. Ordered list of lat,lng pairs
   --within: string # Search within specified geopolitical place id
   --offset: int # Return results starting at specified offset
   --limit: int # Max results to return
@@ -150,7 +159,7 @@ export def "events get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fieldset" $fieldset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/events/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/events/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -168,10 +177,10 @@ export def "places list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --category: list # List of required PlaceCategory ids (Tier 1)
-  --function: list # List of required PlaceFunction ids (Tier 2)
-  --ambience: list # List of required ambience ids
-  --tag: list # List of required tags
+  --category: list<string> # List of required PlaceCategory ids (Tier 1)
+  --function: list<string> # List of required PlaceFunction ids (Tier 2)
+  --ambience: list<string> # List of required ambience ids
+  --tag: list<string> # List of required tags
   --type: string # Specific PlaceType to return
   --name: string # Match on place names
   --exact: oneof<nothing, bool> # Require an exact name match
@@ -184,8 +193,8 @@ export def "places list" [
   --country: string # country component of the address
   --center: string # latitude,longitude of the origin point
   --radius: int # Distance from origin in meters
-  --bbox: list # Corner of a bounding box (lat,lng). Requires 0 or 2 pairs
-  --polygon: list # Closed custom polygon. Ordered list of lat,lng pairs
+  --bbox: list<string> # Corner of a bounding box (lat,lng). Requires 0 or 2 pairs
+  --polygon: list<string> # Closed custom polygon. Ordered list of lat,lng pairs
   --within: string # Search within specified geopolitical place id
   --offset: int # Return results starting at specified offset
   --limit: int # Max results to return
@@ -218,7 +227,7 @@ export def "places get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fieldset" $fieldset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/places/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/places/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "json-email emailValidation" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "json-email get-validation" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /json/email/{YOUR_API_KEY_HERE}/{USER_EMAIL_HERE}
 # operationId: emailValidation
-export def "json-email emailValidation" [
+export def "json-email get-validation" [
   your_api_key_here: string
   user_email_here: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -106,7 +115,7 @@ export def "json-email emailValidation" [
 ]: nothing -> record<associated_names: record<names: list<string>, status: string>, associated_phone_numbers: record<phone_numbers: list<string>, status: string>, catch_all: bool, common: bool, deliverability: string, disposable: bool, dns_valid: bool, domain_age: record<human: string, iso: string, timestamp: float>, domain_velocity: string, first_name: string, first_seen: record<human: string, iso: string, timestamp: float>, fraud_score: float, frequent_complainer: bool, generic: bool, honeypot: bool, leaked: bool, message: string, overall_score: float, recent_abuse: bool, request_id: string, sanitized_email: string, smtp_score: float, spam_trap_score: string, success: bool, suggested_domain: string, suspect: bool, timed_out: bool, user_activity: string, valid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({your_api_key_here: $your_api_key_here, user_email_here: $user_email_here} | format pattern "/json/email/{your_api_key_here}/{user_email_here}"))
+  let full_url = (build-url $base ({your_api_key_here: (encode-path-segment $your_api_key_here), user_email_here: (encode-path-segment $user_email_here)} | format pattern "/json/email/{your_api_key_here}/{user_email_here}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -116,7 +125,7 @@ export def "json-email emailValidation" [
 #
 # GET /json/phone/{YOUR_API_KEY_HERE}/{USER_PHONE_HERE}
 # operationId: phoneValidation
-export def "json-phone phoneValidation" [
+export def "json-phone get-validation" [
   your_api_key_here: string
   user_phone_here: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -132,7 +141,7 @@ export def "json-phone phoneValidation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({your_api_key_here: $your_api_key_here, user_phone_here: $user_phone_here} | format pattern "/json/phone/{your_api_key_here}/{user_phone_here}") $qp)
+  let full_url = (build-url $base ({your_api_key_here: (encode-path-segment $your_api_key_here), user_phone_here: (encode-path-segment $user_phone_here)} | format pattern "/json/phone/{your_api_key_here}/{user_phone_here}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,7 +151,7 @@ export def "json-phone phoneValidation" [
 #
 # GET /json/url/{YOUR_API_KEY_HERE}/{URL_HERE}
 # operationId: maliciousUrlScanner
-export def "json-url maliciousUrlScanner" [
+export def "json-url get-malicious-scanner" [
   your_api_key_here: string
   url_here: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -156,7 +165,7 @@ export def "json-url maliciousUrlScanner" [
 ]: nothing -> record<adult: bool, category: string, content_type: string, dns_valid: bool, domain: string, domain_age: record<human: string, iso: string, timestamp: float>, domain_rank: float, ip_address: string, malware: bool, message: string, page_size: float, parking: bool, phishing: bool, request_id: string, risk_score: float, server: string, spamming: bool, status_code: float, success: bool, suspicious: bool, unsafe: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({your_api_key_here: $your_api_key_here, url_here: $url_here} | format pattern "/json/url/{your_api_key_here}/{url_here}"))
+  let full_url = (build-url $base ({your_api_key_here: (encode-path-segment $your_api_key_here), url_here: (encode-path-segment $url_here)} | format pattern "/json/url/{your_api_key_here}/{url_here}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

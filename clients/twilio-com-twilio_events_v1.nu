@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://events.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def sink-type-completer [] { ["kinesis" "segment" "webhook"] }
@@ -108,7 +118,7 @@ export def "schemas get" [
 ]: nothing -> record<id: string, latest_version: int, latest_version_date_created: string, links: record, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/Schemas/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/Schemas/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -135,7 +145,7 @@ export def "schemas-versions list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/Schemas/{id}/Versions") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/Schemas/{id}/Versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -159,7 +169,7 @@ export def "schemas-versions get" [
 ]: nothing -> record<date_created: string, id: string, raw: string, schema_version: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base ({id: $id, schema_version: $schema_version} | format pattern "/v1/Schemas/{id}/Versions/{schema_version}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), schema_version: (encode-path-segment $schema_version)} | format pattern "/v1/Schemas/{id}/Versions/{schema_version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -214,11 +224,12 @@ export def "sinks create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
   let full_url = (build-url $base "/v1/Sinks")
-  let body = {"Description": $description, "SinkConfiguration": $sink_configuration, "SinkType": $sink_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Description": $description, "SinkConfiguration": $sink_configuration, "SinkType": $sink_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific Sink.
@@ -238,7 +249,7 @@ export def "sinks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Sinks/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Sinks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -261,7 +272,7 @@ export def "sinks get" [
 ]: nothing -> record<date_created: string, date_updated: string, description: string, links: record, sid: string, sink_configuration: any, sink_type: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Sinks/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Sinks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -286,12 +297,13 @@ export def "sinks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Sinks/{sid}"))
-  let body = {"Description": $description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Sinks/{sid}"))
+  let req_body = {"Description": $description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Create a new Sink Test Event for the given Sink.
@@ -311,7 +323,7 @@ export def "sinks-test create" [
 ]: nothing -> record<result: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Sinks/{sid}/Test"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Sinks/{sid}/Test"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -336,12 +348,13 @@ export def "sinks-validate create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Sinks/{sid}/Validate"))
-  let body = {"TestId": $test_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Sinks/{sid}/Validate"))
+  let req_body = {"TestId": $test_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a paginated list of Subscriptions belonging to the account used to make the request.
@@ -392,11 +405,12 @@ export def "subscriptions create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
   let full_url = (build-url $base "/v1/Subscriptions")
-  let body = {"Description": $description, "SinkSid": $sink_sid, "Types": $types} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Description": $description, "SinkSid": $sink_sid, "Types": $types} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific Subscription.
@@ -416,7 +430,7 @@ export def "subscriptions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Subscriptions/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Subscriptions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -439,7 +453,7 @@ export def "subscriptions get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, description: string, links: record, sid: string, sink_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Subscriptions/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Subscriptions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -465,12 +479,13 @@ export def "subscriptions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Subscriptions/{sid}"))
-  let body = {"Description": $description, "SinkSid": $sink_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Subscriptions/{sid}"))
+  let req_body = {"Description": $description, "SinkSid": $sink_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Subscribed Event types for a Subscription.
@@ -494,7 +509,7 @@ export def "subscriptions-subscribed-events list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_sid: $subscription_sid} | format pattern "/v1/Subscriptions/{subscription_sid}/SubscribedEvents") $qp)
+  let full_url = (build-url $base ({subscription_sid: (encode-path-segment $subscription_sid)} | format pattern "/v1/Subscriptions/{subscription_sid}/SubscribedEvents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -520,12 +535,13 @@ export def "subscriptions-subscribed-events create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base ({subscription_sid: $subscription_sid} | format pattern "/v1/Subscriptions/{subscription_sid}/SubscribedEvents"))
-  let body = {"SchemaVersion": $schema_version, "Type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_sid: (encode-path-segment $subscription_sid)} | format pattern "/v1/Subscriptions/{subscription_sid}/SubscribedEvents"))
+  let req_body = {"SchemaVersion": $schema_version, "Type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Remove an event type from a subscription.
@@ -546,7 +562,7 @@ export def "subscriptions-subscribed-events delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base ({subscription_sid: $subscription_sid, type: $type} | format pattern "/v1/Subscriptions/{subscription_sid}/SubscribedEvents/{type}"))
+  let full_url = (build-url $base ({subscription_sid: (encode-path-segment $subscription_sid), type: (encode-path-segment $type)} | format pattern "/v1/Subscriptions/{subscription_sid}/SubscribedEvents/{type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -570,7 +586,7 @@ export def "subscriptions-subscribed-events get" [
 ]: nothing -> record<account_sid: string, schema_version: int, subscription_sid: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base ({subscription_sid: $subscription_sid, type: $type} | format pattern "/v1/Subscriptions/{subscription_sid}/SubscribedEvents/{type}"))
+  let full_url = (build-url $base ({subscription_sid: (encode-path-segment $subscription_sid), type: (encode-path-segment $type)} | format pattern "/v1/Subscriptions/{subscription_sid}/SubscribedEvents/{type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -596,12 +612,13 @@ export def "subscriptions-subscribed-events update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base ({subscription_sid: $subscription_sid, type: $type} | format pattern "/v1/Subscriptions/{subscription_sid}/SubscribedEvents/{type}"))
-  let body = {"SchemaVersion": $schema_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_sid: (encode-path-segment $subscription_sid), type: (encode-path-segment $type)} | format pattern "/v1/Subscriptions/{subscription_sid}/SubscribedEvents/{type}"))
+  let req_body = {"SchemaVersion": $schema_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a paginated list of all the available Event Types.
@@ -648,7 +665,7 @@ export def "types get-event" [
 ]: nothing -> record<date_created: string, date_updated: string, description: string, links: record, schema_id: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base ({type: $type} | format pattern "/v1/Types/{type}"))
+  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/v1/Types/{type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

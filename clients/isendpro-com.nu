@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -136,11 +145,11 @@ export def "campagne get" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Compter le nombre de caractère 
+# Compter le nombre de caractère
 #
 # POST /comptage
 # operationId: comptage
-export def "comptage post" [
+export def "comptage create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -152,26 +161,26 @@ export def "comptage post" [
   --accept: string@accept-completer-1 # Response content type
   comptage: string@comptage-completer # default: 1
   --date-envoi: string # Date d'envoi au format YYYY-MM-DD hh:mm . Ce paramètre est optionnel, si il est omis l'envoi est réalisé immédiatement.
-  --emetteur: string # - L'emetteur doit être une chaîne alphanumérique comprise entre 4 et 11 caractères.  - Les caractères acceptés sont les chiffres entre 0 et 9, les lettres entre A et Z et l’espace.  - Il ne peut pas comporter uniquement des chiffres.   - Pour la modification de l'émetteur et dans le cadre de campagnes commerciales, les opérateurs imposent contractuellement d'ajouter en fin de message le texte "STOP XXXXX". De ce fait, le message envoyé ne pourra excéder une longueur de 148 caractères au lieu des 160 caractères, le « STOP » étant rajouté automatiquement.
+  --emetteur: string # - L'emetteur doit être une chaîne alphanumérique comprise entre 4 et 11 caractères. - Les caractères acceptés sont les chiffres entre 0 et 9, les lettres entre A et Z et l’espace. - Il ne peut pas comporter uniquement des chiffres. - Pour la modification de l'émetteur et dans le cadre de campagnes commerciales, les opérateurs imposent contractuellement d'ajouter en fin de message le texte "STOP XXXXX". De ce fait, le message envoyé ne pourra excéder une longueur de 148 caractères au lieu des 160 caractères, le « STOP » étant rajouté automatiquement.
   --gmt-zone: string@gmt-zone-completer # Fuseau horaire de la date d'envoi
   keyid: string # Clé API
   --nostop: string # Si le message n’est pas à but commercial, vous pouvez faire une demande pour retirer l’obligation du STOP. Une fois votre demande validée par nos services, vous pourrez supprimer la mention STOP SMS en ajoutant nostop = "1"
   num: string # Numero de téléphone au format national (exemple 0680010203) ou international (example 33680010203)
   --num-azur: string@num-azur-completer
   sms: string # Message à envoyer aux destinataires. Le message doit être encodé au format utf-8 et ne contenir que des caractères existant dans l'alphabet GSM. Il est également possible d'envoyer (à l'étranger uniquement) des SMS en UCS-2, cf paramètre ucs2 pour plus de détails.
-  --smslong: string@smslong-completer # Le SMS long permet de dépasser la limite de 160 caractères en envoyant un message constitué de plusieurs SMS. Il est possible d’envoyer jusqu’à 6 SMS concaténés pour une longueur totale maximale de 918 caractères par message. Pour des raisons technique, la limite par SMS concaténé étant de 153 caractères. En cas de modification de l’émetteur, il faut considérer l’ajout automatique de 12 caractères du « STOP SMS ». Pour envoyer un smslong, il faut ajouter le paramètre smslong aux appels. La valeur de SMS doit être le nombre maximum de sms concaténé autorisé.   Pour ne pas avoir ce message d’erreur et obtenir un calcul dynamique du nombre de SMS alors il faut renseigner smslong = "999"  (default: 999)
-  --tracker: string # Le tracker doit être une chaine alphanumérique de moins de 50 caractères. Ce tracker sera ensuite renvoyé en paramètre des urls pour les retours des accusés de réception. 
+  --smslong: string@smslong-completer # Le SMS long permet de dépasser la limite de 160 caractères en envoyant un message constitué de plusieurs SMS. Il est possible d’envoyer jusqu’à 6 SMS concaténés pour une longueur totale maximale de 918 caractères par message. Pour des raisons technique, la limite par SMS concaténé étant de 153 caractères. En cas de modification de l’émetteur, il faut considérer l’ajout automatique de 12 caractères du « STOP SMS ». Pour envoyer un smslong, il faut ajouter le paramètre smslong aux appels. La valeur de SMS doit être le nombre maximum de sms concaténé autorisé. Pour ne pas avoir ce message d’erreur et obtenir un calcul dynamique du nombre de SMS alors il faut renseigner smslong = "999" (default: 999)
+  --tracker: string # Le tracker doit être une chaine alphanumérique de moins de 50 caractères. Ce tracker sera ensuite renvoyé en paramètre des urls pour les retours des accusés de réception.
   --ucs2: string # Il est également possible d’envoyer des SMS en alphabet non latin (russe, chinois, arabe, etc) sur les numéros hors France métropolitaine. Pour ce faire, la requête devrait être encodée au format UTF-8 et contenir l’argument ucs2 = "1" Du fait de contraintes techniques, 1 SMS unique ne pourra pas dépasser 70 caractères (au lieu des 160 usuels) et dans le cas de SMS long, chaque sms ne pourra dépasser 67 caractères.
 ]: any -> record<etat: record<etat: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/comptage")
-  let body = {"comptage": $comptage, "date_envoi": $date_envoi, "emetteur": $emetteur, "gmt_zone": $gmt_zone, "keyid": $keyid, "nostop": $nostop, "num": $num, "numAzur": $num_azur, "sms": $sms, "smslong": $smslong, "tracker": $tracker, "ucs2": $ucs2} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"comptage": $comptage, "date_envoi": $date_envoi, "emetteur": $emetteur, "gmt_zone": $gmt_zone, "keyid": $keyid, "nostop": $nostop, "num": $num, "numAzur": $num_azur, "sms": $sms, "smslong": $smslong, "tracker": $tracker, "ucs2": $ucs2} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Interrogation credit
@@ -203,7 +212,7 @@ export def "credit get" [
 #
 # POST /dellistenoire
 # operationId: delListeNoire
-export def "dellistenoire post" [
+export def "dellistenoire delete-liste-noire" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,24 +274,24 @@ export def "hlr get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   get_hlr: string@get-hlr-completer # Doit valoir "1" (default: 1)
   keyid: string # Clé API
-  num: list # liste de numéros de téléphone
+  num: list<string> # liste de numéros de téléphone
 ]: any -> record<etat: record<etat: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hlr")
-  let body = {"getHLR": $get_hlr, "keyid": $keyid, "num": $num} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"getHLR": $get_hlr, "keyid": $keyid, "num": $num} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gestion repertoire (creation)
 #
 # POST /repertoire
 # operationId: repertoireCrea
-export def "repertoire repertoireCrea" [
+export def "repertoire create-crea" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,18 +308,18 @@ export def "repertoire repertoireCrea" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/repertoire")
-  let body = {"keyid": $keyid, "repertoireEdit": $repertoire_edit, "repertoireNom": $repertoire_nom} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"keyid": $keyid, "repertoireEdit": $repertoire_edit, "repertoireNom": $repertoire_nom} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gestion repertoire (modification)
 #
 # PUT /repertoire
 # operationId: repertoire
-export def "repertoire put" [
+export def "repertoire update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,35 +328,35 @@ export def "repertoire put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --champ1: list # Noms des contact
-  --champ10: list # Champs I des contacts
-  --champ11: list # Champs J des contacts
-  --champ12: list # Champs K des contacts
-  --champ13: list # Champs L des contacts
-  --champ14: list # Champs M des contacts
-  --champ15: list # Champs N des contacts
-  --champ16: list # Champs O des contacts
-  --champ17: list # Champs P des contacts
-  --champ18: list # Champs Q des contacts
-  --champ19: list # Champs R des contacts
-  --champ2: list # Champs A des contacts
-  --champ20: list # Champs S des contacts
-  --champ21: list # Champs T des contacts
-  --champ22: list # Champs U des contacts
-  --champ23: list # Champs V des contacts
-  --champ24: list # Champs W des contacts
-  --champ25: list # Champs X des contacts
-  --champ26: list # Champs Y des contacts
-  --champ27: list # Champs Z des contacts
-  --champ3: list # Champs B des contacts
-  --champ4: list # Champs C des contacts
-  --champ5: list # Champs D des contacts
-  --champ6: list # Champs E des contacts
-  --champ7: list # Champs F des contacts
-  --champ8: list # Champs G des contacts
-  --champ9: list # Champs H des contacts
+  --champ1: list<string> # Noms des contact
+  --champ10: list<string> # Champs I des contacts
+  --champ11: list<string> # Champs J des contacts
+  --champ12: list<string> # Champs K des contacts
+  --champ13: list<string> # Champs L des contacts
+  --champ14: list<string> # Champs M des contacts
+  --champ15: list<string> # Champs N des contacts
+  --champ16: list<string> # Champs O des contacts
+  --champ17: list<string> # Champs P des contacts
+  --champ18: list<string> # Champs Q des contacts
+  --champ19: list<string> # Champs R des contacts
+  --champ2: list<string> # Champs A des contacts
+  --champ20: list<string> # Champs S des contacts
+  --champ21: list<string> # Champs T des contacts
+  --champ22: list<string> # Champs U des contacts
+  --champ23: list<string> # Champs V des contacts
+  --champ24: list<string> # Champs W des contacts
+  --champ25: list<string> # Champs X des contacts
+  --champ26: list<string> # Champs Y des contacts
+  --champ27: list<string> # Champs Z des contacts
+  --champ3: list<string> # Champs B des contacts
+  --champ4: list<string> # Champs C des contacts
+  --champ5: list<string> # Champs D des contacts
+  --champ6: list<string> # Champs E des contacts
+  --champ7: list<string> # Champs F des contacts
+  --champ8: list<string> # Champs G des contacts
+  --champ9: list<string> # Champs H des contacts
   keyid: string # Clé API
-  num: list # liste des numéros des téléphone à ajouter ou supprimer
+  num: list<string> # liste des numéros des téléphone à ajouter ou supprimer
   repertoire_edit: string@repertoire-edit-completer-1 # action à réaliser, "add" pour l'ajout de numéros, "del" pour la suppression de numéros
   repertoire_id: string # repertoireId du répertoire cible
 ]: any -> record<etat: record<etat: list<record>>> {
@@ -355,18 +364,18 @@ export def "repertoire put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/repertoire")
-  let body = {"champ1": $champ1, "champ10": $champ10, "champ11": $champ11, "champ12": $champ12, "champ13": $champ13, "champ14": $champ14, "champ15": $champ15, "champ16": $champ16, "champ17": $champ17, "champ18": $champ18, "champ19": $champ19, "champ2": $champ2, "champ20": $champ20, "champ21": $champ21, "champ22": $champ22, "champ23": $champ23, "champ24": $champ24, "champ25": $champ25, "champ26": $champ26, "champ27": $champ27, "champ3": $champ3, "champ4": $champ4, "champ5": $champ5, "champ6": $champ6, "champ7": $champ7, "champ8": $champ8, "champ9": $champ9, "keyid": $keyid, "num": $num, "repertoireEdit": $repertoire_edit, "repertoireId": $repertoire_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"champ1": $champ1, "champ10": $champ10, "champ11": $champ11, "champ12": $champ12, "champ13": $champ13, "champ14": $champ14, "champ15": $champ15, "champ16": $champ16, "champ17": $champ17, "champ18": $champ18, "champ19": $champ19, "champ2": $champ2, "champ20": $champ20, "champ21": $champ21, "champ22": $champ22, "champ23": $champ23, "champ24": $champ24, "champ25": $champ25, "champ26": $champ26, "champ27": $champ27, "champ3": $champ3, "champ4": $champ4, "champ5": $champ5, "champ6": $champ6, "champ7": $champ7, "champ8": $champ8, "champ9": $champ9, "keyid": $keyid, "num": $num, "repertoireEdit": $repertoire_edit, "repertoireId": $repertoire_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Ajoute un numero en liste noire
 #
 # POST /setlistenoire
 # operationId: setListeNoire
-export def "setlistenoire post" [
+export def "setlistenoire update-liste-noire" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -409,11 +418,11 @@ export def "shortlink create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shortlink")
-  let body = {"keyid": $keyid, "shortlink": $shortlink} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"keyid": $keyid, "shortlink": $shortlink} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Envoyer un sms
@@ -431,26 +440,26 @@ export def "sms send" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --date-envoi: string # Date d'envoi au format YYYY-MM-DD hh:mm . Ce paramètre est optionnel, si il est omis l'envoi est réalisé immédiatement.
-  --emetteur: string # - L'emetteur doit être une chaîne alphanumérique comprise entre 4 et 11 caractères.  - Les caractères acceptés sont les chiffres entre 0 et 9, les lettres entre A et Z et l’espace.  - Il ne peut pas comporter uniquement des chiffres.   - Pour la modification de l'émetteur et dans le cadre de campagnes commerciales, les opérateurs imposent contractuellement d'ajouter en fin de message le texte "STOP XXXXX". De ce fait, le message envoyé ne pourra excéder une longueur de 148 caractères au lieu des 160 caractères, le « STOP » étant rajouté automatiquement.
+  --emetteur: string # - L'emetteur doit être une chaîne alphanumérique comprise entre 4 et 11 caractères. - Les caractères acceptés sont les chiffres entre 0 et 9, les lettres entre A et Z et l’espace. - Il ne peut pas comporter uniquement des chiffres. - Pour la modification de l'émetteur et dans le cadre de campagnes commerciales, les opérateurs imposent contractuellement d'ajouter en fin de message le texte "STOP XXXXX". De ce fait, le message envoyé ne pourra excéder une longueur de 148 caractères au lieu des 160 caractères, le « STOP » étant rajouté automatiquement.
   --gmt-zone: string@gmt-zone-completer # Fuseau horaire de la date d'envoi
   keyid: string # Clé API
   --nostop: string # Si le message n’est pas à but commercial, vous pouvez faire une demande pour retirer l’obligation du STOP. Une fois votre demande validée par nos services, vous pourrez supprimer la mention STOP SMS en ajoutant nostop = "1"
   num: string # Numero de téléphone au format national (exemple 0680010203) ou international (example 33680010203)
   --num-azur: string@num-azur-completer
   sms: string # Message à envoyer aux destinataires. Le message doit être encodé au format utf-8 et ne contenir que des caractères existant dans l'alphabet GSM. Il est également possible d'envoyer (à l'étranger uniquement) des SMS en UCS-2, cf paramètre ucs2 pour plus de détails.
-  --smslong: string # Le SMS long permet de dépasser la limite de 160 caractères en envoyant un message constitué de plusieurs SMS. Il est possible d’envoyer jusqu’à 6 SMS concaténés pour une longueur totale maximale de 918 caractères par message. Pour des raisons technique, la limite par SMS concaténé étant de 153 caractères. En cas de modification de l’émetteur, il faut considérer l’ajout automatique de 12 caractères du « STOP SMS ». Pour envoyer un smslong, il faut ajouter le paramètre smslong aux appels. La valeur de SMS doit être le nombre maximum de sms concaténé autorisé.   Pour ne pas avoir ce message d’erreur et obtenir un calcul dynamique du nombre de SMS alors il faut renseigner smslong = "999"
-  --tracker: string # Le tracker doit être une chaine alphanumérique de moins de 50 caractères. Ce tracker sera ensuite renvoyé en paramètre des urls pour les retours des accusés de réception. 
+  --smslong: string # Le SMS long permet de dépasser la limite de 160 caractères en envoyant un message constitué de plusieurs SMS. Il est possible d’envoyer jusqu’à 6 SMS concaténés pour une longueur totale maximale de 918 caractères par message. Pour des raisons technique, la limite par SMS concaténé étant de 153 caractères. En cas de modification de l’émetteur, il faut considérer l’ajout automatique de 12 caractères du « STOP SMS ». Pour envoyer un smslong, il faut ajouter le paramètre smslong aux appels. La valeur de SMS doit être le nombre maximum de sms concaténé autorisé. Pour ne pas avoir ce message d’erreur et obtenir un calcul dynamique du nombre de SMS alors il faut renseigner smslong = "999"
+  --tracker: string # Le tracker doit être une chaine alphanumérique de moins de 50 caractères. Ce tracker sera ensuite renvoyé en paramètre des urls pour les retours des accusés de réception.
   --ucs2: string # Il est également possible d’envoyer des SMS en alphabet non latin (russe, chinois, arabe, etc) sur les numéros hors France métropolitaine. Pour ce faire, la requête devrait être encodée au format UTF-8 et contenir l’argument ucs2 = "1" Du fait de contraintes techniques, 1 SMS unique ne pourra pas dépasser 70 caractères (au lieu des 160 usuels) et dans le cas de SMS long, chaque sms ne pourra dépasser 67 caractères.
 ]: any -> record<etat: record<etat: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sms")
-  let body = {"date_envoi": $date_envoi, "emetteur": $emetteur, "gmt_zone": $gmt_zone, "keyid": $keyid, "nostop": $nostop, "num": $num, "numAzur": $num_azur, "sms": $sms, "smslong": $smslong, "tracker": $tracker, "ucs2": $ucs2} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"date_envoi": $date_envoi, "emetteur": $emetteur, "gmt_zone": $gmt_zone, "keyid": $keyid, "nostop": $nostop, "num": $num, "numAzur": $num_azur, "sms": $sms, "smslong": $smslong, "tracker": $tracker, "ucs2": $ucs2} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Envoyer des SMS
@@ -468,34 +477,34 @@ export def "smsmulti send-sms-multi" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --date-envoi: string # Paramètre optionnel, date d'envoi au format YYYY-MM-DD hh:mm
-  --emetteur: string # L'emetteur doit être une chaîne alphanumérique comprise entre 4 et 11 caractères. Les caractères acceptés sont les chiffres entre 0 et 9, les lettres entre A et Z et l’espace. Il ne peut pas comporter uniquement des chiffres. Pour la modification de l’émetteur et dans le cadre de campagnes commerciales, les opérateurs imposent contractuellement d’ajouter en fin de message le texte suivant : STOP XXXXX De ce fait, le message envoyé ne pourra excéder une longueur de 148 caractères au lieu des 160 caractères, le « STOP » étant rajouté automatiquement.
+  --emetteur: string # L'emetteur doit être une chaîne alphanumérique comprise entre 4 et 11 caractères. Les caractères acceptés sont les chiffres entre 0 et 9, les lettres entre A et Z et l’espace. Il ne peut pas comporter uniquement des chiffres. Pour la modification de l’émetteur et dans le cadre de campagnes commerciales, les opérateurs imposent contractuellement d’ajouter en fin de message le texte suivant : STOP XXXXX De ce fait, le message envoyé ne pourra excéder une longueur de 148 caractères au lieu des 160 caractères, le « STOP » étant rajouté automatiquement.
   --gmt-zone: string@gmt-zone-completer # Fuseau horaire de la date d'envoi
   keyid: string # Clé API
   --nostop: string # Si le message n’est pas à but commercial, vous pouvez faire une demande pour retirer l’obligation du STOP. Une fois votre demande validée par nos services, vous pourrez supprimer la mention STOP SMS en ajoutant nostop = "1"
-  num: list
+  num: list<string>
   --num-azur: string@num-azur-completer
   --repertoire-id: string # Id du repertoire
-  sms: list
-  --smslong: string # Le SMS long permet de dépasser la limite de 160 caractères en envoyant un message constitué de plusieurs SMS. Il est possible d’envoyer jusqu’à 6 SMS concaténés pour une longueur totale maximale de 918 caractères par message. Pour des raisons technique, la limite par SMS concaténé étant de 153 caractères. En cas de modification de l’émetteur, il faut considérer l’ajout automatique de 12 caractères du « STOP SMS ». Pour envoyer un smslong, il faut ajouter le paramètre smslong aux appels. La valeur de SMS doit être le nombre maximum de sms concaténé autorisé.   Pour ne pas avoir ce message d’erreur et obtenir un calcul dynamique du nombre de SMS alors il faut renseigner smslong = "999" 
-  --tracker: list
+  sms: list<string>
+  --smslong: string # Le SMS long permet de dépasser la limite de 160 caractères en envoyant un message constitué de plusieurs SMS. Il est possible d’envoyer jusqu’à 6 SMS concaténés pour une longueur totale maximale de 918 caractères par message. Pour des raisons technique, la limite par SMS concaténé étant de 153 caractères. En cas de modification de l’émetteur, il faut considérer l’ajout automatique de 12 caractères du « STOP SMS ». Pour envoyer un smslong, il faut ajouter le paramètre smslong aux appels. La valeur de SMS doit être le nombre maximum de sms concaténé autorisé. Pour ne pas avoir ce message d’erreur et obtenir un calcul dynamique du nombre de SMS alors il faut renseigner smslong = "999"
+  --tracker: list<string>
   --ucs2: string # Il est également possible d’envoyer des SMS en alphabet non latin (russe, chinois, arabe, etc) sur les numéros hors France métropolitaine. Pour ce faire, la requête devrait être encodée au format UTF-8 et contenir l’argument ucs2 = "1" Du fait de contraintes techniques, 1 SMS unique ne pourra pas dépasser 70 caractères (au lieu des 160 usuels) et dans le cas de SMS long, chaque sms ne pourra dépasser 67 caractères.
 ]: any -> record<etat: record<etat: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/smsmulti")
-  let body = {"date_envoi": $date_envoi, "emetteur": $emetteur, "gmt_zone": $gmt_zone, "keyid": $keyid, "nostop": $nostop, "num": $num, "numAzur": $num_azur, "repertoireId": $repertoire_id, "sms": $sms, "smslong": $smslong, "tracker": $tracker, "ucs2": $ucs2} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"date_envoi": $date_envoi, "emetteur": $emetteur, "gmt_zone": $gmt_zone, "keyid": $keyid, "nostop": $nostop, "num": $num, "numAzur": $num_azur, "repertoireId": $repertoire_id, "sms": $sms, "smslong": $smslong, "tracker": $tracker, "ucs2": $ucs2} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Ajoute un sous compte
 #
 # POST /subaccount
 # operationId: subaccountAdd
-export def "subaccount subaccountAdd" [
+export def "subaccount create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,18 +523,18 @@ export def "subaccount subaccountAdd" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subaccount")
-  let body = {"keyid": $keyid, "subAccountEdit": $sub_account_edit, "subAccountLogin": $sub_account_login, "subAccountPassword": $sub_account_password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"keyid": $keyid, "subAccountEdit": $sub_account_edit, "subAccountLogin": $sub_account_login, "subAccountPassword": $sub_account_password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Edit a subaccount
 #
 # PUT /subaccount
 # operationId: subaccountEdit
-export def "subaccount subaccountEdit" [
+export def "subaccount update-edit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,9 +556,9 @@ export def "subaccount subaccountEdit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subaccount")
-  let body = {"keyid": $keyid, "subAccountAddCredit": $sub_account_add_credit, "subAccountCountryCode": $sub_account_country_code, "subAccountEdit": $sub_account_edit, "subAccountKeyId": $sub_account_key_id, "subAccountPrice": $sub_account_price, "subAccountRestrictionStop": $sub_account_restriction_stop, "subAccountRestrictionTime": $sub_account_restriction_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"keyid": $keyid, "subAccountAddCredit": $sub_account_add_credit, "subAccountCountryCode": $sub_account_country_code, "subAccountEdit": $sub_account_edit, "subAccountKeyId": $sub_account_key_id, "subAccountPrice": $sub_account_price, "subAccountRestrictionStop": $sub_account_restriction_stop, "subAccountRestrictionTime": $sub_account_restriction_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

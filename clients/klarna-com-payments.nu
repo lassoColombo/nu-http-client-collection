@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -109,7 +118,7 @@ export def "payments-authorizations cancel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({authorization_token: $authorization_token} | format pattern "/payments/v1/authorizations/{authorization_token}"))
+  let full_url = (build-url $base ({authorization_token: (encode-path-segment $authorization_token)} | format pattern "/payments/v1/authorizations/{authorization_token}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -121,7 +130,7 @@ export def "payments-authorizations cancel" [
 # operationId: purchaseToken
 # --billing_address shape: {attention?: string, city?: string, country?: string, email?: string, family_name?: string, given_name?: string, organization_name?: string, phone?: string, postal_code?: string, region?: string, street_address?: string, street_address2?: string, title?: string}
 # --customer shape: {date_of_birth?: string, gender?: string, last_four_ssn?: string, national_identification_number?: string, organization_entity_type?: "LIMITED_COMPANY"|"PUBLIC_LIMITED_COMPANY"|"ENTREPRENEURIAL_COMPANY"|"LIMITED_PARTNERSHIP_LIMITED_COMPANY"|"LIMITED_PARTNERSHIP"|"GENERAL_PARTNERSHIP"|"REGISTERED_SOLE_TRADER"|"SOLE_TRADER"|"CIVIL_LAW_PARTNERSHIP"|"PUBLIC_INSTITUTION"|"OTHER", organization_registration_id?: string, title?: string, type?: string, vat_id?: string}
-export def "payments-authorizations-customer-token purchaseToken" [
+export def "payments-authorizations-customer-token create-purchase" [
   authorization_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -142,12 +151,12 @@ export def "payments-authorizations-customer-token purchaseToken" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({authorization_token: $authorization_token} | format pattern "/payments/v1/authorizations/{authorization_token}/customer-token"))
-  let body = {"billing_address": $billing_address, "customer": $customer, "description": $description, "intended_use": $intended_use, "locale": $locale, "purchase_country": $purchase_country, "purchase_currency": $purchase_currency} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({authorization_token: (encode-path-segment $authorization_token)} | format pattern "/payments/v1/authorizations/{authorization_token}/customer-token"))
+  let req_body = {"billing_address": $billing_address, "customer": $customer, "description": $description, "intended_use": $intended_use, "locale": $locale, "purchase_country": $purchase_country, "purchase_currency": $purchase_currency} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a new order
@@ -172,9 +181,9 @@ export def "payments-authorizations-order create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --auto-capture: oneof<nothing, bool> # Allow merchant to trigger auto capturing. (default: false)
   --billing-address: record # shape: {attention?: string, city?: string, country?: string, email?: string, family_name?: string, given_name?: string, organization_name?: string, phone?: string, postal_code?: string, region?: string, street_address?: string, street_address2?: string, title?: string}
-  --custom-payment-method-ids: list # Promo codes - The array could be used to define which of the configured payment options within a payment category (pay_later, pay_over_time, etc.) should be shown for this purchase. Discuss with the delivery manager to know about the promo codes that will be configured for your account. The feature could also be used to provide promotional offers to specific customers (eg: 0% financing). Please be informed that the usage of this feature can have commercial implications. 
+  --custom-payment-method-ids: list<string> # Promo codes - The array could be used to define which of the configured payment options within a payment category (pay_later, pay_over_time, etc.) should be shown for this purchase. Discuss with the delivery manager to know about the promo codes that will be configured for your account. The feature could also be used to provide promotional offers to specific customers (eg: 0% financing). Please be informed that the usage of this feature can have commercial implications.
   --customer: record # shape: {date_of_birth?: string, gender?: string, last_four_ssn?: string, national_identification_number?: string, organization_entity_type?: "LIMITED_COMPANY"|"PUBLIC_LIMITED_COMPANY"|"ENTREPRENEURIAL_COMPANY"|"LIMITED_PARTNERSHIP_LIMITED_COMPANY"|"LIMITED_PARTNERSHIP"|"GENERAL_PARTNERSHIP"|"REGISTERED_SOLE_TRADER"|"SOLE_TRADER"|"CIVIL_LAW_PARTNERSHIP"|"PUBLIC_INSTITUTION"|"OTHER", organization_registration_id?: string, title?: string, type?: string, vat_id?: string}
-  --locale: string # Used to define the language and region of the customer. The locale follows the format of (RFC 1766)[https://datatracker.ietf.org/doc/rfc1766/], meaning its value consists of language-country. The following values are applicable:  AT: "de-AT", "de-DE", "en-DE" BE: "be-BE", "nl-BE", "fr-BE", "en-BE" CH: "it-CH", "de-CH", "fr-CH", "en-CH" DE: "de-DE", "de-AT", "en-DE" DK: "da-DK", "en-DK" ES: "es-ES", "ca-ES", "en-ES" FI: "fi-FI", "sv-FI", "en-FI" GB: "en-GB" IT: "it-IT", "en-IT" NL: "nl-NL", "en-NL" NO: "nb-NO", "en-NO" PL: "pl-PL", "en-PL" SE: "sv-SE", "en-SE" US: "en-US". (e.g. en-GB)
+  --locale: string # Used to define the language and region of the customer. The locale follows the format of (RFC 1766)[https://datatracker.ietf.org/doc/rfc1766/], meaning its value consists of language-country. The following values are applicable: AT: "de-AT", "de-DE", "en-DE" BE: "be-BE", "nl-BE", "fr-BE", "en-BE" CH: "it-CH", "de-CH", "fr-CH", "en-CH" DE: "de-DE", "de-AT", "en-DE" DK: "da-DK", "en-DK" ES: "es-ES", "ca-ES", "en-ES" FI: "fi-FI", "sv-FI", "en-FI" GB: "en-GB" IT: "it-IT", "en-IT" NL: "nl-NL", "en-NL" NO: "nb-NO", "en-NO" PL: "pl-PL", "en-PL" SE: "sv-SE", "en-SE" US: "en-US". (e.g. en-GB)
   --merchant-data: string # Pass through field to send any information about the order to be used later for reference while retrieving the order details (max 6000 characters) (e.g. {"order_specific":[{"substore":"Women's Fashion","product_name":"Women Sweatshirt"}]})
   --merchant-reference1: string # Used for storing merchant's internal order number or other reference. (e.g. ON4711)
   --merchant-reference2: string # Used for storing merchant's internal order number or other reference. The value is available in the settlement files. (max 255 characters). (e.g. hdt53h-zdgg6-hdaff2)
@@ -189,12 +198,12 @@ export def "payments-authorizations-order create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({authorization_token: $authorization_token} | format pattern "/payments/v1/authorizations/{authorization_token}/order"))
-  let body = {"auto_capture": $auto_capture, "billing_address": $billing_address, "custom_payment_method_ids": $custom_payment_method_ids, "customer": $customer, "locale": $locale, "merchant_data": $merchant_data, "merchant_reference1": $merchant_reference1, "merchant_reference2": $merchant_reference2, "merchant_urls": $merchant_urls, "order_amount": $order_amount, "order_lines": $order_lines, "order_tax_amount": $order_tax_amount, "purchase_country": $purchase_country, "purchase_currency": $purchase_currency, "shipping_address": $shipping_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({authorization_token: (encode-path-segment $authorization_token)} | format pattern "/payments/v1/authorizations/{authorization_token}/order"))
+  let req_body = {"auto_capture": $auto_capture, "billing_address": $billing_address, "custom_payment_method_ids": $custom_payment_method_ids, "customer": $customer, "locale": $locale, "merchant_data": $merchant_data, "merchant_reference1": $merchant_reference1, "merchant_reference2": $merchant_reference2, "merchant_urls": $merchant_urls, "order_amount": $order_amount, "order_lines": $order_lines, "order_tax_amount": $order_tax_amount, "purchase_country": $purchase_country, "purchase_currency": $purchase_currency, "shipping_address": $shipping_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a new payment session
@@ -221,11 +230,11 @@ export def "payments-sessions create-credit" [
   --acquiring-channel: string@acquiring-channel-completer # The acquiring channel in which the session takes place. Ecommerce is default unless specified. Any other values should be defined in the agreement. (e.g. ECOMMERCE)
   --attachment: record # shape: {body: string, content_type: string}
   --billing-address: record # shape: {attention?: string, city?: string, country?: string, email?: string, family_name?: string, given_name?: string, organization_name?: string, phone?: string, postal_code?: string, region?: string, street_address?: string, street_address2?: string, title?: string}
-  --custom-payment-method-ids: list # Promo codes - The array could be used to define which of the configured payment options within a payment category (pay_later, pay_over_time, etc.) should be shown for this purchase. Discuss with the delivery manager to know about the promo codes that will be configured for your account. The feature could also be used to provide promotional offers to specific customers (eg: 0% financing). Please be informed that the usage of this feature can have commercial implications. 
+  --custom-payment-method-ids: list<string> # Promo codes - The array could be used to define which of the configured payment options within a payment category (pay_later, pay_over_time, etc.) should be shown for this purchase. Discuss with the delivery manager to know about the promo codes that will be configured for your account. The feature could also be used to provide promotional offers to specific customers (eg: 0% financing). Please be informed that the usage of this feature can have commercial implications.
   --customer: record # shape: {date_of_birth?: string, gender?: string, last_four_ssn?: string, national_identification_number?: string, organization_entity_type?: "LIMITED_COMPANY"|"PUBLIC_LIMITED_COMPANY"|"ENTREPRENEURIAL_COMPANY"|"LIMITED_PARTNERSHIP_LIMITED_COMPANY"|"LIMITED_PARTNERSHIP"|"GENERAL_PARTNERSHIP"|"REGISTERED_SOLE_TRADER"|"SOLE_TRADER"|"CIVIL_LAW_PARTNERSHIP"|"PUBLIC_INSTITUTION"|"OTHER", organization_registration_id?: string, title?: string, type?: string, vat_id?: string}
   --design: string # Design package to use in the session. This can only by used if a custom design has been implemented for Klarna Payments and agreed upon in the agreement. It might have a financial impact. Delivery manager will provide the value for the parameter.
   --intent: string@intent-completer # Intent for the session. The field is designed to let partners inform Klarna of the purpose of the customer’s session. (e.g. buy)
-  --locale: string # Used to define the language and region of the customer. The locale follows the format of (RFC 1766)[https://datatracker.ietf.org/doc/rfc1766/], meaning its value consists of language-country. The following values are applicable:  AT: "de-AT", "de-DE", "en-DE" BE: "be-BE", "nl-BE", "fr-BE", "en-BE" CH: "it-CH", "de-CH", "fr-CH", "en-CH" DE: "de-DE", "de-AT", "en-DE" DK: "da-DK", "en-DK" ES: "es-ES", "ca-ES", "en-ES" FI: "fi-FI", "sv-FI", "en-FI" GB: "en-GB" IT: "it-IT", "en-IT" NL: "nl-NL", "en-NL" NO: "nb-NO", "en-NO" PL: "pl-PL", "en-PL" SE: "sv-SE", "en-SE" US: "en-US". Default value is "en-US". (e.g. en-US)
+  --locale: string # Used to define the language and region of the customer. The locale follows the format of (RFC 1766)[https://datatracker.ietf.org/doc/rfc1766/], meaning its value consists of language-country. The following values are applicable: AT: "de-AT", "de-DE", "en-DE" BE: "be-BE", "nl-BE", "fr-BE", "en-BE" CH: "it-CH", "de-CH", "fr-CH", "en-CH" DE: "de-DE", "de-AT", "en-DE" DK: "da-DK", "en-DK" ES: "es-ES", "ca-ES", "en-ES" FI: "fi-FI", "sv-FI", "en-FI" GB: "en-GB" IT: "it-IT", "en-IT" NL: "nl-NL", "en-NL" NO: "nb-NO", "en-NO" PL: "pl-PL", "en-PL" SE: "sv-SE", "en-SE" US: "en-US". Default value is "en-US". (e.g. en-US)
   --merchant-data: string # Pass through field to send any information about the order to be used later for reference while retrieving the order details (max 6000 characters) (e.g. {"order_specific":[{"substore":"Women's Fashion","product_name":"Women Sweatshirt"}]})
   --merchant-reference1: string # Used for storing merchant's internal order number or other reference. (e.g. ON4711)
   --merchant-reference2: string # Used for storing merchant's internal order number or other reference. The value is available in the settlement files. (max 255 characters). (e.g. hdt53h-zdgg6-hdaff2)
@@ -242,11 +251,11 @@ export def "payments-sessions create-credit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payments/v1/sessions")
-  let body = {"acquiring_channel": $acquiring_channel, "attachment": $attachment, "billing_address": $billing_address, "custom_payment_method_ids": $custom_payment_method_ids, "customer": $customer, "design": $design, "intent": $intent, "locale": $locale, "merchant_data": $merchant_data, "merchant_reference1": $merchant_reference1, "merchant_reference2": $merchant_reference2, "merchant_urls": $merchant_urls, "options": $options, "order_amount": $order_amount, "order_lines": $order_lines, "order_tax_amount": $order_tax_amount, "purchase_country": $purchase_country, "purchase_currency": $purchase_currency, "shipping_address": $shipping_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"acquiring_channel": $acquiring_channel, "attachment": $attachment, "billing_address": $billing_address, "custom_payment_method_ids": $custom_payment_method_ids, "customer": $customer, "design": $design, "intent": $intent, "locale": $locale, "merchant_data": $merchant_data, "merchant_reference1": $merchant_reference1, "merchant_reference2": $merchant_reference2, "merchant_urls": $merchant_urls, "options": $options, "order_amount": $order_amount, "order_lines": $order_lines, "order_tax_amount": $order_tax_amount, "purchase_country": $purchase_country, "purchase_currency": $purchase_currency, "shipping_address": $shipping_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Read an existing payment session
@@ -266,7 +275,7 @@ export def "payments-sessions get-credit" [
 ]: nothing -> record<acquiring_channel: string, attachment: record<body: string, content_type: string>, authorization_token: string, billing_address: record<attention: string, city: string, country: string, email: string, family_name: string, given_name: string, organization_name: string, phone: string, postal_code: string, region: string, street_address: string, street_address2: string, title: string>, client_token: string, custom_payment_method_ids: list<string>, customer: record<date_of_birth: string, gender: string, organization_entity_type: string, organization_registration_id: string, title: string, type: string, vat_id: string>, design: string, expires_at: string, intent: string, locale: string, merchant_data: string, merchant_reference1: string, merchant_reference2: string, merchant_urls: record<authorization: string, confirmation: string, notification: string, push: string>, options: record<color_border: string, color_border_selected: string, color_details: string, color_text: string, radius_border: string>, order_amount: int, order_lines: table<image_url: string, merchant_data: string, name: string, product_identifiers: record, product_url: string, quantity: int, quantity_unit: string, reference: string, subscription: record, tax_rate: int, total_amount: int, total_discount_amount: int, total_tax_amount: int, type: string, unit_price: int>, order_tax_amount: int, payment_method_categories: table<asset_urls: record, identifier: string, name: string>, purchase_country: string, purchase_currency: string, shipping_address: record<attention: string, city: string, country: string, email: string, family_name: string, given_name: string, organization_name: string, phone: string, postal_code: string, region: string, street_address: string, street_address2: string, title: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({session_id: $session_id} | format pattern "/payments/v1/sessions/{session_id}"))
+  let full_url = (build-url $base ({session_id: (encode-path-segment $session_id)} | format pattern "/payments/v1/sessions/{session_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -297,11 +306,11 @@ export def "payments-sessions update-credit" [
   --acquiring-channel: string@acquiring-channel-completer # The acquiring channel in which the session takes place. Ecommerce is default unless specified. Any other values should be defined in the agreement. (e.g. ECOMMERCE)
   --attachment: record # shape: {body: string, content_type: string}
   --billing-address: record # shape: {attention?: string, city?: string, country?: string, email?: string, family_name?: string, given_name?: string, organization_name?: string, phone?: string, postal_code?: string, region?: string, street_address?: string, street_address2?: string, title?: string}
-  --custom-payment-method-ids: list # Promo codes - The array could be used to define which of the configured payment options within a payment category (pay_later, pay_over_time, etc.) should be shown for this purchase. Discuss with the delivery manager to know about the promo codes that will be configured for your account. The feature could also be used to provide promotional offers to specific customers (eg: 0% financing). Please be informed that the usage of this feature can have commercial implications. 
+  --custom-payment-method-ids: list<string> # Promo codes - The array could be used to define which of the configured payment options within a payment category (pay_later, pay_over_time, etc.) should be shown for this purchase. Discuss with the delivery manager to know about the promo codes that will be configured for your account. The feature could also be used to provide promotional offers to specific customers (eg: 0% financing). Please be informed that the usage of this feature can have commercial implications.
   --customer: record # shape: {date_of_birth?: string, gender?: string, last_four_ssn?: string, national_identification_number?: string, organization_entity_type?: "LIMITED_COMPANY"|"PUBLIC_LIMITED_COMPANY"|"ENTREPRENEURIAL_COMPANY"|"LIMITED_PARTNERSHIP_LIMITED_COMPANY"|"LIMITED_PARTNERSHIP"|"GENERAL_PARTNERSHIP"|"REGISTERED_SOLE_TRADER"|"SOLE_TRADER"|"CIVIL_LAW_PARTNERSHIP"|"PUBLIC_INSTITUTION"|"OTHER", organization_registration_id?: string, title?: string, type?: string, vat_id?: string}
   --design: string # Design package to use in the session. This can only by used if a custom design has been implemented for Klarna Payments and agreed upon in the agreement. It might have a financial impact. Delivery manager will provide the value for the parameter.
   --intent: string@intent-completer # Intent for the session. The field is designed to let partners inform Klarna of the purpose of the customer’s session. (e.g. buy)
-  --locale: string # Used to define the language and region of the customer. The locale follows the format of (RFC 1766)[https://datatracker.ietf.org/doc/rfc1766/], meaning its value consists of language-country. The following values are applicable:  AT: "de-AT", "de-DE", "en-DE" BE: "be-BE", "nl-BE", "fr-BE", "en-BE" CH: "it-CH", "de-CH", "fr-CH", "en-CH" DE: "de-DE", "de-AT", "en-DE" DK: "da-DK", "en-DK" ES: "es-ES", "ca-ES", "en-ES" FI: "fi-FI", "sv-FI", "en-FI" GB: "en-GB" IT: "it-IT", "en-IT" NL: "nl-NL", "en-NL" NO: "nb-NO", "en-NO" PL: "pl-PL", "en-PL" SE: "sv-SE", "en-SE" US: "en-US". (e.g. en-GB)
+  --locale: string # Used to define the language and region of the customer. The locale follows the format of (RFC 1766)[https://datatracker.ietf.org/doc/rfc1766/], meaning its value consists of language-country. The following values are applicable: AT: "de-AT", "de-DE", "en-DE" BE: "be-BE", "nl-BE", "fr-BE", "en-BE" CH: "it-CH", "de-CH", "fr-CH", "en-CH" DE: "de-DE", "de-AT", "en-DE" DK: "da-DK", "en-DK" ES: "es-ES", "ca-ES", "en-ES" FI: "fi-FI", "sv-FI", "en-FI" GB: "en-GB" IT: "it-IT", "en-IT" NL: "nl-NL", "en-NL" NO: "nb-NO", "en-NO" PL: "pl-PL", "en-PL" SE: "sv-SE", "en-SE" US: "en-US". (e.g. en-GB)
   --merchant-data: string # Pass through field to send any information about the order to be used later for reference while retrieving the order details (max 6000 characters) (e.g. {"order_specific":[{"substore":"Women's Fashion","product_name":"Women Sweatshirt"}]})
   --merchant-reference1: string # Used for storing merchant's internal order number or other reference. (e.g. ON4711)
   --merchant-reference2: string # Used for storing merchant's internal order number or other reference. The value is available in the settlement files. (max 255 characters). (e.g. hdt53h-zdgg6-hdaff2)
@@ -317,10 +326,10 @@ export def "payments-sessions update-credit" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({session_id: $session_id} | format pattern "/payments/v1/sessions/{session_id}"))
-  let body = {"acquiring_channel": $acquiring_channel, "attachment": $attachment, "billing_address": $billing_address, "custom_payment_method_ids": $custom_payment_method_ids, "customer": $customer, "design": $design, "intent": $intent, "locale": $locale, "merchant_data": $merchant_data, "merchant_reference1": $merchant_reference1, "merchant_reference2": $merchant_reference2, "merchant_urls": $merchant_urls, "options": $options, "order_amount": $order_amount, "order_lines": $order_lines, "order_tax_amount": $order_tax_amount, "purchase_country": $purchase_country, "purchase_currency": $purchase_currency, "shipping_address": $shipping_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({session_id: (encode-path-segment $session_id)} | format pattern "/payments/v1/sessions/{session_id}"))
+  let req_body = {"acquiring_channel": $acquiring_channel, "attachment": $attachment, "billing_address": $billing_address, "custom_payment_method_ids": $custom_payment_method_ids, "customer": $customer, "design": $design, "intent": $intent, "locale": $locale, "merchant_data": $merchant_data, "merchant_reference1": $merchant_reference1, "merchant_reference2": $merchant_reference2, "merchant_urls": $merchant_urls, "options": $options, "order_amount": $order_amount, "order_lines": $order_lines, "order_tax_amount": $order_tax_amount, "purchase_country": $purchase_country, "purchase_currency": $purchase_currency, "shipping_address": $shipping_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

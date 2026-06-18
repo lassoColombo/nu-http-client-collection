@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "civicinfo-divisions civicinfodivisionssearch" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "civicinfo-divisions list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # GET /civicinfo/v2/divisions
 # operationId: civicinfo.divisions.search
-export def "civicinfo-divisions civicinfodivisionssearch" [
+export def "civicinfo-divisions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,7 +139,7 @@ export def "civicinfo-divisions civicinfodivisionssearch" [
 #
 # GET /civicinfo/v2/elections
 # operationId: civicinfo.elections.electionQuery
-export def "civicinfo-elections civicinfoelectionselectionQuery" [
+export def "civicinfo-elections list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +173,7 @@ export def "civicinfo-elections civicinfoelectionselectionQuery" [
 #
 # GET /civicinfo/v2/representatives
 # operationId: civicinfo.representatives.representativeInfoByAddress
-export def "civicinfo-representatives civicinforepresentativesrepresentativeInfoByAddress" [
+export def "civicinfo-representatives get-by-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,8 +195,8 @@ export def "civicinfo-representatives civicinforepresentativesrepresentativeInfo
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --address: string # The address to look up. May only be specified if the field ocdId is not given in the URL
   --include-offices: oneof<nothing, bool> # Whether to return information about offices and officials. If false, only the top-level district information will be returned.
-  --levels: list # A list of office levels to filter by. Only offices that serve at least one of these levels will be returned. Divisions that don't contain a matching office will not be returned.
-  --roles: list # A list of office roles to filter by. Only offices fulfilling one of these roles will be returned. Divisions that don't contain a matching office will not be returned.
+  --levels: list<string> # A list of office levels to filter by. Only offices that serve at least one of these levels will be returned. Divisions that don't contain a matching office will not be returned.
+  --roles: list<string> # A list of office roles to filter by. Only offices fulfilling one of these roles will be returned. Divisions that don't contain a matching office will not be returned.
 ]: nothing -> record<divisions: record, kind: string, normalizedInput: record<city: string, line1: string, line2: string, line3: string, locationName: string, state: string, zip: string>, offices: table<divisionId: string, levels: list, name: string, officialIndices: list, roles: list, sources: list>, officials: table<address: list, channels: list, emails: list, geocodingSummaries: list, name: string, party: string, phones: list, photoUrl: string, urls: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -202,7 +211,7 @@ export def "civicinfo-representatives civicinforepresentativesrepresentativeInfo
 #
 # GET /civicinfo/v2/representatives/{ocdId}
 # operationId: civicinfo.representatives.representativeInfoByDivision
-export def "civicinfo-representatives civicinforepresentativesrepresentativeInfoByDivision" [
+export def "civicinfo-representatives get-by-division" [
   ocd_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -223,14 +232,14 @@ export def "civicinfo-representatives civicinforepresentativesrepresentativeInfo
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --levels: list # A list of office levels to filter by. Only offices that serve at least one of these levels will be returned. Divisions that don't contain a matching office will not be returned.
+  --levels: list<string> # A list of office levels to filter by. Only offices that serve at least one of these levels will be returned. Divisions that don't contain a matching office will not be returned.
   --recursive: oneof<nothing, bool> # If true, information about all divisions contained in the division requested will be included as well. For example, if querying ocd-division/country:us/district:dc, this would also return all DC's wards and ANCs.
-  --roles: list # A list of office roles to filter by. Only offices fulfilling one of these roles will be returned. Divisions that don't contain a matching office will not be returned.
+  --roles: list<string> # A list of office roles to filter by. Only offices fulfilling one of these roles will be returned. Divisions that don't contain a matching office will not be returned.
 ]: nothing -> record<divisions: record, offices: table<divisionId: string, levels: list, name: string, officialIndices: list, roles: list, sources: list>, officials: table<address: list, channels: list, emails: list, geocodingSummaries: list, name: string, party: string, phones: list, photoUrl: string, urls: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "levels" $levels "multi") (serialize-qp "recursive" $recursive "scalar") (serialize-qp "roles" $roles "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({ocd_id: $ocd_id} | format pattern "/civicinfo/v2/representatives/{ocd_id}") $qp)
+  let full_url = (build-url $base ({ocd_id: (encode-path-segment $ocd_id)} | format pattern "/civicinfo/v2/representatives/{ocd_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -240,7 +249,7 @@ export def "civicinfo-representatives civicinforepresentativesrepresentativeInfo
 #
 # GET /civicinfo/v2/voterinfo
 # operationId: civicinfo.elections.voterInfoQuery
-export def "civicinfo-voterinfo civicinfoelectionsvoterInfoQuery" [
+export def "civicinfo-voterinfo get-voter-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

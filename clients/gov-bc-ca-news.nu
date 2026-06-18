@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -145,7 +154,7 @@ export def "home get" [
 #
 # GET /api/Ministries
 # operationId: Ministries_GetAll
-export def "ministries get-all" [
+export def "ministries get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +195,7 @@ export def "ministries get-one" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key} | format pattern "/api/Ministries/{key}") $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/Ministries/{key}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -212,7 +221,7 @@ export def "ministries-minister get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key} | format pattern "/api/Ministries/{key}/Minister") $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/Ministries/{key}/Minister") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -222,7 +231,7 @@ export def "ministries-minister get" [
 #
 # GET /api/Newsletters
 # operationId: Newsletters_GetAll
-export def "newsletters get-all" [
+export def "newsletters get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +272,7 @@ export def "newsletters-images get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({guid: $guid} | format pattern "/api/Newsletters/Images/{guid}") $qp)
+  let full_url = (build-url $base ({guid: (encode-path-segment $guid)} | format pattern "/api/Newsletters/Images/{guid}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -289,7 +298,7 @@ export def "newsletters get-one" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({newsletter_key: $newsletter_key} | format pattern "/api/Newsletters/{newsletter_key}") $qp)
+  let full_url = (build-url $base ({newsletter_key: (encode-path-segment $newsletter_key)} | format pattern "/api/Newsletters/{newsletter_key}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -316,7 +325,7 @@ export def "newsletters-editions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({newsletter_key: $newsletter_key, edition_key: $edition_key} | format pattern "/api/Newsletters/{newsletter_key}/Editions/{edition_key}") $qp)
+  let full_url = (build-url $base ({newsletter_key: (encode-path-segment $newsletter_key), edition_key: (encode-path-segment $edition_key)} | format pattern "/api/Newsletters/{newsletter_key}/Editions/{edition_key}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -344,7 +353,7 @@ export def "newsletters-editions-articles get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({newsletter_key: $newsletter_key, edition_key: $edition_key, article_key: $article_key} | format pattern "/api/Newsletters/{newsletter_key}/Editions/{edition_key}/Articles/{article_key}") $qp)
+  let full_url = (build-url $base ({newsletter_key: (encode-path-segment $newsletter_key), edition_key: (encode-path-segment $edition_key), article_key: (encode-path-segment $article_key)} | format pattern "/api/Newsletters/{newsletter_key}/Editions/{edition_key}/Articles/{article_key}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -364,7 +373,7 @@ export def "posts get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --post-keys: list # default: 
+  --post-keys: list<string> # default: 
   --api-version: string # The requested API version (default: 1.0)
 ]: nothing -> table<assetUrl: string, atomId: string, azureAssets: list<record>, documents: list<record>, facebookPictureUri: string, hasMediaAssets: bool, isNewsOnDemand: bool, keywords: string, kind: string, leadMinistryKey: string, location: string, ministryKeys: list<string>, publishDate: string, redirectUri: string, reference: string, sectorKeys: list<string>, serviceKeys: list<string>, socialMediaHeadline: string, socialMediaSummary: string, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -380,7 +389,7 @@ export def "posts get" [
 #
 # GET /api/Posts/Keys/{indexKind}/{indexKey}
 # operationId: Posts_GetAllKeys
-export def "posts-keys get-all" [
+export def "posts-keys get-list" [
   index_kind: string
   index_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -400,7 +409,7 @@ export def "posts-keys get-all" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "postKind" $post_kind "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({index_kind: $index_kind, index_key: $index_key} | format pattern "/api/Posts/Keys/{index_kind}/{index_key}") $qp)
+  let full_url = (build-url $base ({index_kind: (encode-path-segment $index_kind), index_key: (encode-path-segment $index_key)} | format pattern "/api/Posts/Keys/{index_kind}/{index_key}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -410,7 +419,7 @@ export def "posts-keys get-all" [
 #
 # GET /api/Posts/Keys/{reference}
 # operationId: Posts_GetKeyFromReference
-export def "posts-keys get-key-from" [
+export def "posts-keys get" [
   reference: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -426,7 +435,7 @@ export def "posts-keys get-key-from" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({reference: $reference} | format pattern "/api/Posts/Keys/{reference}") $qp)
+  let full_url = (build-url $base ({reference: (encode-path-segment $reference)} | format pattern "/api/Posts/Keys/{reference}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -456,7 +465,7 @@ export def "posts-latest get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "postKind" $post_kind "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({index_kind: $index_kind, index_key: $index_key} | format pattern "/api/Posts/Latest/{index_kind}/{index_key}") $qp)
+  let full_url = (build-url $base ({index_kind: (encode-path-segment $index_kind), index_key: (encode-path-segment $index_key)} | format pattern "/api/Posts/Latest/{index_kind}/{index_key}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -482,7 +491,7 @@ export def "posts-latest-media-uri get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({media_type: $media_type} | format pattern "/api/Posts/LatestMediaUri/{media_type}") $qp)
+  let full_url = (build-url $base ({media_type: (encode-path-segment $media_type)} | format pattern "/api/Posts/LatestMediaUri/{media_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -508,7 +517,7 @@ export def "posts get-one" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key} | format pattern "/api/Posts/{key}") $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/Posts/{key}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -518,7 +527,7 @@ export def "posts get-one" [
 #
 # GET /api/ResourceLinks
 # operationId: ResourceLinks_GetAll
-export def "resource-links get-all" [
+export def "resource-links get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -543,7 +552,7 @@ export def "resource-links get-all" [
 #
 # GET /api/Sectors
 # operationId: Sectors_GetAll
-export def "sectors get-all" [
+export def "sectors get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,7 +593,7 @@ export def "sectors get-one" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key} | format pattern "/api/Sectors/{key}") $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/Sectors/{key}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -594,7 +603,7 @@ export def "sectors get-one" [
 #
 # GET /api/Services
 # operationId: Services_GetAll
-export def "services get-all" [
+export def "services get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -635,7 +644,7 @@ export def "services get-one" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key} | format pattern "/api/Services/{key}") $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/Services/{key}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -645,7 +654,7 @@ export def "services get-one" [
 #
 # GET /api/Slides
 # operationId: Slides_GetAll
-export def "slides get-all" [
+export def "slides get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -686,7 +695,7 @@ export def "slides get-one" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/Slides/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Slides/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -696,7 +705,7 @@ export def "slides get-one" [
 #
 # GET /api/Tags
 # operationId: Tags_GetAll
-export def "tags get-all" [
+export def "tags get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -737,7 +746,7 @@ export def "tags get-one" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key} | format pattern "/api/Tags/{key}") $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/Tags/{key}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -747,7 +756,7 @@ export def "tags get-one" [
 #
 # GET /api/Themes
 # operationId: Themes_GetAll
-export def "themes get-all" [
+export def "themes get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -788,7 +797,7 @@ export def "themes get-one" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({key: $key} | format pattern "/api/Themes/{key}") $qp)
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/Themes/{key}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

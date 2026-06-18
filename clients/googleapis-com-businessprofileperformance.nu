@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def daily-sub-entity-type-day-of-week-completer [] { ["DAY_OF_WEEK_UNSPECIFIED" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "locations businessprofileperformancelocationsfetchMultiDailyMetricsTimeSeries" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "locations get-multi-daily-metrics-time-series" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,11 +102,11 @@ export def commands []: nothing -> table {
   }
 }
 
-#  Returns the values for each date from a given time range and optionally the sub entity type, where applicable, that are associated with the specific daily metrics. Example request: `GET https://businessprofileperformance.googleapis.com/v1/locations/12345:fetchMultiDailyMetricsTimeSeries?dailyMetrics=WEBSITE_CLICKS&dailyMetrics=CALL_CLICKS&daily_range.start_date.year=2022&daily_range.start_date.month=1&daily_range.start_date.day=1&daily_range.end_date.year=2022&daily_range.end_date.month=3&daily_range.end_date.day=31`
+# Returns the values for each date from a given time range and optionally the sub entity type, where applicable, that are associated with the specific daily metrics. Example request: `GET https://businessprofileperformance.googleapis.com/v1/locations/12345:fetchMultiDailyMetricsTimeSeries?dailyMetrics=WEBSITE_CLICKS&dailyMetrics=CALL_CLICKS&daily_range.start_date.year=2022&daily_range.start_date.month=1&daily_range.start_date.day=1&daily_range.end_date.year=2022&daily_range.end_date.month=3&daily_range.end_date.day=31`
 #
 # GET /v1/{location}:fetchMultiDailyMetricsTimeSeries
 # operationId: businessprofileperformance.locations.fetchMultiDailyMetricsTimeSeries
-export def "locations businessprofileperformancelocationsfetchMultiDailyMetricsTimeSeries" [
+export def "locations get-multi-daily-metrics-time-series" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -118,7 +127,7 @@ export def "locations businessprofileperformancelocationsfetchMultiDailyMetricsT
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --daily-metrics: list # Required. The metrics to retrieve time series for.
+  --daily-metrics: list<string> # Required. The metrics to retrieve time series for.
   --daily-range-end-date-day: int # Day of a month. Must be from 1 to 31 and valid for the year and month, or 0 to specify a year by itself or a year and month where the day isn't significant.
   --daily-range-end-date-month: int # Month of a year. Must be from 1 to 12, or 0 to specify a year without a month and day.
   --daily-range-end-date-year: int # Year of the date. Must be from 1 to 9999, or 0 to specify a date without a year.
@@ -129,17 +138,17 @@ export def "locations businessprofileperformancelocationsfetchMultiDailyMetricsT
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dailyMetrics" $daily_metrics "multi") (serialize-qp "dailyRange.endDate.day" $daily_range_end_date_day "scalar") (serialize-qp "dailyRange.endDate.month" $daily_range_end_date_month "scalar") (serialize-qp "dailyRange.endDate.year" $daily_range_end_date_year "scalar") (serialize-qp "dailyRange.startDate.day" $daily_range_start_date_day "scalar") (serialize-qp "dailyRange.startDate.month" $daily_range_start_date_month "scalar") (serialize-qp "dailyRange.startDate.year" $daily_range_start_date_year "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location: $location} | format pattern "/v1/{location}:fetchMultiDailyMetricsTimeSeries") $qp)
+  let full_url = (build-url $base ({location: (encode-path-segment $location)} | format pattern "/v1/{location}:fetchMultiDailyMetricsTimeSeries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns the values for each date from a given time range that are associated with the specific daily metric. Example request: `GET https://businessprofileperformance.googleapis.com/v1/locations/12345:getDailyMetricsTimeSeries?dailyMetric=WEBSITE_CLICKS&daily_range.start_date.year=2022&daily_range.start_date.month=1&daily_range.start_date.day=1&daily_range.end_date.year=2022&daily_range.end_date.month=3&daily_range.end_date.day=31`
+# Returns the values for each date from a given time range that are associated with the specific daily metric. Example request: `GET https://businessprofileperformance.googleapis.com/v1/locations/12345:getDailyMetricsTimeSeries?dailyMetric=WEBSITE_CLICKS&daily_range.start_date.year=2022&daily_range.start_date.month=1&daily_range.start_date.day=1&daily_range.end_date.year=2022&daily_range.end_date.month=3&daily_range.end_date.day=31`
 #
 # GET /v1/{name}:getDailyMetricsTimeSeries
 # operationId: businessprofileperformance.locations.getDailyMetricsTimeSeries
-export def "locations businessprofileperformancelocationsgetDailyMetricsTimeSeries" [
+export def "locations get-daily-metrics-time-series" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -176,7 +185,7 @@ export def "locations businessprofileperformancelocationsgetDailyMetricsTimeSeri
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dailyMetric" $daily_metric "scalar") (serialize-qp "dailyRange.endDate.day" $daily_range_end_date_day "scalar") (serialize-qp "dailyRange.endDate.month" $daily_range_end_date_month "scalar") (serialize-qp "dailyRange.endDate.year" $daily_range_end_date_year "scalar") (serialize-qp "dailyRange.startDate.day" $daily_range_start_date_day "scalar") (serialize-qp "dailyRange.startDate.month" $daily_range_start_date_month "scalar") (serialize-qp "dailyRange.startDate.year" $daily_range_start_date_year "scalar") (serialize-qp "dailySubEntityType.dayOfWeek" $daily_sub_entity_type_day_of_week "scalar") (serialize-qp "dailySubEntityType.timeOfDay.hours" $daily_sub_entity_type_time_of_day_hours "scalar") (serialize-qp "dailySubEntityType.timeOfDay.minutes" $daily_sub_entity_type_time_of_day_minutes "scalar") (serialize-qp "dailySubEntityType.timeOfDay.nanos" $daily_sub_entity_type_time_of_day_nanos "scalar") (serialize-qp "dailySubEntityType.timeOfDay.seconds" $daily_sub_entity_type_time_of_day_seconds "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:getDailyMetricsTimeSeries") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:getDailyMetricsTimeSeries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -186,7 +195,7 @@ export def "locations businessprofileperformancelocationsgetDailyMetricsTimeSeri
 #
 # GET /v1/{parent}/searchkeywords/impressions/monthly
 # operationId: businessprofileperformance.locations.searchkeywords.impressions.monthly.list
-export def "searchkeywords-impressions-monthly businessprofileperformancelocationssearchkeywordsimpressionsmonthlylist" [
+export def "searchkeywords-impressions-monthly list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -219,7 +228,7 @@ export def "searchkeywords-impressions-monthly businessprofileperformancelocatio
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "monthlyRange.endMonth.day" $monthly_range_end_month_day "scalar") (serialize-qp "monthlyRange.endMonth.month" $monthly_range_end_month_month "scalar") (serialize-qp "monthlyRange.endMonth.year" $monthly_range_end_month_year "scalar") (serialize-qp "monthlyRange.startMonth.day" $monthly_range_start_month_day "scalar") (serialize-qp "monthlyRange.startMonth.month" $monthly_range_start_month_month "scalar") (serialize-qp "monthlyRange.startMonth.year" $monthly_range_start_month_year "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/searchkeywords/impressions/monthly") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/searchkeywords/impressions/monthly") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

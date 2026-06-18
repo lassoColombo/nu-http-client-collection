@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -79,7 +88,7 @@ def serving-status-completer-1 [] { ["SERVING" "SERVING_STATUS_UNSPECIFIED" "STO
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta-apps appengineappscreate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta-apps create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -106,7 +115,7 @@ export def commands []: nothing -> table {
 # --dispatchRules item shape: {domain?: string, path?: string, service?: string}
 # --featureSettings shape: {splitHealthChecks?: bool, useContainerOptimizedOs?: bool}
 # --iap shape: {enabled?: bool, oauth2ClientId?: string, oauth2ClientSecret?: string}
-export def "v1beta-apps appengineappscreate" [
+export def "v1beta-apps create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,18 +152,18 @@ export def "v1beta-apps appengineappscreate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "parent" $parent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta/apps" $qp)
-  let body = {"authDomain": $auth_domain, "databaseType": $database_type, "defaultCookieExpiration": $default_cookie_expiration, "dispatchRules": $dispatch_rules, "featureSettings": $feature_settings, "iap": $iap, "id": $id, "locationId": $location_id, "serviceAccount": $service_account, "servingStatus": $serving_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"authDomain": $auth_domain, "databaseType": $database_type, "defaultCookieExpiration": $default_cookie_expiration, "dispatchRules": $dispatch_rules, "featureSettings": $feature_settings, "iap": $iap, "id": $id, "locationId": $location_id, "serviceAccount": $service_account, "servingStatus": $serving_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets information about an application.
 #
 # GET /v1beta/apps/{appsId}
 # operationId: appengine.apps.get
-export def "v1beta-apps appengineappsget" [
+export def "v1beta-apps get" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -179,7 +188,7 @@ export def "v1beta-apps appengineappsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id} | format pattern "/v1beta/apps/{apps_id}") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -192,7 +201,7 @@ export def "v1beta-apps appengineappsget" [
 # --dispatchRules item shape: {domain?: string, path?: string, service?: string}
 # --featureSettings shape: {splitHealthChecks?: bool, useContainerOptimizedOs?: bool}
 # --iap shape: {enabled?: bool, oauth2ClientId?: string, oauth2ClientSecret?: string}
-export def "v1beta-apps appengineappspatch" [
+export def "v1beta-apps update" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -229,19 +238,19 @@ export def "v1beta-apps appengineappspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id} | format pattern "/v1beta/apps/{apps_id}") $qp)
-  let body = {"authDomain": $auth_domain, "databaseType": $database_type, "defaultCookieExpiration": $default_cookie_expiration, "dispatchRules": $dispatch_rules, "featureSettings": $feature_settings, "iap": $iap, "id": $id, "locationId": $location_id, "serviceAccount": $service_account, "servingStatus": $serving_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}") $qp)
+  let req_body = {"authDomain": $auth_domain, "databaseType": $database_type, "defaultCookieExpiration": $default_cookie_expiration, "dispatchRules": $dispatch_rules, "featureSettings": $feature_settings, "iap": $iap, "id": $id, "locationId": $location_id, "serviceAccount": $service_account, "servingStatus": $serving_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all SSL certificates the user is authorized to administer.
 #
 # GET /v1beta/apps/{appsId}/authorizedCertificates
 # operationId: appengine.apps.authorizedCertificates.list
-export def "v1beta-apps-authorized-certificates appengineappsauthorizedCertificateslist" [
+export def "v1beta-apps-authorized-certificates list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -269,7 +278,7 @@ export def "v1beta-apps-authorized-certificates appengineappsauthorizedCertifica
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id} | format pattern "/v1beta/apps/{apps_id}/authorizedCertificates") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/authorizedCertificates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -281,7 +290,7 @@ export def "v1beta-apps-authorized-certificates appengineappsauthorizedCertifica
 # operationId: appengine.apps.authorizedCertificates.create
 # --certificateRawData shape: {privateKey?: string, publicCertificate?: string}
 # --managedCertificate shape: {lastRenewalTime?: string, status?: "MANAGEMENT_STATUS_UNSPECIFIED"|"OK"|"PENDING"|"FAILED_RETRYING_NOT_VISIBLE"|"FAILED_PERMANENT"|"FAILED_RETRYING_CAA_FORBIDDEN"|"FAILED_RETRYING_CAA_CHECKING"}
-export def "v1beta-apps-authorized-certificates appengineappsauthorizedCertificatescreate" [
+export def "v1beta-apps-authorized-certificates create" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -305,30 +314,30 @@ export def "v1beta-apps-authorized-certificates appengineappsauthorizedCertifica
   --certificate-raw-data: record # An SSL certificate obtained from a certificate authority. — shape: {privateKey?: string, publicCertificate?: string}
   --display-name: string # The user-specified display name of the certificate. This is not guaranteed to be unique. Example: My Certificate.
   --domain-mappings-count: int # Aggregate count of the domain mappings with this certificate mapped. This count includes domain mappings on applications for which the user does not have VIEWER permissions.Only returned by GET or LIST requests when specifically requested by the view=FULL_CERTIFICATE option.@OutputOnly (format: int32)
-  --domain-names: list # Topmost applicable domains of this certificate. This certificate applies to these domains and their subdomains. Example: example.com.@OutputOnly
+  --domain-names: list<string> # Topmost applicable domains of this certificate. This certificate applies to these domains and their subdomains. Example: example.com.@OutputOnly
   --expire-time: string # The time when this certificate expires. To update the renewal time on this certificate, upload an SSL certificate with a different expiration time using AuthorizedCertificates.UpdateAuthorizedCertificate.@OutputOnly (format: google-datetime)
   --id: string # Relative name of the certificate. This is a unique value autogenerated on AuthorizedCertificate resource creation. Example: 12345.@OutputOnly
   --managed-certificate: record # A certificate managed by App Engine. — shape: {lastRenewalTime?: string, status?: "MANAGEMENT_STATUS_UNSPECIFIED"|"OK"|"PENDING"|"FAILED_RETRYING_NOT_VISIBLE"|"FAILED_PERMANENT"|"FAILED_RETRYING_CAA_FORBIDDEN"|"FAILED_RETRYING_CAA_CHECKING"}
   --name: string # Full path to the AuthorizedCertificate resource in the API. Example: apps/myapp/authorizedCertificates/12345.@OutputOnly
-  --visible-domain-mappings: list # The full paths to user visible Domain Mapping resources that have this certificate mapped. Example: apps/myapp/domainMappings/example.com.This may not represent the full list of mapped domain mappings if the user does not have VIEWER permissions on all of the applications that have this certificate mapped. See domain_mappings_count for a complete count.Only returned by GET or LIST requests when specifically requested by the view=FULL_CERTIFICATE option.@OutputOnly
+  --visible-domain-mappings: list<string> # The full paths to user visible Domain Mapping resources that have this certificate mapped. Example: apps/myapp/domainMappings/example.com.This may not represent the full list of mapped domain mappings if the user does not have VIEWER permissions on all of the applications that have this certificate mapped. See domain_mappings_count for a complete count.Only returned by GET or LIST requests when specifically requested by the view=FULL_CERTIFICATE option.@OutputOnly
 ]: any -> record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id} | format pattern "/v1beta/apps/{apps_id}/authorizedCertificates") $qp)
-  let body = {"certificateRawData": $certificate_raw_data, "displayName": $display_name, "domainMappingsCount": $domain_mappings_count, "domainNames": $domain_names, "expireTime": $expire_time, "id": $id, "managedCertificate": $managed_certificate, "name": $name, "visibleDomainMappings": $visible_domain_mappings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/authorizedCertificates") $qp)
+  let req_body = {"certificateRawData": $certificate_raw_data, "displayName": $display_name, "domainMappingsCount": $domain_mappings_count, "domainNames": $domain_names, "expireTime": $expire_time, "id": $id, "managedCertificate": $managed_certificate, "name": $name, "visibleDomainMappings": $visible_domain_mappings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the specified SSL certificate.
 #
 # DELETE /v1beta/apps/{appsId}/authorizedCertificates/{authorizedCertificatesId}
 # operationId: appengine.apps.authorizedCertificates.delete
-export def "v1beta-apps-authorized-certificates appengineappsauthorizedCertificatesdelete" [
+export def "v1beta-apps-authorized-certificates delete" [
   apps_id: string
   authorized_certificates_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -354,7 +363,7 @@ export def "v1beta-apps-authorized-certificates appengineappsauthorizedCertifica
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, authorized_certificates_id: $authorized_certificates_id} | format pattern "/v1beta/apps/{apps_id}/authorizedCertificates/{authorized_certificates_id}") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), authorized_certificates_id: (encode-path-segment $authorized_certificates_id)} | format pattern "/v1beta/apps/{apps_id}/authorizedCertificates/{authorized_certificates_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -364,7 +373,7 @@ export def "v1beta-apps-authorized-certificates appengineappsauthorizedCertifica
 #
 # GET /v1beta/apps/{appsId}/authorizedCertificates/{authorizedCertificatesId}
 # operationId: appengine.apps.authorizedCertificates.get
-export def "v1beta-apps-authorized-certificates appengineappsauthorizedCertificatesget" [
+export def "v1beta-apps-authorized-certificates get" [
   apps_id: string
   authorized_certificates_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -391,7 +400,7 @@ export def "v1beta-apps-authorized-certificates appengineappsauthorizedCertifica
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, authorized_certificates_id: $authorized_certificates_id} | format pattern "/v1beta/apps/{apps_id}/authorizedCertificates/{authorized_certificates_id}") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), authorized_certificates_id: (encode-path-segment $authorized_certificates_id)} | format pattern "/v1beta/apps/{apps_id}/authorizedCertificates/{authorized_certificates_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -403,7 +412,7 @@ export def "v1beta-apps-authorized-certificates appengineappsauthorizedCertifica
 # operationId: appengine.apps.authorizedCertificates.patch
 # --certificateRawData shape: {privateKey?: string, publicCertificate?: string}
 # --managedCertificate shape: {lastRenewalTime?: string, status?: "MANAGEMENT_STATUS_UNSPECIFIED"|"OK"|"PENDING"|"FAILED_RETRYING_NOT_VISIBLE"|"FAILED_PERMANENT"|"FAILED_RETRYING_CAA_FORBIDDEN"|"FAILED_RETRYING_CAA_CHECKING"}
-export def "v1beta-apps-authorized-certificates appengineappsauthorizedCertificatespatch" [
+export def "v1beta-apps-authorized-certificates update" [
   apps_id: string
   authorized_certificates_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -429,30 +438,30 @@ export def "v1beta-apps-authorized-certificates appengineappsauthorizedCertifica
   --certificate-raw-data: record # An SSL certificate obtained from a certificate authority. — shape: {privateKey?: string, publicCertificate?: string}
   --display-name: string # The user-specified display name of the certificate. This is not guaranteed to be unique. Example: My Certificate.
   --domain-mappings-count: int # Aggregate count of the domain mappings with this certificate mapped. This count includes domain mappings on applications for which the user does not have VIEWER permissions.Only returned by GET or LIST requests when specifically requested by the view=FULL_CERTIFICATE option.@OutputOnly (format: int32)
-  --domain-names: list # Topmost applicable domains of this certificate. This certificate applies to these domains and their subdomains. Example: example.com.@OutputOnly
+  --domain-names: list<string> # Topmost applicable domains of this certificate. This certificate applies to these domains and their subdomains. Example: example.com.@OutputOnly
   --expire-time: string # The time when this certificate expires. To update the renewal time on this certificate, upload an SSL certificate with a different expiration time using AuthorizedCertificates.UpdateAuthorizedCertificate.@OutputOnly (format: google-datetime)
   --id: string # Relative name of the certificate. This is a unique value autogenerated on AuthorizedCertificate resource creation. Example: 12345.@OutputOnly
   --managed-certificate: record # A certificate managed by App Engine. — shape: {lastRenewalTime?: string, status?: "MANAGEMENT_STATUS_UNSPECIFIED"|"OK"|"PENDING"|"FAILED_RETRYING_NOT_VISIBLE"|"FAILED_PERMANENT"|"FAILED_RETRYING_CAA_FORBIDDEN"|"FAILED_RETRYING_CAA_CHECKING"}
   --name: string # Full path to the AuthorizedCertificate resource in the API. Example: apps/myapp/authorizedCertificates/12345.@OutputOnly
-  --visible-domain-mappings: list # The full paths to user visible Domain Mapping resources that have this certificate mapped. Example: apps/myapp/domainMappings/example.com.This may not represent the full list of mapped domain mappings if the user does not have VIEWER permissions on all of the applications that have this certificate mapped. See domain_mappings_count for a complete count.Only returned by GET or LIST requests when specifically requested by the view=FULL_CERTIFICATE option.@OutputOnly
+  --visible-domain-mappings: list<string> # The full paths to user visible Domain Mapping resources that have this certificate mapped. Example: apps/myapp/domainMappings/example.com.This may not represent the full list of mapped domain mappings if the user does not have VIEWER permissions on all of the applications that have this certificate mapped. See domain_mappings_count for a complete count.Only returned by GET or LIST requests when specifically requested by the view=FULL_CERTIFICATE option.@OutputOnly
 ]: any -> record<certificateRawData: record<privateKey: string, publicCertificate: string>, displayName: string, domainMappingsCount: int, domainNames: list<string>, expireTime: string, id: string, managedCertificate: record<lastRenewalTime: string, status: string>, name: string, visibleDomainMappings: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, authorized_certificates_id: $authorized_certificates_id} | format pattern "/v1beta/apps/{apps_id}/authorizedCertificates/{authorized_certificates_id}") $qp)
-  let body = {"certificateRawData": $certificate_raw_data, "displayName": $display_name, "domainMappingsCount": $domain_mappings_count, "domainNames": $domain_names, "expireTime": $expire_time, "id": $id, "managedCertificate": $managed_certificate, "name": $name, "visibleDomainMappings": $visible_domain_mappings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), authorized_certificates_id: (encode-path-segment $authorized_certificates_id)} | format pattern "/v1beta/apps/{apps_id}/authorizedCertificates/{authorized_certificates_id}") $qp)
+  let req_body = {"certificateRawData": $certificate_raw_data, "displayName": $display_name, "domainMappingsCount": $domain_mappings_count, "domainNames": $domain_names, "expireTime": $expire_time, "id": $id, "managedCertificate": $managed_certificate, "name": $name, "visibleDomainMappings": $visible_domain_mappings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all domains the user is authorized to administer.
 #
 # GET /v1beta/apps/{appsId}/authorizedDomains
 # operationId: appengine.apps.authorizedDomains.list
-export def "v1beta-apps-authorized-domains appengineappsauthorizedDomainslist" [
+export def "v1beta-apps-authorized-domains list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -479,7 +488,7 @@ export def "v1beta-apps-authorized-domains appengineappsauthorizedDomainslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id} | format pattern "/v1beta/apps/{apps_id}/authorizedDomains") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/authorizedDomains") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -489,7 +498,7 @@ export def "v1beta-apps-authorized-domains appengineappsauthorizedDomainslist" [
 #
 # GET /v1beta/apps/{appsId}/domainMappings
 # operationId: appengine.apps.domainMappings.list
-export def "v1beta-apps-domain-mappings appengineappsdomainMappingslist" [
+export def "v1beta-apps-domain-mappings list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -516,7 +525,7 @@ export def "v1beta-apps-domain-mappings appengineappsdomainMappingslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id} | format pattern "/v1beta/apps/{apps_id}/domainMappings") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/domainMappings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -528,7 +537,7 @@ export def "v1beta-apps-domain-mappings appengineappsdomainMappingslist" [
 # operationId: appengine.apps.domainMappings.create
 # --resourceRecords item shape: {name?: string, rrdata?: string, type?: "A"|"AAAA"|"CNAME"}
 # --sslSettings shape: {certificateId?: string, pendingManagedCertificateId?: string, sslManagementType?: "AUTOMATIC"|"MANUAL"}
-export def "v1beta-apps-domain-mappings appengineappsdomainMappingscreate" [
+export def "v1beta-apps-domain-mappings create" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,19 +568,19 @@ export def "v1beta-apps-domain-mappings appengineappsdomainMappingscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "overrideStrategy" $override_strategy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id} | format pattern "/v1beta/apps/{apps_id}/domainMappings") $qp)
-  let body = {"id": $id, "name": $name, "resourceRecords": $resource_records, "sslSettings": $ssl_settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/domainMappings") $qp)
+  let req_body = {"id": $id, "name": $name, "resourceRecords": $resource_records, "sslSettings": $ssl_settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the specified domain mapping. A user must be authorized to administer the associated domain in order to delete a DomainMapping resource.
 #
 # DELETE /v1beta/apps/{appsId}/domainMappings/{domainMappingsId}
 # operationId: appengine.apps.domainMappings.delete
-export def "v1beta-apps-domain-mappings appengineappsdomainMappingsdelete" [
+export def "v1beta-apps-domain-mappings delete" [
   apps_id: string
   domain_mappings_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -597,7 +606,7 @@ export def "v1beta-apps-domain-mappings appengineappsdomainMappingsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, domain_mappings_id: $domain_mappings_id} | format pattern "/v1beta/apps/{apps_id}/domainMappings/{domain_mappings_id}") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), domain_mappings_id: (encode-path-segment $domain_mappings_id)} | format pattern "/v1beta/apps/{apps_id}/domainMappings/{domain_mappings_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -607,7 +616,7 @@ export def "v1beta-apps-domain-mappings appengineappsdomainMappingsdelete" [
 #
 # GET /v1beta/apps/{appsId}/domainMappings/{domainMappingsId}
 # operationId: appengine.apps.domainMappings.get
-export def "v1beta-apps-domain-mappings appengineappsdomainMappingsget" [
+export def "v1beta-apps-domain-mappings get" [
   apps_id: string
   domain_mappings_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -633,7 +642,7 @@ export def "v1beta-apps-domain-mappings appengineappsdomainMappingsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, domain_mappings_id: $domain_mappings_id} | format pattern "/v1beta/apps/{apps_id}/domainMappings/{domain_mappings_id}") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), domain_mappings_id: (encode-path-segment $domain_mappings_id)} | format pattern "/v1beta/apps/{apps_id}/domainMappings/{domain_mappings_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -645,7 +654,7 @@ export def "v1beta-apps-domain-mappings appengineappsdomainMappingsget" [
 # operationId: appengine.apps.domainMappings.patch
 # --resourceRecords item shape: {name?: string, rrdata?: string, type?: "A"|"AAAA"|"CNAME"}
 # --sslSettings shape: {certificateId?: string, pendingManagedCertificateId?: string, sslManagementType?: "AUTOMATIC"|"MANUAL"}
-export def "v1beta-apps-domain-mappings appengineappsdomainMappingspatch" [
+export def "v1beta-apps-domain-mappings update" [
   apps_id: string
   domain_mappings_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -677,19 +686,19 @@ export def "v1beta-apps-domain-mappings appengineappsdomainMappingspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, domain_mappings_id: $domain_mappings_id} | format pattern "/v1beta/apps/{apps_id}/domainMappings/{domain_mappings_id}") $qp)
-  let body = {"id": $id, "name": $name, "resourceRecords": $resource_records, "sslSettings": $ssl_settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), domain_mappings_id: (encode-path-segment $domain_mappings_id)} | format pattern "/v1beta/apps/{apps_id}/domainMappings/{domain_mappings_id}") $qp)
+  let req_body = {"id": $id, "name": $name, "resourceRecords": $resource_records, "sslSettings": $ssl_settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the firewall rules of an application.
 #
 # GET /v1beta/apps/{appsId}/firewall/ingressRules
 # operationId: appengine.apps.firewall.ingressRules.list
-export def "v1beta-apps-firewall-ingress-rules appengineappsfirewallingressRuleslist" [
+export def "v1beta-apps-firewall-ingress-rules list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -717,7 +726,7 @@ export def "v1beta-apps-firewall-ingress-rules appengineappsfirewallingressRules
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "matchingAddress" $matching_address "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id} | format pattern "/v1beta/apps/{apps_id}/firewall/ingressRules") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/firewall/ingressRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -727,7 +736,7 @@ export def "v1beta-apps-firewall-ingress-rules appengineappsfirewallingressRules
 #
 # POST /v1beta/apps/{appsId}/firewall/ingressRules
 # operationId: appengine.apps.firewall.ingressRules.create
-export def "v1beta-apps-firewall-ingress-rules appengineappsfirewallingressRulescreate" [
+export def "v1beta-apps-firewall-ingress-rules create" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -757,19 +766,19 @@ export def "v1beta-apps-firewall-ingress-rules appengineappsfirewallingressRules
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id} | format pattern "/v1beta/apps/{apps_id}/firewall/ingressRules") $qp)
-  let body = {"action": $action, "description": $description, "priority": $priority, "sourceRange": $source_range} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/firewall/ingressRules") $qp)
+  let req_body = {"action": $action, "description": $description, "priority": $priority, "sourceRange": $source_range} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the specified firewall rule.
 #
 # DELETE /v1beta/apps/{appsId}/firewall/ingressRules/{ingressRulesId}
 # operationId: appengine.apps.firewall.ingressRules.delete
-export def "v1beta-apps-firewall-ingress-rules appengineappsfirewallingressRulesdelete" [
+export def "v1beta-apps-firewall-ingress-rules delete" [
   apps_id: string
   ingress_rules_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -795,7 +804,7 @@ export def "v1beta-apps-firewall-ingress-rules appengineappsfirewallingressRules
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, ingress_rules_id: $ingress_rules_id} | format pattern "/v1beta/apps/{apps_id}/firewall/ingressRules/{ingress_rules_id}") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), ingress_rules_id: (encode-path-segment $ingress_rules_id)} | format pattern "/v1beta/apps/{apps_id}/firewall/ingressRules/{ingress_rules_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -805,7 +814,7 @@ export def "v1beta-apps-firewall-ingress-rules appengineappsfirewallingressRules
 #
 # GET /v1beta/apps/{appsId}/firewall/ingressRules/{ingressRulesId}
 # operationId: appengine.apps.firewall.ingressRules.get
-export def "v1beta-apps-firewall-ingress-rules appengineappsfirewallingressRulesget" [
+export def "v1beta-apps-firewall-ingress-rules get" [
   apps_id: string
   ingress_rules_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -831,7 +840,7 @@ export def "v1beta-apps-firewall-ingress-rules appengineappsfirewallingressRules
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, ingress_rules_id: $ingress_rules_id} | format pattern "/v1beta/apps/{apps_id}/firewall/ingressRules/{ingress_rules_id}") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), ingress_rules_id: (encode-path-segment $ingress_rules_id)} | format pattern "/v1beta/apps/{apps_id}/firewall/ingressRules/{ingress_rules_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -841,7 +850,7 @@ export def "v1beta-apps-firewall-ingress-rules appengineappsfirewallingressRules
 #
 # PATCH /v1beta/apps/{appsId}/firewall/ingressRules/{ingressRulesId}
 # operationId: appengine.apps.firewall.ingressRules.patch
-export def "v1beta-apps-firewall-ingress-rules appengineappsfirewallingressRulespatch" [
+export def "v1beta-apps-firewall-ingress-rules update" [
   apps_id: string
   ingress_rules_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -873,12 +882,12 @@ export def "v1beta-apps-firewall-ingress-rules appengineappsfirewallingressRules
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, ingress_rules_id: $ingress_rules_id} | format pattern "/v1beta/apps/{apps_id}/firewall/ingressRules/{ingress_rules_id}") $qp)
-  let body = {"action": $action, "description": $description, "priority": $priority, "sourceRange": $source_range} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), ingress_rules_id: (encode-path-segment $ingress_rules_id)} | format pattern "/v1beta/apps/{apps_id}/firewall/ingressRules/{ingress_rules_id}") $qp)
+  let req_body = {"action": $action, "description": $description, "priority": $priority, "sourceRange": $source_range} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Replaces the entire firewall ruleset in one bulk operation. This overrides and replaces the rules of an existing firewall with the new rules.If the final rule does not match traffic with the '*' wildcard IP range, then an "allow all" rule is explicitly added to the end of the list.
@@ -886,7 +895,7 @@ export def "v1beta-apps-firewall-ingress-rules appengineappsfirewallingressRules
 # POST /v1beta/apps/{appsId}/firewall/ingressRules:batchUpdate
 # operationId: appengine.apps.firewall.ingressRules.batchUpdate
 # --ingressRules item shape: {action?: "UNSPECIFIED_ACTION"|"ALLOW"|"DENY", description?: string, priority?: int, sourceRange?: string}
-export def "v1beta-apps-firewall-ingress-rules-batch-update appengineappsfirewallingressRulesbatchUpdate" [
+export def "v1beta-apps-firewall-ingress-rules-batch-update update" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -913,19 +922,19 @@ export def "v1beta-apps-firewall-ingress-rules-batch-update appengineappsfirewal
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id} | format pattern "/v1beta/apps/{apps_id}/firewall/ingressRules:batchUpdate") $qp)
-  let body = {"ingressRules": $ingress_rules} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/firewall/ingressRules:batchUpdate") $qp)
+  let req_body = {"ingressRules": $ingress_rules} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists information about the supported locations for this service.
 #
 # GET /v1beta/apps/{appsId}/locations
 # operationId: appengine.apps.locations.list
-export def "v1beta-apps-locations appengineappslocationslist" [
+export def "v1beta-apps-locations list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -953,7 +962,7 @@ export def "v1beta-apps-locations appengineappslocationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id} | format pattern "/v1beta/apps/{apps_id}/locations") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/locations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -963,7 +972,7 @@ export def "v1beta-apps-locations appengineappslocationslist" [
 #
 # GET /v1beta/apps/{appsId}/locations/{locationsId}
 # operationId: appengine.apps.locations.get
-export def "v1beta-apps-locations appengineappslocationsget" [
+export def "v1beta-apps-locations get" [
   apps_id: string
   locations_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -989,7 +998,7 @@ export def "v1beta-apps-locations appengineappslocationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, locations_id: $locations_id} | format pattern "/v1beta/apps/{apps_id}/locations/{locations_id}") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), locations_id: (encode-path-segment $locations_id)} | format pattern "/v1beta/apps/{apps_id}/locations/{locations_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -999,7 +1008,7 @@ export def "v1beta-apps-locations appengineappslocationsget" [
 #
 # GET /v1beta/apps/{appsId}/operations
 # operationId: appengine.apps.operations.list
-export def "v1beta-apps-operations appengineappsoperationslist" [
+export def "v1beta-apps-operations list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1027,7 +1036,7 @@ export def "v1beta-apps-operations appengineappsoperationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id} | format pattern "/v1beta/apps/{apps_id}/operations") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1037,7 +1046,7 @@ export def "v1beta-apps-operations appengineappsoperationslist" [
 #
 # GET /v1beta/apps/{appsId}/operations/{operationsId}
 # operationId: appengine.apps.operations.get
-export def "v1beta-apps-operations appengineappsoperationsget" [
+export def "v1beta-apps-operations get" [
   apps_id: string
   operations_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1063,7 +1072,7 @@ export def "v1beta-apps-operations appengineappsoperationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, operations_id: $operations_id} | format pattern "/v1beta/apps/{apps_id}/operations/{operations_id}") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), operations_id: (encode-path-segment $operations_id)} | format pattern "/v1beta/apps/{apps_id}/operations/{operations_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1073,7 +1082,7 @@ export def "v1beta-apps-operations appengineappsoperationsget" [
 #
 # GET /v1beta/apps/{appsId}/services
 # operationId: appengine.apps.services.list
-export def "v1beta-apps-services appengineappsserviceslist" [
+export def "v1beta-apps-services list" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1100,7 +1109,7 @@ export def "v1beta-apps-services appengineappsserviceslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id} | format pattern "/v1beta/apps/{apps_id}/services") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}/services") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1110,7 +1119,7 @@ export def "v1beta-apps-services appengineappsserviceslist" [
 #
 # DELETE /v1beta/apps/{appsId}/services/{servicesId}
 # operationId: appengine.apps.services.delete
-export def "v1beta-apps-services appengineappsservicesdelete" [
+export def "v1beta-apps-services delete" [
   apps_id: string
   services_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1136,7 +1145,7 @@ export def "v1beta-apps-services appengineappsservicesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, services_id: $services_id} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1146,7 +1155,7 @@ export def "v1beta-apps-services appengineappsservicesdelete" [
 #
 # GET /v1beta/apps/{appsId}/services/{servicesId}
 # operationId: appengine.apps.services.get
-export def "v1beta-apps-services appengineappsservicesget" [
+export def "v1beta-apps-services get" [
   apps_id: string
   services_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1172,7 +1181,7 @@ export def "v1beta-apps-services appengineappsservicesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, services_id: $services_id} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1184,7 +1193,7 @@ export def "v1beta-apps-services appengineappsservicesget" [
 # operationId: appengine.apps.services.patch
 # --networkSettings shape: {ingressTrafficAllowed?: "INGRESS_TRAFFIC_ALLOWED_UNSPECIFIED"|"INGRESS_TRAFFIC_ALLOWED_ALL"|"INGRESS_TRAFFIC_ALLOWED_INTERNAL_ONLY"|"INGRESS_TRAFFIC_ALLOWED_INTERNAL_AND_LB"}
 # --split shape: {allocations?: record, shardBy?: "UNSPECIFIED"|"COOKIE"|"IP"|"RANDOM"}
-export def "v1beta-apps-services appengineappsservicespatch" [
+export def "v1beta-apps-services update" [
   apps_id: string
   services_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1218,19 +1227,19 @@ export def "v1beta-apps-services appengineappsservicespatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "migrateTraffic" $migrate_traffic "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, services_id: $services_id} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}") $qp)
-  let body = {"id": $id, "labels": $labels, "name": $name, "networkSettings": $network_settings, "split": $body_split} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}") $qp)
+  let req_body = {"id": $id, "labels": $labels, "name": $name, "networkSettings": $network_settings, "split": $body_split} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the versions of a service.
 #
 # GET /v1beta/apps/{appsId}/services/{servicesId}/versions
 # operationId: appengine.apps.services.versions.list
-export def "v1beta-apps-services-versions appengineappsservicesversionslist" [
+export def "v1beta-apps-services-versions list" [
   apps_id: string
   services_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1259,7 +1268,7 @@ export def "v1beta-apps-services-versions appengineappsservicesversionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, services_id: $services_id} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1277,16 +1286,16 @@ export def "v1beta-apps-services-versions appengineappsservicesversionslist" [
 # --entrypoint shape: {shell?: string}
 # --errorHandlers item shape: {errorCode?: "ERROR_CODE_UNSPECIFIED"|"ERROR_CODE_DEFAULT"|"ERROR_CODE_OVER_QUOTA"|"ERROR_CODE_DOS_API_DENIAL"|"ERROR_CODE_TIMEOUT", mimeType?: string, staticFile?: string}
 # --flexibleRuntimeSettings shape: {operatingSystem?: string, runtimeVersion?: string}
-# --handlers item shape: {apiEndpoint?: record, authFailAction?: "AUTH_FAIL_ACTION_UNSPECIFIED"|"AUTH_FAIL_ACTION_REDIRECT"|"AUTH_FAIL_ACTION_UNAUTHORIZED", login?: "LOGIN_UNSPECIFIED"|"LOGIN_OPTIONAL"|"LOGIN_ADMIN"|"LOGIN_REQUIRED", redirectHttpResponseCode?: "REDIRECT_HTTP_RESPONSE_CODE_UNSPECIFIED"|"REDIRECT_HTTP_RESPONSE_CODE_301"|"REDIRECT_HTTP_RESPONSE_CODE_302"|"REDIRECT_HTTP_RESPONSE_CODE_303"|"REDIRECT_HTTP_RESPONSE_CODE_307", script?: record, securityLevel?: "SECURE_UNSPECIFIED"|"SECURE_DEFAULT"|"SECURE_NEVER"|"SECURE_OPTIONAL"|"SECURE_ALWAYS", staticFiles?: record, urlRegex?: string}
+# --handlers item shape: {apiEndpoint?: record, authFailAction?: "AUTH_FAIL_ACTION_UNSPECIFIED"|"AUTH_FAIL_ACTION_REDIRECT"|"AUTH_FAIL_ACTION_UNAUTHORIZED", login?: "LOGIN_UNSPECIFIED"|"LOGIN_OPTIONAL"|"LOGIN_ADMIN"|"LOGIN_REQUIRED", redirectHttpResponseCode?: "REDIRECT_HTTP_RESPONSE_CODE_UNSPECIFIED"|"REDIRECT_HTTP_RESPONSE_CODE_301"|"REDIRECT_HTTP_RESPONSE_CODE_302"|"REDIRECT_HTTP_RESPONSE_CODE_303"|"REDIRECT_HTTP_RESPONSE_CODE_307", script?: record, ... (3 more fields)}
 # --healthCheck shape: {checkInterval?: string, disableHealthCheck?: bool, healthyThreshold?: int, host?: string, restartThreshold?: int, timeout?: string, unhealthyThreshold?: int}
 # --libraries item shape: {name?: string, version?: string}
 # --livenessCheck shape: {checkInterval?: string, failureThreshold?: int, host?: string, initialDelay?: string, path?: string, successThreshold?: int, timeout?: string}
 # --manualScaling shape: {instances?: int}
-# --network shape: {forwardedPorts?: list, instanceIpMode?: "INSTANCE_IP_MODE_UNSPECIFIED"|"EXTERNAL"|"INTERNAL", instanceTag?: string, name?: string, sessionAffinity?: bool, subnetworkName?: string}
+# --network shape: {forwardedPorts?: list<string>, instanceIpMode?: "INSTANCE_IP_MODE_UNSPECIFIED"|"EXTERNAL"|"INTERNAL", instanceTag?: string, name?: string, sessionAffinity?: bool, subnetworkName?: string}
 # --readinessCheck shape: {appStartTimeout?: string, checkInterval?: string, failureThreshold?: int, host?: string, path?: string, successThreshold?: int, timeout?: string}
 # --resources shape: {cpu?: float, diskGb?: float, kmsKeyReference?: string, memoryGb?: float, volumes?: list}
 # --vpcAccessConnector shape: {egressSetting?: "EGRESS_SETTING_UNSPECIFIED"|"ALL_TRAFFIC"|"PRIVATE_IP_RANGES", name?: string}
-export def "v1beta-apps-services-versions appengineappsservicesversionscreate" [
+export def "v1beta-apps-services-versions create" [
   apps_id: string
   services_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1325,16 +1334,16 @@ export def "v1beta-apps-services-versions appengineappsservicesversionscreate" [
   --env-variables: record # Environment variables available to the application.Only returned in GET requests if view=FULL is set.
   --error-handlers: list # Custom static error pages. Limited to 10KB per page.Only returned in GET requests if view=FULL is set. — item shape: {errorCode?: "ERROR_CODE_UNSPECIFIED"|"ERROR_CODE_DEFAULT"|"ERROR_CODE_OVER_QUOTA"|"ERROR_CODE_DOS_API_DENIAL"|"ERROR_CODE_TIMEOUT", mimeType?: string, staticFile?: string}
   --flexible-runtime-settings: record # Runtime settings for the App Engine flexible environment. — shape: {operatingSystem?: string, runtimeVersion?: string}
-  --handlers: list # An ordered list of URL-matching patterns that should be applied to incoming requests. The first matching URL handles the request and other request handlers are not attempted.Only returned in GET requests if view=FULL is set. — item shape: {apiEndpoint?: record, authFailAction?: "AUTH_FAIL_ACTION_UNSPECIFIED"|"AUTH_FAIL_ACTION_REDIRECT"|"AUTH_FAIL_ACTION_UNAUTHORIZED", login?: "LOGIN_UNSPECIFIED"|"LOGIN_OPTIONAL"|"LOGIN_ADMIN"|"LOGIN_REQUIRED", redirectHttpResponseCode?: "REDIRECT_HTTP_RESPONSE_CODE_UNSPECIFIED"|"REDIRECT_HTTP_RESPONSE_CODE_301"|"REDIRECT_HTTP_RESPONSE_CODE_302"|"REDIRECT_HTTP_RESPONSE_CODE_303"|"REDIRECT_HTTP_RESPONSE_CODE_307", script?: record, securityLevel?: "SECURE_UNSPECIFIED"|"SECURE_DEFAULT"|"SECURE_NEVER"|"SECURE_OPTIONAL"|"SECURE_ALWAYS", staticFiles?: record, urlRegex?: string}
+  --handlers: list # An ordered list of URL-matching patterns that should be applied to incoming requests. The first matching URL handles the request and other request handlers are not attempted.Only returned in GET requests if view=FULL is set. — item shape: {apiEndpoint?: record, authFailAction?: "AUTH_FAIL_ACTION_UNSPECIFIED"|"AUTH_FAIL_ACTION_REDIRECT"|"AUTH_FAIL_ACTION_UNAUTHORIZED", login?: "LOGIN_UNSPECIFIED"|"LOGIN_OPTIONAL"|"LOGIN_ADMIN"|"LOGIN_REQUIRED", redirectHttpResponseCode?: "REDIRECT_HTTP_RESPONSE_CODE_UNSPECIFIED"|"REDIRECT_HTTP_RESPONSE_CODE_301"|"REDIRECT_HTTP_RESPONSE_CODE_302"|"REDIRECT_HTTP_RESPONSE_CODE_303"|"REDIRECT_HTTP_RESPONSE_CODE_307", script?: record, ... (3 more fields)}
   --health-check: record # Health checking configuration for VM instances. Unhealthy instances are killed and replaced with new instances. Only applicable for instances in App Engine flexible environment. — shape: {checkInterval?: string, disableHealthCheck?: bool, healthyThreshold?: int, host?: string, restartThreshold?: int, timeout?: string, unhealthyThreshold?: int}
   --id: string # Relative name of the version within the service. Example: v1. Version names can contain only lowercase letters, numbers, or hyphens. Reserved names: "default", "latest", and any name with the prefix "ah-".
-  --inbound-services: list # Before an application can receive email or XMPP messages, the application must be configured to enable the service.
+  --inbound-services: list<string> # Before an application can receive email or XMPP messages, the application must be configured to enable the service.
   --instance-class: string # Instance class that is used to run this version. Valid values are: AutomaticScaling: F1, F2, F4, F4_1G ManualScaling or BasicScaling: B1, B2, B4, B8, B4_1GDefaults to F1 for AutomaticScaling and B1 for ManualScaling or BasicScaling.
   --libraries: list # Configuration for third-party Python runtime libraries that are required by the application.Only returned in GET requests if view=FULL is set. — item shape: {name?: string, version?: string}
   --liveness-check: record # Health checking configuration for VM instances. Unhealthy instances are killed and replaced with new instances. — shape: {checkInterval?: string, failureThreshold?: int, host?: string, initialDelay?: string, path?: string, successThreshold?: int, timeout?: string}
   --manual-scaling: record # A service with manual scaling runs continuously, allowing you to perform complex initialization and rely on the state of its memory over time. — shape: {instances?: int}
   --name: string # Full path to the Version resource in the API. Example: apps/myapp/services/default/versions/v1.@OutputOnly
-  --network: record # Extra network settings. Only applicable in the App Engine flexible environment. — shape: {forwardedPorts?: list, instanceIpMode?: "INSTANCE_IP_MODE_UNSPECIFIED"|"EXTERNAL"|"INTERNAL", instanceTag?: string, name?: string, sessionAffinity?: bool, subnetworkName?: string}
+  --network: record # Extra network settings. Only applicable in the App Engine flexible environment. — shape: {forwardedPorts?: list<string>, instanceIpMode?: "INSTANCE_IP_MODE_UNSPECIFIED"|"EXTERNAL"|"INTERNAL", instanceTag?: string, name?: string, sessionAffinity?: bool, subnetworkName?: string}
   --nobuild-files-regex: string # Files that match this pattern will not be built into this version. Only applicable for Go runtimes.Only returned in GET requests if view=FULL is set.
   --readiness-check: record # Readiness checking configuration for VM instances. Unhealthy instances are removed from traffic rotation. — shape: {appStartTimeout?: string, checkInterval?: string, failureThreshold?: int, host?: string, path?: string, successThreshold?: int, timeout?: string}
   --resources: record # Machine resources for a version. — shape: {cpu?: float, diskGb?: float, kmsKeyReference?: string, memoryGb?: float, volumes?: list}
@@ -1348,25 +1357,25 @@ export def "v1beta-apps-services-versions appengineappsservicesversionscreate" [
   --version-url: string # Serving URL for this version. Example: "https://myversion-dot-myservice-dot-myapp.appspot.com"@OutputOnly
   --vm: oneof<nothing, bool> # Whether to deploy this version in a container on a virtual machine.
   --vpc-access-connector: record # VPC access connector specification. — shape: {egressSetting?: "EGRESS_SETTING_UNSPECIFIED"|"ALL_TRAFFIC"|"PRIVATE_IP_RANGES", name?: string}
-  --zones: list # The Google Compute Engine zones that are supported by this version in the App Engine flexible environment. Deprecated.
+  --zones: list<string> # The Google Compute Engine zones that are supported by this version in the App Engine flexible environment. Deprecated.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, services_id: $services_id} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions") $qp)
-  let body = {"apiConfig": $api_config, "appEngineApis": $app_engine_apis, "automaticScaling": $automatic_scaling, "basicScaling": $basic_scaling, "betaSettings": $beta_settings, "buildEnvVariables": $build_env_variables, "createTime": $create_time, "createdBy": $created_by, "defaultExpiration": $default_expiration, "deployment": $deployment, "diskUsageBytes": $disk_usage_bytes, "endpointsApiService": $endpoints_api_service, "entrypoint": $entrypoint, "env": $body_env, "envVariables": $env_variables, "errorHandlers": $error_handlers, "flexibleRuntimeSettings": $flexible_runtime_settings, "handlers": $handlers, "healthCheck": $health_check, "id": $id, "inboundServices": $inbound_services, "instanceClass": $instance_class, "libraries": $libraries, "livenessCheck": $liveness_check, "manualScaling": $manual_scaling, "name": $name, "network": $network, "nobuildFilesRegex": $nobuild_files_regex, "readinessCheck": $readiness_check, "resources": $resources, "runtime": $runtime, "runtimeApiVersion": $runtime_api_version, "runtimeChannel": $runtime_channel, "runtimeMainExecutablePath": $runtime_main_executable_path, "serviceAccount": $service_account, "servingStatus": $serving_status, "threadsafe": $threadsafe, "versionUrl": $version_url, "vm": $vm, "vpcAccessConnector": $vpc_access_connector, "zones": $zones} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions") $qp)
+  let req_body = {"apiConfig": $api_config, "appEngineApis": $app_engine_apis, "automaticScaling": $automatic_scaling, "basicScaling": $basic_scaling, "betaSettings": $beta_settings, "buildEnvVariables": $build_env_variables, "createTime": $create_time, "createdBy": $created_by, "defaultExpiration": $default_expiration, "deployment": $deployment, "diskUsageBytes": $disk_usage_bytes, "endpointsApiService": $endpoints_api_service, "entrypoint": $entrypoint, "env": $body_env, "envVariables": $env_variables, "errorHandlers": $error_handlers, "flexibleRuntimeSettings": $flexible_runtime_settings, "handlers": $handlers, "healthCheck": $health_check, "id": $id, "inboundServices": $inbound_services, "instanceClass": $instance_class, "libraries": $libraries, "livenessCheck": $liveness_check, "manualScaling": $manual_scaling, "name": $name, "network": $network, "nobuildFilesRegex": $nobuild_files_regex, "readinessCheck": $readiness_check, "resources": $resources, "runtime": $runtime, "runtimeApiVersion": $runtime_api_version, "runtimeChannel": $runtime_channel, "runtimeMainExecutablePath": $runtime_main_executable_path, "serviceAccount": $service_account, "servingStatus": $serving_status, "threadsafe": $threadsafe, "versionUrl": $version_url, "vm": $vm, "vpcAccessConnector": $vpc_access_connector, "zones": $zones} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an existing Version resource.
 #
 # DELETE /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}
 # operationId: appengine.apps.services.versions.delete
-export def "v1beta-apps-services-versions appengineappsservicesversionsdelete" [
+export def "v1beta-apps-services-versions delete" [
   apps_id: string
   services_id: string
   versions_id: string
@@ -1393,7 +1402,7 @@ export def "v1beta-apps-services-versions appengineappsservicesversionsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, services_id: $services_id, versions_id: $versions_id} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id), versions_id: (encode-path-segment $versions_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1403,7 +1412,7 @@ export def "v1beta-apps-services-versions appengineappsservicesversionsdelete" [
 #
 # GET /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}
 # operationId: appengine.apps.services.versions.get
-export def "v1beta-apps-services-versions appengineappsservicesversionsget" [
+export def "v1beta-apps-services-versions get" [
   apps_id: string
   services_id: string
   versions_id: string
@@ -1431,7 +1440,7 @@ export def "v1beta-apps-services-versions appengineappsservicesversionsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, services_id: $services_id, versions_id: $versions_id} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id), versions_id: (encode-path-segment $versions_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1449,16 +1458,16 @@ export def "v1beta-apps-services-versions appengineappsservicesversionsget" [
 # --entrypoint shape: {shell?: string}
 # --errorHandlers item shape: {errorCode?: "ERROR_CODE_UNSPECIFIED"|"ERROR_CODE_DEFAULT"|"ERROR_CODE_OVER_QUOTA"|"ERROR_CODE_DOS_API_DENIAL"|"ERROR_CODE_TIMEOUT", mimeType?: string, staticFile?: string}
 # --flexibleRuntimeSettings shape: {operatingSystem?: string, runtimeVersion?: string}
-# --handlers item shape: {apiEndpoint?: record, authFailAction?: "AUTH_FAIL_ACTION_UNSPECIFIED"|"AUTH_FAIL_ACTION_REDIRECT"|"AUTH_FAIL_ACTION_UNAUTHORIZED", login?: "LOGIN_UNSPECIFIED"|"LOGIN_OPTIONAL"|"LOGIN_ADMIN"|"LOGIN_REQUIRED", redirectHttpResponseCode?: "REDIRECT_HTTP_RESPONSE_CODE_UNSPECIFIED"|"REDIRECT_HTTP_RESPONSE_CODE_301"|"REDIRECT_HTTP_RESPONSE_CODE_302"|"REDIRECT_HTTP_RESPONSE_CODE_303"|"REDIRECT_HTTP_RESPONSE_CODE_307", script?: record, securityLevel?: "SECURE_UNSPECIFIED"|"SECURE_DEFAULT"|"SECURE_NEVER"|"SECURE_OPTIONAL"|"SECURE_ALWAYS", staticFiles?: record, urlRegex?: string}
+# --handlers item shape: {apiEndpoint?: record, authFailAction?: "AUTH_FAIL_ACTION_UNSPECIFIED"|"AUTH_FAIL_ACTION_REDIRECT"|"AUTH_FAIL_ACTION_UNAUTHORIZED", login?: "LOGIN_UNSPECIFIED"|"LOGIN_OPTIONAL"|"LOGIN_ADMIN"|"LOGIN_REQUIRED", redirectHttpResponseCode?: "REDIRECT_HTTP_RESPONSE_CODE_UNSPECIFIED"|"REDIRECT_HTTP_RESPONSE_CODE_301"|"REDIRECT_HTTP_RESPONSE_CODE_302"|"REDIRECT_HTTP_RESPONSE_CODE_303"|"REDIRECT_HTTP_RESPONSE_CODE_307", script?: record, ... (3 more fields)}
 # --healthCheck shape: {checkInterval?: string, disableHealthCheck?: bool, healthyThreshold?: int, host?: string, restartThreshold?: int, timeout?: string, unhealthyThreshold?: int}
 # --libraries item shape: {name?: string, version?: string}
 # --livenessCheck shape: {checkInterval?: string, failureThreshold?: int, host?: string, initialDelay?: string, path?: string, successThreshold?: int, timeout?: string}
 # --manualScaling shape: {instances?: int}
-# --network shape: {forwardedPorts?: list, instanceIpMode?: "INSTANCE_IP_MODE_UNSPECIFIED"|"EXTERNAL"|"INTERNAL", instanceTag?: string, name?: string, sessionAffinity?: bool, subnetworkName?: string}
+# --network shape: {forwardedPorts?: list<string>, instanceIpMode?: "INSTANCE_IP_MODE_UNSPECIFIED"|"EXTERNAL"|"INTERNAL", instanceTag?: string, name?: string, sessionAffinity?: bool, subnetworkName?: string}
 # --readinessCheck shape: {appStartTimeout?: string, checkInterval?: string, failureThreshold?: int, host?: string, path?: string, successThreshold?: int, timeout?: string}
 # --resources shape: {cpu?: float, diskGb?: float, kmsKeyReference?: string, memoryGb?: float, volumes?: list}
 # --vpcAccessConnector shape: {egressSetting?: "EGRESS_SETTING_UNSPECIFIED"|"ALL_TRAFFIC"|"PRIVATE_IP_RANGES", name?: string}
-export def "v1beta-apps-services-versions appengineappsservicesversionspatch" [
+export def "v1beta-apps-services-versions update" [
   apps_id: string
   services_id: string
   versions_id: string
@@ -1499,16 +1508,16 @@ export def "v1beta-apps-services-versions appengineappsservicesversionspatch" [
   --env-variables: record # Environment variables available to the application.Only returned in GET requests if view=FULL is set.
   --error-handlers: list # Custom static error pages. Limited to 10KB per page.Only returned in GET requests if view=FULL is set. — item shape: {errorCode?: "ERROR_CODE_UNSPECIFIED"|"ERROR_CODE_DEFAULT"|"ERROR_CODE_OVER_QUOTA"|"ERROR_CODE_DOS_API_DENIAL"|"ERROR_CODE_TIMEOUT", mimeType?: string, staticFile?: string}
   --flexible-runtime-settings: record # Runtime settings for the App Engine flexible environment. — shape: {operatingSystem?: string, runtimeVersion?: string}
-  --handlers: list # An ordered list of URL-matching patterns that should be applied to incoming requests. The first matching URL handles the request and other request handlers are not attempted.Only returned in GET requests if view=FULL is set. — item shape: {apiEndpoint?: record, authFailAction?: "AUTH_FAIL_ACTION_UNSPECIFIED"|"AUTH_FAIL_ACTION_REDIRECT"|"AUTH_FAIL_ACTION_UNAUTHORIZED", login?: "LOGIN_UNSPECIFIED"|"LOGIN_OPTIONAL"|"LOGIN_ADMIN"|"LOGIN_REQUIRED", redirectHttpResponseCode?: "REDIRECT_HTTP_RESPONSE_CODE_UNSPECIFIED"|"REDIRECT_HTTP_RESPONSE_CODE_301"|"REDIRECT_HTTP_RESPONSE_CODE_302"|"REDIRECT_HTTP_RESPONSE_CODE_303"|"REDIRECT_HTTP_RESPONSE_CODE_307", script?: record, securityLevel?: "SECURE_UNSPECIFIED"|"SECURE_DEFAULT"|"SECURE_NEVER"|"SECURE_OPTIONAL"|"SECURE_ALWAYS", staticFiles?: record, urlRegex?: string}
+  --handlers: list # An ordered list of URL-matching patterns that should be applied to incoming requests. The first matching URL handles the request and other request handlers are not attempted.Only returned in GET requests if view=FULL is set. — item shape: {apiEndpoint?: record, authFailAction?: "AUTH_FAIL_ACTION_UNSPECIFIED"|"AUTH_FAIL_ACTION_REDIRECT"|"AUTH_FAIL_ACTION_UNAUTHORIZED", login?: "LOGIN_UNSPECIFIED"|"LOGIN_OPTIONAL"|"LOGIN_ADMIN"|"LOGIN_REQUIRED", redirectHttpResponseCode?: "REDIRECT_HTTP_RESPONSE_CODE_UNSPECIFIED"|"REDIRECT_HTTP_RESPONSE_CODE_301"|"REDIRECT_HTTP_RESPONSE_CODE_302"|"REDIRECT_HTTP_RESPONSE_CODE_303"|"REDIRECT_HTTP_RESPONSE_CODE_307", script?: record, ... (3 more fields)}
   --health-check: record # Health checking configuration for VM instances. Unhealthy instances are killed and replaced with new instances. Only applicable for instances in App Engine flexible environment. — shape: {checkInterval?: string, disableHealthCheck?: bool, healthyThreshold?: int, host?: string, restartThreshold?: int, timeout?: string, unhealthyThreshold?: int}
   --id: string # Relative name of the version within the service. Example: v1. Version names can contain only lowercase letters, numbers, or hyphens. Reserved names: "default", "latest", and any name with the prefix "ah-".
-  --inbound-services: list # Before an application can receive email or XMPP messages, the application must be configured to enable the service.
+  --inbound-services: list<string> # Before an application can receive email or XMPP messages, the application must be configured to enable the service.
   --instance-class: string # Instance class that is used to run this version. Valid values are: AutomaticScaling: F1, F2, F4, F4_1G ManualScaling or BasicScaling: B1, B2, B4, B8, B4_1GDefaults to F1 for AutomaticScaling and B1 for ManualScaling or BasicScaling.
   --libraries: list # Configuration for third-party Python runtime libraries that are required by the application.Only returned in GET requests if view=FULL is set. — item shape: {name?: string, version?: string}
   --liveness-check: record # Health checking configuration for VM instances. Unhealthy instances are killed and replaced with new instances. — shape: {checkInterval?: string, failureThreshold?: int, host?: string, initialDelay?: string, path?: string, successThreshold?: int, timeout?: string}
   --manual-scaling: record # A service with manual scaling runs continuously, allowing you to perform complex initialization and rely on the state of its memory over time. — shape: {instances?: int}
   --name: string # Full path to the Version resource in the API. Example: apps/myapp/services/default/versions/v1.@OutputOnly
-  --network: record # Extra network settings. Only applicable in the App Engine flexible environment. — shape: {forwardedPorts?: list, instanceIpMode?: "INSTANCE_IP_MODE_UNSPECIFIED"|"EXTERNAL"|"INTERNAL", instanceTag?: string, name?: string, sessionAffinity?: bool, subnetworkName?: string}
+  --network: record # Extra network settings. Only applicable in the App Engine flexible environment. — shape: {forwardedPorts?: list<string>, instanceIpMode?: "INSTANCE_IP_MODE_UNSPECIFIED"|"EXTERNAL"|"INTERNAL", instanceTag?: string, name?: string, sessionAffinity?: bool, subnetworkName?: string}
   --nobuild-files-regex: string # Files that match this pattern will not be built into this version. Only applicable for Go runtimes.Only returned in GET requests if view=FULL is set.
   --readiness-check: record # Readiness checking configuration for VM instances. Unhealthy instances are removed from traffic rotation. — shape: {appStartTimeout?: string, checkInterval?: string, failureThreshold?: int, host?: string, path?: string, successThreshold?: int, timeout?: string}
   --resources: record # Machine resources for a version. — shape: {cpu?: float, diskGb?: float, kmsKeyReference?: string, memoryGb?: float, volumes?: list}
@@ -1522,25 +1531,25 @@ export def "v1beta-apps-services-versions appengineappsservicesversionspatch" [
   --version-url: string # Serving URL for this version. Example: "https://myversion-dot-myservice-dot-myapp.appspot.com"@OutputOnly
   --vm: oneof<nothing, bool> # Whether to deploy this version in a container on a virtual machine.
   --vpc-access-connector: record # VPC access connector specification. — shape: {egressSetting?: "EGRESS_SETTING_UNSPECIFIED"|"ALL_TRAFFIC"|"PRIVATE_IP_RANGES", name?: string}
-  --zones: list # The Google Compute Engine zones that are supported by this version in the App Engine flexible environment. Deprecated.
+  --zones: list<string> # The Google Compute Engine zones that are supported by this version in the App Engine flexible environment. Deprecated.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, services_id: $services_id, versions_id: $versions_id} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}") $qp)
-  let body = {"apiConfig": $api_config, "appEngineApis": $app_engine_apis, "automaticScaling": $automatic_scaling, "basicScaling": $basic_scaling, "betaSettings": $beta_settings, "buildEnvVariables": $build_env_variables, "createTime": $create_time, "createdBy": $created_by, "defaultExpiration": $default_expiration, "deployment": $deployment, "diskUsageBytes": $disk_usage_bytes, "endpointsApiService": $endpoints_api_service, "entrypoint": $entrypoint, "env": $body_env, "envVariables": $env_variables, "errorHandlers": $error_handlers, "flexibleRuntimeSettings": $flexible_runtime_settings, "handlers": $handlers, "healthCheck": $health_check, "id": $id, "inboundServices": $inbound_services, "instanceClass": $instance_class, "libraries": $libraries, "livenessCheck": $liveness_check, "manualScaling": $manual_scaling, "name": $name, "network": $network, "nobuildFilesRegex": $nobuild_files_regex, "readinessCheck": $readiness_check, "resources": $resources, "runtime": $runtime, "runtimeApiVersion": $runtime_api_version, "runtimeChannel": $runtime_channel, "runtimeMainExecutablePath": $runtime_main_executable_path, "serviceAccount": $service_account, "servingStatus": $serving_status, "threadsafe": $threadsafe, "versionUrl": $version_url, "vm": $vm, "vpcAccessConnector": $vpc_access_connector, "zones": $zones} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id), versions_id: (encode-path-segment $versions_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}") $qp)
+  let req_body = {"apiConfig": $api_config, "appEngineApis": $app_engine_apis, "automaticScaling": $automatic_scaling, "basicScaling": $basic_scaling, "betaSettings": $beta_settings, "buildEnvVariables": $build_env_variables, "createTime": $create_time, "createdBy": $created_by, "defaultExpiration": $default_expiration, "deployment": $deployment, "diskUsageBytes": $disk_usage_bytes, "endpointsApiService": $endpoints_api_service, "entrypoint": $entrypoint, "env": $body_env, "envVariables": $env_variables, "errorHandlers": $error_handlers, "flexibleRuntimeSettings": $flexible_runtime_settings, "handlers": $handlers, "healthCheck": $health_check, "id": $id, "inboundServices": $inbound_services, "instanceClass": $instance_class, "libraries": $libraries, "livenessCheck": $liveness_check, "manualScaling": $manual_scaling, "name": $name, "network": $network, "nobuildFilesRegex": $nobuild_files_regex, "readinessCheck": $readiness_check, "resources": $resources, "runtime": $runtime, "runtimeApiVersion": $runtime_api_version, "runtimeChannel": $runtime_channel, "runtimeMainExecutablePath": $runtime_main_executable_path, "serviceAccount": $service_account, "servingStatus": $serving_status, "threadsafe": $threadsafe, "versionUrl": $version_url, "vm": $vm, "vpcAccessConnector": $vpc_access_connector, "zones": $zones} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the instances of a version.Tip: To aggregate details about instances over time, see the Stackdriver Monitoring API (https://cloud.google.com/monitoring/api/ref_v3/rest/v3/projects.timeSeries/list).
 #
 # GET /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}/instances
 # operationId: appengine.apps.services.versions.instances.list
-export def "v1beta-apps-services-versions-instances appengineappsservicesversionsinstanceslist" [
+export def "v1beta-apps-services-versions-instances list" [
   apps_id: string
   services_id: string
   versions_id: string
@@ -1569,7 +1578,7 @@ export def "v1beta-apps-services-versions-instances appengineappsservicesversion
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, services_id: $services_id, versions_id: $versions_id} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}/instances") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id), versions_id: (encode-path-segment $versions_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}/instances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1579,7 +1588,7 @@ export def "v1beta-apps-services-versions-instances appengineappsservicesversion
 #
 # DELETE /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}/instances/{instancesId}
 # operationId: appengine.apps.services.versions.instances.delete
-export def "v1beta-apps-services-versions-instances appengineappsservicesversionsinstancesdelete" [
+export def "v1beta-apps-services-versions-instances delete" [
   apps_id: string
   services_id: string
   versions_id: string
@@ -1607,7 +1616,7 @@ export def "v1beta-apps-services-versions-instances appengineappsservicesversion
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, services_id: $services_id, versions_id: $versions_id, instances_id: $instances_id} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}/instances/{instances_id}") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id), versions_id: (encode-path-segment $versions_id), instances_id: (encode-path-segment $instances_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}/instances/{instances_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1617,7 +1626,7 @@ export def "v1beta-apps-services-versions-instances appengineappsservicesversion
 #
 # GET /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}/instances/{instancesId}
 # operationId: appengine.apps.services.versions.instances.get
-export def "v1beta-apps-services-versions-instances appengineappsservicesversionsinstancesget" [
+export def "v1beta-apps-services-versions-instances get" [
   apps_id: string
   services_id: string
   versions_id: string
@@ -1645,7 +1654,7 @@ export def "v1beta-apps-services-versions-instances appengineappsservicesversion
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, services_id: $services_id, versions_id: $versions_id, instances_id: $instances_id} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}/instances/{instances_id}") $qp)
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id), versions_id: (encode-path-segment $versions_id), instances_id: (encode-path-segment $instances_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}/instances/{instances_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1655,7 +1664,7 @@ export def "v1beta-apps-services-versions-instances appengineappsservicesversion
 #
 # POST /v1beta/apps/{appsId}/services/{servicesId}/versions/{versionsId}/instances/{instancesId}:debug
 # operationId: appengine.apps.services.versions.instances.debug
-export def "v1beta-apps-services-versions-instances appengineappsservicesversionsinstancesdebug" [
+export def "v1beta-apps-services-versions-instances create-debug" [
   apps_id: string
   services_id: string
   versions_id: string
@@ -1685,19 +1694,19 @@ export def "v1beta-apps-services-versions-instances appengineappsservicesversion
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id, services_id: $services_id, versions_id: $versions_id, instances_id: $instances_id} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}/instances/{instances_id}:debug") $qp)
-  let body = {"sshKey": $ssh_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id), services_id: (encode-path-segment $services_id), versions_id: (encode-path-segment $versions_id), instances_id: (encode-path-segment $instances_id)} | format pattern "/v1beta/apps/{apps_id}/services/{services_id}/versions/{versions_id}/instances/{instances_id}:debug") $qp)
+  let req_body = {"sshKey": $ssh_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Recreates the required App Engine features for the specified App Engine application, for example a Cloud Storage bucket or App Engine service account. Use this method if you receive an error message about a missing feature, for example, Error retrieving the App Engine service account. If you have deleted your App Engine service account, this will not be able to recreate it. Instead, you should attempt to use the IAM undelete API if possible at https://cloud.google.com/iam/reference/rest/v1/projects.serviceAccounts/undelete?apix_params=%7B"name"%3A"projects%2F-%2FserviceAccounts%2Funique_id"%2C"resource"%3A%7B%7D%7D . If the deletion was recent, the numeric ID can be found in the Cloud Console Activity Log.
 #
 # POST /v1beta/apps/{appsId}:repair
 # operationId: appengine.apps.repair
-export def "v1beta-apps appengineappsrepair" [
+export def "v1beta-apps create-repair" [
   apps_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1724,18 +1733,19 @@ export def "v1beta-apps appengineappsrepair" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({apps_id: $apps_id} | format pattern "/v1beta/apps/{apps_id}:repair") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({apps_id: (encode-path-segment $apps_id)} | format pattern "/v1beta/apps/{apps_id}:repair") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists information about the supported locations for this service.
 #
 # GET /v1beta/projects/{projectsId}/locations
 # operationId: appengine.projects.locations.list
-export def "v1beta-projects-locations appengineprojectslocationslist" [
+export def "v1beta-projects-locations list" [
   projects_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1763,7 +1773,7 @@ export def "v1beta-projects-locations appengineprojectslocationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({projects_id: $projects_id} | format pattern "/v1beta/projects/{projects_id}/locations") $qp)
+  let full_url = (build-url $base ({projects_id: (encode-path-segment $projects_id)} | format pattern "/v1beta/projects/{projects_id}/locations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1773,7 +1783,7 @@ export def "v1beta-projects-locations appengineprojectslocationslist" [
 #
 # GET /v1beta/projects/{projectsId}/locations/{locationsId}
 # operationId: appengine.projects.locations.get
-export def "v1beta-projects-locations appengineprojectslocationsget" [
+export def "v1beta-projects-locations get" [
   projects_id: string
   locations_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1799,7 +1809,7 @@ export def "v1beta-projects-locations appengineprojectslocationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({projects_id: $projects_id, locations_id: $locations_id} | format pattern "/v1beta/projects/{projects_id}/locations/{locations_id}") $qp)
+  let full_url = (build-url $base ({projects_id: (encode-path-segment $projects_id), locations_id: (encode-path-segment $locations_id)} | format pattern "/v1beta/projects/{projects_id}/locations/{locations_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1812,7 +1822,7 @@ export def "v1beta-projects-locations appengineprojectslocationsget" [
 # --dispatchRules item shape: {domain?: string, path?: string, service?: string}
 # --featureSettings shape: {splitHealthChecks?: bool, useContainerOptimizedOs?: bool}
 # --iap shape: {enabled?: bool, oauth2ClientId?: string, oauth2ClientSecret?: string}
-export def "v1beta-projects-locations-applications appengineprojectslocationsapplicationscreate" [
+export def "v1beta-projects-locations-applications create" [
   projects_id: string
   locations_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1849,19 +1859,19 @@ export def "v1beta-projects-locations-applications appengineprojectslocationsapp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({projects_id: $projects_id, locations_id: $locations_id} | format pattern "/v1beta/projects/{projects_id}/locations/{locations_id}/applications") $qp)
-  let body = {"authDomain": $auth_domain, "databaseType": $database_type, "defaultCookieExpiration": $default_cookie_expiration, "dispatchRules": $dispatch_rules, "featureSettings": $feature_settings, "iap": $iap, "id": $id, "locationId": $location_id, "serviceAccount": $service_account, "servingStatus": $serving_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({projects_id: (encode-path-segment $projects_id), locations_id: (encode-path-segment $locations_id)} | format pattern "/v1beta/projects/{projects_id}/locations/{locations_id}/applications") $qp)
+  let req_body = {"authDomain": $auth_domain, "databaseType": $database_type, "defaultCookieExpiration": $default_cookie_expiration, "dispatchRules": $dispatch_rules, "featureSettings": $feature_settings, "iap": $iap, "id": $id, "locationId": $location_id, "serviceAccount": $service_account, "servingStatus": $serving_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets information about an application.
 #
 # GET /v1beta/projects/{projectsId}/locations/{locationsId}/applications/{applicationsId}
 # operationId: appengine.projects.locations.applications.get
-export def "v1beta-projects-locations-applications appengineprojectslocationsapplicationsget" [
+export def "v1beta-projects-locations-applications get" [
   projects_id: string
   locations_id: string
   applications_id: string
@@ -1888,7 +1898,7 @@ export def "v1beta-projects-locations-applications appengineprojectslocationsapp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({projects_id: $projects_id, locations_id: $locations_id, applications_id: $applications_id} | format pattern "/v1beta/projects/{projects_id}/locations/{locations_id}/applications/{applications_id}") $qp)
+  let full_url = (build-url $base ({projects_id: (encode-path-segment $projects_id), locations_id: (encode-path-segment $locations_id), applications_id: (encode-path-segment $applications_id)} | format pattern "/v1beta/projects/{projects_id}/locations/{locations_id}/applications/{applications_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1898,7 +1908,7 @@ export def "v1beta-projects-locations-applications appengineprojectslocationsapp
 #
 # POST /v1beta/projects/{projectsId}/locations/{locationsId}/applications/{applicationsId}:repair
 # operationId: appengine.projects.locations.applications.repair
-export def "v1beta-projects-locations-applications appengineprojectslocationsapplicationsrepair" [
+export def "v1beta-projects-locations-applications create-repair" [
   projects_id: string
   locations_id: string
   applications_id: string
@@ -1927,18 +1937,19 @@ export def "v1beta-projects-locations-applications appengineprojectslocationsapp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({projects_id: $projects_id, locations_id: $locations_id, applications_id: $applications_id} | format pattern "/v1beta/projects/{projects_id}/locations/{locations_id}/applications/{applications_id}:repair") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({projects_id: (encode-path-segment $projects_id), locations_id: (encode-path-segment $locations_id), applications_id: (encode-path-segment $applications_id)} | format pattern "/v1beta/projects/{projects_id}/locations/{locations_id}/applications/{applications_id}:repair") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists operations that match the specified filter in the request. If the server doesn't support this method, it returns UNIMPLEMENTED.
 #
 # GET /v1beta/projects/{projectsId}/locations/{locationsId}/operations
 # operationId: appengine.projects.locations.operations.list
-export def "v1beta-projects-locations-operations appengineprojectslocationsoperationslist" [
+export def "v1beta-projects-locations-operations list" [
   projects_id: string
   locations_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1967,7 +1978,7 @@ export def "v1beta-projects-locations-operations appengineprojectslocationsopera
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({projects_id: $projects_id, locations_id: $locations_id} | format pattern "/v1beta/projects/{projects_id}/locations/{locations_id}/operations") $qp)
+  let full_url = (build-url $base ({projects_id: (encode-path-segment $projects_id), locations_id: (encode-path-segment $locations_id)} | format pattern "/v1beta/projects/{projects_id}/locations/{locations_id}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1977,7 +1988,7 @@ export def "v1beta-projects-locations-operations appengineprojectslocationsopera
 #
 # GET /v1beta/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}
 # operationId: appengine.projects.locations.operations.get
-export def "v1beta-projects-locations-operations appengineprojectslocationsoperationsget" [
+export def "v1beta-projects-locations-operations get" [
   projects_id: string
   locations_id: string
   operations_id: string
@@ -2004,7 +2015,7 @@ export def "v1beta-projects-locations-operations appengineprojectslocationsopera
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({projects_id: $projects_id, locations_id: $locations_id, operations_id: $operations_id} | format pattern "/v1beta/projects/{projects_id}/locations/{locations_id}/operations/{operations_id}") $qp)
+  let full_url = (build-url $base ({projects_id: (encode-path-segment $projects_id), locations_id: (encode-path-segment $locations_id), operations_id: (encode-path-segment $operations_id)} | format pattern "/v1beta/projects/{projects_id}/locations/{locations_id}/operations/{operations_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

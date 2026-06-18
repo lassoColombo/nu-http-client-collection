@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "autnum domainsrdapautnumget" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "autnum get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/autnum/{autnumId}
 # operationId: domainsrdap.autnum.get
-export def "autnum domainsrdapautnumget" [
+export def "autnum get" [
   autnum_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -120,7 +129,7 @@ export def "autnum domainsrdapautnumget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({autnum_id: $autnum_id} | format pattern "/v1/autnum/{autnum_id}") $qp)
+  let full_url = (build-url $base ({autnum_id: (encode-path-segment $autnum_id)} | format pattern "/v1/autnum/{autnum_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -130,7 +139,7 @@ export def "autnum domainsrdapautnumget" [
 #
 # GET /v1/domain/{domainName}
 # operationId: domainsrdap.domain.get
-export def "domain domainsrdapdomainget" [
+export def "domain get" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -155,7 +164,7 @@ export def "domain domainsrdapdomainget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/v1/domain/{domain_name}") $qp)
+  let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/v1/domain/{domain_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -165,7 +174,7 @@ export def "domain domainsrdapdomainget" [
 #
 # GET /v1/domains
 # operationId: domainsrdap.getDomains
-export def "domains domainsrdapgetDomains" [
+export def "domains get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +208,7 @@ export def "domains domainsrdapgetDomains" [
 #
 # GET /v1/entities
 # operationId: domainsrdap.getEntities
-export def "entities domainsrdapgetEntities" [
+export def "entities get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +242,7 @@ export def "entities domainsrdapgetEntities" [
 #
 # GET /v1/entity/{entityId}
 # operationId: domainsrdap.entity.get
-export def "entity domainsrdapentityget" [
+export def "entity get" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -258,7 +267,7 @@ export def "entity domainsrdapentityget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({entity_id: $entity_id} | format pattern "/v1/entity/{entity_id}") $qp)
+  let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/v1/entity/{entity_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -268,7 +277,7 @@ export def "entity domainsrdapentityget" [
 #
 # GET /v1/help
 # operationId: domainsrdap.getHelp
-export def "help domainsrdapgetHelp" [
+export def "help get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,7 +311,7 @@ export def "help domainsrdapgetHelp" [
 #
 # GET /v1/ip
 # operationId: domainsrdap.getIp
-export def "ip domainsrdapgetIp" [
+export def "ip get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,7 +345,7 @@ export def "ip domainsrdapgetIp" [
 #
 # GET /v1/ip/{ipId}/{ipId1}
 # operationId: domainsrdap.ip.get
-export def "ip domainsrdapipget" [
+export def "ip get-by-ipId-ipId1" [
   ip_id: string
   ip_id1: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -362,7 +371,7 @@ export def "ip domainsrdapipget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ip_id: $ip_id, ip_id1: $ip_id1} | format pattern "/v1/ip/{ip_id}/{ip_id1}") $qp)
+  let full_url = (build-url $base ({ip_id: (encode-path-segment $ip_id), ip_id1: (encode-path-segment $ip_id1)} | format pattern "/v1/ip/{ip_id}/{ip_id1}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -372,7 +381,7 @@ export def "ip domainsrdapipget" [
 #
 # GET /v1/nameserver/{nameserverId}
 # operationId: domainsrdap.nameserver.get
-export def "nameserver domainsrdapnameserverget" [
+export def "nameserver get" [
   nameserver_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -397,7 +406,7 @@ export def "nameserver domainsrdapnameserverget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({nameserver_id: $nameserver_id} | format pattern "/v1/nameserver/{nameserver_id}") $qp)
+  let full_url = (build-url $base ({nameserver_id: (encode-path-segment $nameserver_id)} | format pattern "/v1/nameserver/{nameserver_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -407,7 +416,7 @@ export def "nameserver domainsrdapnameserverget" [
 #
 # GET /v1/nameservers
 # operationId: domainsrdap.getNameservers
-export def "nameservers domainsrdapgetNameservers" [
+export def "nameservers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

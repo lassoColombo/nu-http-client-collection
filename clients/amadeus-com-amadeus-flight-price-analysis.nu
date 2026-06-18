@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analytics-itinerary-price-metrics get-itinerary-price-metrics" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analytics-itinerary-price-metrics get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /analytics/itinerary-price-metrics
 # operationId: get-itinerary-price-metrics
-export def "analytics-itinerary-price-metrics get-itinerary-price-metrics" [
+export def "analytics-itinerary-price-metrics get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,9 +110,9 @@ export def "analytics-itinerary-price-metrics get-itinerary-price-metrics" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --origin-iata-code: string # airport code, following [IATA standard](http://www.iata.org/publications/Pages/code-search.aspx), from which the traveler will depart  (e.g. MAD)
+  --origin-iata-code: string # airport code, following [IATA standard](http://www.iata.org/publications/Pages/code-search.aspx), from which the traveler will depart (e.g. MAD)
   --destination-iata-code: string # airport code, following [IATA standard](http://www.iata.org/publications/Pages/code-search.aspx), to which the traveler is going. (e.g. CDG)
-  --departure-date: string # The date on which the traveler will depart from the origin to go to the destination.   Dates are specified in the[ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format. (e.g. 2021-03-21)
+  --departure-date: string # The date on which the traveler will depart from the origin to go to the destination. Dates are specified in the[ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format. (e.g. 2021-03-21)
   --currency-code: string # the preferred currency for display. Currency is specified in the [ISO 4217](https://en.wikipedia.org/wiki/ISO_4217) format, e.g. EUR for Euro (default: EUR)
   --one-way: oneof<nothing, bool> # true to get price metrics for a one way trip, false to get price metrics for a round trip (default: false)
 ]: nothing -> any {

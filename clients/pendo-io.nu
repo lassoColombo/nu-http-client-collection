@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -141,7 +150,7 @@ export def "accounts delete" [
 ]: nothing -> record<created_at: string, external_id: string, id: string, is_paying: bool, monthly_value: float, name: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -163,7 +172,7 @@ export def "accounts get" [
 ]: nothing -> record<created_at: string, external_id: string, id: string, is_paying: bool, monthly_value: float, name: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -172,7 +181,7 @@ export def "accounts get" [
 # Update an Account
 #
 # PUT /accounts/{id}
-export def "accounts put" [
+export def "accounts update" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -189,12 +198,12 @@ export def "accounts put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}"))
-  let body = {"monthly_value": $monthly_value, "name": $name, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}"))
+  let req_body = {"monthly_value": $monthly_value, "name": $name, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete custom Account tags
@@ -213,7 +222,7 @@ export def "accounts-tags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/tags"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -235,7 +244,7 @@ export def "accounts-tags get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/tags"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -244,7 +253,7 @@ export def "accounts-tags get" [
 # Overwrite current custom Account tags with the given tags
 #
 # POST /accounts/{id}/tags
-export def "accounts-tags post" [
+export def "accounts-tags create" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -259,11 +268,12 @@ export def "accounts-tags post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/tags"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}/tags"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # fetch Comment records
@@ -335,7 +345,7 @@ export def "features get" [
 ]: nothing -> record<app_url: string, created_at: string, created_by_user_id: int, declined_at: string, description: string, developing_at: string, effort: int, form_entry: string, id: float, is_private: bool, merged_to_feature_id: int, planned_at: string, products: list<string>, released_at: string, resolution: string, resolved_by_user_id: int, status: string, status_changed_at: string, tags: any, title: string, updated_at: string, updated_by_user_id: int, uploads: list<string>, vendor_id: int, view_count: int, waiting_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/features/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/features/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -357,7 +367,7 @@ export def "features-tags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/features/{id}/tags"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/features/{id}/tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -379,7 +389,7 @@ export def "features-tags get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/features/{id}/tags"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/features/{id}/tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -388,7 +398,7 @@ export def "features-tags get" [
 # Overwrite current custom Feature tags with the given tags
 #
 # POST /features/{id}/tags
-export def "features-tags post" [
+export def "features-tags create" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -403,11 +413,12 @@ export def "features-tags post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/features/{id}/tags"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/features/{id}/tags"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Health check for API
@@ -434,7 +445,7 @@ export def "health-check-ping get" [
 # Subscribe to webhooks
 #
 # POST /hooks
-export def "hooks post" [
+export def "hooks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,17 +461,17 @@ export def "hooks post" [
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hooks")
-  let body = {"event": $event, "target_url": $target_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"event": $event, "target_url": $target_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unsubscribe from webhooks
 #
 # POST /hooks/unsubscribe
-export def "hooks-unsubscribe post" [
+export def "hooks-unsubscribe create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -475,11 +486,11 @@ export def "hooks-unsubscribe post" [
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hooks/unsubscribe")
-  let body = {"target_url": $target_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"target_url": $target_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search features
@@ -541,8 +552,8 @@ export def "users list" [
 #
 # POST /users
 # --account shape: {created_at?: string, id?: string, is_paying?: bool, monthly_value?: float, name?: string, status?: string, tags?: any}
-# --user shape: {allowed_products?: list, created_at?: string, email?: string, full_name?: string, id?: string, roles?: "endUser", tags?: any}
-export def "users post" [
+# --user shape: {allowed_products?: list<string>, created_at?: string, email?: string, full_name?: string, id?: string, roles?: "endUser", tags?: any}
+export def "users create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -553,23 +564,23 @@ export def "users post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --account: record # shape: {created_at?: string, id?: string, is_paying?: bool, monthly_value?: float, name?: string, status?: string, tags?: any}
   --return-url: string
-  --user: record # shape: {allowed_products?: list, created_at?: string, email?: string, full_name?: string, id?: string, roles?: "endUser", tags?: any}
+  --user: record # shape: {allowed_products?: list<string>, created_at?: string, email?: string, full_name?: string, id?: string, roles?: "endUser", tags?: any}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users")
-  let body = {"account": $account, "return_url": $return_url, "user": $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "return_url": $return_url, "user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Invite an EndUser (customer)
 #
 # POST /users/invite_end_user
-export def "users-invite-end-user post" [
+export def "users-invite-end-user create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -591,17 +602,17 @@ export def "users-invite-end-user post" [
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/invite_end_user")
-  let body = {"account_external_id": $account_external_id, "account_name": $account_name, "account_status": $account_status, "email": $email, "full_name": $full_name, "monthly_value": $monthly_value, "send_invite": $send_invite, "user_external_id": $user_external_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account_external_id": $account_external_id, "account_name": $account_name, "account_status": $account_status, "email": $email, "full_name": $full_name, "monthly_value": $monthly_value, "send_invite": $send_invite, "user_external_id": $user_external_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Invite a VendorUser (Team member)
 #
 # POST /users/invite_vendor_user
-export def "users-invite-vendor-user post" [
+export def "users-invite-vendor-user create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -620,11 +631,11 @@ export def "users-invite-vendor-user post" [
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/invite_vendor_user")
-  let body = {"email": $email, "external_id": $external_id, "full_name": $full_name, "permission_group_id": $permission_group_id, "team": $team} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "external_id": $external_id, "full_name": $full_name, "permission_group_id": $permission_group_id, "team": $team} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find a User with a query
@@ -668,7 +679,7 @@ export def "users delete" [
 ]: nothing -> record<account: record<id: string, monthly_value: float, name: string, status: string>, created_at: string, email: string, external_id: string, id: string, name: string, roles: string> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -690,7 +701,7 @@ export def "users get" [
 ]: nothing -> record<account: record<id: string, monthly_value: float, name: string, status: string>, created_at: string, email: string, external_id: string, id: string, name: string, roles: string> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -699,7 +710,7 @@ export def "users get" [
 # Update a User
 #
 # PUT /users/{id}
-export def "users put" [
+export def "users update" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -717,12 +728,12 @@ export def "users put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}"))
-  let body = {"email": $email, "external_id": $external_id, "name": $name, "permission_group_id": $permission_group_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}"))
+  let req_body = {"email": $email, "external_id": $external_id, "name": $name, "permission_group_id": $permission_group_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete custom User tags
@@ -741,7 +752,7 @@ export def "users-tags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/tags"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -763,7 +774,7 @@ export def "users-tags get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/tags"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -772,7 +783,7 @@ export def "users-tags get" [
 # Overwrite current custom User tags with the given tags
 #
 # POST /users/{id}/tags
-export def "users-tags post" [
+export def "users-tags create" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -787,17 +798,18 @@ export def "users-tags post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/tags"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/tags"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or update a team member by their external_id
 #
 # POST /vendor_users
-export def "vendor-users post" [
+export def "vendor-users create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -816,11 +828,11 @@ export def "vendor-users post" [
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/vendor_users")
-  let body = {"email": $email, "external_id": $external_id, "full_name": $full_name, "permission_group_id": $permission_group_id, "team": $team} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "external_id": $external_id, "full_name": $full_name, "permission_group_id": $permission_group_id, "team": $team} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /votes
@@ -853,7 +865,7 @@ export def "votes get" [
 #
 # POST /votes
 # --votes item shape: {feature_id?: string, quantity?: int}
-export def "votes post" [
+export def "votes create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -869,9 +881,9 @@ export def "votes post" [
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/votes")
-  let body = {"user_id": $user_id, "votes": $votes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"user_id": $user_id, "votes": $votes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

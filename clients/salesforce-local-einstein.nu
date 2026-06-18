@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -62,6 +71,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
 def base-url-completer [] { ["http://salesforce.local"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -75,7 +111,7 @@ def type-completer-2 [] { ["image" "image-detection" "image-multi-label"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apiusage get-api-usage-plans-v2" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apiusage get-usage-plans" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +135,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/apiusage
 # operationId: getApiUsagePlansV2
-export def "apiusage get-api-usage-plans-v2" [
+export def "apiusage get-usage-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,7 +183,7 @@ export def "language-datasets list" [
 #
 # POST /v2/language/datasets/upload
 # operationId: uploadDatasetAsync
-export def "language-datasets-upload upload-dataset-async" [
+export def "language-datasets-upload upload-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,11 +201,12 @@ export def "language-datasets-upload upload-dataset-async" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/language/datasets/upload")
-  let body = {"data": $data, "name": $name, "path": $path, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data, "name": $name, "path": $path, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Create a Dataset From a File Synchronously
@@ -194,11 +231,12 @@ export def "language-datasets-upload-sync upload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/language/datasets/upload/sync")
-  let body = {"data": $data, "name": $name, "path": $path, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data, "name": $name, "path": $path, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Delete a Dataset
@@ -218,7 +256,7 @@ export def "language-datasets delete" [
 ]: nothing -> record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dataset_id: $dataset_id} | format pattern "/v2/language/datasets/{dataset_id}"))
+  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/language/datasets/{dataset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -241,7 +279,7 @@ export def "language-datasets get" [
 ]: nothing -> record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dataset_id: $dataset_id} | format pattern "/v2/language/datasets/{dataset_id}"))
+  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/language/datasets/{dataset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -268,7 +306,7 @@ export def "language-datasets-examples get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({dataset_id: $dataset_id} | format pattern "/v2/language/datasets/{dataset_id}/examples") $qp)
+  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/language/datasets/{dataset_id}/examples") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -294,7 +332,7 @@ export def "language-datasets-models get-trained" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({dataset_id: $dataset_id} | format pattern "/v2/language/datasets/{dataset_id}/models") $qp)
+  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/language/datasets/{dataset_id}/models") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -304,7 +342,7 @@ export def "language-datasets-models get-trained" [
 #
 # PUT /v2/language/datasets/{datasetId}/upload
 # operationId: updateDatasetAsync
-export def "language-datasets-upload update-dataset-async" [
+export def "language-datasets-upload update-async" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -314,18 +352,19 @@ export def "language-datasets-upload update-dataset-async" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --data: string # Path to the .csv, .tsv, or .json file on a local drive. 
+  --data: string # Path to the .csv, .tsv, or .json file on a local drive.
   --type: string # URL of the .csv, .tsv, or .json file.
 ]: any -> record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dataset_id: $dataset_id} | format pattern "/v2/language/datasets/{dataset_id}/upload"))
-  let body = {"data": $data, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/language/datasets/{dataset_id}/upload"))
+  let req_body = {"data": $data, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get Deletion Status
@@ -345,7 +384,7 @@ export def "language-deletion get" [
 ]: nothing -> record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/language/deletion/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/language/deletion/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -355,7 +394,7 @@ export def "language-deletion get" [
 #
 # GET /v2/language/examples
 # operationId: getExamplesByLabel
-export def "language-examples get" [
+export def "language-examples get-by-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,7 +420,7 @@ export def "language-examples get" [
 #
 # POST /v2/language/feedback
 # operationId: provideFeedback
-export def "language-feedback provideFeedback" [
+export def "language-feedback create-provide" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -399,18 +438,19 @@ export def "language-feedback provideFeedback" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/language/feedback")
-  let body = {"document": $document, "expectedLabel": $expected_label, "modelId": $model_id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"document": $document, "expectedLabel": $expected_label, "modelId": $model_id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Prediction for Intent
 #
 # POST /v2/language/intent
 # operationId: intentMultipart
-export def "language-intent intentMultipart" [
+export def "language-intent create-multipart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,18 +461,18 @@ export def "language-intent intentMultipart" [
   --dry-run(-n) # Return the request that would be sent without executing it
   document: string # Text for which you want to return an intent prediction. (e.g. I can't tell you how much fun it was)
   model_id: string # ID of the model that makes the prediction. The model must have been created from a dataset with a type of text-sentiment. (e.g. WJH4YCA7YX4PCWVNCYNWYHBMY4)
-  --num-results: int # Number of probabilities to return.  (format: int32, e.g. 3)
+  --num-results: int # Number of probabilities to return. (format: int32, e.g. 3)
   --sample-id: string # String that you can pass in to tag the prediction. Optional. Can be any value, and is returned in the response.
 ]: any -> record<object: string, probabilities: table<label: string, probability: float>, sampleId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/language/intent")
-  let body = {"document": $document, "modelId": $model_id, "numResults": $num_results, "sampleId": $sample_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"document": $document, "modelId": $model_id, "numResults": $num_results, "sampleId": $sample_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a Model
@@ -452,7 +492,7 @@ export def "language-models delete" [
 ]: nothing -> record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({model_id: $model_id} | format pattern "/v2/language/models/{model_id}"))
+  let full_url = (build-url $base ({model_id: (encode-path-segment $model_id)} | format pattern "/v2/language/models/{model_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -462,7 +502,7 @@ export def "language-models delete" [
 #
 # GET /v2/language/models/{modelId}
 # operationId: getTrainedModelMetrics
-export def "language-models get-trained-model-metrics" [
+export def "language-models get-trained-metrics" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -475,7 +515,7 @@ export def "language-models get-trained-model-metrics" [
 ]: nothing -> record<algorithm: string, createdAt: string, id: string, language: string, metricsData: record, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({model_id: $model_id} | format pattern "/v2/language/models/{model_id}"))
+  let full_url = (build-url $base ({model_id: (encode-path-segment $model_id)} | format pattern "/v2/language/models/{model_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -485,7 +525,7 @@ export def "language-models get-trained-model-metrics" [
 #
 # GET /v2/language/models/{modelId}/lc
 # operationId: getTrainedModelLearningCurve
-export def "language-models-lc get-trained-model-learning-curve" [
+export def "language-models-lc get-trained-learning-curve" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -501,7 +541,7 @@ export def "language-models-lc get-trained-model-learning-curve" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({model_id: $model_id} | format pattern "/v2/language/models/{model_id}/lc") $qp)
+  let full_url = (build-url $base ({model_id: (encode-path-segment $model_id)} | format pattern "/v2/language/models/{model_id}/lc") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -512,7 +552,7 @@ export def "language-models-lc get-trained-model-learning-curve" [
 # POST /v2/language/retrain
 # operationId: retrain
 # --trainParams shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
-export def "language-retrain retrain" [
+export def "language-retrain create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -531,18 +571,19 @@ export def "language-retrain retrain" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/language/retrain")
-  let body = {"algorithm": $algorithm, "epochs": $epochs, "learningRate": $learning_rate, "modelId": $model_id, "trainParams": $train_params} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"algorithm": $algorithm, "epochs": $epochs, "learningRate": $learning_rate, "modelId": $model_id, "trainParams": $train_params} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Prediction for Sentiment
 #
 # POST /v2/language/sentiment
 # operationId: sentimentMultipart
-export def "language-sentiment sentimentMultipart" [
+export def "language-sentiment create-multipart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -553,18 +594,18 @@ export def "language-sentiment sentimentMultipart" [
   --dry-run(-n) # Return the request that would be sent without executing it
   document: string # Text for which you want to return a sentiment prediction. (e.g. I can't tell you how much fun it was)
   model_id: string # ID of the model that makes the prediction. The model must have been created from a dataset with a type of text-sentiment. (e.g. WJH4YCA7YX4PCWVNCYNWYHBMY4)
-  --num-results: int # Number of probabilities to return.  (format: int32, e.g. 3)
+  --num-results: int # Number of probabilities to return. (format: int32, e.g. 3)
   --sample-id: string # String that you can pass in to tag the prediction. Optional. Can be any value, and is returned in the response.
 ]: any -> record<object: string, probabilities: table<label: string, probability: float>, sampleId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/language/sentiment")
-  let body = {"document": $document, "modelId": $model_id, "numResults": $num_results, "sampleId": $sample_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"document": $document, "modelId": $model_id, "numResults": $num_results, "sampleId": $sample_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Train a Dataset
@@ -572,7 +613,7 @@ export def "language-sentiment sentimentMultipart" [
 # POST /v2/language/train
 # operationId: train
 # --trainParams shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
-export def "language-train train" [
+export def "language-train create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -592,18 +633,19 @@ export def "language-train train" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/language/train")
-  let body = {"algorithm": $algorithm, "datasetId": $dataset_id, "epochs": $epochs, "learningRate": $learning_rate, "name": $name, "trainParams": $train_params} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"algorithm": $algorithm, "datasetId": $dataset_id, "epochs": $epochs, "learningRate": $learning_rate, "name": $name, "trainParams": $train_params} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get Training Status
 #
 # GET /v2/language/train/{modelId}
 # operationId: getTrainStatusAndProgress
-export def "language-train get-train-status-and-progress" [
+export def "language-train get-status-and-progress" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -616,7 +658,7 @@ export def "language-train get-train-status-and-progress" [
 ]: nothing -> record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({model_id: $model_id} | format pattern "/v2/language/train/{model_id}"))
+  let full_url = (build-url $base ({model_id: (encode-path-segment $model_id)} | format pattern "/v2/language/train/{model_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -627,7 +669,7 @@ export def "language-train get-train-status-and-progress" [
 # POST /v2/oauth2/token
 # Docs: https://metamind.readme.io/docs/generate-an-oauth-access-token — authentication guid
 # operationId: generateTokenV2
-export def "oauth2-token generateTokenV2" [
+export def "oauth2-token generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -646,18 +688,19 @@ export def "oauth2-token generateTokenV2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/oauth2/token")
-  let body = {"assertion": $assertion, "grant_type": $grant_type, "refresh_token": $refresh_token, "scope": $scope, "valid_for": $valid_for} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"assertion": $assertion, "grant_type": $grant_type, "refresh_token": $refresh_token, "scope": $scope, "valid_for": $valid_for} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a Refresh Token
 #
 # DELETE /v2/oauth2/tokens/{token}
 # operationId: revokeRefreshTokenV2
-export def "oauth2-tokens delete-refresh-v2" [
+export def "oauth2-tokens delete-refresh" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -670,7 +713,7 @@ export def "oauth2-tokens delete-refresh-v2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/v2/oauth2/tokens/{token_arg}"))
+  let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v2/oauth2/tokens/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -696,11 +739,12 @@ export def "vision-bulkfeedback update-dataset-async-by-" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/vision/bulkfeedback")
-  let body = {"data": $data, "modelId": $model_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data, "modelId": $model_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get All Datasets
@@ -750,18 +794,19 @@ export def "vision-datasets create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/vision/datasets")
-  let body = {"labels": $labels, "name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"labels": $labels, "name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Create a Dataset From a Zip File Asynchronously
 #
 # POST /v2/vision/datasets/upload
 # operationId: uploadDatasetAsync_1
-export def "vision-datasets-upload upload-dataset-async-by-" [
+export def "vision-datasets-upload upload-async-by-" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -779,11 +824,12 @@ export def "vision-datasets-upload upload-dataset-async-by-" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/vision/datasets/upload")
-  let body = {"data": $data, "name": $name, "path": $path, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data, "name": $name, "path": $path, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Create a Dataset From a Zip File Synchronously
@@ -808,11 +854,12 @@ export def "vision-datasets-upload-sync upload-by-" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/vision/datasets/upload/sync")
-  let body = {"data": $data, "name": $name, "path": $path, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data, "name": $name, "path": $path, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Delete a Dataset
@@ -832,7 +879,7 @@ export def "vision-datasets delete-by-datasetId" [
 ]: nothing -> record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dataset_id: $dataset_id} | format pattern "/v2/vision/datasets/{dataset_id}"))
+  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/vision/datasets/{dataset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -855,7 +902,7 @@ export def "vision-datasets get-by-datasetId" [
 ]: nothing -> record<available: bool, createdAt: string, id: int, labelSummary: record<labels: list<record>>, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dataset_id: $dataset_id} | format pattern "/v2/vision/datasets/{dataset_id}"))
+  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/vision/datasets/{dataset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -882,7 +929,7 @@ export def "vision-datasets-examples get-by-datasetId" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({dataset_id: $dataset_id} | format pattern "/v2/vision/datasets/{dataset_id}/examples") $qp)
+  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/vision/datasets/{dataset_id}/examples") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -909,12 +956,13 @@ export def "vision-datasets-examples create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dataset_id: $dataset_id} | format pattern "/v2/vision/datasets/{dataset_id}/examples"))
-  let body = {"data": $data, "labelId": $label_id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/vision/datasets/{dataset_id}/examples"))
+  let req_body = {"data": $data, "labelId": $label_id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get All Models
@@ -937,7 +985,7 @@ export def "vision-datasets-models get-trained-by-datasetId" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({dataset_id: $dataset_id} | format pattern "/v2/vision/datasets/{dataset_id}/models") $qp)
+  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/vision/datasets/{dataset_id}/models") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -947,7 +995,7 @@ export def "vision-datasets-models get-trained-by-datasetId" [
 #
 # PUT /v2/vision/datasets/{datasetId}/upload
 # operationId: updateDatasetAsync_2
-export def "vision-datasets-upload update-dataset-async-by-datasetId" [
+export def "vision-datasets-upload update-async-by-datasetId" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -963,12 +1011,13 @@ export def "vision-datasets-upload update-dataset-async-by-datasetId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dataset_id: $dataset_id} | format pattern "/v2/vision/datasets/{dataset_id}/upload"))
-  let body = {"data": $data, "path": $path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({dataset_id: (encode-path-segment $dataset_id)} | format pattern "/v2/vision/datasets/{dataset_id}/upload"))
+  let req_body = {"data": $data, "path": $path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get Deletion Status
@@ -988,7 +1037,7 @@ export def "vision-deletion get-by-id" [
 ]: nothing -> record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/vision/deletion/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/vision/deletion/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -998,7 +1047,7 @@ export def "vision-deletion get-by-id" [
 #
 # POST /v2/vision/detect
 # operationId: detectMultipart
-export def "vision-detect detectMultipart" [
+export def "vision-detect create-multipart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1016,18 +1065,18 @@ export def "vision-detect detectMultipart" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/vision/detect")
-  let body = {"modelId": $model_id, "sampleBase64Content": $sample_base64_content, "sampleId": $sample_id, "sampleLocation": $sample_location} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"modelId": $model_id, "sampleBase64Content": $sample_base64_content, "sampleId": $sample_id, "sampleLocation": $sample_location} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get All Examples for Label
 #
 # GET /v2/vision/examples
 # operationId: getExamplesByLabel_1
-export def "vision-examples get-by-" [
+export def "vision-examples get-by-label-by-" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1053,7 +1102,7 @@ export def "vision-examples get-by-" [
 #
 # POST /v2/vision/feedback
 # operationId: provideFeedback_1
-export def "vision-feedback provideFeedback-by-" [
+export def "vision-feedback create-provide-by-" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1071,11 +1120,12 @@ export def "vision-feedback provideFeedback-by-" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/vision/feedback")
-  let body = {"data": $data, "expectedLabel": $expected_label, "modelId": $model_id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data, "expectedLabel": $expected_label, "modelId": $model_id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Delete a Model
@@ -1095,7 +1145,7 @@ export def "vision-models delete-by-modelId" [
 ]: nothing -> record<deletedObjectId: string, id: string, message: string, object: string, organizationId: string, progress: float, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({model_id: $model_id} | format pattern "/v2/vision/models/{model_id}"))
+  let full_url = (build-url $base ({model_id: (encode-path-segment $model_id)} | format pattern "/v2/vision/models/{model_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1105,7 +1155,7 @@ export def "vision-models delete-by-modelId" [
 #
 # GET /v2/vision/models/{modelId}
 # operationId: getTrainedModelMetrics_1
-export def "vision-models get-trained-model-metrics-by-modelId" [
+export def "vision-models get-trained-metrics-by-modelId" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1118,7 +1168,7 @@ export def "vision-models get-trained-model-metrics-by-modelId" [
 ]: nothing -> record<algorithm: string, createdAt: string, id: string, language: string, metricsData: record, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({model_id: $model_id} | format pattern "/v2/vision/models/{model_id}"))
+  let full_url = (build-url $base ({model_id: (encode-path-segment $model_id)} | format pattern "/v2/vision/models/{model_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1128,7 +1178,7 @@ export def "vision-models get-trained-model-metrics-by-modelId" [
 #
 # GET /v2/vision/models/{modelId}/lc
 # operationId: getTrainedModelLearningCurve_1
-export def "vision-models-lc get-trained-model-learning-curve-by-modelId" [
+export def "vision-models-lc get-trained-learning-curve-by-modelId" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1144,7 +1194,7 @@ export def "vision-models-lc get-trained-model-learning-curve-by-modelId" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({model_id: $model_id} | format pattern "/v2/vision/models/{model_id}/lc") $qp)
+  let full_url = (build-url $base ({model_id: (encode-path-segment $model_id)} | format pattern "/v2/vision/models/{model_id}/lc") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1154,7 +1204,7 @@ export def "vision-models-lc get-trained-model-learning-curve-by-modelId" [
 #
 # POST /v2/vision/ocr
 # operationId: ocrMultipart
-export def "vision-ocr ocrMultipart" [
+export def "vision-ocr create-multipart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1173,18 +1223,19 @@ export def "vision-ocr ocrMultipart" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/vision/ocr")
-  let body = {"modelId": $model_id, "sampleContent": $sample_content, "sampleId": $sample_id, "sampleLocation": $sample_location, "task": $task} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"modelId": $model_id, "sampleContent": $sample_content, "sampleId": $sample_id, "sampleLocation": $sample_location, "task": $task} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["sampleContent"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Make Prediction
 #
 # POST /v2/vision/predict
 # operationId: predictMultipart
-export def "vision-predict predictMultipart" [
+export def "vision-predict create-multipart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1203,11 +1254,11 @@ export def "vision-predict predictMultipart" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/vision/predict")
-  let body = {"modelId": $model_id, "numResults": $num_results, "sampleBase64Content": $sample_base64_content, "sampleId": $sample_id, "sampleLocation": $sample_location} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"modelId": $model_id, "numResults": $num_results, "sampleBase64Content": $sample_base64_content, "sampleId": $sample_id, "sampleLocation": $sample_location} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrain a Dataset
@@ -1215,7 +1266,7 @@ export def "vision-predict predictMultipart" [
 # POST /v2/vision/retrain
 # operationId: retrain_1
 # --trainParams shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
-export def "vision-retrain retrain-by-" [
+export def "vision-retrain create-by-" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1234,11 +1285,12 @@ export def "vision-retrain retrain-by-" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/vision/retrain")
-  let body = {"algorithm": $algorithm, "epochs": $epochs, "learningRate": $learning_rate, "modelId": $model_id, "trainParams": $train_params} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"algorithm": $algorithm, "epochs": $epochs, "learningRate": $learning_rate, "modelId": $model_id, "trainParams": $train_params} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Train a Dataset
@@ -1246,7 +1298,7 @@ export def "vision-retrain retrain-by-" [
 # POST /v2/vision/train
 # operationId: train_1
 # --trainParams shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
-export def "vision-train train-by-" [
+export def "vision-train create-by-" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1266,18 +1318,19 @@ export def "vision-train train-by-" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/vision/train")
-  let body = {"algorithm": $algorithm, "datasetId": $dataset_id, "epochs": $epochs, "learningRate": $learning_rate, "name": $name, "trainParams": $train_params} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"algorithm": $algorithm, "datasetId": $dataset_id, "epochs": $epochs, "learningRate": $learning_rate, "name": $name, "trainParams": $train_params} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get Training Status
 #
 # GET /v2/vision/train/{modelId}
 # operationId: getTrainStatusAndProgress_1
-export def "vision-train get-train-status-and-progress-by-modelId" [
+export def "vision-train get-status-and-progress-by-modelId" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1290,7 +1343,7 @@ export def "vision-train get-train-status-and-progress-by-modelId" [
 ]: nothing -> record<algorithm: string, createdAt: string, datasetId: int, datasetVersionId: int, epochs: int, failureMsg: string, language: string, learningRate: float, modelId: string, modelType: string, name: string, object: string, progress: float, queuePosition: int, status: string, trainParams: string, trainStats: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({model_id: $model_id} | format pattern "/v2/vision/train/{model_id}"))
+  let full_url = (build-url $base ({model_id: (encode-path-segment $model_id)} | format pattern "/v2/vision/train/{model_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

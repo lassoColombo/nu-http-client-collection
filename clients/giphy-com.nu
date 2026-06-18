@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -117,7 +126,7 @@ export def "gifs list" [
 #
 # GET /gifs/random
 # operationId: randomGif
-export def "gifs-random randomGif" [
+export def "gifs-random get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +179,7 @@ export def "gifs-search list" [
 #
 # GET /gifs/translate
 # operationId: translateGif
-export def "gifs-translate translateGif" [
+export def "gifs-translate get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +203,7 @@ export def "gifs-translate translateGif" [
 #
 # GET /gifs/trending
 # operationId: trendingGifs
-export def "gifs-trending trendingGifs" [
+export def "gifs-trending get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +242,7 @@ export def "gifs get" [
 ]: nothing -> record<data: record<bitly_url: string, content_url: string, create_datetime: string, embded_url: string, featured_tags: list<string>, id: string, images: record<downsized: record, downsized_large: record, downsized_medium: record, downsized_small: record, downsized_still: record, fixed_height: record, fixed_height_downsampled: record, fixed_height_small: record, fixed_height_small_still: record, fixed_height_still: record, fixed_width: record, fixed_width_downsampled: record, fixed_width_small: record, fixed_width_small_still: record, fixed_width_still: record, looping: record, original: record, original_still: record, preview: record, preview_gif: record>, import_datetime: string, rating: string, slug: string, source: string, source_post_url: string, source_tld: string, tags: list<string>, trending_datetime: string, type: string, update_datetime: string, url: string, user: record<avatar_url: string, banner_url: string, display_name: string, profile_url: string, twitter: string, username: string>, username: string>, meta: record<msg: string, response_id: string, status: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({gif_id: $gif_id} | format pattern "/gifs/{gif_id}"))
+  let full_url = (build-url $base ({gif_id: (encode-path-segment $gif_id)} | format pattern "/gifs/{gif_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -243,7 +252,7 @@ export def "gifs get" [
 #
 # GET /stickers/random
 # operationId: randomSticker
-export def "stickers-random randomSticker" [
+export def "stickers-random get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,7 +305,7 @@ export def "stickers-search list" [
 #
 # GET /stickers/translate
 # operationId: translateSticker
-export def "stickers-translate translateSticker" [
+export def "stickers-translate get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,7 +329,7 @@ export def "stickers-translate translateSticker" [
 #
 # GET /stickers/trending
 # operationId: trendingStickers
-export def "stickers-trending trendingStickers" [
+export def "stickers-trending get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

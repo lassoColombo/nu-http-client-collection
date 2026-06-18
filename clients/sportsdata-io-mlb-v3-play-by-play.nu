@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -108,7 +117,7 @@ export def "play-by-play get" [
 ]: nothing -> record<Game: record<Attendance: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamErrors: int, AwayTeamHits: int, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamProbablePitcherID: int, AwayTeamRuns: int, AwayTeamStartingPitcher: string, AwayTeamStartingPitcherID: int, Balls: int, Channel: string, CurrentHitter: string, CurrentHitterID: int, CurrentHittingTeamID: int, CurrentPitcher: string, CurrentPitcherID: int, CurrentPitchingTeamID: int, DateTime: string, DateTimeUTC: string, Day: string, DueUpHitterID1: int, DueUpHitterID2: int, DueUpHitterID3: int, ForecastDescription: string, ForecastTempHigh: int, ForecastTempLow: int, ForecastWindChill: int, ForecastWindDirection: int, ForecastWindSpeed: int, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamErrors: int, HomeTeamHits: int, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamProbablePitcherID: int, HomeTeamRuns: int, HomeTeamStartingPitcher: string, HomeTeamStartingPitcherID: int, Inning: int, InningDescription: string, InningHalf: string, Innings: list<record>, IsClosed: bool, LastPlay: string, LosingPitcher: string, LosingPitcherID: int, NeutralVenue: bool, Outs: int, OverPayout: int, OverUnder: float, PointSpread: float, PointSpreadAwayTeamMoneyLine: int, PointSpreadHomeTeamMoneyLine: int, RescheduledFromGameID: int, RescheduledGameID: int, RunnerOnFirst: bool, RunnerOnSecond: bool, RunnerOnThird: bool, SavingPitcher: string, SavingPitcherID: int, Season: int, SeasonType: int, SeriesInfo: record<AwayTeamWins: int, GameNumber: int, HomeTeamWins: int, MaxLength: int>, StadiumID: int, Status: string, Strikes: int, UnderPayout: int, Updated: string, WinningPitcher: string, WinningPitcherID: int>, Plays: table<AtBat: bool, AwayTeamRuns: int, Balls: int, Description: string, Error: bool, Hit: bool, HitterBatHand: string, HitterID: int, HitterName: string, HitterPosition: string, HitterTeamID: int, HomeTeamRuns: int, InningBatterNumber: int, InningHalf: string, InningID: int, InningNumber: int, NumberOfOutsOnPlay: int, Out: bool, Outs: int, PitchNumberThisAtBat: int, PitcherID: int, PitcherName: string, PitcherTeamID: int, PitcherThrowHand: string, Pitches: list, PlayID: int, PlayNumber: int, Result: string, Runner1ID: int, Runner2ID: int, Runner3ID: int, RunsBattedIn: int, Sacrifice: bool, Strikeout: bool, Strikes: int, Updated: string, Walk: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, gameid: $gameid} | format pattern "/{format}/PlayByPlay/{gameid}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), gameid: (encode-path-segment $gameid)} | format pattern "/{format}/PlayByPlay/{gameid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -133,7 +142,7 @@ export def "play-by-play-delta get" [
 ]: nothing -> table<Game: record<Attendance: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamErrors: int, AwayTeamHits: int, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamProbablePitcherID: int, AwayTeamRuns: int, AwayTeamStartingPitcher: string, AwayTeamStartingPitcherID: int, Balls: int, Channel: string, CurrentHitter: string, CurrentHitterID: int, CurrentHittingTeamID: int, CurrentPitcher: string, CurrentPitcherID: int, CurrentPitchingTeamID: int, DateTime: string, DateTimeUTC: string, Day: string, DueUpHitterID1: int, DueUpHitterID2: int, DueUpHitterID3: int, ForecastDescription: string, ForecastTempHigh: int, ForecastTempLow: int, ForecastWindChill: int, ForecastWindDirection: int, ForecastWindSpeed: int, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamErrors: int, HomeTeamHits: int, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamProbablePitcherID: int, HomeTeamRuns: int, HomeTeamStartingPitcher: string, HomeTeamStartingPitcherID: int, Inning: int, InningDescription: string, InningHalf: string, Innings: list, IsClosed: bool, LastPlay: string, LosingPitcher: string, LosingPitcherID: int, NeutralVenue: bool, Outs: int, OverPayout: int, OverUnder: float, PointSpread: float, PointSpreadAwayTeamMoneyLine: int, PointSpreadHomeTeamMoneyLine: int, RescheduledFromGameID: int, RescheduledGameID: int, RunnerOnFirst: bool, RunnerOnSecond: bool, RunnerOnThird: bool, SavingPitcher: string, SavingPitcherID: int, Season: int, SeasonType: int, SeriesInfo: record, StadiumID: int, Status: string, Strikes: int, UnderPayout: int, Updated: string, WinningPitcher: string, WinningPitcherID: int>, Plays: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format, date: $date, minutes: $minutes} | format pattern "/{format}/PlayByPlayDelta/{date}/{minutes}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date), minutes: (encode-path-segment $minutes)} | format pattern "/{format}/PlayByPlayDelta/{date}/{minutes}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

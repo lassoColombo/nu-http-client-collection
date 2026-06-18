@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -114,11 +123,11 @@ export def "build-job build" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/buildJob" $qp)
-  let body = {"name": $name, "properties": $properties, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "properties": $properties, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the jobs, if any, associated with the specified Data Lake Analytics account. The response includes a link to the next page of results, if any.
@@ -170,7 +179,7 @@ export def "jobs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_identity: $job_identity} | format pattern "/jobs/{job_identity}") $qp)
+  let full_url = (build-url $base ({job_identity: (encode-path-segment $job_identity)} | format pattern "/jobs/{job_identity}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -200,12 +209,12 @@ export def "jobs update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_identity: $job_identity} | format pattern "/jobs/{job_identity}") $qp)
-  let body = {"degreeOfParallelism": $degree_of_parallelism, "degreeOfParallelismPercent": $degree_of_parallelism_percent, "priority": $priority, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({job_identity: (encode-path-segment $job_identity)} | format pattern "/jobs/{job_identity}") $qp)
+  let req_body = {"degreeOfParallelism": $degree_of_parallelism, "degreeOfParallelismPercent": $degree_of_parallelism_percent, "priority": $priority, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Submits a job to the specified Data Lake Analytics account.
@@ -227,7 +236,7 @@ export def "jobs create" [
   --api-version: string # Client Api Version.
   --degree-of-parallelism: int # The degree of parallelism to use for this job. At most one of degreeOfParallelism and degreeOfParallelismPercent should be specified. If none, a default value of 1 will be used for degreeOfParallelism. (format: int32, default: 1)
   --degree-of-parallelism-percent: float # the degree of parallelism in percentage used for this job. At most one of degreeOfParallelism and degreeOfParallelismPercent should be specified. If none, a default value of 1 will be used for degreeOfParallelism. (format: double)
-  --log-file-patterns: list # The list of log file name patterns to find in the logFolder. '*' is the only matching character allowed. Example format: jobExecution*.log or *mylog*.txt
+  --log-file-patterns: list<string> # The list of log file name patterns to find in the logFolder. '*' is the only matching character allowed. Example format: jobExecution*.log or *mylog*.txt
   name: string # The friendly name of the job to submit.
   --priority: int # The priority value to use for the current job. Lower numbers have a higher priority. By default, a job has a priority of 1000. This must be greater than 0. (format: int32)
   --related: any # Job relationship information properties including pipeline information, correlation information, etc. — shape: {pipelineId?: string, pipelineName?: string, pipelineUri?: string, recurrenceId: string, recurrenceName?: string, runId?: string}
@@ -238,12 +247,12 @@ export def "jobs create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_identity: $job_identity} | format pattern "/jobs/{job_identity}") $qp)
-  let body = {"degreeOfParallelism": $degree_of_parallelism, "degreeOfParallelismPercent": $degree_of_parallelism_percent, "logFilePatterns": $log_file_patterns, "name": $name, "priority": $priority, "related": $related, "properties": $properties, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({job_identity: (encode-path-segment $job_identity)} | format pattern "/jobs/{job_identity}") $qp)
+  let req_body = {"degreeOfParallelism": $degree_of_parallelism, "degreeOfParallelismPercent": $degree_of_parallelism_percent, "logFilePatterns": $log_file_patterns, "name": $name, "priority": $priority, "related": $related, "properties": $properties, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancels the running job specified by the job ID.
@@ -265,7 +274,7 @@ export def "jobs-cancel-job cancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_identity: $job_identity} | format pattern "/jobs/{job_identity}/CancelJob") $qp)
+  let full_url = (build-url $base ({job_identity: (encode-path-segment $job_identity)} | format pattern "/jobs/{job_identity}/CancelJob") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -290,7 +299,7 @@ export def "jobs-get-debug-data-path get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_identity: $job_identity} | format pattern "/jobs/{job_identity}/GetDebugDataPath") $qp)
+  let full_url = (build-url $base ({job_identity: (encode-path-segment $job_identity)} | format pattern "/jobs/{job_identity}/GetDebugDataPath") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -315,7 +324,7 @@ export def "jobs-get-statistics get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_identity: $job_identity} | format pattern "/jobs/{job_identity}/GetStatistics") $qp)
+  let full_url = (build-url $base ({job_identity: (encode-path-segment $job_identity)} | format pattern "/jobs/{job_identity}/GetStatistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -325,7 +334,7 @@ export def "jobs-get-statistics get" [
 #
 # POST /jobs/{jobIdentity}/YieldJob
 # operationId: Job_Yield
-export def "jobs-yield-job post" [
+export def "jobs-yield-job create" [
   job_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -340,7 +349,7 @@ export def "jobs-yield-job post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({job_identity: $job_identity} | format pattern "/jobs/{job_identity}/YieldJob") $qp)
+  let full_url = (build-url $base ({job_identity: (encode-path-segment $job_identity)} | format pattern "/jobs/{job_identity}/YieldJob") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -393,7 +402,7 @@ export def "pipelines get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pipeline_identity: $pipeline_identity} | format pattern "/pipelines/{pipeline_identity}") $qp)
+  let full_url = (build-url $base ({pipeline_identity: (encode-path-segment $pipeline_identity)} | format pattern "/pipelines/{pipeline_identity}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -446,7 +455,7 @@ export def "recurrences get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({recurrence_identity: $recurrence_identity} | format pattern "/recurrences/{recurrence_identity}") $qp)
+  let full_url = (build-url $base ({recurrence_identity: (encode-path-segment $recurrence_identity)} | format pattern "/recurrences/{recurrence_identity}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

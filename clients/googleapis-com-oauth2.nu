@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def alt-completer [] { ["json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "oauth2-tokeninfo oauth2tokeninfo" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "oauth2-tokeninfo create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 # POST /oauth2/v2/tokeninfo
 #
 # operationId: oauth2.tokeninfo
-export def "oauth2-tokeninfo oauth2tokeninfo" [
+export def "oauth2-tokeninfo create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -125,7 +134,7 @@ export def "oauth2-tokeninfo oauth2tokeninfo" [
 # GET /oauth2/v2/userinfo
 #
 # operationId: oauth2.userinfo.get
-export def "oauth2-userinfo oauth2userinfoget" [
+export def "oauth2-userinfo get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -154,7 +163,7 @@ export def "oauth2-userinfo oauth2userinfoget" [
 # GET /userinfo/v2/me
 #
 # operationId: oauth2.userinfo.v2.me.get
-export def "userinfo-me oauth2userinfov2meget" [
+export def "userinfo-me get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

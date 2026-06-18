@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -75,7 +84,7 @@ def accept-completer-1 [] { ["image/png" "image/svg+xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-encrypt encryptValue" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-encrypt create-value" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +108,7 @@ export def commands []: nothing -> table {
 #
 # POST /account/encrypt
 # operationId: encryptValue
-export def "account-encrypt encryptValue" [
+export def "account-encrypt create-value" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,11 +123,11 @@ export def "account-encrypt encryptValue" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/encrypt")
-  let body = {"plainValue": $plain_value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"plainValue": $plain_value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get build artifacts
@@ -140,7 +149,7 @@ export def "buildjobs-artifacts list" [
 ]: nothing -> table<created: string, fileName: string, name: string, size: int, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/buildjobs/{job_id}/artifacts"))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/buildjobs/{job_id}/artifacts"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -165,7 +174,7 @@ export def "buildjobs-artifacts get-build" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id, artifact_file_name: $artifact_file_name} | format pattern "/buildjobs/{job_id}/artifacts/{artifact_file_name}"))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), artifact_file_name: (encode-path-segment $artifact_file_name)} | format pattern "/buildjobs/{job_id}/artifacts/{artifact_file_name}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -189,7 +198,7 @@ export def "buildjobs-log get-build" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/buildjobs/{job_id}/log"))
+  let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/buildjobs/{job_id}/log"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -221,11 +230,11 @@ export def "builds start" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/builds")
-  let body = {"accountName": $account_name, "branch": $branch, "commitId": $commit_id, "environmentVariables": $environment_variables, "projectSlug": $project_slug, "pullRequestId": $pull_request_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountName": $account_name, "branch": $branch, "commitId": $commit_id, "environmentVariables": $environment_variables, "projectSlug": $project_slug, "pullRequestId": $pull_request_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Re-run build
@@ -233,7 +242,7 @@ export def "builds start" [
 # PUT /builds
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#re-run-build
 # operationId: reRunBuild
-export def "builds reRunBuild" [
+export def "builds build-re-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,11 +259,11 @@ export def "builds reRunBuild" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/builds")
-  let body = {"buildId": $build_id, "reRunIncomplete": $re_run_incomplete} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"buildId": $build_id, "reRunIncomplete": $re_run_incomplete} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel build
@@ -278,7 +287,7 @@ export def "builds cancel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_name: $account_name, project_slug: $project_slug, build_version: $build_version} | format pattern "/builds/{account_name}/{project_slug}/{build_version}"))
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), project_slug: (encode-path-segment $project_slug), build_version: (encode-path-segment $build_version)} | format pattern "/builds/{account_name}/{project_slug}/{build_version}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -330,11 +339,11 @@ export def "collaborators update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/collaborators")
-  let body = {"roleId": $role_id, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"roleId": $role_id, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete collaborator
@@ -356,7 +365,7 @@ export def "collaborators delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/collaborators/{user_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/collaborators/{user_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -381,7 +390,7 @@ export def "collaborators get" [
 ]: nothing -> record<roles: table<created: string, updated: string, isSystem: bool, name: string, roleId: int>, user: record<created: string, updated: string, accountId: int, accountName: string, email: string, fullName: string, isCollaborator: bool, isOwner: bool, pageSize: int, password: string, roleId: int, roleName: string, twoFactorAuthEnabled: bool, userId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/collaborators/{user_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/collaborators/{user_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -413,11 +422,11 @@ export def "deployments start" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deployments")
-  let body = {"accountName": $account_name, "buildJobId": $build_job_id, "buildVersion": $build_version, "environmentName": $environment_name, "environmentVariables": $environment_variables, "projectSlug": $project_slug} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountName": $account_name, "buildJobId": $build_job_id, "buildVersion": $build_version, "environmentName": $environment_name, "environmentVariables": $environment_variables, "projectSlug": $project_slug} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel deployment
@@ -441,11 +450,11 @@ export def "deployments-stop cancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deployments/stop")
-  let body = {"deploymentId": $deployment_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"deploymentId": $deployment_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get deployment
@@ -467,7 +476,7 @@ export def "deployments get" [
 ]: nothing -> record<deployment: record<build: record<branch: string, buildId: int, message: string, version: string, created: string, updated: string, authorName: string, authorUsername: string, buildNumber: int, commitId: string, committed: string, committerName: string, committerUsername: string, finished: string, isTag: bool, jobs: list, messageExtended: string, messages: list, projectId: int, pullRequestId: int, pullRequestName: string, started: string, status: string>, deploymentId: int, finished: string, started: string, status: string, created: string, updated: string, environment: record<deploymentEnvironmentId: int, name: string, provider: string, created: string, updated: string, accountId: int, projectsMode: int, securityDescriptor: record, tags: string>, jobs: list<record>>, project: record<accountName: string, name: string, projectId: int, slug: string, created: string, updated: string, accountId: int, alwaysBuildClosedPullRequests: bool, builds: list<record>, currentBuildId: int, disablePullRequestWebhooks: bool, disablePushWebhooks: bool, enableDeploymentInPullRequests: bool, enableSecureVariablesInPullRequests: bool, enableSecureVariablesInPullRequestsFromSameRepo: bool, isGitHubApp: bool, isPrivate: bool, nuGetFeed: record<created: string, updated: string, accountId: int, id: string, isPrivateProject: bool, name: string, nuGetFeedId: int, projectId: int, publishingEnabled: bool>, repositoryBranch: string, repositoryName: string, repositoryScm: string, repositoryType: string, rollingBuilds: bool, rollingBuildsDoNotCancelRunningBuilds: bool, rollingBuildsOnlyForPullRequests: bool, saveBuildCacheInPullRequests: bool, securityDescriptor: record<accessRightDefinitions: list, roleAces: list>, skipBranchesWithoutAppveyorYml: bool, tags: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({deployment_id: $deployment_id} | format pattern "/deployments/{deployment_id}"))
+  let full_url = (build-url $base ({deployment_id: (encode-path-segment $deployment_id)} | format pattern "/deployments/{deployment_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -521,11 +530,11 @@ export def "environments create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/environments")
-  let body = {"name": $name, "provider": $provider, "settings": $settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "provider": $provider, "settings": $settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update environment
@@ -547,18 +556,18 @@ export def "environments update" [
   --accept: string@accept-completer # Response content type
   --environment-access-key: string
   --projects: list # Projects available for selection in UI. Only present in response from getEnvironmentSettings. — item shape: {isSelected: bool, name: string, projectId: int}
-  --selected-projects: list # Project IDs of selected projects
+  --selected-projects: list<int> # Project IDs of selected projects
   --settings: record # shape: {environmentVariables?: list, notifications?: list, providerSettings?: list}
 ]: any -> record<environmentAccessKey: string, projects: table<isSelected: bool, name: string, projectId: int>, selectedProjects: list<int>, settings: record<environmentVariables: list<record>, notifications: list<record>, providerSettings: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/environments")
-  let body = {"environmentAccessKey": $environment_access_key, "projects": $projects, "selectedProjects": $selected_projects, "settings": $settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"environmentAccessKey": $environment_access_key, "projects": $projects, "selectedProjects": $selected_projects, "settings": $settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete environment
@@ -580,7 +589,7 @@ export def "environments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({deployment_environment_id: $deployment_environment_id} | format pattern "/environments/{deployment_environment_id}"))
+  let full_url = (build-url $base ({deployment_environment_id: (encode-path-segment $deployment_environment_id)} | format pattern "/environments/{deployment_environment_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -605,7 +614,7 @@ export def "environments-deployments get" [
 ]: nothing -> record<deployments: table<build: record, deploymentId: int, finished: string, started: string, status: string, project: record>, environment: record<deploymentEnvironmentId: int, name: string, provider: string, created: string, updated: string, accountId: int, projectsMode: int, securityDescriptor: record<accessRightDefinitions: list, roleAces: list>, tags: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({deployment_environment_id: $deployment_environment_id} | format pattern "/environments/{deployment_environment_id}/deployments"))
+  let full_url = (build-url $base ({deployment_environment_id: (encode-path-segment $deployment_environment_id)} | format pattern "/environments/{deployment_environment_id}/deployments"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -630,7 +639,7 @@ export def "environments-settings get" [
 ]: nothing -> record<environment: record<environmentAccessKey: string, projects: list<record>, selectedProjects: list<int>, settings: record<environmentVariables: list, notifications: list, providerSettings: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({deployment_environment_id: $deployment_environment_id} | format pattern "/environments/{deployment_environment_id}/settings"))
+  let full_url = (build-url $base ({deployment_environment_id: (encode-path-segment $deployment_environment_id)} | format pattern "/environments/{deployment_environment_id}/settings"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -685,11 +694,11 @@ export def "projects create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/projects")
-  let body = {"repositoryAuthentication": $repository_authentication, "repositoryName": $repository_name, "repositoryPassword": $repository_password, "repositoryProvider": $repository_provider, "repositoryUsername": $repository_username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"repositoryAuthentication": $repository_authentication, "repositoryName": $repository_name, "repositoryPassword": $repository_password, "repositoryProvider": $repository_provider, "repositoryUsername": $repository_username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update project
@@ -697,7 +706,7 @@ export def "projects create" [
 # PUT /projects
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#update-project
 # operationId: updateProject
-# --configuration shape: {afterBuildScripts?: list, afterDeployScripts?: list, afterTestScripts?: list, artifacts?: list, assemblyFileVersionFormat?: string, assemblyInfoFile?: string, assemblyInformationalVersionFormat?: string, assemblyVersionFormat?: string, beforeBuildScripts?: list, beforeDeployScripts?: list, beforePackageScripts?: list, beforeTestScripts?: list, branchesMode?: "exclude"|"include", buildCloud?: list, buildMode?: "msbuild"|"none"|"script", buildScripts?: list, cacheEntries?: list, cloneDepth?: int, cloneFolder?: string, cloneScripts?: list, configuration?: list, configureNuGetAccountSource?: bool, configureNuGetProjectSource?: bool, deployMode?: "providers"|"none"|"script", deployScripts?: list, deployments?: list, disableNuGetPublishForOctopusPackages?: bool, disableNuGetPublishOnPullRequests?: bool, doNotIncrementBuildNumberOnPullRequests?: bool, dotnetCsprojAssemblyVersionFormat?: string, dotnetCsprojFile?: string, dotnetCsprojFileVersionFormat?: string, dotnetCsprojInformationalVersionFormat?: string, dotnetCsprojPackageVersionFormat?: string, dotnetCsprojVersionFormat?: string, environmentVariables?: list, environmentVariablesMatrix?: list, excludeBranches?: list, forceHttpsClone?: bool, hostsEntries?: list, hotFixScripts?: list, includeBranches?: list, includeNuGetReferences?: bool, initScripts?: list, installScripts?: list, matrixAllowFailures?: list, matrixExcept?: list, matrixExclude?: list, matrixFastFinish?: bool, matrixOnly?: list, maxJobs?: int, msBuildInParallel?: bool, msBuildProjectFileName?: string, msBuildVerbosity?: "quiet"|"minimal"|"normal"|"detailed", notifications?: list, onBuildErrorScripts?: list, onBuildFinishScripts?: list, onBuildSuccessScripts?: list, onlyCommitsFiles?: list, operatingSystem?: list, packageAspNetCoreProjects?: bool, packageAzureCloudServiceProjects?: bool, packageDotnetConsoleProjects?: bool, packageNuGetProjects?: bool, packageNuGetSymbols?: bool, packageWebApplicationProjects?: bool, packageWebApplicationProjectsBeanstalk?: bool, packageWebApplicationProjectsOctopus?: bool, packageWebApplicationProjectsXCopy?: bool, patchAssemblyInfo?: bool, patchDotnetCsproj?: bool, platform?: list, services?: list, shallowClone?: bool, skipBranchWithPullRequests?: bool, skipCommitsFiles?: list, skipNonTags?: bool, skipTags?: bool, stacks?: list, testAssemblies?: list, testCategories?: list, testCategoriesMatrix?: list, testCategoriesMode?: "exclude"|"include", testMode?: "auto"|"none"|"script", testScripts?: list, xamarinRegisterAndroidProduct?: bool, xamarinRegisterIosProduct?: bool}
+# --configuration shape: {afterBuildScripts?: list, afterDeployScripts?: list, afterTestScripts?: list, artifacts?: list, assemblyFileVersionFormat?: string, assemblyInfoFile?: string, assemblyInformationalVersionFormat?: string, assemblyVersionFormat?: string, beforeBuildScripts?: list, beforeDeployScripts?: list, beforePackageScripts?: list, beforeTestScripts?: list, branchesMode?: "exclude"|"include", buildCloud?: list, buildMode?: "msbuild"|"none"|"script", buildScripts?: list, cacheEntries?: list, cloneDepth?: int, ... (69 more fields)}
 export def "projects update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -709,13 +718,13 @@ export def "projects update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --build-priority: int
-  configuration: record # shape: {afterBuildScripts?: list, afterDeployScripts?: list, afterTestScripts?: list, artifacts?: list, assemblyFileVersionFormat?: string, assemblyInfoFile?: string, assemblyInformationalVersionFormat?: string, assemblyVersionFormat?: string, beforeBuildScripts?: list, beforeDeployScripts?: list, beforePackageScripts?: list, beforeTestScripts?: list, branchesMode?: "exclude"|"include", buildCloud?: list, buildMode?: "msbuild"|"none"|"script", buildScripts?: list, cacheEntries?: list, cloneDepth?: int, cloneFolder?: string, cloneScripts?: list, configuration?: list, configureNuGetAccountSource?: bool, configureNuGetProjectSource?: bool, deployMode?: "providers"|"none"|"script", deployScripts?: list, deployments?: list, disableNuGetPublishForOctopusPackages?: bool, disableNuGetPublishOnPullRequests?: bool, doNotIncrementBuildNumberOnPullRequests?: bool, dotnetCsprojAssemblyVersionFormat?: string, dotnetCsprojFile?: string, dotnetCsprojFileVersionFormat?: string, dotnetCsprojInformationalVersionFormat?: string, dotnetCsprojPackageVersionFormat?: string, dotnetCsprojVersionFormat?: string, environmentVariables?: list, environmentVariablesMatrix?: list, excludeBranches?: list, forceHttpsClone?: bool, hostsEntries?: list, hotFixScripts?: list, includeBranches?: list, includeNuGetReferences?: bool, initScripts?: list, installScripts?: list, matrixAllowFailures?: list, matrixExcept?: list, matrixExclude?: list, matrixFastFinish?: bool, matrixOnly?: list, maxJobs?: int, msBuildInParallel?: bool, msBuildProjectFileName?: string, msBuildVerbosity?: "quiet"|"minimal"|"normal"|"detailed", notifications?: list, onBuildErrorScripts?: list, onBuildFinishScripts?: list, onBuildSuccessScripts?: list, onlyCommitsFiles?: list, operatingSystem?: list, packageAspNetCoreProjects?: bool, packageAzureCloudServiceProjects?: bool, packageDotnetConsoleProjects?: bool, packageNuGetProjects?: bool, packageNuGetSymbols?: bool, packageWebApplicationProjects?: bool, packageWebApplicationProjectsBeanstalk?: bool, packageWebApplicationProjectsOctopus?: bool, packageWebApplicationProjectsXCopy?: bool, patchAssemblyInfo?: bool, patchDotnetCsproj?: bool, platform?: list, services?: list, shallowClone?: bool, skipBranchWithPullRequests?: bool, skipCommitsFiles?: list, skipNonTags?: bool, skipTags?: bool, stacks?: list, testAssemblies?: list, testCategories?: list, testCategoriesMatrix?: list, testCategoriesMode?: "exclude"|"include", testMode?: "auto"|"none"|"script", testScripts?: list, xamarinRegisterAndroidProduct?: bool, xamarinRegisterIosProduct?: bool}
+  configuration: record # shape: {afterBuildScripts?: list, afterDeployScripts?: list, afterTestScripts?: list, artifacts?: list, assemblyFileVersionFormat?: string, assemblyInfoFile?: string, assemblyInformationalVersionFormat?: string, assemblyVersionFormat?: string, beforeBuildScripts?: list, beforeDeployScripts?: list, beforePackageScripts?: list, beforeTestScripts?: list, branchesMode?: "exclude"|"include", buildCloud?: list, buildMode?: "msbuild"|"none"|"script", buildScripts?: list, cacheEntries?: list, cloneDepth?: int, ... (69 more fields)}
   --custom-yml-name: string
   --ignore-appveyor-yml: oneof<nothing, bool>
   --next-build-number: int
   --repository-authentication: string@repository-authentication-completer
   --repository-username: string
-  --schedule-crontab-expression: string # Build schedule as an NCrontab Expression.  See https://github.com/atifaziz/NCrontab/wiki/Crontab-Expression
+  --schedule-crontab-expression: string # Build schedule as an NCrontab Expression. See https://github.com/atifaziz/NCrontab/wiki/Crontab-Expression
   --ssh-public-key: string
   --status-badge-id: string
   version_format: string
@@ -726,11 +735,11 @@ export def "projects update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/projects")
-  let body = {"buildPriority": $build_priority, "configuration": $configuration, "customYmlName": $custom_yml_name, "ignoreAppveyorYml": $ignore_appveyor_yml, "nextBuildNumber": $next_build_number, "repositoryAuthentication": $repository_authentication, "repositoryUsername": $repository_username, "scheduleCrontabExpression": $schedule_crontab_expression, "sshPublicKey": $ssh_public_key, "statusBadgeId": $status_badge_id, "versionFormat": $version_format, "webhookId": $webhook_id, "webhookUrl": $webhook_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"buildPriority": $build_priority, "configuration": $configuration, "customYmlName": $custom_yml_name, "ignoreAppveyorYml": $ignore_appveyor_yml, "nextBuildNumber": $next_build_number, "repositoryAuthentication": $repository_authentication, "repositoryUsername": $repository_username, "scheduleCrontabExpression": $schedule_crontab_expression, "sshPublicKey": $ssh_public_key, "statusBadgeId": $status_badge_id, "versionFormat": $version_format, "webhookId": $webhook_id, "webhookUrl": $webhook_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get status badge image for a project with a public repository
@@ -738,7 +747,7 @@ export def "projects update" [
 # GET /projects/status/{badgeRepoProvider}/{repoAccountName}/{repoSlug}
 # Docs: https://www.appveyor.com/docs/status-badges/
 # operationId: getPublicProjectStatusBadge
-export def "projects-status get-public-project-status-badge" [
+export def "projects-status get-public-badge" [
   badge_repo_provider: any
   repo_account_name: any
   repo_slug: any
@@ -752,8 +761,8 @@ export def "projects-status get-public-project-status-badge" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --branch: string # Repository Branch
-  --svg: oneof<nothing, bool> # Return an SVG image instead of PNG?  Exclusive with `retina`. (default: false)
-  --retina: oneof<nothing, bool> # Return a larger image suitable for retina displays?  Exclusive with `svg`. (default: false)
+  --svg: oneof<nothing, bool> # Return an SVG image instead of PNG? Exclusive with `retina`. (default: false)
+  --retina: oneof<nothing, bool> # Return a larger image suitable for retina displays? Exclusive with `svg`. (default: false)
   --passing-text: string # Text to show in badge when build is passing.
   --failing-text: string # Text to show in badge when build is failing.
   --pending-text: string # Text to show in badge when build is pending.
@@ -761,7 +770,7 @@ export def "projects-status get-public-project-status-badge" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "branch" $branch "scalar") (serialize-qp "svg" $svg "scalar") (serialize-qp "retina" $retina "scalar") (serialize-qp "passingText" $passing_text "scalar") (serialize-qp "failingText" $failing_text "scalar") (serialize-qp "pendingText" $pending_text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({badge_repo_provider: $badge_repo_provider, repo_account_name: $repo_account_name, repo_slug: $repo_slug} | format pattern "/projects/status/{badge_repo_provider}/{repo_account_name}/{repo_slug}") $qp)
+  let full_url = (build-url $base ({badge_repo_provider: (encode-path-segment $badge_repo_provider), repo_account_name: (encode-path-segment $repo_account_name), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/projects/status/{badge_repo_provider}/{repo_account_name}/{repo_slug}") $qp)
   let accept_val = ($accept | default "image/svg+xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -772,7 +781,7 @@ export def "projects-status get-public-project-status-badge" [
 # GET /projects/status/{statusBadgeId}
 # Docs: https://www.appveyor.com/docs/status-badges/
 # operationId: getProjectStatusBadge
-export def "projects-status get-project-status-badge" [
+export def "projects-status get-badge" [
   status_badge_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -783,8 +792,8 @@ export def "projects-status get-project-status-badge" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --svg: oneof<nothing, bool> # Return an SVG image instead of PNG?  Exclusive with `retina`. (default: false)
-  --retina: oneof<nothing, bool> # Return a larger image suitable for retina displays?  Exclusive with `svg`. (default: false)
+  --svg: oneof<nothing, bool> # Return an SVG image instead of PNG? Exclusive with `retina`. (default: false)
+  --retina: oneof<nothing, bool> # Return a larger image suitable for retina displays? Exclusive with `svg`. (default: false)
   --passing-text: string # Text to show in badge when build is passing.
   --failing-text: string # Text to show in badge when build is failing.
   --pending-text: string # Text to show in badge when build is pending.
@@ -792,7 +801,7 @@ export def "projects-status get-project-status-badge" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "svg" $svg "scalar") (serialize-qp "retina" $retina "scalar") (serialize-qp "passingText" $passing_text "scalar") (serialize-qp "failingText" $failing_text "scalar") (serialize-qp "pendingText" $pending_text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({status_badge_id: $status_badge_id} | format pattern "/projects/status/{status_badge_id}") $qp)
+  let full_url = (build-url $base ({status_badge_id: (encode-path-segment $status_badge_id)} | format pattern "/projects/status/{status_badge_id}") $qp)
   let accept_val = ($accept | default "image/svg+xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -803,7 +812,7 @@ export def "projects-status get-project-status-badge" [
 # GET /projects/status/{statusBadgeId}/branch/{buildBranch}
 # Docs: https://www.appveyor.com/docs/status-badges/
 # operationId: getProjectBranchStatusBadge
-export def "projects-status-branch get-project-branch-status-badge" [
+export def "projects-status-branch get-badge" [
   status_badge_id: any
   build_branch: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -815,8 +824,8 @@ export def "projects-status-branch get-project-branch-status-badge" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --svg: oneof<nothing, bool> # Return an SVG image instead of PNG?  Exclusive with `retina`. (default: false)
-  --retina: oneof<nothing, bool> # Return a larger image suitable for retina displays?  Exclusive with `svg`. (default: false)
+  --svg: oneof<nothing, bool> # Return an SVG image instead of PNG? Exclusive with `retina`. (default: false)
+  --retina: oneof<nothing, bool> # Return a larger image suitable for retina displays? Exclusive with `svg`. (default: false)
   --passing-text: string # Text to show in badge when build is passing.
   --failing-text: string # Text to show in badge when build is failing.
   --pending-text: string # Text to show in badge when build is pending.
@@ -824,7 +833,7 @@ export def "projects-status-branch get-project-branch-status-badge" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "svg" $svg "scalar") (serialize-qp "retina" $retina "scalar") (serialize-qp "passingText" $passing_text "scalar") (serialize-qp "failingText" $failing_text "scalar") (serialize-qp "pendingText" $pending_text "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({status_badge_id: $status_badge_id, build_branch: $build_branch} | format pattern "/projects/status/{status_badge_id}/branch/{build_branch}") $qp)
+  let full_url = (build-url $base ({status_badge_id: (encode-path-segment $status_badge_id), build_branch: (encode-path-segment $build_branch)} | format pattern "/projects/status/{status_badge_id}/branch/{build_branch}") $qp)
   let accept_val = ($accept | default "image/svg+xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -850,7 +859,7 @@ export def "projects delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_name: $account_name, project_slug: $project_slug} | format pattern "/projects/{account_name}/{project_slug}"))
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), project_slug: (encode-path-segment $project_slug)} | format pattern "/projects/{account_name}/{project_slug}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -861,7 +870,7 @@ export def "projects delete" [
 # GET /projects/{accountName}/{projectSlug}
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#get-project-last-build
 # operationId: getProjectLastBuild
-export def "projects get-project-last-build" [
+export def "projects get-last-build" [
   account_name: string
   project_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -876,7 +885,7 @@ export def "projects get-project-last-build" [
 ]: nothing -> record<build: record<branch: string, buildId: int, message: string, version: string, created: string, updated: string, authorName: string, authorUsername: string, buildNumber: int, commitId: string, committed: string, committerName: string, committerUsername: string, finished: string, isTag: bool, jobs: list<record>, messageExtended: string, messages: list<record>, projectId: int, pullRequestId: int, pullRequestName: string, started: string, status: string>, project: record<accountName: string, name: string, projectId: int, slug: string, created: string, updated: string, accountId: int, alwaysBuildClosedPullRequests: bool, builds: list<record>, currentBuildId: int, disablePullRequestWebhooks: bool, disablePushWebhooks: bool, enableDeploymentInPullRequests: bool, enableSecureVariablesInPullRequests: bool, enableSecureVariablesInPullRequestsFromSameRepo: bool, isGitHubApp: bool, isPrivate: bool, nuGetFeed: record<created: string, updated: string, accountId: int, id: string, isPrivateProject: bool, name: string, nuGetFeedId: int, projectId: int, publishingEnabled: bool>, repositoryBranch: string, repositoryName: string, repositoryScm: string, repositoryType: string, rollingBuilds: bool, rollingBuildsDoNotCancelRunningBuilds: bool, rollingBuildsOnlyForPullRequests: bool, saveBuildCacheInPullRequests: bool, securityDescriptor: record<accessRightDefinitions: list, roleAces: list>, skipBranchesWithoutAppveyorYml: bool, tags: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_name: $account_name, project_slug: $project_slug} | format pattern "/projects/{account_name}/{project_slug}"))
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), project_slug: (encode-path-segment $project_slug)} | format pattern "/projects/{account_name}/{project_slug}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -908,7 +917,7 @@ export def "projects-artifacts get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "branch" $branch "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "job" $job "scalar") (serialize-qp "all" $all "scalar") (serialize-qp "pr" $pr "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_name: $account_name, project_slug: $project_slug, artifact_file_name: $artifact_file_name} | format pattern "/projects/{account_name}/{project_slug}/artifacts/{artifact_file_name}") $qp)
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), project_slug: (encode-path-segment $project_slug), artifact_file_name: (encode-path-segment $artifact_file_name)} | format pattern "/projects/{account_name}/{project_slug}/artifacts/{artifact_file_name}") $qp)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -919,7 +928,7 @@ export def "projects-artifacts get" [
 # GET /projects/{accountName}/{projectSlug}/branch/{buildBranch}
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#get-project-last-branch-build
 # operationId: getProjectLastBuildBranch
-export def "projects-branch get-project-last-build" [
+export def "projects-branch get-last-build" [
   account_name: string
   project_slug: string
   build_branch: string
@@ -935,7 +944,7 @@ export def "projects-branch get-project-last-build" [
 ]: nothing -> record<build: record<branch: string, buildId: int, message: string, version: string, created: string, updated: string, authorName: string, authorUsername: string, buildNumber: int, commitId: string, committed: string, committerName: string, committerUsername: string, finished: string, isTag: bool, jobs: list<record>, messageExtended: string, messages: list<record>, projectId: int, pullRequestId: int, pullRequestName: string, started: string, status: string>, project: record<accountName: string, name: string, projectId: int, slug: string, created: string, updated: string, accountId: int, alwaysBuildClosedPullRequests: bool, builds: list<record>, currentBuildId: int, disablePullRequestWebhooks: bool, disablePushWebhooks: bool, enableDeploymentInPullRequests: bool, enableSecureVariablesInPullRequests: bool, enableSecureVariablesInPullRequestsFromSameRepo: bool, isGitHubApp: bool, isPrivate: bool, nuGetFeed: record<created: string, updated: string, accountId: int, id: string, isPrivateProject: bool, name: string, nuGetFeedId: int, projectId: int, publishingEnabled: bool>, repositoryBranch: string, repositoryName: string, repositoryScm: string, repositoryType: string, rollingBuilds: bool, rollingBuildsDoNotCancelRunningBuilds: bool, rollingBuildsOnlyForPullRequests: bool, saveBuildCacheInPullRequests: bool, securityDescriptor: record<accessRightDefinitions: list, roleAces: list>, skipBranchesWithoutAppveyorYml: bool, tags: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_name: $account_name, project_slug: $project_slug, build_branch: $build_branch} | format pattern "/projects/{account_name}/{project_slug}/branch/{build_branch}"))
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), project_slug: (encode-path-segment $project_slug), build_branch: (encode-path-segment $build_branch)} | format pattern "/projects/{account_name}/{project_slug}/branch/{build_branch}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -946,7 +955,7 @@ export def "projects-branch get-project-last-build" [
 # GET /projects/{accountName}/{projectSlug}/build/{buildVersion}
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#get-project-build-by-version
 # operationId: getProjectBuildByVersion
-export def "projects-build get" [
+export def "projects-build get-by-version" [
   account_name: string
   project_slug: string
   build_version: string
@@ -962,7 +971,7 @@ export def "projects-build get" [
 ]: nothing -> record<build: record<branch: string, buildId: int, message: string, version: string, created: string, updated: string, authorName: string, authorUsername: string, buildNumber: int, commitId: string, committed: string, committerName: string, committerUsername: string, finished: string, isTag: bool, jobs: list<record>, messageExtended: string, messages: list<record>, projectId: int, pullRequestId: int, pullRequestName: string, started: string, status: string>, project: record<accountName: string, name: string, projectId: int, slug: string, created: string, updated: string, accountId: int, alwaysBuildClosedPullRequests: bool, builds: list<record>, currentBuildId: int, disablePullRequestWebhooks: bool, disablePushWebhooks: bool, enableDeploymentInPullRequests: bool, enableSecureVariablesInPullRequests: bool, enableSecureVariablesInPullRequestsFromSameRepo: bool, isGitHubApp: bool, isPrivate: bool, nuGetFeed: record<created: string, updated: string, accountId: int, id: string, isPrivateProject: bool, name: string, nuGetFeedId: int, projectId: int, publishingEnabled: bool>, repositoryBranch: string, repositoryName: string, repositoryScm: string, repositoryType: string, rollingBuilds: bool, rollingBuildsDoNotCancelRunningBuilds: bool, rollingBuildsOnlyForPullRequests: bool, saveBuildCacheInPullRequests: bool, securityDescriptor: record<accessRightDefinitions: list, roleAces: list>, skipBranchesWithoutAppveyorYml: bool, tags: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_name: $account_name, project_slug: $project_slug, build_version: $build_version} | format pattern "/projects/{account_name}/{project_slug}/build/{build_version}"))
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), project_slug: (encode-path-segment $project_slug), build_version: (encode-path-segment $build_version)} | format pattern "/projects/{account_name}/{project_slug}/build/{build_version}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -973,7 +982,7 @@ export def "projects-build get" [
 # DELETE /projects/{accountName}/{projectSlug}/buildcache
 # Docs: https://www.appveyor.com/docs/api/projects-builds/#delete-project-build-cache
 # operationId: deleteProjectBuildCache
-export def "projects-buildcache delete" [
+export def "projects-buildcache delete-build-cache" [
   account_name: string
   project_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -988,7 +997,7 @@ export def "projects-buildcache delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_name: $account_name, project_slug: $project_slug} | format pattern "/projects/{account_name}/{project_slug}/buildcache"))
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), project_slug: (encode-path-segment $project_slug)} | format pattern "/projects/{account_name}/{project_slug}/buildcache"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1011,12 +1020,12 @@ export def "projects-deployments get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --records-number: int # Number of results to include in the response. getProjectDeployments is documented to have a maximum of 20. It currently returns 500 Internal Server Error for recordsNumber <= 5. In the past it has returned 500 Internal Server Error for many different values which did not match the value used by the ci.appveyor.com web interface at the time.  As of 2018-09-08, the value used by the web interface is 10.
+  --records-number: int # Number of results to include in the response. getProjectDeployments is documented to have a maximum of 20. It currently returns 500 Internal Server Error for recordsNumber <= 5. In the past it has returned 500 Internal Server Error for many different values which did not match the value used by the ci.appveyor.com web interface at the time. As of 2018-09-08, the value used by the web interface is 10.
 ]: nothing -> record<deployments: table<build: record, deploymentId: int, finished: string, started: string, status: string, environment: record>, project: record<accountName: string, name: string, projectId: int, slug: string, created: string, updated: string, accountId: int, alwaysBuildClosedPullRequests: bool, builds: list<record>, currentBuildId: int, disablePullRequestWebhooks: bool, disablePushWebhooks: bool, enableDeploymentInPullRequests: bool, enableSecureVariablesInPullRequests: bool, enableSecureVariablesInPullRequestsFromSameRepo: bool, isGitHubApp: bool, isPrivate: bool, nuGetFeed: record<created: string, updated: string, accountId: int, id: string, isPrivateProject: bool, name: string, nuGetFeedId: int, projectId: int, publishingEnabled: bool>, repositoryBranch: string, repositoryName: string, repositoryScm: string, repositoryType: string, rollingBuilds: bool, rollingBuildsDoNotCancelRunningBuilds: bool, rollingBuildsOnlyForPullRequests: bool, saveBuildCacheInPullRequests: bool, securityDescriptor: record<accessRightDefinitions: list, roleAces: list>, skipBranchesWithoutAppveyorYml: bool, tags: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "recordsNumber" $records_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_name: $account_name, project_slug: $project_slug} | format pattern "/projects/{account_name}/{project_slug}/deployments") $qp)
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), project_slug: (encode-path-segment $project_slug)} | format pattern "/projects/{account_name}/{project_slug}/deployments") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1039,14 +1048,14 @@ export def "projects-history get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --records-number: int # Number of results to include in the response. getProjectDeployments is documented to have a maximum of 20. It currently returns 500 Internal Server Error for recordsNumber <= 5. In the past it has returned 500 Internal Server Error for many different values which did not match the value used by the ci.appveyor.com web interface at the time.  As of 2018-09-08, the value used by the web interface is 10.
+  --records-number: int # Number of results to include in the response. getProjectDeployments is documented to have a maximum of 20. It currently returns 500 Internal Server Error for recordsNumber <= 5. In the past it has returned 500 Internal Server Error for many different values which did not match the value used by the ci.appveyor.com web interface at the time. As of 2018-09-08, the value used by the web interface is 10.
   --start-build-id: int # Maximum `buildId` to include in the results (exclusive).
   --branch: string # Repository Branch
 ]: nothing -> record<builds: table<branch: string, buildId: int, message: string, version: string, created: string, updated: string, authorName: string, authorUsername: string, buildNumber: int, commitId: string, committed: string, committerName: string, committerUsername: string, finished: string, isTag: bool, jobs: list, messageExtended: string, messages: list, projectId: int, pullRequestId: int, pullRequestName: string, started: string, status: string>, project: record<accountName: string, name: string, projectId: int, slug: string, created: string, updated: string, accountId: int, alwaysBuildClosedPullRequests: bool, builds: list<record>, currentBuildId: int, disablePullRequestWebhooks: bool, disablePushWebhooks: bool, enableDeploymentInPullRequests: bool, enableSecureVariablesInPullRequests: bool, enableSecureVariablesInPullRequestsFromSameRepo: bool, isGitHubApp: bool, isPrivate: bool, nuGetFeed: record<created: string, updated: string, accountId: int, id: string, isPrivateProject: bool, name: string, nuGetFeedId: int, projectId: int, publishingEnabled: bool>, repositoryBranch: string, repositoryName: string, repositoryScm: string, repositoryType: string, rollingBuilds: bool, rollingBuildsDoNotCancelRunningBuilds: bool, rollingBuildsOnlyForPullRequests: bool, saveBuildCacheInPullRequests: bool, securityDescriptor: record<accessRightDefinitions: list, roleAces: list>, skipBranchesWithoutAppveyorYml: bool, tags: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "recordsNumber" $records_number "scalar") (serialize-qp "startBuildId" $start_build_id "scalar") (serialize-qp "branch" $branch "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_name: $account_name, project_slug: $project_slug} | format pattern "/projects/{account_name}/{project_slug}/history") $qp)
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), project_slug: (encode-path-segment $project_slug)} | format pattern "/projects/{account_name}/{project_slug}/history") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1072,7 +1081,7 @@ export def "projects-settings get" [
 ]: nothing -> record<buildClouds: table<value: string>, defaultImageName: string, images: table<buildCloudName: string, buildWorkerImageId: int, name: string, osType: string>, project: record<accountName: string, name: string, projectId: int, slug: string, created: string, updated: string, accountId: int, alwaysBuildClosedPullRequests: bool, builds: list<record>, currentBuildId: int, disablePullRequestWebhooks: bool, disablePushWebhooks: bool, enableDeploymentInPullRequests: bool, enableSecureVariablesInPullRequests: bool, enableSecureVariablesInPullRequestsFromSameRepo: bool, isGitHubApp: bool, isPrivate: bool, nuGetFeed: record<created: string, updated: string, accountId: int, id: string, isPrivateProject: bool, name: string, nuGetFeedId: int, projectId: int, publishingEnabled: bool>, repositoryBranch: string, repositoryName: string, repositoryScm: string, repositoryType: string, rollingBuilds: bool, rollingBuildsDoNotCancelRunningBuilds: bool, rollingBuildsOnlyForPullRequests: bool, saveBuildCacheInPullRequests: bool, securityDescriptor: record<accessRightDefinitions: list, roleAces: list>, skipBranchesWithoutAppveyorYml: bool, tags: string>, settings: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_name: $account_name, project_slug: $project_slug} | format pattern "/projects/{account_name}/{project_slug}/settings"))
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), project_slug: (encode-path-segment $project_slug)} | format pattern "/projects/{account_name}/{project_slug}/settings"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1100,12 +1109,12 @@ export def "projects-settings-build-number update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_name: $account_name, project_slug: $project_slug} | format pattern "/projects/{account_name}/{project_slug}/settings/build-number"))
-  let body = {"nextBuildNumber": $next_build_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), project_slug: (encode-path-segment $project_slug)} | format pattern "/projects/{account_name}/{project_slug}/settings/build-number"))
+  let req_body = {"nextBuildNumber": $next_build_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get project environment variables
@@ -1128,7 +1137,7 @@ export def "projects-settings-environment-variables get" [
 ]: nothing -> table<name: string, value: record<isEncrypted: bool, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_name: $account_name, project_slug: $project_slug} | format pattern "/projects/{account_name}/{project_slug}/settings/environment-variables"))
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), project_slug: (encode-path-segment $project_slug)} | format pattern "/projects/{account_name}/{project_slug}/settings/environment-variables"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1156,11 +1165,12 @@ export def "projects-settings-environment-variables update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_name: $account_name, project_slug: $project_slug} | format pattern "/projects/{account_name}/{project_slug}/settings/environment-variables"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), project_slug: (encode-path-segment $project_slug)} | format pattern "/projects/{account_name}/{project_slug}/settings/environment-variables"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get project settings in YAML
@@ -1182,7 +1192,7 @@ export def "projects-settings-yaml get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_name: $account_name, project_slug: $project_slug} | format pattern "/projects/{account_name}/{project_slug}/settings/yaml"))
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), project_slug: (encode-path-segment $project_slug)} | format pattern "/projects/{account_name}/{project_slug}/settings/yaml"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1210,11 +1220,12 @@ export def "projects-settings-yaml update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_name: $account_name, project_slug: $project_slug} | format pattern "/projects/{account_name}/{project_slug}/settings/yaml"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), project_slug: (encode-path-segment $project_slug)} | format pattern "/projects/{account_name}/{project_slug}/settings/yaml"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get roles
@@ -1262,11 +1273,11 @@ export def "roles create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/roles")
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update role
@@ -1291,11 +1302,11 @@ export def "roles update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/roles")
-  let body = {"groups": $groups} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"groups": $groups} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete role
@@ -1317,7 +1328,7 @@ export def "roles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({role_id: $role_id} | format pattern "/roles/{role_id}"))
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/roles/{role_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1342,7 +1353,7 @@ export def "roles get" [
 ]: nothing -> record<groups: table<name: string, permissions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({role_id: $role_id} | format pattern "/roles/{role_id}"))
+  let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/roles/{role_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1352,7 +1363,7 @@ export def "roles get" [
 #
 # PUT /user/join-account
 # operationId: joinAccount
-export def "user-join-account joinAccount" [
+export def "user-join-account update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1368,11 +1379,11 @@ export def "user-join-account joinAccount" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/join-account")
-  let body = {"invitationId": $invitation_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"invitationId": $invitation_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get users
@@ -1425,11 +1436,11 @@ export def "users update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users")
-  let body = {"email": $email, "fullName": $full_name, "password": $password, "roleId": $role_id, "twoFactorAuthEnabled": $two_factor_auth_enabled, "userId": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "fullName": $full_name, "password": $password, "roleId": $role_id, "twoFactorAuthEnabled": $two_factor_auth_enabled, "userId": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get user invitations
@@ -1459,7 +1470,7 @@ export def "users-invitations get" [
 #
 # POST /users/invitations
 # operationId: inviteUser
-export def "users-invitations inviteUser" [
+export def "users-invitations create-invite" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1476,11 +1487,11 @@ export def "users-invitations inviteUser" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/invitations")
-  let body = {"email": $email, "roleId": $role_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "roleId": $role_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel user invitation
@@ -1501,7 +1512,7 @@ export def "users-invitations cancel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_invitation_id: $user_invitation_id} | format pattern "/users/invitations/{user_invitation_id}"))
+  let full_url = (build-url $base ({user_invitation_id: (encode-path-segment $user_invitation_id)} | format pattern "/users/invitations/{user_invitation_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1526,7 +1537,7 @@ export def "users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1551,7 +1562,7 @@ export def "users get" [
 ]: nothing -> record<roles: table<created: string, updated: string, isSystem: bool, name: string, roleId: int>, user: record<created: string, updated: string, accountId: int, accountName: string, email: string, fullName: string, isCollaborator: bool, isOwner: bool, pageSize: int, password: string, roleId: int, roleName: string, twoFactorAuthEnabled: bool, userId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -83,7 +92,7 @@ def type-completer-3 [] { ["option_type_checkbox" "option_type_date" "option_typ
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accountcartaddjson post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-cart-add-json create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -107,8 +116,8 @@ export def commands []: nothing -> table {
 #
 # POST /account.cart.add.json
 # operationId: AccountCartAdd
-# --hybris_websites item shape: {storeIds: list, uid: string, url: string}
-export def "accountcartaddjson post" [
+# --hybris_websites item shape: {storeIds: list<string>, uid: string, url: string}
+export def "account-cart-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +183,7 @@ export def "accountcartaddjson post" [
   --hybris-client-secret: string # Omni Commerce Connector Client Secret
   --hybris-password: string # User password
   --hybris-username: string # User Name
-  --hybris-websites: list # Websites to stores mapping data — item shape: {storeIds: list, uid: string, url: string}
+  --hybris-websites: list # Websites to stores mapping data — item shape: {storeIds: list<string>, uid: string, url: string}
   --lightspeed-api-key: string # LightSpeed api key
   --lightspeed-api-secret: string # LightSpeed api secret
   --magento-access-token: string # Magento Access Token
@@ -221,18 +230,18 @@ export def "accountcartaddjson post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account.cart.add.json")
-  let body = {"3dcart_access_token": $3dcart_access_token, "3dcart_private_key": $3dcart_private_key, "3dcartapi_api_key": $3dcartapi_api_key, "amazon_access_key_id": $amazon_access_key_id, "amazon_access_token": $amazon_access_token, "amazon_marketplaces_ids": $amazon_marketplaces_ids, "amazon_secret_key": $amazon_secret_key, "amazon_seller_id": $amazon_seller_id, "amazon_sp_api_environment": $amazon_sp_api_environment, "amazon_sp_aws_region": $amazon_sp_aws_region, "amazon_sp_aws_role_arn": $amazon_sp_aws_role_arn, "amazon_sp_aws_user_key_id": $amazon_sp_aws_user_key_id, "amazon_sp_aws_user_secret": $amazon_sp_aws_user_secret, "amazon_sp_client_id": $amazon_sp_client_id, "amazon_sp_client_secret": $amazon_sp_client_secret, "amazon_sp_refresh_token": $amazon_sp_refresh_token, "aspdotnetstorefront_api_pass": $aspdotnetstorefront_api_pass, "aspdotnetstorefront_api_user": $aspdotnetstorefront_api_user, "bigcommerceapi_access_token": $bigcommerceapi_access_token, "bigcommerceapi_admin_account": $bigcommerceapi_admin_account, "bigcommerceapi_api_key": $bigcommerceapi_api_key, "bigcommerceapi_api_path": $bigcommerceapi_api_path, "bigcommerceapi_client_id": $bigcommerceapi_client_id, "bigcommerceapi_context": $bigcommerceapi_context, "bridge_url": $bridge_url, "cart_id": $cart_id, "commercehq_api_key": $commercehq_api_key, "commercehq_api_password": $commercehq_api_password, "db_tables_prefix": $db_tables_prefix, "demandware_api_password": $demandware_api_password, "demandware_client_id": $demandware_client_id, "demandware_user_name": $demandware_user_name, "demandware_user_password": $demandware_user_password, "ebay_access_token": $ebay_access_token, "ebay_client_id": $ebay_client_id, "ebay_client_secret": $ebay_client_secret, "ebay_environment": $ebay_environment, "ebay_refresh_token": $ebay_refresh_token, "ebay_runame": $ebay_runame, "ebay_site_id": $ebay_site_id, "ecwid_acess_token": $ecwid_acess_token, "ecwid_store_id": $ecwid_store_id, "etsy_access_token": $etsy_access_token, "etsy_client_id": $etsy_client_id, "etsy_keystring": $etsy_keystring, "etsy_refresh_token": $etsy_refresh_token, "etsy_shared_secret": $etsy_shared_secret, "etsy_token_secret": $etsy_token_secret, "ftp_host": $ftp_host, "ftp_password": $ftp_password, "ftp_port": $ftp_port, "ftp_store_dir": $ftp_store_dir, "ftp_user": $ftp_user, "hybris_client_id": $hybris_client_id, "hybris_client_secret": $hybris_client_secret, "hybris_password": $hybris_password, "hybris_username": $hybris_username, "hybris_websites": $hybris_websites, "lightspeed_api_key": $lightspeed_api_key, "lightspeed_api_secret": $lightspeed_api_secret, "magento_access_token": $magento_access_token, "magento_consumer_key": $magento_consumer_key, "magento_consumer_secret": $magento_consumer_secret, "magento_token_secret": $magento_token_secret, "mercado_libre_app_id": $mercado_libre_app_id, "mercado_libre_app_secret_key": $mercado_libre_app_secret_key, "mercado_libre_refresh_token": $mercado_libre_refresh_token, "neto_api_key": $neto_api_key, "neto_api_username": $neto_api_username, "prestashop_webservice_key": $prestashop_webservice_key, "shopify_access_token": $shopify_access_token, "shopify_api_key": $shopify_api_key, "shopify_api_password": $shopify_api_password, "shopify_shared_secret": $shopify_shared_secret, "shopware_access_key": $shopware_access_key, "shopware_api_key": $shopware_api_key, "shopware_api_secret": $shopware_api_secret, "squarespace_api_key": $squarespace_api_key, "store_key": $store_key, "store_root": $store_root, "store_url": $store_url, "validate_version": $validate_version, "verify": $verify, "volusion_login": $volusion_login, "volusion_password": $volusion_password, "walmart_channel_type": $walmart_channel_type, "walmart_client_id": $walmart_client_id, "walmart_client_secret": $walmart_client_secret, "walmart_environment": $walmart_environment, "wc_consumer_key": $wc_consumer_key, "wc_consumer_secret": $wc_consumer_secret, "wix_app_id": $wix_app_id, "wix_app_secret_key": $wix_app_secret_key, "wix_refresh_token": $wix_refresh_token, "zid_access_token": $zid_access_token, "zid_authorization": $zid_authorization, "zid_client_id": $zid_client_id, "zid_client_secret": $zid_client_secret, "zid_refresh_token": $zid_refresh_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"3dcart_access_token": $3dcart_access_token, "3dcart_private_key": $3dcart_private_key, "3dcartapi_api_key": $3dcartapi_api_key, "amazon_access_key_id": $amazon_access_key_id, "amazon_access_token": $amazon_access_token, "amazon_marketplaces_ids": $amazon_marketplaces_ids, "amazon_secret_key": $amazon_secret_key, "amazon_seller_id": $amazon_seller_id, "amazon_sp_api_environment": $amazon_sp_api_environment, "amazon_sp_aws_region": $amazon_sp_aws_region, "amazon_sp_aws_role_arn": $amazon_sp_aws_role_arn, "amazon_sp_aws_user_key_id": $amazon_sp_aws_user_key_id, "amazon_sp_aws_user_secret": $amazon_sp_aws_user_secret, "amazon_sp_client_id": $amazon_sp_client_id, "amazon_sp_client_secret": $amazon_sp_client_secret, "amazon_sp_refresh_token": $amazon_sp_refresh_token, "aspdotnetstorefront_api_pass": $aspdotnetstorefront_api_pass, "aspdotnetstorefront_api_user": $aspdotnetstorefront_api_user, "bigcommerceapi_access_token": $bigcommerceapi_access_token, "bigcommerceapi_admin_account": $bigcommerceapi_admin_account, "bigcommerceapi_api_key": $bigcommerceapi_api_key, "bigcommerceapi_api_path": $bigcommerceapi_api_path, "bigcommerceapi_client_id": $bigcommerceapi_client_id, "bigcommerceapi_context": $bigcommerceapi_context, "bridge_url": $bridge_url, "cart_id": $cart_id, "commercehq_api_key": $commercehq_api_key, "commercehq_api_password": $commercehq_api_password, "db_tables_prefix": $db_tables_prefix, "demandware_api_password": $demandware_api_password, "demandware_client_id": $demandware_client_id, "demandware_user_name": $demandware_user_name, "demandware_user_password": $demandware_user_password, "ebay_access_token": $ebay_access_token, "ebay_client_id": $ebay_client_id, "ebay_client_secret": $ebay_client_secret, "ebay_environment": $ebay_environment, "ebay_refresh_token": $ebay_refresh_token, "ebay_runame": $ebay_runame, "ebay_site_id": $ebay_site_id, "ecwid_acess_token": $ecwid_acess_token, "ecwid_store_id": $ecwid_store_id, "etsy_access_token": $etsy_access_token, "etsy_client_id": $etsy_client_id, "etsy_keystring": $etsy_keystring, "etsy_refresh_token": $etsy_refresh_token, "etsy_shared_secret": $etsy_shared_secret, "etsy_token_secret": $etsy_token_secret, "ftp_host": $ftp_host, "ftp_password": $ftp_password, "ftp_port": $ftp_port, "ftp_store_dir": $ftp_store_dir, "ftp_user": $ftp_user, "hybris_client_id": $hybris_client_id, "hybris_client_secret": $hybris_client_secret, "hybris_password": $hybris_password, "hybris_username": $hybris_username, "hybris_websites": $hybris_websites, "lightspeed_api_key": $lightspeed_api_key, "lightspeed_api_secret": $lightspeed_api_secret, "magento_access_token": $magento_access_token, "magento_consumer_key": $magento_consumer_key, "magento_consumer_secret": $magento_consumer_secret, "magento_token_secret": $magento_token_secret, "mercado_libre_app_id": $mercado_libre_app_id, "mercado_libre_app_secret_key": $mercado_libre_app_secret_key, "mercado_libre_refresh_token": $mercado_libre_refresh_token, "neto_api_key": $neto_api_key, "neto_api_username": $neto_api_username, "prestashop_webservice_key": $prestashop_webservice_key, "shopify_access_token": $shopify_access_token, "shopify_api_key": $shopify_api_key, "shopify_api_password": $shopify_api_password, "shopify_shared_secret": $shopify_shared_secret, "shopware_access_key": $shopware_access_key, "shopware_api_key": $shopware_api_key, "shopware_api_secret": $shopware_api_secret, "squarespace_api_key": $squarespace_api_key, "store_key": $store_key, "store_root": $store_root, "store_url": $store_url, "validate_version": $validate_version, "verify": $verify, "volusion_login": $volusion_login, "volusion_password": $volusion_password, "walmart_channel_type": $walmart_channel_type, "walmart_client_id": $walmart_client_id, "walmart_client_secret": $walmart_client_secret, "walmart_environment": $walmart_environment, "wc_consumer_key": $wc_consumer_key, "wc_consumer_secret": $wc_consumer_secret, "wix_app_id": $wix_app_id, "wix_app_secret_key": $wix_app_secret_key, "wix_refresh_token": $wix_refresh_token, "zid_access_token": $zid_access_token, "zid_authorization": $zid_authorization, "zid_client_id": $zid_client_id, "zid_client_secret": $zid_client_secret, "zid_refresh_token": $zid_refresh_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get list of carts.
 #
 # GET /account.cart.list.json
 # operationId: AccountCartList
-export def "accountcartlistjson get" [
+export def "account-cart-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +270,7 @@ export def "accountcartlistjson get" [
 #
 # PUT /account.config.update.json
 # operationId: AccountConfigUpdate
-export def "accountconfigupdatejson put" [
+export def "account-config-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -337,7 +346,7 @@ export def "accountconfigupdatejson put" [
   --hybris-client-secret: string # Omni Commerce Connector Client Secret
   --hybris-username: string # User Name
   --hybris-password: string # User password
-  --hybris-websites: list # Websites to stores mapping data
+  --hybris-websites: list<string> # Websites to stores mapping data
   --lightspeed-api-key: string # LightSpeed api key
   --lightspeed-api-secret: string # LightSpeed api secret
   --commercehq-api-key: string # CommerceHQ api key
@@ -374,7 +383,7 @@ export def "accountconfigupdatejson put" [
 #
 # GET /account.failed_webhooks.json
 # operationId: AccountFailedWebhooks
-export def "accountfailed-webhooksjson get" [
+export def "account-failed-webhooks-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,7 +409,7 @@ export def "accountfailed-webhooksjson get" [
 #
 # GET /account.supported_platforms.json
 # operationId: AccountSupportedPlatforms
-export def "accountsupported-platformsjson get" [
+export def "account-supported-platforms-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -422,7 +431,7 @@ export def "accountsupported-platformsjson get" [
 #
 # POST /attribute.add.json
 # operationId: AttributeAdd
-export def "attributeaddjson post" [
+export def "attribute-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,7 +475,7 @@ export def "attributeaddjson post" [
 #
 # POST /attribute.assign.group.json
 # operationId: AttributeAssignGroup
-export def "attributeassigngroupjson post" [
+export def "attribute-assign-group-json assign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -492,7 +501,7 @@ export def "attributeassigngroupjson post" [
 #
 # POST /attribute.assign.set.json
 # operationId: AttributeAssignSet
-export def "attributeassignsetjson post" [
+export def "attribute-assign-set-json assign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -518,7 +527,7 @@ export def "attributeassignsetjson post" [
 #
 # GET /attribute.attributeset.list.json
 # operationId: AttributeAttributesetList
-export def "attributeattributesetlistjson get" [
+export def "attribute-attributeset-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -546,7 +555,7 @@ export def "attributeattributesetlistjson get" [
 #
 # GET /attribute.count.json
 # operationId: AttributeCount
-export def "attributecountjson get" [
+export def "attribute-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -575,7 +584,7 @@ export def "attributecountjson get" [
 #
 # DELETE /attribute.delete.json
 # operationId: AttributeDelete
-export def "attributedeletejson delete" [
+export def "attribute-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,7 +609,7 @@ export def "attributedeletejson delete" [
 #
 # GET /attribute.group.list.json
 # operationId: AttributeGroupList
-export def "attributegrouplistjson get" [
+export def "attribute-group-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -630,7 +639,7 @@ export def "attributegrouplistjson get" [
 #
 # GET /attribute.info.json
 # operationId: AttributeInfo
-export def "attributeinfojson get" [
+export def "attribute-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -659,7 +668,7 @@ export def "attributeinfojson get" [
 #
 # GET /attribute.list.json
 # operationId: AttributeList
-export def "attributelistjson get" [
+export def "attribute-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -694,7 +703,7 @@ export def "attributelistjson get" [
 #
 # GET /attribute.type.list.json
 # operationId: AttributeTypeList
-export def "attributetypelistjson get" [
+export def "attribute-type-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,7 +725,7 @@ export def "attributetypelistjson get" [
 #
 # POST /attribute.unassign.group.json
 # operationId: AttributeUnassignGroup
-export def "attributeunassigngroupjson post" [
+export def "attribute-unassign-group-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -741,7 +750,7 @@ export def "attributeunassigngroupjson post" [
 #
 # POST /attribute.unassign.set.json
 # operationId: AttributeUnassignSet
-export def "attributeunassignsetjson post" [
+export def "attribute-unassign-set-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -766,7 +775,7 @@ export def "attributeunassignsetjson post" [
 #
 # POST /attribute.update.json
 # operationId: AttributeUpdate
-export def "attributeupdatejson post" [
+export def "attribute-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -793,7 +802,7 @@ export def "attributeupdatejson post" [
 #
 # GET /basket.info.json
 # operationId: BasketInfo
-export def "basketinfojson get" [
+export def "basket-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -821,7 +830,7 @@ export def "basketinfojson get" [
 #
 # POST /basket.item.add.json
 # operationId: BasketItemAdd
-export def "basketitemaddjson post" [
+export def "basket-item-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -849,7 +858,7 @@ export def "basketitemaddjson post" [
 #
 # POST /basket.live_shipping_service.create.json
 # operationId: BasketLiveShippingServiceCreate
-export def "basketlive-shipping-servicecreatejson create" [
+export def "basket-live-shipping-service-create-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -875,7 +884,7 @@ export def "basketlive-shipping-servicecreatejson create" [
 #
 # DELETE /basket.live_shipping_service.delete.json
 # operationId: BasketLiveShippingServiceDelete
-export def "basketlive-shipping-servicedeletejson delete" [
+export def "basket-live-shipping-service-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -899,7 +908,7 @@ export def "basketlive-shipping-servicedeletejson delete" [
 #
 # GET /basket.live_shipping_service.list.json
 # operationId: BasketLiveShippingServiceList
-export def "basketlive-shipping-servicelistjson list" [
+export def "basket-live-shipping-service-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -925,7 +934,7 @@ export def "basketlive-shipping-servicelistjson list" [
 #
 # POST /bridge.delete.json
 # operationId: BridgeDelete
-export def "bridgedeletejson post" [
+export def "bridge-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -947,7 +956,7 @@ export def "bridgedeletejson post" [
 #
 # GET /bridge.download.file
 # operationId: BridgeDownload
-export def "bridgedownloadfile get" [
+export def "bridge-download-file download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -971,7 +980,7 @@ export def "bridgedownloadfile get" [
 #
 # POST /bridge.update.json
 # operationId: BridgeUpdate
-export def "bridgeupdatejson post" [
+export def "bridge-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -993,7 +1002,7 @@ export def "bridgeupdatejson post" [
 #
 # GET /cart.bridge.json
 # operationId: CartBridge
-export def "cartbridgejson get" [
+export def "cart-bridge-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1015,7 +1024,7 @@ export def "cartbridgejson get" [
 #
 # GET /cart.catalog_price_rules.count.json
 # operationId: CartCatalogPriceRulesCount
-export def "cartcatalog-price-rulescountjson get" [
+export def "cart-catalog-price-rules-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1037,7 +1046,7 @@ export def "cartcatalog-price-rulescountjson get" [
 #
 # GET /cart.catalog_price_rules.list.json
 # operationId: CartCatalogPriceRulesList
-export def "cartcatalog-price-ruleslistjson list" [
+export def "cart-catalog-price-rules-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1049,7 +1058,7 @@ export def "cartcatalog-price-ruleslistjson list" [
   --page-cursor: string # Used to retrieve entities via cursor-based pagination (it can't be used with any other filtering parameter)
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
-  --ids: string # Retrieves  catalog_price_rules by ids
+  --ids: string # Retrieves catalog_price_rules by ids
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,name,description)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
@@ -1067,7 +1076,7 @@ export def "cartcatalog-price-ruleslistjson list" [
 #
 # POST /cart.clear_cache.json
 # operationId: CartClearCache
-export def "cartclear-cachejson post" [
+export def "cart-clear-cache-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1091,7 +1100,7 @@ export def "cartclear-cachejson post" [
 #
 # GET /cart.config.json
 # operationId: CartConfig
-export def "cartconfigjson get" [
+export def "cart-config-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1118,7 +1127,7 @@ export def "cartconfigjson get" [
 # DEPRECATED
 # operationId: CartConfigUpdate
 @deprecated
-export def "cartconfigupdatejson put" [
+export def "cart-config-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1135,18 +1144,18 @@ export def "cartconfigupdatejson put" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.config.update.json")
-  let body = {"custom_fields": $custom_fields, "db_tables_prefix": $db_tables_prefix, "store_id": $store_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"custom_fields": $custom_fields, "db_tables_prefix": $db_tables_prefix, "store_id": $store_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create new coupon
 #
 # POST /cart.coupon.add.json
 # operationId: CartCouponAdd
-export def "cartcouponaddjson post" [
+export def "cart-coupon-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1164,7 +1173,7 @@ export def "cartcouponaddjson post" [
   action_scope: string@action-scope-completer # Specify how discount should be applied. If scope=matching_items, then discount will be applied to each of the items that match action conditions. Scope order means that discount will be applied once.
   action_type: string@action-type-completer # Coupon discount type
   code: string # Coupon code
-  --codes: list # Entity codes
+  --codes: list<string> # Entity codes
   --date-end: string # Defines when discount code will be expired.
   --date-start: string # Defines when discount code will be available. (default: now)
   --name: string # Coupon name
@@ -1176,18 +1185,18 @@ export def "cartcouponaddjson post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.coupon.add.json")
-  let body = {"action_amount": $action_amount, "action_apply_to": $action_apply_to, "action_condition_entity": $action_condition_entity, "action_condition_key": $action_condition_key, "action_condition_operator": $action_condition_operator, "action_condition_value": $action_condition_value, "action_scope": $action_scope, "action_type": $action_type, "code": $code, "codes": $codes, "date_end": $date_end, "date_start": $date_start, "name": $name, "store_id": $store_id, "usage_limit": $usage_limit, "usage_limit_per_customer": $usage_limit_per_customer} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"action_amount": $action_amount, "action_apply_to": $action_apply_to, "action_condition_entity": $action_condition_entity, "action_condition_key": $action_condition_key, "action_condition_operator": $action_condition_operator, "action_condition_value": $action_condition_value, "action_scope": $action_scope, "action_type": $action_type, "code": $code, "codes": $codes, "date_end": $date_end, "date_start": $date_start, "name": $name, "store_id": $store_id, "usage_limit": $usage_limit, "usage_limit_per_customer": $usage_limit_per_customer} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create new coupon condition
 #
 # POST /cart.coupon.condition.add.json
 # operationId: CartCouponConditionAdd
-export def "cartcouponconditionaddjson post" [
+export def "cart-coupon-condition-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1217,7 +1226,7 @@ export def "cartcouponconditionaddjson post" [
 #
 # GET /cart.coupon.count.json
 # operationId: CartCouponCount
-export def "cartcouponcountjson get" [
+export def "cart-coupon-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1246,7 +1255,7 @@ export def "cartcouponcountjson get" [
 #
 # DELETE /cart.coupon.delete.json
 # operationId: CartCouponDelete
-export def "cartcoupondeletejson delete" [
+export def "cart-coupon-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1271,7 +1280,7 @@ export def "cartcoupondeletejson delete" [
 #
 # GET /cart.coupon.list.json
 # operationId: CartCouponList
-export def "cartcouponlistjson get" [
+export def "cart-coupon-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1310,7 +1319,7 @@ export def "cartcouponlistjson get" [
 # DEPRECATED
 # operationId: CartCreate
 @deprecated
-export def "cartcreatejson post" [
+export def "cart-create-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1381,7 +1390,7 @@ export def "cartcreatejson post" [
   --hybris-client-secret: string # Omni Commerce Connector Client Secret
   --hybris-username: string # User Name
   --hybris-password: string # User password
-  --hybris-websites: list # Websites to stores mapping data
+  --hybris-websites: list<string> # Websites to stores mapping data
   --walmart-client-id: string # Walmart client ID
   --walmart-client-secret: string # Walmart client secret
   --walmart-environment: string # Walmart environment (default: production)
@@ -1427,7 +1436,7 @@ export def "cartcreatejson post" [
 #
 # DELETE /cart.delete.json
 # operationId: CartDelete
-export def "cartdeletejson delete" [
+export def "cart-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1453,7 +1462,7 @@ export def "cartdeletejson delete" [
 # DEPRECATED
 # operationId: CartDisconnect
 @deprecated
-export def "cartdisconnectjson get" [
+export def "cart-disconnect-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1477,7 +1486,7 @@ export def "cartdisconnectjson get" [
 #
 # POST /cart.giftcard.add.json
 # operationId: CartGiftcardAdd
-export def "cartgiftcardaddjson post" [
+export def "cart-giftcard-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1504,7 +1513,7 @@ export def "cartgiftcardaddjson post" [
 #
 # GET /cart.giftcard.count.json
 # operationId: CartGiftcardCount
-export def "cartgiftcardcountjson get" [
+export def "cart-giftcard-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1528,7 +1537,7 @@ export def "cartgiftcardcountjson get" [
 #
 # GET /cart.giftcard.list.json
 # operationId: CartGiftcardList
-export def "cartgiftcardlistjson get" [
+export def "cart-giftcard-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1558,7 +1567,7 @@ export def "cartgiftcardlistjson get" [
 #
 # GET /cart.info.json
 # operationId: CartInfo
-export def "cartinfojson get" [
+export def "cart-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1587,7 +1596,7 @@ export def "cartinfojson get" [
 # DEPRECATED
 # operationId: CartList
 @deprecated
-export def "cartlistjson get" [
+export def "cart-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1609,7 +1618,7 @@ export def "cartlistjson get" [
 #
 # GET /cart.meta_data.list.json
 # operationId: CartMetaDataList
-export def "cartmeta-datalistjson get" [
+export def "cart-meta-data-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1641,7 +1650,7 @@ export def "cartmeta-datalistjson get" [
 #
 # POST /cart.meta_data.set.json
 # operationId: CartMetaDataSet
-export def "cartmeta-datasetjson post" [
+export def "cart-meta-data-set-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1670,7 +1679,7 @@ export def "cartmeta-datasetjson post" [
 #
 # DELETE /cart.meta_data.unset.json
 # operationId: CartMetaDataUnset
-export def "cartmeta-dataunsetjson delete" [
+export def "cart-meta-data-unset-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1698,7 +1707,7 @@ export def "cartmeta-dataunsetjson delete" [
 #
 # GET /cart.methods.json
 # operationId: CartMethods
-export def "cartmethodsjson get" [
+export def "cart-methods-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1720,7 +1729,7 @@ export def "cartmethodsjson get" [
 #
 # GET /cart.plugin.list.json
 # operationId: CartPluginList
-export def "cartpluginlistjson get" [
+export def "cart-plugin-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1747,7 +1756,7 @@ export def "cartpluginlistjson get" [
 #
 # POST /cart.script.add.json
 # operationId: CartScriptAdd
-export def "cartscriptaddjson post" [
+export def "cart-script-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1777,7 +1786,7 @@ export def "cartscriptaddjson post" [
 #
 # DELETE /cart.script.delete.json
 # operationId: CartScriptDelete
-export def "cartscriptdeletejson delete" [
+export def "cart-script-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1802,7 +1811,7 @@ export def "cartscriptdeletejson delete" [
 #
 # GET /cart.script.list.json
 # operationId: CartScriptList
-export def "cartscriptlistjson get" [
+export def "cart-script-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1837,7 +1846,7 @@ export def "cartscriptlistjson get" [
 #
 # GET /cart.shipping_zones.list.json
 # operationId: CartShippingZonesList
-export def "cartshipping-zoneslistjson get" [
+export def "cart-shipping-zones-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1866,7 +1875,7 @@ export def "cartshipping-zoneslistjson get" [
 #
 # GET /cart.validate.json
 # operationId: CartValidate
-export def "cartvalidatejson get" [
+export def "cart-validate-json validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1890,7 +1899,7 @@ export def "cartvalidatejson get" [
 #
 # POST /category.add.json
 # operationId: CategoryAdd
-export def "categoryaddjson post" [
+export def "category-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1927,7 +1936,7 @@ export def "categoryaddjson post" [
 #
 # POST /category.assign.json
 # operationId: CategoryAssign
-export def "categoryassignjson post" [
+export def "category-assign-json assign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1953,7 +1962,7 @@ export def "categoryassignjson post" [
 #
 # GET /category.count.json
 # operationId: CategoryCount
-export def "categorycountjson get" [
+export def "category-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1984,7 +1993,7 @@ export def "categorycountjson get" [
 #
 # DELETE /category.delete.json
 # operationId: CategoryDelete
-export def "categorydeletejson delete" [
+export def "category-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2008,7 +2017,7 @@ export def "categorydeletejson delete" [
 #
 # GET /category.find.json
 # operationId: CategoryFind
-export def "categoryfindjson get" [
+export def "category-find-json find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2036,7 +2045,7 @@ export def "categoryfindjson get" [
 #
 # POST /category.image.add.json
 # operationId: CategoryImageAdd
-export def "categoryimageaddjson post" [
+export def "category-image-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2047,7 +2056,7 @@ export def "categoryimageaddjson post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --category-id: string # Defines category id where the image should be added
   --image-name: string # Defines image's name
-  --qp-url: string # Defines URL of the image that has to be added
+  --url: string # Defines URL of the image that has to be added
   --label: string # Defines alternative text that has to be attached to the picture
   --mime: string # Mime type of image http://en.wikipedia.org/wiki/Internet_media_type.
   --type: string@type-completer-1 # Defines image's types that are specified by comma-separated list
@@ -2056,7 +2065,7 @@ export def "categoryimageaddjson post" [
 ]: nothing -> record<result: record<image_path: string>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "category_id" $category_id "scalar") (serialize-qp "image_name" $image_name "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "mime" $mime "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "category_id" $category_id "scalar") (serialize-qp "image_name" $image_name "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "mime" $mime "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.image.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2067,7 +2076,7 @@ export def "categoryimageaddjson post" [
 #
 # DELETE /category.image.delete.json
 # operationId: CategoryImageDelete
-export def "categoryimagedeletejson delete" [
+export def "category-image-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2093,7 +2102,7 @@ export def "categoryimagedeletejson delete" [
 #
 # GET /category.info.json
 # operationId: CategoryInfo
-export def "categoryinfojson get" [
+export def "category-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2106,8 +2115,8 @@ export def "categoryinfojson get" [
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: id,parent_id,name,description)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
-  --store-id: string # Retrieves category info  specified by store id
-  --lang-id: string # Retrieves category info  specified by language id
+  --store-id: string # Retrieves category info specified by store id
+  --lang-id: string # Retrieves category info specified by language id
 ]: nothing -> record<result: record<additional_fields: record, avail: bool, created_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, description: string, id: string, images: list<record>, keywords: string, meta_description: string, meta_title: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, name: string, parent_id: string, path: string, seo_url: string, short_description: string, sort_order: int, stores_ids: list<string>>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2122,7 +2131,7 @@ export def "categoryinfojson get" [
 #
 # GET /category.list.json
 # operationId: CategoryList
-export def "categorylistjson get" [
+export def "category-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2159,7 +2168,7 @@ export def "categorylistjson get" [
 #
 # POST /category.unassign.json
 # operationId: CategoryUnassign
-export def "categoryunassignjson post" [
+export def "category-unassign-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2185,7 +2194,7 @@ export def "categoryunassignjson post" [
 #
 # PUT /category.update.json
 # operationId: CategoryUpdate
-export def "categoryupdatejson put" [
+export def "category-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2223,7 +2232,7 @@ export def "categoryupdatejson put" [
 # POST /customer.add.json
 # operationId: CustomerAdd
 # --address item shape: {address_book_address1?: string, address_book_address2?: string, address_book_city?: string, address_book_company?: string, address_book_country?: string, address_book_default?: bool, address_book_fax?: string, address_book_first_name?: string, address_book_gender?: string, address_book_last_name?: string, address_book_phone?: string, address_book_postcode?: string, address_book_region?: string, address_book_state?: string, address_book_type?: string, address_book_website?: string}
-export def "customeraddjson post" [
+export def "customer-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2256,18 +2265,18 @@ export def "customeraddjson post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/customer.add.json")
-  let body = {"address": $address, "birth_day": $birth_day, "company": $company, "created_time": $created_time, "email": $email, "fax": $fax, "first_name": $first_name, "gender": $gender, "group": $group, "last_login": $last_login, "last_name": $last_name, "login": $login, "modified_time": $modified_time, "news_letter_subscription": $news_letter_subscription, "password": $password, "phone": $phone, "status": $status, "store_id": $store_id, "website": $website} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address": $address, "birth_day": $birth_day, "company": $company, "created_time": $created_time, "email": $email, "fax": $fax, "first_name": $first_name, "gender": $gender, "group": $group, "last_login": $last_login, "last_name": $last_name, "login": $login, "modified_time": $modified_time, "news_letter_subscription": $news_letter_subscription, "password": $password, "phone": $phone, "status": $status, "store_id": $store_id, "website": $website} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get attributes for specific customer
 #
 # GET /customer.attribute.list.json
 # operationId: CustomerAttributeList
-export def "customerattributelistjson get" [
+export def "customer-attribute-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2298,7 +2307,7 @@ export def "customerattributelistjson get" [
 #
 # GET /customer.count.json
 # operationId: CustomerCount
-export def "customercountjson get" [
+export def "customer-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2329,7 +2338,7 @@ export def "customercountjson get" [
 #
 # GET /customer.find.json
 # operationId: CustomerFind
-export def "customerfindjson get" [
+export def "customer-find-json find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2356,7 +2365,7 @@ export def "customerfindjson get" [
 #
 # POST /customer.group.add.json
 # operationId: CustomerGroupAdd
-export def "customergroupaddjson post" [
+export def "customer-group-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2382,7 +2391,7 @@ export def "customergroupaddjson post" [
 #
 # GET /customer.group.list.json
 # operationId: CustomerGroupList
-export def "customergrouplistjson get" [
+export def "customer-group-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2414,7 +2423,7 @@ export def "customergrouplistjson get" [
 #
 # GET /customer.info.json
 # operationId: CustomerInfo
-export def "customerinfojson get" [
+export def "customer-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2442,7 +2451,7 @@ export def "customerinfojson get" [
 #
 # GET /customer.list.json
 # operationId: CustomerList
-export def "customerlistjson get" [
+export def "customer-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2479,7 +2488,7 @@ export def "customerlistjson get" [
 #
 # PUT /customer.update.json
 # operationId: CustomerUpdate
-export def "customerupdatejson put" [
+export def "customer-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2520,7 +2529,7 @@ export def "customerupdatejson put" [
 #
 # GET /order.abandoned.list.json
 # operationId: OrderAbandonedList
-export def "orderabandonedlistjson get" [
+export def "order-abandoned-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2559,7 +2568,7 @@ export def "orderabandonedlistjson get" [
 # operationId: OrderAdd
 # --note_attributes item shape: {name?: string, value?: string}
 # --order_item item shape: {order_item_allow_refund_items_separately?: bool, order_item_allow_ship_items_separately?: bool, order_item_id: string, order_item_model?: string, order_item_name: string, order_item_option?: list, order_item_parent?: int, order_item_parent_option_name?: string, order_item_price: float, order_item_price_includes_tax?: bool, order_item_property?: list, order_item_quantity: int, order_item_tax?: float, order_item_variant_id?: string, order_item_weight?: float}
-export def "orderaddjson post" [
+export def "order-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2585,7 +2594,7 @@ export def "orderaddjson post" [
   --clear-cache: oneof<nothing, bool> # Is cache clear required (default: true)
   --comment: string # Specifies order comment
   --coupon-discount: float # Specifies order's coupon discount
-  --coupons: list # Coupons that will be applied to order
+  --coupons: list<string> # Coupons that will be applied to order
   --create-invoice: oneof<nothing, bool> # Defines whether the invoice is created automatically along with the order (default: false)
   --currency: string # Currency code of order
   --customer-birthday: string # Specifies customer’s birthday
@@ -2595,19 +2604,19 @@ export def "orderaddjson post" [
   --customer-last-name: string # Specifies customer’s last name
   --customer-phone: string # Specifies customer’s phone
   --date: string # Specifies an order creation date in format Y-m-d H:i:s
-  --date-finished: string # Specifies order's  finished date
-  --date-modified: string # Specifies order's  modification date
+  --date-finished: string # Specifies order's finished date
+  --date-modified: string # Specifies order's modification date
   --discount: float # Specifies order's discount
   --external-source: string # Identifying the system used to generate the order
   --financial-status: string # Create order with financial status
   --fulfillment-status: string # Create order with fulfillment status
   --gift-certificate-discount: float # Discounts for order with gift certificates
   --id: string # Defines order's id
-  --inventory-behaviour: string # The behaviour to use when updating inventory.<hr><div style="font-style:normal">Values description:<div style="margin-left: 2%; padding-top: 2%"><div style="font-size:85%"><b>bypass</b> = Do not claim inventory </br></br><b>decrement_ignoring_policy</b> = Ignore the product's </br> inventory policy and claim amounts</br></br><b>decrement_obeying_policy</b> =  Obey the product's </br> inventory policy.</br></br></div></div></div> (default: bypass)
+  --inventory-behaviour: string # The behaviour to use when updating inventory.Values description:bypass = Do not claim inventory decrement_ignoring_policy = Ignore the product's inventory policy and claim amountsdecrement_obeying_policy = Obey the product's inventory policy. (default: bypass)
   --note-attributes: list # Defines note attributes — item shape: {name?: string, value?: string}
   --order-id: string # Defines the order id if it is supported by the cart
   order_item: list # item shape: {order_item_allow_refund_items_separately?: bool, order_item_allow_ship_items_separately?: bool, order_item_id: string, order_item_model?: string, order_item_name: string, order_item_option?: list, order_item_parent?: int, order_item_parent_option_name?: string, order_item_price: float, order_item_price_includes_tax?: bool, order_item_property?: list, order_item_quantity: int, order_item_tax?: float, order_item_variant_id?: string, order_item_weight?: float}
-  --order-payment-method: string # Defines order payment method.<br/>Setting order_payment_method on Shopify will also change financial_status field value to 'paid'
+  --order-payment-method: string # Defines order payment method.Setting order_payment_method on Shopify will also change financial_status field value to 'paid'
   --order-shipping-method: string # Defines order shipping method
   order_status: string # Defines order status.
   --prices-inc-tax: oneof<nothing, bool> # Indicates whether prices and subtotal includes tax. (default: false)
@@ -2639,18 +2648,18 @@ export def "orderaddjson post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.add.json")
-  let body = {"admin_comment": $admin_comment, "admin_private_comment": $admin_private_comment, "bill_address_1": $bill_address_1, "bill_address_2": $bill_address_2, "bill_city": $bill_city, "bill_company": $bill_company, "bill_country": $bill_country, "bill_fax": $bill_fax, "bill_first_name": $bill_first_name, "bill_last_name": $bill_last_name, "bill_phone": $bill_phone, "bill_postcode": $bill_postcode, "bill_state": $bill_state, "channel_id": $channel_id, "clear_cache": $clear_cache, "comment": $comment, "coupon_discount": $coupon_discount, "coupons": $coupons, "create_invoice": $create_invoice, "currency": $currency, "customer_birthday": $customer_birthday, "customer_email": $customer_email, "customer_fax": $customer_fax, "customer_first_name": $customer_first_name, "customer_last_name": $customer_last_name, "customer_phone": $customer_phone, "date": $date, "date_finished": $date_finished, "date_modified": $date_modified, "discount": $discount, "external_source": $external_source, "financial_status": $financial_status, "fulfillment_status": $fulfillment_status, "gift_certificate_discount": $gift_certificate_discount, "id": $id, "inventory_behaviour": $inventory_behaviour, "note_attributes": $note_attributes, "order_id": $order_id, "order_item": $order_item, "order_payment_method": $order_payment_method, "order_shipping_method": $order_shipping_method, "order_status": $order_status, "prices_inc_tax": $prices_inc_tax, "send_admin_notifications": $send_admin_notifications, "send_notifications": $send_notifications, "shipp_address_1": $shipp_address_1, "shipp_address_2": $shipp_address_2, "shipp_city": $shipp_city, "shipp_company": $shipp_company, "shipp_country": $shipp_country, "shipp_fax": $shipp_fax, "shipp_first_name": $shipp_first_name, "shipp_last_name": $shipp_last_name, "shipp_phone": $shipp_phone, "shipp_postcode": $shipp_postcode, "shipp_state": $shipp_state, "shipping_price": $shipping_price, "shipping_tax": $shipping_tax, "store_id": $store_id, "subtotal_price": $subtotal_price, "tags": $tags, "tax_price": $tax_price, "total_paid": $total_paid, "total_price": $total_price, "total_weight": $total_weight, "transaction_id": $transaction_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"admin_comment": $admin_comment, "admin_private_comment": $admin_private_comment, "bill_address_1": $bill_address_1, "bill_address_2": $bill_address_2, "bill_city": $bill_city, "bill_company": $bill_company, "bill_country": $bill_country, "bill_fax": $bill_fax, "bill_first_name": $bill_first_name, "bill_last_name": $bill_last_name, "bill_phone": $bill_phone, "bill_postcode": $bill_postcode, "bill_state": $bill_state, "channel_id": $channel_id, "clear_cache": $clear_cache, "comment": $comment, "coupon_discount": $coupon_discount, "coupons": $coupons, "create_invoice": $create_invoice, "currency": $currency, "customer_birthday": $customer_birthday, "customer_email": $customer_email, "customer_fax": $customer_fax, "customer_first_name": $customer_first_name, "customer_last_name": $customer_last_name, "customer_phone": $customer_phone, "date": $date, "date_finished": $date_finished, "date_modified": $date_modified, "discount": $discount, "external_source": $external_source, "financial_status": $financial_status, "fulfillment_status": $fulfillment_status, "gift_certificate_discount": $gift_certificate_discount, "id": $id, "inventory_behaviour": $inventory_behaviour, "note_attributes": $note_attributes, "order_id": $order_id, "order_item": $order_item, "order_payment_method": $order_payment_method, "order_shipping_method": $order_shipping_method, "order_status": $order_status, "prices_inc_tax": $prices_inc_tax, "send_admin_notifications": $send_admin_notifications, "send_notifications": $send_notifications, "shipp_address_1": $shipp_address_1, "shipp_address_2": $shipp_address_2, "shipp_city": $shipp_city, "shipp_company": $shipp_company, "shipp_country": $shipp_country, "shipp_fax": $shipp_fax, "shipp_first_name": $shipp_first_name, "shipp_last_name": $shipp_last_name, "shipp_phone": $shipp_phone, "shipp_postcode": $shipp_postcode, "shipp_state": $shipp_state, "shipping_price": $shipping_price, "shipping_tax": $shipping_tax, "store_id": $store_id, "subtotal_price": $subtotal_price, "tags": $tags, "tax_price": $tax_price, "total_paid": $total_paid, "total_price": $total_price, "total_weight": $total_weight, "transaction_id": $transaction_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Count orders in store
 #
 # GET /order.count.json
 # operationId: OrderCount
-export def "ordercountjson get" [
+export def "order-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2662,7 +2671,7 @@ export def "ordercountjson get" [
   --customer-id: string # Counts orders quantity specified by customer id
   --customer-email: string # Counts orders quantity specified by customer email
   --order-status: string # Counts orders quantity specified by order status
-  --order-status-ids: list # Retrieves orders specified by order statuses
+  --order-status-ids: list<string> # Retrieves orders specified by order statuses
   --created-to: string # Retrieve entities to their creation date
   --created-from: string # Retrieve entities from their creation date
   --modified-to: string # Retrieve entities to their modification date
@@ -2690,7 +2699,7 @@ export def "ordercountjson get" [
 #
 # GET /order.financial_status.list.json
 # operationId: OrderFinancialStatusList
-export def "orderfinancial-statuslistjson get" [
+export def "order-financial-status-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2714,7 +2723,7 @@ export def "orderfinancial-statuslistjson get" [
 # DEPRECATED
 # operationId: OrderFind
 @deprecated
-export def "orderfindjson get" [
+export def "order-find-json find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2749,7 +2758,7 @@ export def "orderfindjson get" [
 #
 # GET /order.fulfillment_status.list.json
 # operationId: OrderFulfillmentStatusList
-export def "orderfulfillment-statuslistjson get" [
+export def "order-fulfillment-status-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2771,7 +2780,7 @@ export def "orderfulfillment-statuslistjson get" [
 #
 # GET /order.info.json
 # operationId: OrderInfo
-export def "orderinfojson get" [
+export def "order-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2801,7 +2810,7 @@ export def "orderinfojson get" [
 #
 # GET /order.list.json
 # operationId: OrderList
-export def "orderlistjson get" [
+export def "order-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2814,7 +2823,7 @@ export def "orderlistjson get" [
   --customer-email: string # Retrieves orders specified by customer email
   --phone: string # Filter orders by customer's phone number
   --order-status: string # Retrieves orders specified by order status
-  --order-status-ids: list # Retrieves orders specified by order statuses
+  --order-status-ids: list<string> # Retrieves orders specified by order statuses
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
   --page-cursor: string # Used to retrieve orders via cursor-based pagination (it can't be used with any other filtering parameter)
@@ -2858,7 +2867,7 @@ export def "orderlistjson get" [
 # POST /order.preestimate_shipping.list.json
 # operationId: OrderPreestimateShippingList
 # --order_item item shape: {order_item_id: string, order_item_model?: string, order_item_option?: list, order_item_quantity: int, order_item_variant_id?: string, order_item_weight?: float}
-export def "orderpreestimate-shippinglistjson post" [
+export def "order-preestimate-shipping-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2884,11 +2893,11 @@ export def "orderpreestimate-shippinglistjson post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.preestimate_shipping.list.json")
-  let body = {"customer_email": $customer_email, "customer_id": $customer_id, "exclude": $exclude, "order_item": $order_item, "params": $params, "shipp_address_1": $shipp_address_1, "shipp_city": $shipp_city, "shipp_country": $shipp_country, "shipp_postcode": $shipp_postcode, "shipp_state": $shipp_state, "store_id": $store_id, "warehouse_id": $warehouse_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"customer_email": $customer_email, "customer_id": $customer_id, "exclude": $exclude, "order_item": $order_item, "params": $params, "shipp_address_1": $shipp_address_1, "shipp_city": $shipp_city, "shipp_country": $shipp_country, "shipp_postcode": $shipp_postcode, "shipp_state": $shipp_state, "store_id": $store_id, "warehouse_id": $warehouse_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add a refund to the order.
@@ -2896,7 +2905,7 @@ export def "orderpreestimate-shippinglistjson post" [
 # POST /order.refund.add.json
 # operationId: OrderRefundAdd
 # --items item shape: {order_product_id?: string, price?: float, quantity?: int}
-export def "orderrefundaddjson post" [
+export def "order-refund-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2920,11 +2929,11 @@ export def "orderrefundaddjson post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.refund.add.json")
-  let body = {"date": $date, "fee_price": $fee_price, "is_online": $is_online, "item_restock": $item_restock, "items": $items, "message": $message, "order_id": $order_id, "send_notifications": $send_notifications, "shipping_price": $shipping_price, "total_price": $total_price} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"date": $date, "fee_price": $fee_price, "is_online": $is_online, "item_restock": $item_restock, "items": $items, "message": $message, "order_id": $order_id, "send_notifications": $send_notifications, "shipping_price": $shipping_price, "total_price": $total_price} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add a shipment to the order.
@@ -2933,7 +2942,7 @@ export def "orderrefundaddjson post" [
 # operationId: OrderShipmentAdd
 # --items item shape: {order_product_id?: string, quantity?: float}
 # --tracking_numbers item shape: {carrier_id?: string, tracking_number?: string}
-export def "ordershipmentaddjson post" [
+export def "order-shipment-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2952,25 +2961,25 @@ export def "ordershipmentaddjson post" [
   --shipping-method: string # Define shipping method
   --store-id: string # Store Id
   --tracking-link: string # Defines custom tracking link
-  --tracking-numbers: list # Defines shipment's tracking numbers that have to be added</br> How set tracking numbers to appropriate carrier:<ul><li>tracking_numbers[]=a2c.demo1,a2c.demo2 - set default carrier</li><li>tracking_numbers[<b>carrier_id</b>]=a2c.demo - set appropriate carrier</li></ul>To get the list of carriers IDs that are available in your store, use the <a href = "https://api2cart.com/docs/#/cart/CartInfo">cart.info</a > method — item shape: {carrier_id?: string, tracking_number?: string}
+  --tracking-numbers: list # Defines shipment's tracking numbers that have to be added How set tracking numbers to appropriate carrier:tracking_numbers[]=a2c.demo1,a2c.demo2 - set default carriertracking_numbers[carrier_id]=a2c.demo - set appropriate carrierTo get the list of carriers IDs that are available in your store, use the cart.info method — item shape: {carrier_id?: string, tracking_number?: string}
   --warehouse-id: string # This parameter is used for selecting a warehouse where you need to set/modify a product quantity.
 ]: any -> record<result: record<shipment_id: string>, return_code: int, return_message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.shipment.add.json")
-  let body = {"adjust_stock": $adjust_stock, "enable_cache": $enable_cache, "is_shipped": $is_shipped, "items": $items, "order_id": $order_id, "send_notifications": $send_notifications, "shipment_provider": $shipment_provider, "shipping_method": $shipping_method, "store_id": $store_id, "tracking_link": $tracking_link, "tracking_numbers": $tracking_numbers, "warehouse_id": $warehouse_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"adjust_stock": $adjust_stock, "enable_cache": $enable_cache, "is_shipped": $is_shipped, "items": $items, "order_id": $order_id, "send_notifications": $send_notifications, "shipment_provider": $shipment_provider, "shipping_method": $shipping_method, "store_id": $store_id, "tracking_link": $tracking_link, "tracking_numbers": $tracking_numbers, "warehouse_id": $warehouse_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete order's shipment.
 #
 # DELETE /order.shipment.delete.json
 # operationId: OrderShipmentDelete
-export def "ordershipmentdeletejson delete" [
+export def "order-shipment-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2996,7 +3005,7 @@ export def "ordershipmentdeletejson delete" [
 #
 # GET /order.shipment.info.json
 # operationId: OrderShipmentInfo
-export def "ordershipmentinfojson get" [
+export def "order-shipment-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3026,7 +3035,7 @@ export def "ordershipmentinfojson get" [
 #
 # GET /order.shipment.list.json
 # operationId: OrderShipmentList
-export def "ordershipmentlistjson get" [
+export def "order-shipment-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3061,7 +3070,7 @@ export def "ordershipmentlistjson get" [
 #
 # POST /order.shipment.tracking.add.json
 # operationId: OrderShipmentTrackingAdd
-export def "ordershipmenttrackingaddjson post" [
+export def "order-shipment-tracking-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3083,11 +3092,11 @@ export def "ordershipmenttrackingaddjson post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.shipment.tracking.add.json")
-  let body = {"carrier_id": $carrier_id, "order_id": $order_id, "send_notifications": $send_notifications, "shipment_id": $shipment_id, "store_id": $store_id, "tracking_link": $tracking_link, "tracking_number": $tracking_number, "tracking_provider": $tracking_provider} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"carrier_id": $carrier_id, "order_id": $order_id, "send_notifications": $send_notifications, "shipment_id": $shipment_id, "store_id": $store_id, "tracking_link": $tracking_link, "tracking_number": $tracking_number, "tracking_provider": $tracking_provider} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update order's shipment information.
@@ -3095,7 +3104,7 @@ export def "ordershipmenttrackingaddjson post" [
 # PUT /order.shipment.update.json
 # operationId: OrderShipmentUpdate
 # --tracking_numbers item shape: {carrier_id?: string, tracking_number?: string}
-export def "ordershipmentupdatejson put" [
+export def "order-shipment-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3110,24 +3119,24 @@ export def "ordershipmentupdatejson put" [
   shipment_id: string # Shipment id indicates the number of delivery
   --store-id: string # Store Id
   --tracking-link: string # Defines custom tracking link
-  --tracking-numbers: list # Defines shipment's tracking numbers that have to be added</br> How set tracking numbers to appropriate carrier:<ul><li>tracking_numbers[]=a2c.demo1,a2c.demo2 - set default carrier</li><li>tracking_numbers[<b>carrier_id</b>]=a2c.demo - set appropriate carrier</li></ul>To get the list of carriers IDs that are available in your store, use the <a href = "https://api2cart.com/docs/#/cart/CartInfo">cart.info</a > method — item shape: {carrier_id?: string, tracking_number?: string}
+  --tracking-numbers: list # Defines shipment's tracking numbers that have to be added How set tracking numbers to appropriate carrier:tracking_numbers[]=a2c.demo1,a2c.demo2 - set default carriertracking_numbers[carrier_id]=a2c.demo - set appropriate carrierTo get the list of carriers IDs that are available in your store, use the cart.info method — item shape: {carrier_id?: string, tracking_number?: string}
 ]: any -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.shipment.update.json")
-  let body = {"is_shipped": $is_shipped, "order_id": $order_id, "replace": $replace, "shipment_id": $shipment_id, "store_id": $store_id, "tracking_link": $tracking_link, "tracking_numbers": $tracking_numbers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"is_shipped": $is_shipped, "order_id": $order_id, "replace": $replace, "shipment_id": $shipment_id, "store_id": $store_id, "tracking_link": $tracking_link, "tracking_numbers": $tracking_numbers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve list of statuses
 #
 # GET /order.status.list.json
 # operationId: OrderStatusList
-export def "orderstatuslistjson get" [
+export def "order-status-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3151,7 +3160,7 @@ export def "orderstatuslistjson get" [
 #
 # GET /order.transaction.list.json
 # operationId: OrderTransactionList
-export def "ordertransactionlistjson get" [
+export def "order-transaction-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3181,7 +3190,7 @@ export def "ordertransactionlistjson get" [
 #
 # PUT /order.update.json
 # operationId: OrderUpdate
-export def "orderupdatejson put" [
+export def "order-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3196,11 +3205,11 @@ export def "orderupdatejson put" [
   --comment: string # Specifies order comment
   --admin-comment: string # Specifies admin's order comment
   --admin-private-comment: string # Specifies private admin's order comment
-  --date-modified: string # Specifies order's  modification date
-  --date-finished: string # Specifies order's  finished date
+  --date-modified: string # Specifies order's modification date
+  --date-finished: string # Specifies order's finished date
   --financial-status: string # Update order financial status to specified
   --fulfillment-status: string # Create order with fulfillment status
-  --order-payment-method: string # Defines order payment method.<br/>Setting order_payment_method on Shopify will also change financial_status field value to 'paid'
+  --order-payment-method: string # Defines order payment method.Setting order_payment_method on Shopify will also change financial_status field value to 'paid'
   --send-notifications: oneof<nothing, bool> # Send notifications to customer after order was created (default: false)
 ]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3221,7 +3230,7 @@ export def "orderupdatejson put" [
 # --seller_profiles shape: {payment_profile_id?: string, return_profile_id?: string, shipping_profile_id?: string}
 # --shipping_details item shape: {shipping_cost?: float, shipping_service?: string, shipping_type?: string}
 # --tier_prices item shape: {price?: float, quantity?: float}
-export def "productaddjson post" [
+export def "product-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3237,7 +3246,7 @@ export def "productaddjson post" [
   --available-for-view: oneof<nothing, bool> # Specifies the set of visible/invisible products for users (default: true)
   --backorder-status: string # Set backorder status
   --barcode: string # A barcode is a unique code composed of numbers used as a product identifier.
-  --best-offer: list # The price at which Best Offers are automatically accepted.<hr><div style="font-style:normal">Param structure:<div style="margin-left: 2%;"><code style="padding:0; background-color:#ffffff;font-size:85%;font-family:monospace;">best_offer[<b>minimum_offer_price</b>] = decimal</br>best_offer[<b>auto_accept_price</b>] = decimal</br></code></div></div>
+  --best-offer: list<string> # The price at which Best Offers are automatically accepted.Param structure:best_offer[minimum_offer_price] = decimalbest_offer[auto_accept_price] = decimal
   --brand-name: string # Retrieves brands specified by brand name
   --categories-ids: string # Defines product add that is specified by comma-separated categories id
   --category-id: string # Defines product add that is specified by category id
@@ -3272,23 +3281,23 @@ export def "productaddjson post" [
   name: string # Defines product's name that has to be added
   --old-price: float # Defines product's old price
   --ordered-count: int # Defines how many times the product was ordered (default: 0)
-  --package-details: list # If the seller is subscribed to "Business Policies", use the seller_profiles instead of the shipping_details, payment_methods and return_accepted params.<hr><div style="font-style:normal">Param structure:<div style="margin-left: 2%;"><code style="padding:0; background-color:#ffffff;font-size:85%;font-family:monospace;">package_details[<b>measure_unit</b>] = string</br> Allowed measure_unit values: [English or Metric] </br> Default: Metric</br>package_details[<b>weigh_unit</b>] = string</br> Allowed weigh_unit values: [kg, g, lbs, oz]</br>package_details[<b>package_depth</b>] = decimal</br>package_details[<b>package_length</b>] = decimal</br>package_details[<b>package_width</b>] = decimal</br>package_details[<b>weight_major</b>] = decimal</br>package_details[<b>weight_minor</b>] = decimal</br>package_details[<b>shipping_package</b>] = string</br> See cart.info method, param `eBay_shipping_package_details`</code></div></div>
-  --payment-methods: list # Identifies the payment method (such as PayPal) that the seller will accept when the buyer pays for the item. Look at cart.info method response for allowed values.<hr><div style="font-style:normal">Param structure:<div style="margin-left: 2%;"><code style="padding:0; background-color:#ffffff;font-size:85%;font-family:monospace;">payment_methods[0] = string</br>payment_methods[1] = string</br></code></div></div>
+  --package-details: list<string> # If the seller is subscribed to "Business Policies", use the seller_profiles instead of the shipping_details, payment_methods and return_accepted params.Param structure:package_details[measure_unit] = string Allowed measure_unit values: [English or Metric] Default: Metricpackage_details[weigh_unit] = string Allowed weigh_unit values: [kg, g, lbs, oz]package_details[package_depth] = decimalpackage_details[package_length] = decimalpackage_details[package_width] = decimalpackage_details[weight_major] = decimalpackage_details[weight_minor] = decimalpackage_details[shipping_package] = string See cart.info method, param `eBay_shipping_package_details`
+  --payment-methods: list<string> # Identifies the payment method (such as PayPal) that the seller will accept when the buyer pays for the item. Look at cart.info method response for allowed values.Param structure:payment_methods[0] = stringpayment_methods[1] = string
   --paypal-email: string # Valid PayPal email address for the PayPal account that the seller will use if they offer PayPal as a payment method for the listing.
   price: float # Defines product's price that has to be added
   --product-class: string # A categorization for the product
   --quantity: float # Defines product's quantity that has to be added (default: 0)
   --return-accepted: oneof<nothing, bool> # Indicates whether the seller allows the buyer to return the item.
-  --sales-tax: list # Percent of an item's price to be charged as the sales tax for the order. Look at cart.info method response for allowed values.<hr><div style="font-style:normal">Param structure:<div style="margin-left: 2%;"><code style="padding:0; background-color:#ffffff;font-size:85%;font-family:monospace;">sales_tax[<b>tax_percent</b>] = decimal (##.###)</br>sales_tax[<b>tax_state</b>] = string</br>sales_tax[<b>shipping_inc_in_tax</b>] = bool</br></code></div></div>
+  --sales-tax: list<string> # Percent of an item's price to be charged as the sales tax for the order. Look at cart.info method response for allowed values.Param structure:sales_tax[tax_percent] = decimal (##.###)sales_tax[tax_state] = stringsales_tax[shipping_inc_in_tax] = bool
   --search-keywords: string # Defines unique search keywords
-  --seller-profiles: record # If the seller is subscribed to "Business Policies", use the seller_profiles instead of the shipping_details, payment_methods and return_accepted params.<hr><div style="font-style:normal">Param structure:<div style="margin-left: 2%;"><code style="padding:0; background-color:#ffffff;font-size:85%;font-family:monospace;">seller_profiles[<b>shipping_profile_id</b>] = integer</br>seller_profiles[<b>payment_profile_id</b>] = integer</br>seller_profiles[<b>return_profile_id</b>] = integer</br></code></div></div> — shape: {payment_profile_id?: string, return_profile_id?: string, shipping_profile_id?: string}
+  --seller-profiles: record # If the seller is subscribed to "Business Policies", use the seller_profiles instead of the shipping_details, payment_methods and return_accepted params.Param structure:seller_profiles[shipping_profile_id] = integerseller_profiles[payment_profile_id] = integerseller_profiles[return_profile_id] = integer — shape: {payment_profile_id?: string, return_profile_id?: string, shipping_profile_id?: string}
   --seo-url: string # Defines unique URL for SEO
-  --shipping-details: list # The shipping details, including flat and calculated shipping costs and shipping insurance costs. Look at cart.info method response for allowed values.<hr><div style="font-style:normal">Param structure:<div style="margin-left: 2%;"><code style="padding:0; background-color:#ffffff;font-size:85%;font-family:monospace;">shipping_details[0][<b>shipping_type</b>] = string </br>shipping_details[0][<b>shipping_service</b>] = string</br>shipping_details[0][<b>shipping_cost</b>] = decimal</br>shipping_details[1][<b>shipping_type</b>] = string </br>shipping_details[1][<b>shipping_service</b>] = string</br>shipping_details[1][<b>shipping_cost</b>] = decimal</br></code></div></div> — item shape: {shipping_cost?: float, shipping_service?: string, shipping_type?: string}
+  --shipping-details: list # The shipping details, including flat and calculated shipping costs and shipping insurance costs. Look at cart.info method response for allowed values.Param structure:shipping_details[0][shipping_type] = string shipping_details[0][shipping_service] = stringshipping_details[0][shipping_cost] = decimalshipping_details[1][shipping_type] = string shipping_details[1][shipping_service] = stringshipping_details[1][shipping_cost] = decimal — item shape: {shipping_cost?: float, shipping_service?: string, shipping_type?: string}
   --shipping-template-id: int # The numeric ID of the shipping template associated with the products in Etsy. (default: 0)
   --short-description: string # Defines short description
   --sku: string # Defines product's sku that has to be added
   --special-price: float # Defines product's model that has to be added
-  --specifics: list # An array of Item Specific Name/Value pairs used by the seller to provide descriptive details of an item in a structured manner.         <hr>         <div style="font-style:normal">Param structure:           <div style="margin-left: 2%;">             <code style="padding:0; background-color:#ffffff;font-size:85%;font-family:monospace;">               specifics[int][<b>name</b>] = string</br>               specifics[int][<b>value</b>] = string</br>             </code>           </div>         </div>
+  --specifics: list<string> # An array of Item Specific Name/Value pairs used by the seller to provide descriptive details of an item in a structured manner. Param structure: specifics[int][name] = string specifics[int][value] = string
   --sprice-create: string # Defines the date of special price creation
   --sprice-expire: string # Defines the term of special price offer duration
   --sprice-modified: string # Defines the date of special price modification
@@ -3301,7 +3310,7 @@ export def "productaddjson post" [
   --tier-prices: list # Defines product's tier prices — item shape: {price?: float, quantity?: float}
   --type: string # Defines product's type (default: simple)
   --upc: string # Universal Product Code. A UPC (UPC-A) is a commonly used identifer for many different products.
-  --body-url: string # Defines unique product's URL
+  --url: string # Defines unique product's URL
   --viewed-count: int # Specifies the number of product's reviews (default: 0)
   --visible: string # Set visibility status
   --warehouse-id: string # This parameter is used for selecting a warehouse where you need to set/modify a product quantity.
@@ -3314,18 +3323,18 @@ export def "productaddjson post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.add.json")
-  let body = {"attribute_name": $attribute_name, "attribute_set_name": $attribute_set_name, "avail_from": $avail_from, "available_for_sale": $available_for_sale, "available_for_view": $available_for_view, "backorder_status": $backorder_status, "barcode": $barcode, "best_offer": $best_offer, "brand_name": $brand_name, "categories_ids": $categories_ids, "category_id": $category_id, "clear_cache": $clear_cache, "condition": $condition, "cost_price": $cost_price, "country_of_origin": $country_of_origin, "created_at": $created_at, "description": $description, "downloadable": $downloadable, "ean": $ean, "files": $files, "group_prices": $group_prices, "gtin": $gtin, "harmonized_system_code": $harmonized_system_code, "height": $height, "image_name": $image_name, "image_url": $image_url, "isbn": $isbn, "lang_id": $lang_id, "length": $length, "listing_duration": $listing_duration, "listing_type": $listing_type, "manage_stock": $manage_stock, "manufacturer": $manufacturer, "marketplace_item_properties": $marketplace_item_properties, "meta_description": $meta_description, "meta_keywords": $meta_keywords, "meta_title": $meta_title, "model": $model, "mpn": $mpn, "name": $name, "old_price": $old_price, "ordered_count": $ordered_count, "package_details": $package_details, "payment_methods": $payment_methods, "paypal_email": $paypal_email, "price": $price, "product_class": $product_class, "quantity": $quantity, "return_accepted": $return_accepted, "sales_tax": $sales_tax, "search_keywords": $search_keywords, "seller_profiles": $seller_profiles, "seo_url": $seo_url, "shipping_details": $shipping_details, "shipping_template_id": $shipping_template_id, "short_description": $short_description, "sku": $sku, "special_price": $special_price, "specifics": $specifics, "sprice_create": $sprice_create, "sprice_expire": $sprice_expire, "sprice_modified": $sprice_modified, "status": $status, "store_id": $store_id, "stores_ids": $stores_ids, "tags": $tags, "tax_class_id": $tax_class_id, "taxable": $taxable, "tier_prices": $tier_prices, "type": $type, "upc": $upc, "url": $body_url, "viewed_count": $viewed_count, "visible": $visible, "warehouse_id": $warehouse_id, "weight": $weight, "weight_unit": $weight_unit, "wholesale_price": $wholesale_price, "width": $width} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"attribute_name": $attribute_name, "attribute_set_name": $attribute_set_name, "avail_from": $avail_from, "available_for_sale": $available_for_sale, "available_for_view": $available_for_view, "backorder_status": $backorder_status, "barcode": $barcode, "best_offer": $best_offer, "brand_name": $brand_name, "categories_ids": $categories_ids, "category_id": $category_id, "clear_cache": $clear_cache, "condition": $condition, "cost_price": $cost_price, "country_of_origin": $country_of_origin, "created_at": $created_at, "description": $description, "downloadable": $downloadable, "ean": $ean, "files": $files, "group_prices": $group_prices, "gtin": $gtin, "harmonized_system_code": $harmonized_system_code, "height": $height, "image_name": $image_name, "image_url": $image_url, "isbn": $isbn, "lang_id": $lang_id, "length": $length, "listing_duration": $listing_duration, "listing_type": $listing_type, "manage_stock": $manage_stock, "manufacturer": $manufacturer, "marketplace_item_properties": $marketplace_item_properties, "meta_description": $meta_description, "meta_keywords": $meta_keywords, "meta_title": $meta_title, "model": $model, "mpn": $mpn, "name": $name, "old_price": $old_price, "ordered_count": $ordered_count, "package_details": $package_details, "payment_methods": $payment_methods, "paypal_email": $paypal_email, "price": $price, "product_class": $product_class, "quantity": $quantity, "return_accepted": $return_accepted, "sales_tax": $sales_tax, "search_keywords": $search_keywords, "seller_profiles": $seller_profiles, "seo_url": $seo_url, "shipping_details": $shipping_details, "shipping_template_id": $shipping_template_id, "short_description": $short_description, "sku": $sku, "special_price": $special_price, "specifics": $specifics, "sprice_create": $sprice_create, "sprice_expire": $sprice_expire, "sprice_modified": $sprice_modified, "status": $status, "store_id": $store_id, "stores_ids": $stores_ids, "tags": $tags, "tax_class_id": $tax_class_id, "taxable": $taxable, "tier_prices": $tier_prices, "type": $type, "upc": $upc, "url": $url, "viewed_count": $viewed_count, "visible": $visible, "warehouse_id": $warehouse_id, "weight": $weight, "weight_unit": $weight_unit, "wholesale_price": $wholesale_price, "width": $width} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get list of attributes and values.
 #
 # GET /product.attribute.list.json
 # operationId: ProductAttributeList
-export def "productattributelistjson get" [
+export def "product-attribute-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3363,7 +3372,7 @@ export def "productattributelistjson get" [
 #
 # POST /product.attribute.value.set.json
 # operationId: ProductAttributeValueSet
-export def "productattributevaluesetjson post" [
+export def "product-attribute-value-set-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3394,7 +3403,7 @@ export def "productattributevaluesetjson post" [
 #
 # POST /product.attribute.value.unset.json
 # operationId: ProductAttributeValueUnset
-export def "productattributevalueunsetjson post" [
+export def "product-attribute-value-unset-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3423,7 +3432,7 @@ export def "productattributevalueunsetjson post" [
 #
 # GET /product.brand.list.json
 # operationId: ProductBrandList
-export def "productbrandlistjson get" [
+export def "product-brand-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3458,7 +3467,7 @@ export def "productbrandlistjson get" [
 #
 # GET /product.child_item.find.json
 # operationId: ProductChildItemFind
-export def "productchild-itemfindjson get" [
+export def "product-child-item-find-json find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3485,7 +3494,7 @@ export def "productchild-itemfindjson get" [
 #
 # GET /product.child_item.info.json
 # operationId: ProductChildItemInfo
-export def "productchild-iteminfojson get" [
+export def "product-child-item-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3516,7 +3525,7 @@ export def "productchild-iteminfojson get" [
 #
 # GET /product.child_item.list.json
 # operationId: ProductChildItemList
-export def "productchild-itemlistjson get" [
+export def "product-child-item-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3557,7 +3566,7 @@ export def "productchild-itemlistjson get" [
 #
 # GET /product.count.json
 # operationId: ProductCount
-export def "productcountjson get" [
+export def "product-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3579,7 +3588,7 @@ export def "productcountjson get" [
   --report-request-id: string # Report request id
   --disable-report-cache: oneof<nothing, bool> # Disable report cache for current request (default: false)
   --brand-name: string # Retrieves brands specified by brand name
-  --product-attributes: list # Defines product attributes
+  --product-attributes: list<string> # Defines product attributes
   --status: string # Defines product's status
   --type: string # Defines products's type
 ]: nothing -> record<result: record<products_count: int>, return_code: int, return_message: string> {
@@ -3596,7 +3605,7 @@ export def "productcountjson get" [
 #
 # POST /product.currency.add.json
 # operationId: ProductCurrencyAdd
-export def "productcurrencyaddjson post" [
+export def "product-currency-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3626,7 +3635,7 @@ export def "productcurrencyaddjson post" [
 #
 # GET /product.currency.list.json
 # operationId: ProductCurrencyList
-export def "productcurrencylistjson get" [
+export def "product-currency-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3657,7 +3666,7 @@ export def "productcurrencylistjson get" [
 #
 # DELETE /product.delete.json
 # operationId: ProductDelete
-export def "productdeletejson delete" [
+export def "product-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3681,7 +3690,7 @@ export def "productdeletejson delete" [
 #
 # GET /product.fields.json
 # operationId: ProductFields
-export def "productfieldsjson get" [
+export def "product-fields-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3703,7 +3712,7 @@ export def "productfieldsjson get" [
 #
 # GET /product.find.json
 # operationId: ProductFind
-export def "productfindjson get" [
+export def "product-find-json find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3732,7 +3741,7 @@ export def "productfindjson get" [
 #
 # POST /product.image.add.json
 # operationId: ProductImageAdd
-export def "productimageaddjson post" [
+export def "product-image-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3751,25 +3760,25 @@ export def "productimageaddjson post" [
   --product-variant-id: int # Defines product's variants specified by variant id
   --store-id: string # Store Id
   type: string@type-completer-2 # Defines image's types that are specified by comma-separated list
-  --body-url: string # Defines URL of the image that has to be added
+  --url: string # Defines URL of the image that has to be added
   --variant-ids: string # Defines product's variants ids
 ]: any -> record<result: record<id: string, image_path: string>, return_code: int, return_message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.image.add.json")
-  let body = {"content": $content, "image_name": $image_name, "label": $label, "lang_id": $lang_id, "mime": $mime, "position": $position, "product_id": $product_id, "product_variant_id": $product_variant_id, "store_id": $store_id, "type": $type, "url": $body_url, "variant_ids": $variant_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"content": $content, "image_name": $image_name, "label": $label, "lang_id": $lang_id, "mime": $mime, "position": $position, "product_id": $product_id, "product_variant_id": $product_variant_id, "store_id": $store_id, "type": $type, "url": $url, "variant_ids": $variant_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete image
 #
 # DELETE /product.image.delete.json
 # operationId: ProductImageDelete
-export def "productimagedeletejson delete" [
+export def "product-image-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3795,7 +3804,7 @@ export def "productimagedeletejson delete" [
 #
 # PUT /product.image.update.json
 # operationId: ProductImageUpdate
-export def "productimageupdatejson put" [
+export def "product-image-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3827,7 +3836,7 @@ export def "productimageupdatejson put" [
 #
 # GET /product.info.json
 # operationId: ProductInfo
-export def "productinfojson get" [
+export def "product-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3859,7 +3868,7 @@ export def "productinfojson get" [
 #
 # GET /product.list.json
 # operationId: ProductList
-export def "productlistjson get" [
+export def "product-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3893,7 +3902,7 @@ export def "productlistjson get" [
   --sku: string # Filter by product's sku
   --disable-cache: oneof<nothing, bool> # Disable cache for current request (default: false)
   --brand-name: string # Retrieves brands specified by brand name
-  --product-attributes: list # Defines product attributes
+  --product-attributes: list<string> # Defines product attributes
   --status: string # Defines product's status
   --type: string # Defines products's type
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, product: list<record>, products_count: int>, return_code: int, return_message: string> {
@@ -3910,7 +3919,7 @@ export def "productlistjson get" [
 #
 # POST /product.manufacturer.add.json
 # operationId: ProductManufacturerAdd
-export def "productmanufactureraddjson post" [
+export def "product-manufacturer-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3935,7 +3944,7 @@ export def "productmanufactureraddjson post" [
 #
 # POST /product.option.add.json
 # operationId: ProductOptionAdd
-export def "productoptionaddjson post" [
+export def "product-option-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3968,7 +3977,7 @@ export def "productoptionaddjson post" [
 #
 # POST /product.option.assign.json
 # operationId: ProductOptionAssign
-export def "productoptionassignjson post" [
+export def "product-option-assign-json assign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3997,7 +4006,7 @@ export def "productoptionassignjson post" [
 #
 # GET /product.option.list.json
 # operationId: ProductOptionList
-export def "productoptionlistjson get" [
+export def "product-option-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4028,7 +4037,7 @@ export def "productoptionlistjson get" [
 #
 # POST /product.option.value.add.json
 # operationId: ProductOptionValueAdd
-export def "productoptionvalueaddjson post" [
+export def "product-option-value-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4056,7 +4065,7 @@ export def "productoptionvalueaddjson post" [
 #
 # POST /product.option.value.assign.json
 # operationId: ProductOptionValueAssign
-export def "productoptionvalueassignjson post" [
+export def "product-option-value-assign-json assign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4082,7 +4091,7 @@ export def "productoptionvalueassignjson post" [
 #
 # PUT /product.option.value.update.json
 # operationId: ProductOptionValueUpdate
-export def "productoptionvalueupdatejson put" [
+export def "product-option-value-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4113,7 +4122,7 @@ export def "productoptionvalueupdatejson put" [
 # POST /product.price.add.json
 # operationId: ProductPriceAdd
 # --group_prices item shape: {group_id?: string, price?: float}
-export def "productpriceaddjson post" [
+export def "product-price-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4129,18 +4138,18 @@ export def "productpriceaddjson post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.price.add.json")
-  let body = {"group_prices": $group_prices, "product_id": $product_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"group_prices": $group_prices, "product_id": $product_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete some prices of the product
 #
 # DELETE /product.price.delete.json
 # operationId: ProductPriceDelete
-export def "productpricedeletejson delete" [
+export def "product-price-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4166,7 +4175,7 @@ export def "productpricedeletejson delete" [
 # PUT /product.price.update.json
 # operationId: ProductPriceUpdate
 # --group_prices item shape: {group_id?: string, id?: int, price?: float}
-export def "productpriceupdatejson put" [
+export def "product-price-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4182,18 +4191,18 @@ export def "productpriceupdatejson put" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.price.update.json")
-  let body = {"group_prices": $group_prices, "product_id": $product_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"group_prices": $group_prices, "product_id": $product_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get reviews of a specific product.
 #
 # GET /product.review.list.json
 # operationId: ProductReviewList
-export def "productreviewlistjson get" [
+export def "product-review-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4226,7 +4235,7 @@ export def "productreviewlistjson get" [
 #
 # POST /product.store.assign.json
 # operationId: ProductStoreAssign
-export def "productstoreassignjson post" [
+export def "product-store-assign-json assign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4252,7 +4261,7 @@ export def "productstoreassignjson post" [
 # POST /product.tax.add.json
 # operationId: ProductTaxAdd
 # --tax_rates item shape: {name?: string, type?: string, value?: float}
-export def "producttaxaddjson post" [
+export def "product-tax-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4269,18 +4278,18 @@ export def "producttaxaddjson post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.tax.add.json")
-  let body = {"name": $name, "product_id": $product_id, "tax_rates": $tax_rates} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "product_id": $product_id, "tax_rates": $tax_rates} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update price and quantity for a specific product
 #
 # PUT /product.update.json
 # operationId: ProductUpdate
-export def "productupdatejson put" [
+export def "product-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4352,7 +4361,7 @@ export def "productupdatejson put" [
 # POST /product.variant.add.json
 # operationId: ProductVariantAdd
 # --attributes item shape: {attribute_name?: string, attribute_price?: float, attribute_value?: string}
-export def "productvariantaddjson post" [
+export def "product-variant-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4393,7 +4402,7 @@ export def "productvariantaddjson post" [
   --store-id: string # Add variants specified by store id
   --tax-class-id: int # Defines tax classes where entity has to be added
   --taxable: oneof<nothing, bool> # Specifies whether a tax is charged (default: true)
-  --body-url: string # Defines unique product variant's URL
+  --url: string # Defines unique product variant's URL
   --warehouse-id: string # This parameter is used for selecting a warehouse where you need to set/modify a product quantity.
   --weight: float # Weight (default: 0)
   --weight-unit: string # Weight Unit
@@ -4403,18 +4412,18 @@ export def "productvariantaddjson post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.add.json")
-  let body = {"attributes": $attributes, "available_for_sale": $available_for_sale, "available_for_view": $available_for_view, "barcode": $barcode, "clear_cache": $clear_cache, "cost_price": $cost_price, "country_of_origin": $country_of_origin, "created_at": $created_at, "description": $description, "harmonized_system_code": $harmonized_system_code, "height": $height, "lang_id": $lang_id, "length": $length, "manage_stock": $manage_stock, "manufacturer": $manufacturer, "meta_description": $meta_description, "meta_keywords": $meta_keywords, "meta_title": $meta_title, "model": $model, "name": $name, "price": $price, "product_id": $product_id, "quantity": $quantity, "short_description": $short_description, "sku": $sku, "special_price": $special_price, "sprice_create": $sprice_create, "sprice_expire": $sprice_expire, "sprice_modified": $sprice_modified, "store_id": $store_id, "tax_class_id": $tax_class_id, "taxable": $taxable, "url": $body_url, "warehouse_id": $warehouse_id, "weight": $weight, "weight_unit": $weight_unit, "width": $width} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"attributes": $attributes, "available_for_sale": $available_for_sale, "available_for_view": $available_for_view, "barcode": $barcode, "clear_cache": $clear_cache, "cost_price": $cost_price, "country_of_origin": $country_of_origin, "created_at": $created_at, "description": $description, "harmonized_system_code": $harmonized_system_code, "height": $height, "lang_id": $lang_id, "length": $length, "manage_stock": $manage_stock, "manufacturer": $manufacturer, "meta_description": $meta_description, "meta_keywords": $meta_keywords, "meta_title": $meta_title, "model": $model, "name": $name, "price": $price, "product_id": $product_id, "quantity": $quantity, "short_description": $short_description, "sku": $sku, "special_price": $special_price, "sprice_create": $sprice_create, "sprice_expire": $sprice_expire, "sprice_modified": $sprice_modified, "store_id": $store_id, "tax_class_id": $tax_class_id, "taxable": $taxable, "url": $url, "warehouse_id": $warehouse_id, "weight": $weight, "weight_unit": $weight_unit, "width": $width} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get count variants.
 #
 # GET /product.variant.count.json
 # operationId: ProductVariantCount
-export def "productvariantcountjson get" [
+export def "product-variant-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4444,7 +4453,7 @@ export def "productvariantcountjson get" [
 #
 # DELETE /product.variant.delete.json
 # operationId: ProductVariantDelete
-export def "productvariantdeletejson delete" [
+export def "product-variant-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4469,7 +4478,7 @@ export def "productvariantdeletejson delete" [
 #
 # POST /product.variant.image.add.json
 # operationId: ProductVariantImageAdd
-export def "productvariantimageaddjson post" [
+export def "product-variant-image-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4488,24 +4497,24 @@ export def "productvariantimageaddjson post" [
   product_variant_id: int # Defines product's variants specified by variant id
   --store-id: string # Store Id
   type: string@type-completer-2 # Defines image's types that are specified by comma-separated list (default: base)
-  --body-url: string # Defines URL of the image that has to be added
+  --url: string # Defines URL of the image that has to be added
 ]: any -> record<result: record<id: string, image_path: string>, return_code: int, return_message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.image.add.json")
-  let body = {"content": $content, "image_name": $image_name, "label": $label, "mime": $mime, "option_id": $option_id, "position": $position, "product_id": $product_id, "product_variant_id": $product_variant_id, "store_id": $store_id, "type": $type, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"content": $content, "image_name": $image_name, "label": $label, "mime": $mime, "option_id": $option_id, "position": $position, "product_id": $product_id, "product_variant_id": $product_variant_id, "store_id": $store_id, "type": $type, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Delete  image to product
+# Delete image to product
 #
 # DELETE /product.variant.image.delete.json
 # operationId: ProductVariantImageDelete
-export def "productvariantimagedeletejson delete" [
+export def "product-variant-image-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4532,7 +4541,7 @@ export def "productvariantimagedeletejson delete" [
 #
 # GET /product.variant.info.json
 # operationId: ProductVariantInfo
-export def "productvariantinfojson get" [
+export def "product-variant-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4559,7 +4568,7 @@ export def "productvariantinfojson get" [
 #
 # GET /product.variant.list.json
 # operationId: ProductVariantList
-export def "productvariantlistjson get" [
+export def "product-variant-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4594,7 +4603,7 @@ export def "productvariantlistjson get" [
 # POST /product.variant.price.add.json
 # operationId: ProductVariantPriceAdd
 # --group_prices item shape: {group_id?: string, price?: float}
-export def "productvariantpriceaddjson post" [
+export def "product-variant-price-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4610,18 +4619,18 @@ export def "productvariantpriceaddjson post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.price.add.json")
-  let body = {"group_prices": $group_prices, "id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"group_prices": $group_prices, "id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete some prices of the product variant.
 #
 # DELETE /product.variant.price.delete.json
 # operationId: ProductVariantPriceDelete
-export def "productvariantpricedeletejson delete" [
+export def "product-variant-price-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4647,7 +4656,7 @@ export def "productvariantpricedeletejson delete" [
 # PUT /product.variant.price.update.json
 # operationId: ProductVariantPriceUpdate
 # --group_prices item shape: {group_id?: string, id?: int, price?: float}
-export def "productvariantpriceupdatejson put" [
+export def "product-variant-price-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4663,18 +4672,18 @@ export def "productvariantpriceupdatejson put" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.price.update.json")
-  let body = {"group_prices": $group_prices, "id": $id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"group_prices": $group_prices, "id": $id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update variant.
 #
 # PUT /product.variant.update.json
 # operationId: ProductVariantUpdate
-export def "productvariantupdatejson put" [
+export def "product-variant-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4714,7 +4723,7 @@ export def "productvariantupdatejson put" [
   --barcode: string # A barcode is a unique code composed of numbers used as a product identifier.
   --reindex: oneof<nothing, bool> # Is reindex required (default: true)
   --taxable: oneof<nothing, bool> # Specifies whether a tax is charged (default: true)
-  --options: list # Defines variant's options list
+  --options: list<string> # Defines variant's options list
   --harmonized-system-code: string # Harmonized System Code. An HSC is a 6-digit identifier that allows participating countries to classify traded goods on a common basis for customs purposes
   --country-of-origin: string # The country where the inventory item was made
   --width: float # Defines product's width
@@ -4739,7 +4748,7 @@ export def "productvariantupdatejson put" [
 #
 # GET /subscriber.list.json
 # operationId: SubscriberList
-export def "subscriberlistjson subscribe-r-list" [
+export def "subscriber-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4775,7 +4784,7 @@ export def "subscriberlistjson subscribe-r-list" [
 #
 # GET /tax.class.info.json
 # operationId: TaxClassInfo
-export def "taxclassinfojson get" [
+export def "tax-class-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4804,7 +4813,7 @@ export def "taxclassinfojson get" [
 #
 # GET /webhook.count.json
 # operationId: WebhookCount
-export def "webhookcountjson get" [
+export def "webhook-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4830,7 +4839,7 @@ export def "webhookcountjson get" [
 #
 # POST /webhook.create.json
 # operationId: WebhookCreate
-export def "webhookcreatejson post" [
+export def "webhook-create-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4860,7 +4869,7 @@ export def "webhookcreatejson post" [
 #
 # DELETE /webhook.delete.json
 # operationId: WebhookDelete
-export def "webhookdeletejson delete" [
+export def "webhook-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4884,7 +4893,7 @@ export def "webhookdeletejson delete" [
 #
 # GET /webhook.events.json
 # operationId: WebhookEvents
-export def "webhookeventsjson get" [
+export def "webhook-events-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4906,7 +4915,7 @@ export def "webhookeventsjson get" [
 #
 # GET /webhook.list.json
 # operationId: WebhookList
-export def "webhooklistjson get" [
+export def "webhook-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4936,7 +4945,7 @@ export def "webhooklistjson get" [
 #
 # PUT /webhook.update.json
 # operationId: WebhookUpdate
-export def "webhookupdatejson put" [
+export def "webhook-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

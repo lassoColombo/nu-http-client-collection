@@ -37,6 +37,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -64,6 +73,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
 def base-url-completer [] { ["https://betaapi.digitallocker.gov.in/public"] }
 def auth-scheme-completer [] { ["x-2" "x1123" "bearer"] }
 
@@ -75,7 +111,7 @@ def gender-completer [] { ["F" "M" "T"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-1-pushuri post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-1-pushuri push-uri" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +135,7 @@ export def commands []: nothing -> table {
 #
 # POST /account/1/pushuri
 # operationId: Push URI to Account id
-export def "account-1-pushuri post" [
+export def "account-1-pushuri push-uri" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -123,18 +159,19 @@ export def "account-1-pushuri post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/1/pushuri")
-  let body = {"action": $action, "clientid": $clientid, "digilockerid": $digilockerid, "docid": $docid, "hmac": $hmac, "issuedate": $issuedate, "ts": $ts, "uri": $uri, "validfrom": $validfrom, "validto": $validto} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"action": $action, "clientid": $clientid, "digilockerid": $digilockerid, "docid": $docid, "hmac": $hmac, "issuedate": $issuedate, "ts": $ts, "uri": $uri, "validfrom": $validfrom, "validto": $validto} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["hmac"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Verify Account
 #
 # POST /account/2/verify
 # operationId: Verify Account id
-export def "account-2-verify post" [
+export def "account-2-verify verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,18 +190,19 @@ export def "account-2-verify post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/2/verify")
-  let body = {"clientid": $clientid, "hmac": $hmac, "mobile": $mobile, "ts": $ts, "uid": $uid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clientid": $clientid, "hmac": $hmac, "mobile": $mobile, "ts": $ts, "uid": $uid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["hmac"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get Authorization Code
 #
 # GET /oauth2/1/authorize
 # operationId: Get Authorization Code id
-export def "oauth2-1-authorize get" [
+export def "oauth2-1-authorize get-authorization-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +215,7 @@ export def "oauth2-1-authorize get" [
   --response-type: string # Provide the grant type requested, either token or code.
   --redirect-uri: string # The URI to redirect the user after authorization has completed.
   --state: string # This is your application specific data that will be passed back to your application through redirect_uri.
-  --code-challenge: string # A unique random string called code verifier (code_verifier) is created by the client application for every authorization request. The code_challenge sent as this parameter is the Base64URL (with no padding) encoded SHA256 hash of the code verifier.         Code block:         ```        string base64_url_encode_without_padding(string arg)        {            string s = base64encode(arg); //Regular base64encoder with padding           s = s.replace(’=’,’’); //Remove any trailing ’=’           s = s.replace(’+’, ’-’); //Replace ’+’ with ’-’           s = s.replace(’/’, ’_’); //Replace ’/’ with ’_’ return s;         }         ```  (e.g. base64_url_encode_without_padding(sha256(code_verifier)))
+  --code-challenge: string # A unique random string called code verifier (code_verifier) is created by the client application for every authorization request. The code_challenge sent as this parameter is the Base64URL (with no padding) encoded SHA256 hash of the code verifier. Code block: ``` string base64_url_encode_without_padding(string arg) { string s = base64encode(arg); //Regular base64encoder with padding s = s.replace(’=’,’’); //Remove any trailing ’=’ s = s.replace(’+’, ’-’); //Replace ’+’ with ’-’ s = s.replace(’/’, ’_’); //Replace ’/’ with ’_’ return s; } ``` (e.g. base64_url_encode_without_padding(sha256(code_verifier)))
   --code-challenge-method: string # Specifies what method was used to encode a code_verifier to generate code_challenge parameter above. This parameter must be used with the code_challenge parameter. The only supported values for this parameter is S256.
   --dl-flow: string # If this parameter is provided its value will always be signup. This parameter indicates that the user does not have a DigiLocker account and will be directed to the signup flow directly. After the account is created, the user will be directed to the authorization flow. If this parameter is not sent, the user will be redirected to the sign in flow.
   --verified-mobile: int # Verified mobile number of the user. If this parameter is passed, DigiLocker will skip the mobile OTP verification step during sign up. DigiLocker will treat the mobile number passed in this parameter as a verified mobile number by the trusted client application. This parameter will be used only if dl_flow parameter mentioned above is set to signup and will be ignored otherwise.
@@ -195,7 +233,7 @@ export def "oauth2-1-authorize get" [
 #
 # POST /oauth2/1/code
 # operationId: Get Device Code id
-export def "oauth2-1-code post" [
+export def "oauth2-1-code get-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,26 +243,26 @@ export def "oauth2-1-code post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string
-  --dl-mobile: int # Mobile number associated with DigiLocker account of the   user. The client device accepts the mobile number on the device from user and sends it in this parameter. Either the username or the mobile number must be provided.
-  --dl-username: string # DigiLocker username of the user. The client device accepts the username on the device from user and sends the username in this parameter. Either the username or the mobile number must be provided.   
+  --dl-mobile: int # Mobile number associated with DigiLocker account of the user. The client device accepts the mobile number on the device from user and sends it in this parameter. Either the username or the mobile number must be provided.
+  --dl-username: string # DigiLocker username of the user. The client device accepts the username on the device from user and sends the username in this parameter. Either the username or the mobile number must be provided.
   --response-type: string # The parameter must be set to device_code. (e.g. device_code)
 ]: any -> record<device_code: string, dl_masked_email: string, dl_masked_mobile: int, expires_in: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/1/code")
-  let body = {"client_id": $client_id, "dl_mobile": $dl_mobile, "dl_username": $dl_username, "response_type": $response_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"client_id": $client_id, "dl_mobile": $dl_mobile, "dl_username": $dl_username, "response_type": $response_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Upload file to locker
 #
 # POST /oauth2/1/file/upload
 # operationId: Upload File to Locker id
-export def "oauth2-1-file-upload post" [
+export def "oauth2-1-file-upload upload-to-locker" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,12 +279,13 @@ export def "oauth2-1-file-upload post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/1/file/upload")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"path": $path, "hmac": $hmac} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  let extra_headers = {"path": $path, "hmac": $hmac} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # Get File from URI
@@ -267,7 +306,7 @@ export def "oauth2-1-file get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({uri: $uri} | format pattern "/oauth2/1/file/{uri}"))
+  let full_url = (build-url $base ({uri: (encode-path-segment $uri)} | format pattern "/oauth2/1/file/{uri}"))
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -299,7 +338,7 @@ export def "oauth2-1-files list" [
 #
 # GET /oauth2/1/files/issued
 # operationId: Get List of issued Documents Version1 id
-export def "oauth2-1-files-issued get" [
+export def "oauth2-1-files-issued get-list-of-documents-version1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,7 +360,7 @@ export def "oauth2-1-files-issued get" [
 #
 # GET /oauth2/1/files/{id}
 # operationId: Get List of Self Uploaded Documents id
-export def "oauth2-1-files get" [
+export def "oauth2-1-files get-list-of-self-uploaded-documents" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,7 +373,7 @@ export def "oauth2-1-files get" [
 ]: nothing -> record<details: record<date: string, description: string, id: int, issuer: string, mime: string, name: string, parent: string, size: string, type: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/oauth2/1/files/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/oauth2/1/files/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -344,7 +383,7 @@ export def "oauth2-1-files get" [
 #
 # POST /oauth2/1/pull/doctype
 # operationId: Get List of Documents Provided by an Issuer id
-export def "oauth2-1-pull-doctype post" [
+export def "oauth2-1-pull-doctype get-list-of-documents-provided-by-issuer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,18 +401,19 @@ export def "oauth2-1-pull-doctype post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/1/pull/doctype")
-  let body = {"clientid": $clientid, "hmac": $hmac, "orgid": $orgid, "ts": $ts} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clientid": $clientid, "hmac": $hmac, "orgid": $orgid, "ts": $ts} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Get List of Issuers
 #
 # POST /oauth2/1/pull/issuers
 # operationId: Get List of Issuers id
-export def "oauth2-1-pull-issuers post" [
+export def "oauth2-1-pull-issuers get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,18 +430,19 @@ export def "oauth2-1-pull-issuers post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/1/pull/issuers")
-  let body = {"clientid": $clientid, "hmac": $hmac, "ts": $ts} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clientid": $clientid, "hmac": $hmac, "ts": $ts} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Get Search Parameters for a Document
 #
 # POST /oauth2/1/pull/parameters
 # operationId: Get Search Parameters for a Document id
-export def "oauth2-1-pull-parameters post" [
+export def "oauth2-1-pull-parameters get-list-for-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,18 +461,19 @@ export def "oauth2-1-pull-parameters post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/1/pull/parameters")
-  let body = {"clientid": $clientid, "doctype": $doctype, "hmac": $hmac, "orgid": $orgid, "ts": $ts} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clientid": $clientid, "doctype": $doctype, "hmac": $hmac, "orgid": $orgid, "ts": $ts} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Pull Document
 #
 # POST /oauth2/1/pull/pulldocument
 # operationId: Pull Document id
-export def "oauth2-1-pull-pulldocument post" [
+export def "oauth2-1-pull-pulldocument pull-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,18 +492,19 @@ export def "oauth2-1-pull-pulldocument post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/1/pull/pulldocument")
-  let body = {"chasis_no": $chasis_no, "consent": $consent, "doctype": $doctype, "orgid": $orgid, "reg_no": $reg_no} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"chasis_no": $chasis_no, "consent": $consent, "doctype": $doctype, "orgid": $orgid, "reg_no": $reg_no} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Revoke Token.
 #
 # POST /oauth2/1/revoke
 # operationId: get token revocation id
-export def "oauth2-1-revoke get-token-revocation-id" [
+export def "oauth2-1-revoke get-token-revocation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -477,11 +520,11 @@ export def "oauth2-1-revoke get-token-revocation-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/1/revoke")
-  let body = {"token": $body_token, "token_type_hint": $token_type_hint} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"token": $body_token, "token_type_hint": $token_type_hint} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Access Token
@@ -491,7 +534,7 @@ export def "oauth2-1-revoke get-token-revocation-id" [
 # --Get access token using authorization code shape: {client_id: string, client_secret: string, code?: string, code_verifier?: string, grant_type: "authorization_code", redirect_uri?: string}
 # --Get access token using device code and OTP shape: {client_id?: string, device_code?: string, dl_otp?: string, grant_type?: string}
 # --Get access token using refresh token shape: {client_id: string, client_secret: string, grant_type: "refresh_token", refresh_token: string}
-export def "oauth2-1-token get-accesstoken" [
+export def "oauth2-1-token create-getaccesstoken" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,18 +551,18 @@ export def "oauth2-1-token get-accesstoken" [
   let auth = (build-auth $token ($auth_scheme | default "x-2"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/1/token")
-  let body = {"Get access token using authorization code": $get_access_token_using_authorization_code, "Get access token using device code and OTP": $get_access_token_using_device_code_and_otp, "Get access token using refresh token": $get_access_token_using_refresh_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Get access token using authorization code": $get_access_token_using_authorization_code, "Get access token using device code and OTP": $get_access_token_using_device_code_and_otp, "Get access token using refresh token": $get_access_token_using_refresh_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get User Details
 #
 # GET /oauth2/1/user
 # operationId: Account Detail API id
-export def "oauth2-1-user get" [
+export def "oauth2-1-user get-account-detail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -541,7 +584,7 @@ export def "oauth2-1-user get" [
 #
 # GET /oauth2/1/xml/{uri}
 # operationId: Get Certificate Data in XML Format from URI id
-export def "oauth2-1-xml get" [
+export def "oauth2-1-xml get-certificate-data-in-format" [
   uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,7 +597,7 @@ export def "oauth2-1-xml get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({uri: $uri} | format pattern "/oauth2/1/xml/{uri}"))
+  let full_url = (build-url $base ({uri: (encode-path-segment $uri)} | format pattern "/oauth2/1/xml/{uri}"))
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -564,7 +607,7 @@ export def "oauth2-1-xml get" [
 #
 # GET /oauth2/2/files/issued
 # operationId: Get List of issued Documents id
-export def "oauth2-2-files-issued get" [
+export def "oauth2-2-files-issued get-list-of-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -586,7 +629,7 @@ export def "oauth2-2-files-issued get" [
 #
 # GET /oauth2/2/xml/eaadhaar
 # operationId: Get e-Aadhaar Data in XML Format id
-export def "oauth2-2-xml-eaadhaar get" [
+export def "oauth2-2-xml-eaadhaar get-e-aadhaar-data-in-format" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -608,7 +651,7 @@ export def "oauth2-2-xml-eaadhaar get" [
 #
 # POST /signup/1/demoauthverify
 # operationId: Verify OTP id
-export def "signup-1-demoauthverify post" [
+export def "signup-1-demoauthverify verify-otp" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -627,18 +670,19 @@ export def "signup-1-demoauthverify post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signup/1/demoauthverify")
-  let body = {"clientid": $clientid, "hmac": $hmac, "mobile": $mobile, "otp": $otp, "ts": $ts} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clientid": $clientid, "hmac": $hmac, "mobile": $mobile, "otp": $otp, "ts": $ts} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["hmac"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # SIGN UP
 #
 # POST /signup/2/demoauth
 # operationId: SIGN UP id
-export def "signup-2-demoauth post" [
+export def "signup-2-demoauth create-sign-up" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,18 +707,19 @@ export def "signup-2-demoauth post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signup/2/demoauth")
-  let body = {"clientid": $clientid, "consent": $consent, "demoauth": $demoauth, "dob": $dob, "gender": $gender, "hmac": $hmac, "mobile": $mobile, "name": $name, "ts": $ts, "uid": $uid, "verification": $verification} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clientid": $clientid, "consent": $consent, "demoauth": $demoauth, "dob": $dob, "gender": $gender, "hmac": $hmac, "mobile": $mobile, "name": $name, "ts": $ts, "uid": $uid, "verification": $verification} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["hmac"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get Statistics
 #
 # POST /statistics/1/counts
 # operationId: Get Statistics id
-export def "statistics-1-counts post" [
+export def "statistics-1-counts get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -691,9 +736,10 @@ export def "statistics-1-counts post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/statistics/1/counts")
-  let body = {"clientid": $clientid, "hmac": $hmac, "ts": $ts} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clientid": $clientid, "hmac": $hmac, "ts": $ts} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["hmac"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }

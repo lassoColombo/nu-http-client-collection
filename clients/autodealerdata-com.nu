@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -144,7 +153,7 @@ export def "days-to-sell get" [
 #
 # GET /getBrands
 # operationId: getBrandNames_getBrands_get
-export def "get-brands get" [
+export def "get-brands get-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,7 +253,7 @@ export def "get-dealers-by-region get" [
 #
 # GET /getInactiveModels
 # operationId: getModelNamesAll_getInactiveModels_get
-export def "get-inactive-models get" [
+export def "get-inactive-models list-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +278,7 @@ export def "get-inactive-models get" [
 #
 # GET /getModels
 # operationId: getModelNames_getModels_get
-export def "get-models get" [
+export def "get-models get-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,7 +403,7 @@ export def "get-sub-user-keys get" [
 #
 # GET /getToken
 # operationId: makeToken_getToken_get
-export def "get-token get" [
+export def "get-token get-make" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -419,7 +428,7 @@ export def "get-token get" [
 #
 # POST /getToken
 # operationId: makeToken_getToken_post
-export def "get-token post" [
+export def "get-token create-make" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -444,7 +453,7 @@ export def "get-token post" [
 #
 # GET /listPrice
 # operationId: getAvgListPrice_listPrice_get
-export def "list-price get" [
+export def "list-price get-avg-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -470,7 +479,7 @@ export def "list-price get" [
 #
 # GET /listings
 # operationId: getListingsByDealer_listings_get
-export def "listings get" [
+export def "listings get-by-dealer-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -497,7 +506,7 @@ export def "listings get" [
 #
 # GET /listings2
 # operationId: getListings2_listings2_get
-export def "listings2 get" [
+export def "listings2 get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,7 +547,7 @@ export def "listings2 get" [
 #
 # GET /listingsByDate
 # operationId: getListingsByDealer_listingsByDate_get
-export def "listings-by-date get" [
+export def "listings-by-date get-dealer-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -567,7 +576,7 @@ export def "listings-by-date get" [
 #
 # GET /listingsByRegion
 # operationId: getListingsByRegion_listingsByRegion_get
-export def "listings-by-region get" [
+export def "listings-by-region get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -596,7 +605,7 @@ export def "listings-by-region get" [
 #
 # GET /listingsByRegionAndDate
 # operationId: getListingsByRegionAndDate_listingsByRegionAndDate_get
-export def "listings-by-region-and-date get" [
+export def "listings-by-region-and-date get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -684,7 +693,7 @@ export def "listings-by-zip-code-and-date get" [
 #
 # POST /makeSubUserKey
 # operationId: makeSubUserKey_makeSubUserKey_post
-export def "make-sub-user-key post" [
+export def "make-sub-user-key create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -696,25 +705,25 @@ export def "make-sub-user-key post" [
   --api-id: string
   --api-key: string
   --site-name: string # default: localhost
-  --end-points: list # default: [*]
+  --end-points: list<string> # default: [*]
 ]: any -> record<createdOn: int, domain: string, endPoints: list<string>, expires: int, token: string, uuid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar") (serialize-qp "siteName" $site_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/makeSubUserKey" $qp)
-  let body = {"endPoints": $end_points} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"endPoints": $end_points} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Used market share of model year by model
 #
 # GET /modelYearDist
 # operationId: getModelUsedDist_modelYearDist_get
-export def "model-year-dist get" [
+export def "model-year-dist get-used-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -741,7 +750,7 @@ export def "model-year-dist get" [
 #
 # GET /regionDailySales
 # operationId: getDealerSales_regionDailySales_get
-export def "region-daily-sales get" [
+export def "region-daily-sales get-dealer-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -768,7 +777,7 @@ export def "region-daily-sales get" [
 #
 # GET /regionSales
 # operationId: getDealerSales_regionSales_get
-export def "region-sales get" [
+export def "region-sales get-dealer-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -795,7 +804,7 @@ export def "region-sales get" [
 #
 # PUT /revokeSubUserKey
 # operationId: revokeSubUserKey_revokeSubUserKey_put
-export def "revoke-sub-user-key put" [
+export def "revoke-sub-user-key update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -821,7 +830,7 @@ export def "revoke-sub-user-key put" [
 #
 # GET /salePrice
 # operationId: getAvgSalePrice_salePrice_get
-export def "sale-price get" [
+export def "sale-price get-avg-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -847,7 +856,7 @@ export def "sale-price get" [
 #
 # GET /salePriceHistogram
 # operationId: getModelSaleBuckets_salePriceHistogram_get
-export def "sale-price-histogram get" [
+export def "sale-price-histogram get-model-buckets-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -874,7 +883,7 @@ export def "sale-price-histogram get" [
 #
 # GET /similarSalePrice
 # operationId: getMarket3_similarSalePrice_get
-export def "similar-sale-price get" [
+export def "similar-sale-price get-market3-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -902,7 +911,7 @@ export def "similar-sale-price get" [
 #
 # GET /topModels
 # operationId: getTopModels_topModels_get
-export def "top-models get" [
+export def "top-models get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -927,7 +936,7 @@ export def "top-models get" [
 #
 # GET /valuation
 # operationId: getMarket4_valuation_get
-export def "valuation get" [
+export def "valuation get-market4-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -966,7 +975,7 @@ export def "valuation get" [
 #
 # GET /vehicleHistory
 # operationId: getHistory2_vehicleHistory_get
-export def "vehicle-history get" [
+export def "vehicle-history get-history2-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -991,7 +1000,7 @@ export def "vehicle-history get" [
 #
 # GET /vehicleSeen
 # operationId: getVehicleSeen_vehicleSeen_get
-export def "vehicle-seen get" [
+export def "vehicle-seen get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def metrics-granularity-completer [] { ["DAILY" "UNSPECIFIED_GRANULARITY" "WEEKL
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "processes scriptprocesseslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "processes list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/processes
 # operationId: script.processes.list
-export def "processes scriptprocesseslist" [
+export def "processes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -125,9 +134,9 @@ export def "processes scriptprocesseslist" [
   --user-process-filter-project-name: string # Optional field used to limit returned processes to those originating from projects with project names containing a specific string.
   --user-process-filter-script-id: string # Optional field used to limit returned processes to those originating from projects with a specific script ID.
   --user-process-filter-start-time: string # Optional field used to limit returned processes to those that were started on or after the given timestamp.
-  --user-process-filter-statuses: list # Optional field used to limit returned processes to those having one of the specified process statuses.
-  --user-process-filter-types: list # Optional field used to limit returned processes to those having one of the specified process types.
-  --user-process-filter-user-access-levels: list # Optional field used to limit returned processes to those having one of the specified user access levels.
+  --user-process-filter-statuses: list<string> # Optional field used to limit returned processes to those having one of the specified process statuses.
+  --user-process-filter-types: list<string> # Optional field used to limit returned processes to those having one of the specified process types.
+  --user-process-filter-user-access-levels: list<string> # Optional field used to limit returned processes to those having one of the specified user access levels.
 ]: nothing -> record<nextPageToken: string, processes: table<duration: string, functionName: string, processStatus: string, processType: string, projectName: string, startTime: string, userAccessLevel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -142,7 +151,7 @@ export def "processes scriptprocesseslist" [
 #
 # GET /v1/processes:listScriptProcesses
 # operationId: script.processes.listScriptProcesses
-export def "processes-list-script-processes scriptprocesseslistScriptProcesses" [
+export def "processes-list-script-processes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,9 +178,9 @@ export def "processes-list-script-processes scriptprocesseslistScriptProcesses" 
   --script-process-filter-end-time: string # Optional field used to limit returned processes to those that completed on or before the given timestamp.
   --script-process-filter-function-name: string # Optional field used to limit returned processes to those originating from a script function with the given function name.
   --script-process-filter-start-time: string # Optional field used to limit returned processes to those that were started on or after the given timestamp.
-  --script-process-filter-statuses: list # Optional field used to limit returned processes to those having one of the specified process statuses.
-  --script-process-filter-types: list # Optional field used to limit returned processes to those having one of the specified process types.
-  --script-process-filter-user-access-levels: list # Optional field used to limit returned processes to those having one of the specified user access levels.
+  --script-process-filter-statuses: list<string> # Optional field used to limit returned processes to those having one of the specified process statuses.
+  --script-process-filter-types: list<string> # Optional field used to limit returned processes to those having one of the specified process types.
+  --script-process-filter-user-access-levels: list<string> # Optional field used to limit returned processes to those having one of the specified user access levels.
 ]: nothing -> record<nextPageToken: string, processes: table<duration: string, functionName: string, processStatus: string, processType: string, projectName: string, startTime: string, userAccessLevel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -186,7 +195,7 @@ export def "processes-list-script-processes scriptprocesseslistScriptProcesses" 
 #
 # POST /v1/projects
 # operationId: script.projects.create
-export def "projects scriptprojectscreate" [
+export def "projects create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,18 +223,18 @@ export def "projects scriptprojectscreate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/projects" $qp)
-  let body = {"parentId": $parent_id, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"parentId": $parent_id, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a script project's metadata.
 #
 # GET /v1/projects/{scriptId}
 # operationId: script.projects.get
-export def "projects scriptprojectsget" [
+export def "projects get" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -250,7 +259,7 @@ export def "projects scriptprojectsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({script_id: $script_id} | format pattern "/v1/projects/{script_id}") $qp)
+  let full_url = (build-url $base ({script_id: (encode-path-segment $script_id)} | format pattern "/v1/projects/{script_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -260,7 +269,7 @@ export def "projects scriptprojectsget" [
 #
 # GET /v1/projects/{scriptId}/content
 # operationId: script.projects.getContent
-export def "projects-content scriptprojectsgetContent" [
+export def "projects-content get" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -286,7 +295,7 @@ export def "projects-content scriptprojectsgetContent" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "versionNumber" $version_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({script_id: $script_id} | format pattern "/v1/projects/{script_id}/content") $qp)
+  let full_url = (build-url $base ({script_id: (encode-path-segment $script_id)} | format pattern "/v1/projects/{script_id}/content") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -297,7 +306,7 @@ export def "projects-content scriptprojectsgetContent" [
 # PUT /v1/projects/{scriptId}/content
 # operationId: script.projects.updateContent
 # --files item shape: {createTime?: string, functionSet?: record, lastModifyUser?: record, name?: string, source?: string, type?: "ENUM_TYPE_UNSPECIFIED"|"SERVER_JS"|"HTML"|"JSON", updateTime?: string}
-export def "projects-content scriptprojectsupdateContent" [
+export def "projects-content update" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -325,19 +334,19 @@ export def "projects-content scriptprojectsupdateContent" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({script_id: $script_id} | format pattern "/v1/projects/{script_id}/content") $qp)
-  let body = {"files": $files, "scriptId": $body_script_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({script_id: (encode-path-segment $script_id)} | format pattern "/v1/projects/{script_id}/content") $qp)
+  let req_body = {"files": $files, "scriptId": $body_script_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the deployments of an Apps Script project.
 #
 # GET /v1/projects/{scriptId}/deployments
 # operationId: script.projects.deployments.list
-export def "projects-deployments scriptprojectsdeploymentslist" [
+export def "projects-deployments list" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -364,7 +373,7 @@ export def "projects-deployments scriptprojectsdeploymentslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({script_id: $script_id} | format pattern "/v1/projects/{script_id}/deployments") $qp)
+  let full_url = (build-url $base ({script_id: (encode-path-segment $script_id)} | format pattern "/v1/projects/{script_id}/deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -374,7 +383,7 @@ export def "projects-deployments scriptprojectsdeploymentslist" [
 #
 # POST /v1/projects/{scriptId}/deployments
 # operationId: script.projects.deployments.create
-export def "projects-deployments scriptprojectsdeploymentscreate" [
+export def "projects-deployments create" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -404,19 +413,19 @@ export def "projects-deployments scriptprojectsdeploymentscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({script_id: $script_id} | format pattern "/v1/projects/{script_id}/deployments") $qp)
-  let body = {"description": $description, "manifestFileName": $manifest_file_name, "scriptId": $body_script_id, "versionNumber": $version_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({script_id: (encode-path-segment $script_id)} | format pattern "/v1/projects/{script_id}/deployments") $qp)
+  let req_body = {"description": $description, "manifestFileName": $manifest_file_name, "scriptId": $body_script_id, "versionNumber": $version_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a deployment of an Apps Script project.
 #
 # DELETE /v1/projects/{scriptId}/deployments/{deploymentId}
 # operationId: script.projects.deployments.delete
-export def "projects-deployments scriptprojectsdeploymentsdelete" [
+export def "projects-deployments delete" [
   script_id: string
   deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -442,7 +451,7 @@ export def "projects-deployments scriptprojectsdeploymentsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({script_id: $script_id, deployment_id: $deployment_id} | format pattern "/v1/projects/{script_id}/deployments/{deployment_id}") $qp)
+  let full_url = (build-url $base ({script_id: (encode-path-segment $script_id), deployment_id: (encode-path-segment $deployment_id)} | format pattern "/v1/projects/{script_id}/deployments/{deployment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -452,7 +461,7 @@ export def "projects-deployments scriptprojectsdeploymentsdelete" [
 #
 # GET /v1/projects/{scriptId}/deployments/{deploymentId}
 # operationId: script.projects.deployments.get
-export def "projects-deployments scriptprojectsdeploymentsget" [
+export def "projects-deployments get" [
   script_id: string
   deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -478,7 +487,7 @@ export def "projects-deployments scriptprojectsdeploymentsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({script_id: $script_id, deployment_id: $deployment_id} | format pattern "/v1/projects/{script_id}/deployments/{deployment_id}") $qp)
+  let full_url = (build-url $base ({script_id: (encode-path-segment $script_id), deployment_id: (encode-path-segment $deployment_id)} | format pattern "/v1/projects/{script_id}/deployments/{deployment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -489,7 +498,7 @@ export def "projects-deployments scriptprojectsdeploymentsget" [
 # PUT /v1/projects/{scriptId}/deployments/{deploymentId}
 # operationId: script.projects.deployments.update
 # --deploymentConfig shape: {description?: string, manifestFileName?: string, scriptId?: string, versionNumber?: int}
-export def "projects-deployments scriptprojectsdeploymentsupdate" [
+export def "projects-deployments update" [
   script_id: string
   deployment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -517,19 +526,19 @@ export def "projects-deployments scriptprojectsdeploymentsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({script_id: $script_id, deployment_id: $deployment_id} | format pattern "/v1/projects/{script_id}/deployments/{deployment_id}") $qp)
-  let body = {"deploymentConfig": $deployment_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({script_id: (encode-path-segment $script_id), deployment_id: (encode-path-segment $deployment_id)} | format pattern "/v1/projects/{script_id}/deployments/{deployment_id}") $qp)
+  let req_body = {"deploymentConfig": $deployment_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get metrics data for scripts, such as number of executions and active users.
 #
 # GET /v1/projects/{scriptId}/metrics
 # operationId: script.projects.getMetrics
-export def "projects-metrics scriptprojectsgetMetrics" [
+export def "projects-metrics get" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -556,7 +565,7 @@ export def "projects-metrics scriptprojectsgetMetrics" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "metricsFilter.deploymentId" $metrics_filter_deployment_id "scalar") (serialize-qp "metricsGranularity" $metrics_granularity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({script_id: $script_id} | format pattern "/v1/projects/{script_id}/metrics") $qp)
+  let full_url = (build-url $base ({script_id: (encode-path-segment $script_id)} | format pattern "/v1/projects/{script_id}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -566,7 +575,7 @@ export def "projects-metrics scriptprojectsgetMetrics" [
 #
 # GET /v1/projects/{scriptId}/versions
 # operationId: script.projects.versions.list
-export def "projects-versions scriptprojectsversionslist" [
+export def "projects-versions list" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -593,7 +602,7 @@ export def "projects-versions scriptprojectsversionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({script_id: $script_id} | format pattern "/v1/projects/{script_id}/versions") $qp)
+  let full_url = (build-url $base ({script_id: (encode-path-segment $script_id)} | format pattern "/v1/projects/{script_id}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -603,7 +612,7 @@ export def "projects-versions scriptprojectsversionslist" [
 #
 # POST /v1/projects/{scriptId}/versions
 # operationId: script.projects.versions.create
-export def "projects-versions scriptprojectsversionscreate" [
+export def "projects-versions create" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -633,19 +642,19 @@ export def "projects-versions scriptprojectsversionscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({script_id: $script_id} | format pattern "/v1/projects/{script_id}/versions") $qp)
-  let body = {"createTime": $create_time, "description": $description, "scriptId": $body_script_id, "versionNumber": $version_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({script_id: (encode-path-segment $script_id)} | format pattern "/v1/projects/{script_id}/versions") $qp)
+  let req_body = {"createTime": $create_time, "description": $description, "scriptId": $body_script_id, "versionNumber": $version_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a version of a script project.
 #
 # GET /v1/projects/{scriptId}/versions/{versionNumber}
 # operationId: script.projects.versions.get
-export def "projects-versions scriptprojectsversionsget" [
+export def "projects-versions get" [
   script_id: string
   version_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -671,7 +680,7 @@ export def "projects-versions scriptprojectsversionsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({script_id: $script_id, version_number: $version_number} | format pattern "/v1/projects/{script_id}/versions/{version_number}") $qp)
+  let full_url = (build-url $base ({script_id: (encode-path-segment $script_id), version_number: (encode-path-segment $version_number)} | format pattern "/v1/projects/{script_id}/versions/{version_number}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -681,7 +690,7 @@ export def "projects-versions scriptprojectsversionsget" [
 #
 # POST /v1/scripts/{scriptId}:run
 # operationId: script.scripts.run
-export def "scripts scriptscriptsrun" [
+export def "scripts create-run" [
   script_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -711,10 +720,10 @@ export def "scripts scriptscriptsrun" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({script_id: $script_id} | format pattern "/v1/scripts/{script_id}:run") $qp)
-  let body = {"devMode": $dev_mode, "function": $function, "parameters": $parameters, "sessionState": $session_state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({script_id: (encode-path-segment $script_id)} | format pattern "/v1/scripts/{script_id}:run") $qp)
+  let req_body = {"devMode": $dev_mode, "function": $function, "parameters": $parameters, "sessionState": $session_state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

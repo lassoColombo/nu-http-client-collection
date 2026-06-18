@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -61,6 +70,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   }
   if ($method in ["head" "options"]) { return $resp }
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://api.soundcloud.com"] }
@@ -139,7 +175,7 @@ export def "likes-playlists delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/likes/playlists/{playlist_id}"))
+  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/likes/playlists/{playlist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -148,7 +184,7 @@ export def "likes-playlists delete" [
 # Likes a playlist.
 #
 # POST /likes/playlists/{playlist_id}
-export def "likes-playlists post" [
+export def "likes-playlists create" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -161,7 +197,7 @@ export def "likes-playlists post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/likes/playlists/{playlist_id}"))
+  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/likes/playlists/{playlist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -183,7 +219,7 @@ export def "likes-tracks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({track_id: $track_id} | format pattern "/likes/tracks/{track_id}"))
+  let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/likes/tracks/{track_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -192,7 +228,7 @@ export def "likes-tracks delete" [
 # Likes a track.
 #
 # POST /likes/tracks/{track_id}
-export def "likes-tracks post" [
+export def "likes-tracks create" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -205,7 +241,7 @@ export def "likes-tracks post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({track_id: $track_id} | format pattern "/likes/tracks/{track_id}"))
+  let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/likes/tracks/{track_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -244,7 +280,7 @@ export def "me-activities get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access: list # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details.  (default: playable,preview)
+  --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -268,7 +304,7 @@ export def "me-activities-all-own get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access: list # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details.  (default: playable,preview)
+  --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -292,7 +328,7 @@ export def "me-activities-tracks get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access: list # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details.  (default: playable,preview)
+  --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -345,7 +381,7 @@ export def "me-connections get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({connection_id: $connection_id} | format pattern "/me/connections/{connection_id}"))
+  let full_url = (build-url $base ({connection_id: (encode-path-segment $connection_id)} | format pattern "/me/connections/{connection_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -417,7 +453,7 @@ export def "me-followers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({follower_id: $follower_id} | format pattern "/me/followers/{follower_id}"))
+  let full_url = (build-url $base ({follower_id: (encode-path-segment $follower_id)} | format pattern "/me/followers/{follower_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -461,7 +497,7 @@ export def "me-followings-tracks get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access: list # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details.  (default: playable,preview)
+  --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
 ]: nothing -> any {
@@ -490,7 +526,7 @@ export def "me-followings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/me/followings/{user_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/me/followings/{user_id}"))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -514,7 +550,7 @@ export def "me-followings get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/me/followings/{user_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/me/followings/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -523,7 +559,7 @@ export def "me-followings get" [
 # Follows a user.
 #
 # PUT /me/followings/{user_id}
-export def "me-followings put" [
+export def "me-followings update" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -536,7 +572,7 @@ export def "me-followings put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/me/followings/{user_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/me/followings/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -607,7 +643,7 @@ export def "me-playlists get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/me/playlists/{playlist_id}"))
+  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/me/playlists/{playlist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -655,7 +691,7 @@ export def "me-tracks get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({track_id: $track_id} | format pattern "/me/tracks/{track_id}"))
+  let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/me/tracks/{track_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -664,7 +700,7 @@ export def "me-tracks get" [
 # This endpoint accepts POST requests and is used to provision access tokens once a user has authorized your application.
 #
 # POST /oauth2/token
-export def "oauth2-token post" [
+export def "oauth2-token create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -686,11 +722,12 @@ export def "oauth2-token post" [
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/token")
-  let body = {"authorization_code": $authorization_code, "client_id": $client_id, "client_secret": $client_secret, "grant_type": $grant_type, "redirect_uri": $redirect_uri, "refresh_token": $refresh_token, "password": $password, "user_name": $user_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"authorization_code": $authorization_code, "client_id": $client_id, "client_secret": $client_secret, "grant_type": $grant_type, "redirect_uri": $redirect_uri, "refresh_token": $refresh_token, "password": $password, "user_name": $user_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Performs a playlist search based on a query
@@ -707,7 +744,7 @@ export def "playlists list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # search (e.g. hello)
-  --access: list # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details.  (default: playable,preview)
+  --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
   --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
@@ -725,7 +762,7 @@ export def "playlists list" [
 #
 # POST /playlists
 # --playlist shape: {description?: string, sharing?: "public"|"private", title?: string, tracks?: list}
-export def "playlists post" [
+export def "playlists create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -740,11 +777,11 @@ export def "playlists post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/playlists")
-  let body = {"playlist": $playlist} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"playlist": $playlist} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a playlist.
@@ -763,7 +800,7 @@ export def "playlists delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/playlists/{playlist_id}"))
+  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/playlists/{playlist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -783,12 +820,12 @@ export def "playlists get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --secret-token: string # A secret token to fetch private playlists/tracks
-  --access: list # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details.  (default: playable,preview)
+  --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "secret_token" $secret_token "scalar") (serialize-qp "access" $access "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/playlists/{playlist_id}") $qp)
+  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/playlists/{playlist_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -798,7 +835,7 @@ export def "playlists get" [
 #
 # PUT /playlists/{playlist_id}
 # --playlist shape: {description?: string, sharing?: "public"|"private", title?: string, tracks?: list}
-export def "playlists put" [
+export def "playlists update" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -813,12 +850,12 @@ export def "playlists put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/playlists/{playlist_id}"))
-  let body = {"playlist": $playlist} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/playlists/{playlist_id}"))
+  let req_body = {"playlist": $playlist} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a collection of playlist's reposters.
@@ -839,7 +876,7 @@ export def "playlists-reposters get" [
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/playlists/{playlist_id}/reposters") $qp)
+  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/playlists/{playlist_id}/reposters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -859,13 +896,13 @@ export def "playlists-tracks get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --secret-token: string # A secret token to fetch private playlists/tracks
-  --access: list # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details.  (default: playable,preview)
+  --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "secret_token" $secret_token "scalar") (serialize-qp "access" $access "csv") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/playlists/{playlist_id}/tracks") $qp)
+  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/playlists/{playlist_id}/tracks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -887,7 +924,7 @@ export def "reposts-playlists delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/reposts/playlists/{playlist_id}"))
+  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/reposts/playlists/{playlist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -896,7 +933,7 @@ export def "reposts-playlists delete" [
 # Reposts a playlist as the authenticated user
 #
 # POST /reposts/playlists/{playlist_id}
-export def "reposts-playlists post" [
+export def "reposts-playlists create" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -909,7 +946,7 @@ export def "reposts-playlists post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/reposts/playlists/{playlist_id}"))
+  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/reposts/playlists/{playlist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -931,7 +968,7 @@ export def "reposts-tracks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({track_id: $track_id} | format pattern "/reposts/tracks/{track_id}"))
+  let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/reposts/tracks/{track_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -940,7 +977,7 @@ export def "reposts-tracks delete" [
 # Reposts a track as the authenticated user
 #
 # POST /reposts/tracks/{track_id}
-export def "reposts-tracks post" [
+export def "reposts-tracks create" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -953,7 +990,7 @@ export def "reposts-tracks post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({track_id: $track_id} | format pattern "/reposts/tracks/{track_id}"))
+  let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/reposts/tracks/{track_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -971,11 +1008,11 @@ export def "resolve get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-url: string # SoundCloud URL (e.g. https://soundcloud.com/user-434241656)
+  --url: string # SoundCloud URL (e.g. https://soundcloud.com/user-434241656)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resolve" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1002,7 +1039,7 @@ export def "tracks list" [
   --bpm: record # Return tracks with a specified bpm[from], bpm[to]
   --duration: record # Return tracks within a specified duration range
   --created-at: record # (yyyy-mm-dd hh:mm:ss) return tracks created within the specified dates
-  --access: list # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details.  (default: playable,preview)
+  --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
   --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
@@ -1019,7 +1056,7 @@ export def "tracks list" [
 # Uploads a new track.
 #
 # POST /tracks
-export def "tracks post" [
+export def "tracks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1051,11 +1088,12 @@ export def "tracks post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tracks")
-  let body = {"track[artwork_data]": $track_artwork_data, "track[asset_data]": $track_asset_data, "track[commentable]": $track_commentable, "track[description]": $track_description, "track[downloadable]": $track_downloadable, "track[embeddable_by]": $track_embeddable_by, "track[genre]": $track_genre, "track[isrc]": $track_isrc, "track[label_name]": $track_label_name, "track[license]": $track_license, "track[permalink]": $track_permalink, "track[purchase_url]": $track_purchase_url, "track[release]": $track_release, "track[release_date]": $track_release_date, "track[sharing]": $track_sharing, "track[streamable]": $track_streamable, "track[tag_list]": $track_tag_list, "track[title]": $track_title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"track[artwork_data]": $track_artwork_data, "track[asset_data]": $track_asset_data, "track[commentable]": $track_commentable, "track[description]": $track_description, "track[downloadable]": $track_downloadable, "track[embeddable_by]": $track_embeddable_by, "track[genre]": $track_genre, "track[isrc]": $track_isrc, "track[label_name]": $track_label_name, "track[license]": $track_license, "track[permalink]": $track_permalink, "track[purchase_url]": $track_purchase_url, "track[release]": $track_release, "track[release_date]": $track_release_date, "track[sharing]": $track_sharing, "track[streamable]": $track_streamable, "track[tag_list]": $track_tag_list, "track[title]": $track_title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["track[artwork_data]" "track[asset_data]"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Deletes a track.
@@ -1074,7 +1112,7 @@ export def "tracks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({track_id: $track_id} | format pattern "/tracks/{track_id}"))
+  let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/tracks/{track_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1098,7 +1136,7 @@ export def "tracks get" [
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "secret_token" $secret_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({track_id: $track_id} | format pattern "/tracks/{track_id}") $qp)
+  let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/tracks/{track_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1108,7 +1146,7 @@ export def "tracks get" [
 #
 # PUT /tracks/{track_id}
 # --track shape: {commentable?: bool, description?: string, downloadable?: bool, embeddable_by?: "all"|"me"|"none", genre?: string, isrc?: string, label_name?: string, license?: "no-rights-reserved"|"all-rights-reserved"|"cc-by"|"cc-by-nc"|"cc-by-nd"|"cc-by-sa"|"cc-by-nc-nd"|"cc-by-nc-sa", permalink?: string, purchase_url?: string, release?: string, release_date?: string, sharing?: "public"|"private", streamable?: bool, tag_list?: string, title?: string}
-export def "tracks put" [
+export def "tracks update" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1123,12 +1161,12 @@ export def "tracks put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({track_id: $track_id} | format pattern "/tracks/{track_id}"))
-  let body = {"track": $track} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/tracks/{track_id}"))
+  let req_body = {"track": $track} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the comments posted on the track(track_id).
@@ -1152,7 +1190,7 @@ export def "tracks-comments get" [
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({track_id: $track_id} | format pattern "/tracks/{track_id}/comments") $qp)
+  let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/tracks/{track_id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1161,7 +1199,7 @@ export def "tracks-comments get" [
 # Returns the newly created comment on success
 #
 # POST /tracks/{track_id}/comments
-export def "tracks-comments post" [
+export def "tracks-comments create" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1176,11 +1214,12 @@ export def "tracks-comments post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({track_id: $track_id} | format pattern "/tracks/{track_id}/comments"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/tracks/{track_id}/comments"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json; charset=utf-8" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json; charset=utf-8" $req_body
 }
 
 # Returns a list of users who have favorited or liked the track.
@@ -1203,7 +1242,7 @@ export def "tracks-favoriters get" [
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({track_id: $track_id} | format pattern "/tracks/{track_id}/favoriters") $qp)
+  let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/tracks/{track_id}/favoriters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1223,7 +1262,7 @@ export def "tracks-related get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access: list # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details.  (default: playable,preview)
+  --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
   --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
@@ -1231,7 +1270,7 @@ export def "tracks-related get" [
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({track_id: $track_id} | format pattern "/tracks/{track_id}/related") $qp)
+  let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/tracks/{track_id}/related") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1255,7 +1294,7 @@ export def "tracks-reposters get" [
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({track_id: $track_id} | format pattern "/tracks/{track_id}/reposters") $qp)
+  let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/tracks/{track_id}/reposters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1279,7 +1318,7 @@ export def "tracks-streams get" [
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "secret_token" $secret_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({track_id: $track_id} | format pattern "/tracks/{track_id}/streams") $qp)
+  let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/tracks/{track_id}/streams") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1329,7 +1368,7 @@ export def "users get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1355,7 +1394,7 @@ export def "users-comments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/comments") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1382,7 +1421,7 @@ export def "users-favorites get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/favorites") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/favorites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1406,7 +1445,7 @@ export def "users-followers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/followers") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/followers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1430,7 +1469,7 @@ export def "users-followings list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/followings") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/followings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1455,7 +1494,7 @@ export def "users-followings get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user_id: $user_id, following_id: $following_id} | format pattern "/users/{user_id}/followings/{following_id}"))
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), following_id: (encode-path-segment $following_id)} | format pattern "/users/{user_id}/followings/{following_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1474,14 +1513,14 @@ export def "users-likes-tracks get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access: list # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details.  (default: playable,preview)
+  --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/likes/tracks") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/likes/tracks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1500,14 +1539,14 @@ export def "users-playlists get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access: list # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details.  (default: playable,preview)
+  --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/playlists") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/playlists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1526,14 +1565,14 @@ export def "users-tracks get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --access: list # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details.  (default: playable,preview)
+  --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/tracks") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/tracks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1557,7 +1596,7 @@ export def "users-web-profiles get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/web-profiles") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/web-profiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

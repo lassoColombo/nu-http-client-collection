@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -120,12 +129,13 @@ export def "check verify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format} | format pattern "/check/{format}"))
-  let body = {"api_key": $api_key, "api_secret": $api_secret, "code": $code, "ip_address": $ip_address, "request_id": $request_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/check/{format}"))
+  let req_body = {"api_key": $api_key, "api_secret": $api_secret, "code": $code, "ip_address": $ip_address, "request_id": $request_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Verify Control
@@ -145,25 +155,26 @@ export def "control verify" [
   --accept: string@accept-completer # Response content type
   api_key: string # You can find your API key in your [account dashboard](https://dashboard.nexmo.com) (e.g. abcd1234)
   api_secret: string # You can find your API secret in your [account dashboard](https://dashboard.nexmo.com) (e.g. Sup3rS3cr3t!!)
-  cmd: string@cmd-completer # The possible commands are `cancel` to request cancellation of the verification process, or `trigger_next_event` to advance  to the next verification event (if any). Cancellation is only possible 30 seconds after the start of the verification request and before the second event (either TTS or SMS) has taken place. (e.g. cancel)
+  cmd: string@cmd-completer # The possible commands are `cancel` to request cancellation of the verification process, or `trigger_next_event` to advance to the next verification event (if any). Cancellation is only possible 30 seconds after the start of the verification request and before the second event (either TTS or SMS) has taken place. (e.g. cancel)
   request_id: string # The `request_id` you received in the response to the Verify request. (e.g. abcdef0123456789abcdef0123456789)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format} | format pattern "/control/{format}"))
-  let body = {"api_key": $api_key, "api_secret": $api_secret, "cmd": $cmd, "request_id": $request_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/control/{format}"))
+  let req_body = {"api_key": $api_key, "api_secret": $api_secret, "cmd": $cmd, "request_id": $request_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Request a network unblock
 #
 # POST /network-unblock
 # operationId: networkUnblock
-export def "network-unblock networkUnblock" [
+export def "network-unblock create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,18 +190,18 @@ export def "network-unblock networkUnblock" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/network-unblock")
-  let body = {"network": $network, "unblock_duration": $unblock_duration} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"network": $network, "unblock_duration": $unblock_duration} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PSD2 (Payment Services Directive 2) Request
 #
 # POST /psd2/{format}
 # operationId: verifyRequestWithPSD2
-export def "psd2 verify-request-with" [
+export def "psd2 verify-request" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -215,12 +226,13 @@ export def "psd2 verify-request-with" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format} | format pattern "/psd2/{format}"))
-  let body = {"amount": $amount, "api_key": $api_key, "api_secret": $api_secret, "code_length": $code_length, "country": $country, "lg": $lg, "next_event_wait": $next_event_wait, "number": $number, "payee": $payee, "pin_expiry": $pin_expiry, "workflow_id": $workflow_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/psd2/{format}"))
+  let req_body = {"amount": $amount, "api_key": $api_key, "api_secret": $api_secret, "code_length": $code_length, "country": $country, "lg": $lg, "next_event_wait": $next_event_wait, "number": $number, "payee": $payee, "pin_expiry": $pin_expiry, "workflow_id": $workflow_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Verify Search
@@ -241,12 +253,12 @@ export def "search verify" [
   --api-key: string # e.g. abcd1234
   --api-secret: string # e.g. Sup3rS3cr3t!!
   --request-id: string # The `request_id` you received in the Verify Request Response. Required if `request_ids` not provided. (e.g. abcdef0123456789abcdef0123456789)
-  --request-ids: list # More than one `request_id`. Each `request_id` is a new parameter in the Verify Search request. Required if `request_id` not provided.
+  --request-ids: list<string> # More than one `request_id`. Each `request_id` is a new parameter in the Verify Search request. Required if `request_id` not provided.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "api_secret" $api_secret "scalar") (serialize-qp "request_id" $request_id "scalar") (serialize-qp "request_ids" $request_ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({format: $format} | format pattern "/search/{format}") $qp)
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/search/{format}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -275,7 +287,7 @@ export def "requests verify" [
   --lg: string@lg-completer-1 # By default, the SMS or text-to-speech (TTS) message is generated in the locale that matches the `number`. For example, the text message or TTS message for a `33*` number is sent in French. Use this parameter to explicitly control the language used for the Verify request. A list of languages is available: <https://developer.nexmo.com/verify/guides/verify-languages> (default: en-us, e.g. en-us)
   --next-event-wait: int # Specifies the wait time in seconds between attempts to deliver the verification code. (default: 300, e.g. 120)
   number: string # The mobile or landline phone number to verify. Unless you are setting `country` explicitly, this number must be in [E.164](https://en.wikipedia.org/wiki/E.164) format. (e.g. 447700900000)
-  --pin-code: string # A custom PIN to send to the user. If a PIN is not provided, Verify will generate a random PIN for you. <b>This feature is not enabled by default</b> - please discuss with your Account Manager if you would like it enabled. If this feature is not enabled on your account, error status `20` will be returned. (e.g. AKFG-3424)
+  --pin-code: string # A custom PIN to send to the user. If a PIN is not provided, Verify will generate a random PIN for you. This feature is not enabled by default - please discuss with your Account Manager if you would like it enabled. If this feature is not enabled on your account, error status `20` will be returned. (e.g. AKFG-3424)
   --pin-expiry: int # How long the generated verification code is valid for, in seconds. When you specify both `pin_expiry` and `next_event_wait` then `pin_expiry` must be an integer multiple of `next_event_wait` otherwise `pin_expiry` is defaulted to equal next_event_wait. See [changing the event timings](https://developer.nexmo.com/verify/guides/changing-default-timings). (default: 300, e.g. 240)
   --sender-id: string # An 11-character alphanumeric string that represents the [identity of the sender](https://developer.nexmo.com/messaging/sms/guides/custom-sender-id) of the verification request. Depending on the destination of the phone number you are sending the verification SMS to, restrictions might apply. (default: VERIFY, e.g. ACME)
   --workflow-id: int@workflow-id-completer # Selects the predefined sequence of SMS and TTS (Text To Speech) actions to use in order to convey the PIN to your user. For example, an id of 1 identifies the workflow SMS - TTS - TTS. For a list of all workflows and their associated ids, please visit the [developer portal](https://developer.nexmo.com/verify/guides/workflows-and-events). (default: 1, e.g. 4)
@@ -283,10 +295,11 @@ export def "requests verify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format} | format pattern "/{format}"))
-  let body = {"api_key": $api_key, "api_secret": $api_secret, "brand": $brand, "code_length": $code_length, "country": $country, "lg": $lg, "next_event_wait": $next_event_wait, "number": $number, "pin_code": $pin_code, "pin_expiry": $pin_expiry, "sender_id": $sender_id, "workflow_id": $workflow_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}"))
+  let req_body = {"api_key": $api_key, "api_secret": $api_secret, "brand": $brand, "code_length": $code_length, "country": $country, "lg": $lg, "next_event_wait": $next_event_wait, "number": $number, "pin_code": $pin_code, "pin_expiry": $pin_expiry, "sender_id": $sender_id, "workflow_id": $workflow_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }

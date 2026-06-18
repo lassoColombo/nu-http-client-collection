@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -141,11 +150,11 @@ export def "analyze create" [
   let auth = (build-auth $token ($auth_scheme | default "query-PrivateKey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/Analyze")
-  let body = {"DocumentLanguage": $document_language, "DocumentText": $document_text, "IsTwitterContent": $is_twitter_content, "PrivateKey": $private_key, "RequestIdentifier": $request_identifier, "Secret": $secret, "SerializeFormat": $serialize_format, "UserCategoryModelName": $user_category_model_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"DocumentLanguage": $document_language, "DocumentText": $document_text, "IsTwitterContent": $is_twitter_content, "PrivateKey": $private_key, "RequestIdentifier": $request_identifier, "Secret": $secret, "SerializeFormat": $serialize_format, "UserCategoryModelName": $user_category_model_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Test api response without api key
@@ -198,11 +207,11 @@ export def "categorize create" [
   let auth = (build-auth $token ($auth_scheme | default "query-PrivateKey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/Categorize")
-  let body = {"DocumentLanguage": $document_language, "DocumentText": $document_text, "IsTwitterContent": $is_twitter_content, "PrivateKey": $private_key, "RequestIdentifier": $request_identifier, "Secret": $secret, "SerializeFormat": $serialize_format, "UserCategoryModelName": $user_category_model_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"DocumentLanguage": $document_language, "DocumentText": $document_text, "IsTwitterContent": $is_twitter_content, "PrivateKey": $private_key, "RequestIdentifier": $request_identifier, "Secret": $secret, "SerializeFormat": $serialize_format, "UserCategoryModelName": $user_category_model_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Test api response without api key
@@ -255,9 +264,9 @@ export def "extract create" [
   let auth = (build-auth $token ($auth_scheme | default "query-PrivateKey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/Extract")
-  let body = {"DocumentLanguage": $document_language, "DocumentText": $document_text, "IsTwitterContent": $is_twitter_content, "PrivateKey": $private_key, "RequestIdentifier": $request_identifier, "Secret": $secret, "SerializeFormat": $serialize_format, "UserCategoryModelName": $user_category_model_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"DocumentLanguage": $document_language, "DocumentText": $document_text, "IsTwitterContent": $is_twitter_content, "PrivateKey": $private_key, "RequestIdentifier": $request_identifier, "Secret": $secret, "SerializeFormat": $serialize_format, "UserCategoryModelName": $user_category_model_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

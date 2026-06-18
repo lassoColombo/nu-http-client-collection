@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def output-completer [] { ["JSON" "JSONP" "XML"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "eff-rest-servicesdownload-effluent-chart get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "eff-rest-services-download-effluent-chart get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 # Effluent Charts Download Service
 #
 # GET /eff_rest_services.download_effluent_chart
-export def "eff-rest-servicesdownload-effluent-chart get" [
+export def "eff-rest-services-download-effluent-chart get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -122,7 +131,7 @@ export def "eff-rest-servicesdownload-effluent-chart get" [
 # Effluent Charts Download Service
 #
 # POST /eff_rest_services.download_effluent_chart
-export def "eff-rest-servicesdownload-effluent-chart post" [
+export def "eff-rest-services-download-effluent-chart create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -144,7 +153,7 @@ export def "eff-rest-servicesdownload-effluent-chart post" [
 # Detailed Effluent Chart Service
 #
 # GET /eff_rest_services.get_effluent_chart
-export def "eff-rest-servicesget-effluent-chart get" [
+export def "eff-rest-services-get-effluent-chart get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,8 +168,8 @@ export def "eff-rest-servicesget-effluent-chart get" [
   --parameter-code: string # Five-digit numeric code identifying the parameter. See Parameter Lookup documentation for a complete list of codes.
   --start-date: string # The start date (mm/dd/yyyy) for the date range of interest. Must be used in conjunction with end_date. If start_date and end_date are not specified, the service will return the last three years of data.
   --end-date: string # The end date (mm/dd/yyyy) for the date range of interest. Must be used in conjunction with start_date. If start_date and end_date are not specified, the service will return the last three years of data.
-  --output: string@output-completer # Output Format Flag.  Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding.   - XML = Data model formatted as Extensible Markup Language.
-  --callback: string # JSONP Callback.  For use with JSONP and GEOJSONP output only.  Enter a name of the function in which to wrap the JSON response.
+  --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
+  --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
 ]: nothing -> record<Results: record<CWPCity: string, CWPCurrentSNCStatus: string, CWPMajorMinorStatusFlag: string, CWPName: string, CWPPermitStatusDesc: string, CWPPermitTypeDesc: string, CWPState: string, CWPStreet: string, CWPZip: string, EPASystem: string, EndDate: string, Message: string, PermFeatures: list<record>, RegistryId: string, SourceId: string, StartDate: string, Statute: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -174,7 +183,7 @@ export def "eff-rest-servicesget-effluent-chart get" [
 # Detailed Effluent Chart Service
 #
 # POST /eff_rest_services.get_effluent_chart
-export def "eff-rest-servicesget-effluent-chart post" [
+export def "eff-rest-services-get-effluent-chart create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +205,7 @@ export def "eff-rest-servicesget-effluent-chart post" [
 # Summary Effluent Chart Service
 #
 # GET /eff_rest_services.get_summary_chart
-export def "eff-rest-servicesget-summary-chart get" [
+export def "eff-rest-services-get-summary-chart get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,8 +216,8 @@ export def "eff-rest-servicesget-summary-chart get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --p-id: string # Identifier for the service.
-  --output: string@output-completer # Output Format Flag.  Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding.   - XML = Data model formatted as Extensible Markup Language.
-  --callback: string # JSONP Callback.  For use with JSONP and GEOJSONP output only.  Enter a name of the function in which to wrap the JSON response.
+  --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
+  --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --start-date: string # The start date (mm/dd/yyyy) for the date range of interest. Must be used in conjunction with end_date. If start_date and end_date are not specified, the service will return the last three years of data.
   --end-date: string # The end date (mm/dd/yyyy) for the date range of interest. Must be used in conjunction with start_date. If start_date and end_date are not specified, the service will return the last three years of data.
 ]: nothing -> record<Results: record<CWPCity: string, CWPCurrentSNCStatus: string, CWPMajorMinorStatusFlag: string, CWPName: string, CWPPermitStatusDesc: string, CWPPermitTypeDesc: string, CWPState: string, CWPStreet: string, CWPZip: string, EPASystem: string, EndDate: string, LinkedPermits: list<record>, Message: string, PermFeatures: list<record>, RegistryId: string, SourceId: string, StartDate: string, Statute: string>> {
@@ -224,7 +233,7 @@ export def "eff-rest-servicesget-summary-chart get" [
 # Summary Effluent Chart Service
 #
 # POST /eff_rest_services.get_summary_chart
-export def "eff-rest-servicesget-summary-chart post" [
+export def "eff-rest-services-get-summary-chart create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +255,7 @@ export def "eff-rest-servicesget-summary-chart post" [
 # ECHO CWA Parameter Lookup Service
 #
 # GET /rest_lookups.cwa_parameters
-export def "rest-lookupscwa-parameters get" [
+export def "rest-lookups-cwa-parameters get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,8 +265,8 @@ export def "rest-lookupscwa-parameters get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --output: string@output-completer # Output Format Flag.  Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding.   - XML = Data model formatted as Extensible Markup Language.
-  --callback: string # JSONP Callback.  For use with JSONP and GEOJSONP output only.  Enter a name of the function in which to wrap the JSON response.
+  --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
+  --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --search-term: string # Enter a partial or complete search phrase or word.
   --search-code: string # Enter a partial or complete code value.
 ]: nothing -> record<Results: record<LuValues: list<record>, Message: string>> {
@@ -273,7 +282,7 @@ export def "rest-lookupscwa-parameters get" [
 # ECHO CWA Parameter Lookup Service
 #
 # POST /rest_lookups.cwa_parameters
-export def "rest-lookupscwa-parameters post" [
+export def "rest-lookups-cwa-parameters create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

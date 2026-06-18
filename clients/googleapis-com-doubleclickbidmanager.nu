@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def data-range-completer [] { ["ALL_TIME" "CURRENT_DAY" "CUSTOM_DATES" "LAST_14_
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "queries doubleclickbidmanagerquerieslistqueries" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "queries get-listqueries" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /queries
 # operationId: doubleclickbidmanager.queries.listqueries
-export def "queries doubleclickbidmanagerquerieslistqueries" [
+export def "queries get-listqueries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,7 +142,7 @@ export def "queries doubleclickbidmanagerquerieslistqueries" [
 #
 # GET /queries/{queryId}/reports
 # operationId: doubleclickbidmanager.reports.listreports
-export def "queries-reports doubleclickbidmanagerreportslistreports" [
+export def "queries-reports get-listreports" [
   query_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,7 +169,7 @@ export def "queries-reports doubleclickbidmanagerreportslistreports" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({query_id: $query_id} | format pattern "/queries/{query_id}/reports") $qp)
+  let full_url = (build-url $base ({query_id: (encode-path-segment $query_id)} | format pattern "/queries/{query_id}/reports") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,10 +179,10 @@ export def "queries-reports doubleclickbidmanagerreportslistreports" [
 #
 # POST /query
 # operationId: doubleclickbidmanager.queries.createquery
-# --metadata shape: {dataRange?: "CUSTOM_DATES"|"CURRENT_DAY"|"PREVIOUS_DAY"|"WEEK_TO_DATE"|"MONTH_TO_DATE"|"QUARTER_TO_DATE"|"YEAR_TO_DATE"|"PREVIOUS_WEEK"|"PREVIOUS_HALF_MONTH"|"PREVIOUS_MONTH"|"PREVIOUS_QUARTER"|"PREVIOUS_YEAR"|"LAST_7_DAYS"|"LAST_30_DAYS"|"LAST_90_DAYS"|"LAST_365_DAYS"|"ALL_TIME"|"LAST_14_DAYS"|"TYPE_NOT_SUPPORTED"|"LAST_60_DAYS", format?: "CSV"|"EXCEL_CSV"|"XLSX", googleCloudStoragePathForLatestReport?: string, googleDrivePathForLatestReport?: string, latestReportRunTimeMs?: string, locale?: string, reportCount?: int, running?: bool, sendNotification?: bool, shareEmailAddress?: list, title?: string}
-# --params shape: {filters?: list, groupBys?: list, includeInviteData?: bool, metrics?: list, options?: record, type?: "TYPE_GENERAL"|"TYPE_AUDIENCE_PERFORMANCE"|"TYPE_INVENTORY_AVAILABILITY"|"TYPE_KEYWORD"|"TYPE_PIXEL_LOAD"|"TYPE_AUDIENCE_COMPOSITION"|"TYPE_CROSS_PARTNER"|"TYPE_PAGE_CATEGORY"|"TYPE_THIRD_PARTY_DATA_PROVIDER"|"TYPE_CROSS_PARTNER_THIRD_PARTY_DATA_PROVIDER"|"TYPE_CLIENT_SAFE"|"TYPE_ORDER_ID"|"TYPE_FEE"|"TYPE_CROSS_FEE"|"TYPE_ACTIVE_GRP"|"TYPE_YOUTUBE_VERTICAL"|"TYPE_COMSCORE_VCE"|"TYPE_TRUEVIEW"|"TYPE_NIELSEN_AUDIENCE_PROFILE"|"TYPE_NIELSEN_DAILY_REACH_BUILD"|"TYPE_NIELSEN_SITE"|"TYPE_REACH_AND_FREQUENCY"|"TYPE_ESTIMATED_CONVERSION"|"TYPE_VERIFICATION"|"TYPE_TRUEVIEW_IAR"|"TYPE_NIELSEN_ONLINE_GLOBAL_MARKET"|"TYPE_PETRA_NIELSEN_AUDIENCE_PROFILE"|"TYPE_PETRA_NIELSEN_DAILY_REACH_BUILD"|"TYPE_PETRA_NIELSEN_ONLINE_GLOBAL_MARKET"|"TYPE_NOT_SUPPORTED"|"TYPE_REACH_AUDIENCE"|"TYPE_LINEAR_TV_SEARCH_LIFT"|"TYPE_PATH"|"TYPE_PATH_ATTRIBUTION"}
+# --metadata shape: {dataRange?: "CUSTOM_DATES"|"CURRENT_DAY"|"PREVIOUS_DAY"|"WEEK_TO_DATE"|"MONTH_TO_DATE"|"QUARTER_TO_DATE"|"YEAR_TO_DATE"|"PREVIOUS_WEEK"|"PREVIOUS_HALF_MONTH"|"PREVIOUS_MONTH"|"PREVIOUS_QUARTER"|"PREVIOUS_YEAR"|"LAST_7_DAYS"|"LAST_30_DAYS"|"LAST_90_DAYS"|"LAST_365_DAYS"|"ALL_TIME"|"LAST_14_DAYS"|"TYPE_NOT_SUPPORTED"|"LAST_60_DAYS", format?: "CSV"|"EXCEL_CSV"|"XLSX", googleCloudStoragePathForLatestReport?: string, googleDrivePathForLatestReport?: string, latestReportRunTimeMs?: string, ... (6 more fields)}
+# --params shape: {filters?: list, groupBys?: list<string>, includeInviteData?: bool, metrics?: list<string>, options?: record, ... (1 more fields)}
 # --schedule shape: {endTimeMs?: string, frequency?: "ONE_TIME"|"DAILY"|"WEEKLY"|"SEMI_MONTHLY"|"MONTHLY"|"QUARTERLY"|"YEARLY", nextRunMinuteOfDay?: int, nextRunTimezoneCode?: string, startTimeMs?: string}
-export def "query doubleclickbidmanagerqueriescreatequery" [
+export def "query create-createquery" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,8 +204,8 @@ export def "query doubleclickbidmanagerqueriescreatequery" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --asynchronous: oneof<nothing, bool> # If true, tries to run the query asynchronously. Only applicable when the frequency is ONE_TIME.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "doubleclickbidmanager#query".
-  --metadata: record # Query metadata. — shape: {dataRange?: "CUSTOM_DATES"|"CURRENT_DAY"|"PREVIOUS_DAY"|"WEEK_TO_DATE"|"MONTH_TO_DATE"|"QUARTER_TO_DATE"|"YEAR_TO_DATE"|"PREVIOUS_WEEK"|"PREVIOUS_HALF_MONTH"|"PREVIOUS_MONTH"|"PREVIOUS_QUARTER"|"PREVIOUS_YEAR"|"LAST_7_DAYS"|"LAST_30_DAYS"|"LAST_90_DAYS"|"LAST_365_DAYS"|"ALL_TIME"|"LAST_14_DAYS"|"TYPE_NOT_SUPPORTED"|"LAST_60_DAYS", format?: "CSV"|"EXCEL_CSV"|"XLSX", googleCloudStoragePathForLatestReport?: string, googleDrivePathForLatestReport?: string, latestReportRunTimeMs?: string, locale?: string, reportCount?: int, running?: bool, sendNotification?: bool, shareEmailAddress?: list, title?: string}
-  --params: record # Parameters of a query or report. — shape: {filters?: list, groupBys?: list, includeInviteData?: bool, metrics?: list, options?: record, type?: "TYPE_GENERAL"|"TYPE_AUDIENCE_PERFORMANCE"|"TYPE_INVENTORY_AVAILABILITY"|"TYPE_KEYWORD"|"TYPE_PIXEL_LOAD"|"TYPE_AUDIENCE_COMPOSITION"|"TYPE_CROSS_PARTNER"|"TYPE_PAGE_CATEGORY"|"TYPE_THIRD_PARTY_DATA_PROVIDER"|"TYPE_CROSS_PARTNER_THIRD_PARTY_DATA_PROVIDER"|"TYPE_CLIENT_SAFE"|"TYPE_ORDER_ID"|"TYPE_FEE"|"TYPE_CROSS_FEE"|"TYPE_ACTIVE_GRP"|"TYPE_YOUTUBE_VERTICAL"|"TYPE_COMSCORE_VCE"|"TYPE_TRUEVIEW"|"TYPE_NIELSEN_AUDIENCE_PROFILE"|"TYPE_NIELSEN_DAILY_REACH_BUILD"|"TYPE_NIELSEN_SITE"|"TYPE_REACH_AND_FREQUENCY"|"TYPE_ESTIMATED_CONVERSION"|"TYPE_VERIFICATION"|"TYPE_TRUEVIEW_IAR"|"TYPE_NIELSEN_ONLINE_GLOBAL_MARKET"|"TYPE_PETRA_NIELSEN_AUDIENCE_PROFILE"|"TYPE_PETRA_NIELSEN_DAILY_REACH_BUILD"|"TYPE_PETRA_NIELSEN_ONLINE_GLOBAL_MARKET"|"TYPE_NOT_SUPPORTED"|"TYPE_REACH_AUDIENCE"|"TYPE_LINEAR_TV_SEARCH_LIFT"|"TYPE_PATH"|"TYPE_PATH_ATTRIBUTION"}
+  --metadata: record # Query metadata. — shape: {dataRange?: "CUSTOM_DATES"|"CURRENT_DAY"|"PREVIOUS_DAY"|"WEEK_TO_DATE"|"MONTH_TO_DATE"|"QUARTER_TO_DATE"|"YEAR_TO_DATE"|"PREVIOUS_WEEK"|"PREVIOUS_HALF_MONTH"|"PREVIOUS_MONTH"|"PREVIOUS_QUARTER"|"PREVIOUS_YEAR"|"LAST_7_DAYS"|"LAST_30_DAYS"|"LAST_90_DAYS"|"LAST_365_DAYS"|"ALL_TIME"|"LAST_14_DAYS"|"TYPE_NOT_SUPPORTED"|"LAST_60_DAYS", format?: "CSV"|"EXCEL_CSV"|"XLSX", googleCloudStoragePathForLatestReport?: string, googleDrivePathForLatestReport?: string, latestReportRunTimeMs?: string, ... (6 more fields)}
+  --params: record # Parameters of a query or report. — shape: {filters?: list, groupBys?: list<string>, includeInviteData?: bool, metrics?: list<string>, options?: record, ... (1 more fields)}
   --query-id: string # Query ID. (format: int64)
   --report-data-end-time-ms: string # The ending time for the data that is shown in the report. Note, reportDataEndTimeMs is required if metadata.dataRange is CUSTOM_DATES and ignored otherwise. (format: int64)
   --report-data-start-time-ms: string # The starting time for the data that is shown in the report. Note, reportDataStartTimeMs is required if metadata.dataRange is CUSTOM_DATES and ignored otherwise. (format: int64)
@@ -208,18 +217,18 @@ export def "query doubleclickbidmanagerqueriescreatequery" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "asynchronous" $asynchronous "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/query" $qp)
-  let body = {"kind": $kind, "metadata": $metadata, "params": $params, "queryId": $query_id, "reportDataEndTimeMs": $report_data_end_time_ms, "reportDataStartTimeMs": $report_data_start_time_ms, "schedule": $schedule, "timezoneCode": $timezone_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"kind": $kind, "metadata": $metadata, "params": $params, "queryId": $query_id, "reportDataEndTimeMs": $report_data_end_time_ms, "reportDataStartTimeMs": $report_data_start_time_ms, "schedule": $schedule, "timezoneCode": $timezone_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a stored query as well as the associated stored reports.
 #
 # DELETE /query/{queryId}
 # operationId: doubleclickbidmanager.queries.deletequery
-export def "query doubleclickbidmanagerqueriesdeletequery" [
+export def "query delete-deletequery" [
   query_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -244,7 +253,7 @@ export def "query doubleclickbidmanagerqueriesdeletequery" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({query_id: $query_id} | format pattern "/query/{query_id}") $qp)
+  let full_url = (build-url $base ({query_id: (encode-path-segment $query_id)} | format pattern "/query/{query_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -254,7 +263,7 @@ export def "query doubleclickbidmanagerqueriesdeletequery" [
 #
 # GET /query/{queryId}
 # operationId: doubleclickbidmanager.queries.getquery
-export def "query doubleclickbidmanagerqueriesgetquery" [
+export def "query get-getquery" [
   query_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -279,7 +288,7 @@ export def "query doubleclickbidmanagerqueriesgetquery" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({query_id: $query_id} | format pattern "/query/{query_id}") $qp)
+  let full_url = (build-url $base ({query_id: (encode-path-segment $query_id)} | format pattern "/query/{query_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -289,7 +298,7 @@ export def "query doubleclickbidmanagerqueriesgetquery" [
 #
 # POST /query/{queryId}
 # operationId: doubleclickbidmanager.queries.runquery
-export def "query doubleclickbidmanagerqueriesrunquery" [
+export def "query create-runquery" [
   query_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -320,10 +329,10 @@ export def "query doubleclickbidmanagerqueriesrunquery" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "asynchronous" $asynchronous "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({query_id: $query_id} | format pattern "/query/{query_id}") $qp)
-  let body = {"dataRange": $data_range, "reportDataEndTimeMs": $report_data_end_time_ms, "reportDataStartTimeMs": $report_data_start_time_ms, "timezoneCode": $timezone_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({query_id: (encode-path-segment $query_id)} | format pattern "/query/{query_id}") $qp)
+  let req_body = {"dataRange": $data_range, "reportDataEndTimeMs": $report_data_end_time_ms, "reportDataStartTimeMs": $report_data_start_time_ms, "timezoneCode": $timezone_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

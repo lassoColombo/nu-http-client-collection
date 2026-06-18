@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-api-key" => { {headers: {X-API-Key: $token_val}, query: ""} }
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,13 +74,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://pal-test.adyen.com/pal/services/TestCard/v1"] }
-def auth-scheme-completer [] { ["x-api-key" "basic"] }
+def auth-scheme-completer [] { ["x-api-key" "basic" "basic-credentials"] }
 
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-test-card-ranges post-createTestCardRanges" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-test-card-ranges create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +105,7 @@ export def commands []: nothing -> table {
 # POST /createTestCardRanges
 # operationId: post-createTestCardRanges
 # --testCardRanges item shape: {address?: any, cardHolderName: string, cvc?: string, expiryMonth: "APRIL"|"AUGUST"|"DECEMBER"|"FEBRUARY"|"JANUARY"|"JULY"|"JUNE"|"MARCH"|"MAY"|"NOVEMBER"|"OCTOBER"|"SEPTEMBER", expiryYear: int, rangeEnd: string, rangeStart: string, threeDDirectoryServerResponse?: "N"|"U"|"Y", threeDPassword?: string, threeDUsername?: string}
-export def "create-test-card-ranges post-createTestCardRanges" [
+export def "create-test-card-ranges create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,16 +115,16 @@ export def "create-test-card-ranges post-createTestCardRanges" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   account_code: string # The code of the account, for which the test card ranges should be created.
-  account_type_code: string # The type of the account, for which the test card ranges should be created.  Permitted values: * Company * MerchantAccount > These values are case-sensitive.
+  account_type_code: string # The type of the account, for which the test card ranges should be created. Permitted values: * Company * MerchantAccount > These values are case-sensitive.
   test_card_ranges: list # A list of test card ranges to create. — item shape: {address?: any, cardHolderName: string, cvc?: string, expiryMonth: "APRIL"|"AUGUST"|"DECEMBER"|"FEBRUARY"|"JANUARY"|"JULY"|"JUNE"|"MARCH"|"MAY"|"NOVEMBER"|"OCTOBER"|"SEPTEMBER", expiryYear: int, rangeEnd: string, rangeStart: string, threeDDirectoryServerResponse?: "N"|"U"|"Y", threeDPassword?: string, threeDUsername?: string}
 ]: any -> record<rangeCreationResults: table<cardNumberRangeEnd: string, cardNumberRangeStart: string, creationResultCode: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/createTestCardRanges")
-  let body = {"accountCode": $account_code, "accountTypeCode": $account_type_code, "testCardRanges": $test_card_ranges} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountCode": $account_code, "accountTypeCode": $account_type_code, "testCardRanges": $test_card_ranges} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

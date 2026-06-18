@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -62,6 +71,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
 def base-url-completer [] { ["http://meshery.local" "http://localhost"] }
 def auth-scheme-completer [] { ["cookie-token"] }
 
@@ -69,7 +105,7 @@ def auth-scheme-completer [] { ["cookie-token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "application idGetApplicationFileRequest" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "application get-file-request" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +129,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/application/
 # operationId: idGetApplicationFileRequest
-export def "application idGetApplicationFileRequest" [
+export def "application get-file-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -115,7 +151,7 @@ export def "application idGetApplicationFileRequest" [
 #
 # POST /api/application/
 # operationId: idPostApplicationFileRequest
-export def "application idPostApplicationFileRequest" [
+export def "application create-file-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,7 +173,7 @@ export def "application idPostApplicationFileRequest" [
 #
 # DELETE /api/application/deploy
 # operationId: idDeleteApplicationFile
-export def "application-deploy idDeleteApplicationFile" [
+export def "application-deploy delete-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +195,7 @@ export def "application-deploy idDeleteApplicationFile" [
 #
 # POST /api/application/deploy
 # operationId: idPostDeployApplicationFile
-export def "application-deploy idPostDeployApplicationFile" [
+export def "application-deploy create-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,18 +210,19 @@ export def "application-deploy idPostDeployApplicationFile" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/application/deploy")
-  let body = {"Upload Yaml/Yml File": $upload_yaml_yml_file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Upload Yaml/Yml File": $upload_yaml_yml_file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["Upload Yaml/Yml File"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Handle Delete for a Meshery Application File
 #
 # DELETE /api/application/{id}
 # operationId: idDeleteMesheryApplicationFile
-export def "application idDeleteMesheryApplicationFile" [
+export def "application delete-meshery-file" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,7 +235,7 @@ export def "application idDeleteMesheryApplicationFile" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/application/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/application/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -208,7 +245,7 @@ export def "application idDeleteMesheryApplicationFile" [
 #
 # GET /api/application/{id}
 # operationId: idGetMesheryApplication
-export def "application idGetMesheryApplication" [
+export def "application get-meshery" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -221,7 +258,7 @@ export def "application idGetMesheryApplication" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/application/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/application/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -231,7 +268,7 @@ export def "application idGetMesheryApplication" [
 #
 # GET /api/filter
 # operationId: idGetFilterFile
-export def "filter idGetFilterFile" [
+export def "filter get-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +290,7 @@ export def "filter idGetFilterFile" [
 #
 # POST /api/filter
 # operationId: idPostFilterFile
-export def "filter idPostFilterFile" [
+export def "filter create-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,7 +312,7 @@ export def "filter idPostFilterFile" [
 #
 # GET /api/filter/file/{id}
 # operationId: idGetFilterFiles
-export def "filter-file idGetFilterFiles" [
+export def "filter-file get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -288,7 +325,7 @@ export def "filter-file idGetFilterFiles" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/filter/file/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/filter/file/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -298,7 +335,7 @@ export def "filter-file idGetFilterFiles" [
 #
 # DELETE /api/filter/{id}
 # operationId: idDeleteMesheryFilter
-export def "filter idDeleteMesheryFilter" [
+export def "filter delete-meshery" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -311,7 +348,7 @@ export def "filter idDeleteMesheryFilter" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/filter/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/filter/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -321,7 +358,7 @@ export def "filter idDeleteMesheryFilter" [
 #
 # GET /api/filter/{id}
 # operationId: idGetMesheryFilter
-export def "filter idGetMesheryFilter" [
+export def "filter get-meshery" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,7 +371,7 @@ export def "filter idGetMesheryFilter" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/filter/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/filter/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -344,7 +381,7 @@ export def "filter idGetMesheryFilter" [
 #
 # GET /api/oam/{type}
 # operationId: idGETOAMMesheryPattern
-export def "oam idGETOAMMesheryPattern" [
+export def "oam get-getoam-meshery-pattern" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -357,7 +394,7 @@ export def "oam idGETOAMMesheryPattern" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({type: $type} | format pattern "/api/oam/{type}"))
+  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/api/oam/{type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -367,7 +404,7 @@ export def "oam idGETOAMMesheryPattern" [
 #
 # POST /api/oam/{type}
 # operationId: idPOSTOAMMesheryPattern
-export def "oam idPOSTOAMMesheryPattern" [
+export def "oam create-postoam-meshery-pattern" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -380,7 +417,7 @@ export def "oam idPOSTOAMMesheryPattern" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({type: $type} | format pattern "/api/oam/{type}"))
+  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/api/oam/{type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -390,7 +427,7 @@ export def "oam idPOSTOAMMesheryPattern" [
 #
 # GET /api/pattern
 # operationId: idGetPatternFiles
-export def "pattern idGetPatternFiles" [
+export def "pattern get-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,7 +449,7 @@ export def "pattern idGetPatternFiles" [
 #
 # POST /api/pattern
 # operationId: idPostPatternFile
-export def "pattern idPostPatternFile" [
+export def "pattern create-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +471,7 @@ export def "pattern idPostPatternFile" [
 #
 # DELETE /api/pattern/deploy
 # operationId: idDeleteDeployPattern
-export def "pattern-deploy idDeleteDeployPattern" [
+export def "pattern-deploy delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +493,7 @@ export def "pattern-deploy idDeleteDeployPattern" [
 #
 # POST /api/pattern/deploy
 # operationId: idPostDeployPattern
-export def "pattern-deploy idPostDeployPattern" [
+export def "pattern-deploy create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,18 +508,19 @@ export def "pattern-deploy idPostDeployPattern" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/pattern/deploy")
-  let body = {"Upload Yaml/Yml File": $upload_yaml_yml_file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Upload Yaml/Yml File": $upload_yaml_yml_file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["Upload Yaml/Yml File"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Handle Delete for a Meshery Pattern
 #
 # DELETE /api/pattern/{id}
 # operationId: idDeleteMesheryPattern
-export def "pattern idDeleteMesheryPattern" [
+export def "pattern delete-meshery" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -495,7 +533,7 @@ export def "pattern idDeleteMesheryPattern" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/pattern/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/pattern/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -505,7 +543,7 @@ export def "pattern idDeleteMesheryPattern" [
 #
 # GET /api/pattern/{id}
 # operationId: idGetMesheryPattern
-export def "pattern idGetMesheryPattern" [
+export def "pattern get-meshery" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -518,7 +556,7 @@ export def "pattern idGetMesheryPattern" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/pattern/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/pattern/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -528,8 +566,8 @@ export def "pattern idGetMesheryPattern" [
 #
 # GET /api/perf/profile
 # operationId: idRunPerfTest
-# --clients item shape: {body?: string, connections?: int, content_type?: string, cookies?: record, endpoint_urls?: list, headers?: record, internal?: bool, load_generator?: string, protocol?: int, rps?: int}
-export def "perf-profile idRunPerfTest" [
+# --clients item shape: {body?: string, connections?: int, content_type?: string, cookies?: record, endpoint_urls?: list<string>, headers?: record, internal?: bool, load_generator?: string, protocol?: int, rps?: int}
+export def "perf-profile test-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,7 +576,7 @@ export def "perf-profile idRunPerfTest" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clients: list # Single or distributed load generators — item shape: {body?: string, connections?: int, content_type?: string, cookies?: record, endpoint_urls?: list, headers?: record, internal?: bool, load_generator?: string, protocol?: int, rps?: int}
+  --clients: list # Single or distributed load generators — item shape: {body?: string, connections?: int, content_type?: string, cookies?: record, endpoint_urls?: list<string>, headers?: record, internal?: bool, load_generator?: string, protocol?: int, rps?: int}
   --duration: string # Length of time the endpoint will be under load
   --id: string
   --labels: record
@@ -549,18 +587,18 @@ export def "perf-profile idRunPerfTest" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/perf/profile")
-  let body = {"clients": $clients, "duration": $duration, "id": $id, "labels": $labels, "name": $name, "smp_version": $smp_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clients": $clients, "duration": $duration, "id": $id, "labels": $labels, "name": $name, "smp_version": $smp_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Handles GET requests for perf results
 #
 # GET /api/perf/profile/result
 # operationId: idGetAllPerfResults
-export def "perf-profile-result idGetAllPerfResults" [
+export def "perf-profile-result get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -582,7 +620,7 @@ export def "perf-profile-result idGetAllPerfResults" [
 #
 # GET /api/perf/profile/result/{id}
 # operationId: idGetSinglePerfResult
-export def "perf-profile-result idGetSinglePerfResult" [
+export def "perf-profile-result get-single" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -595,7 +633,7 @@ export def "perf-profile-result idGetSinglePerfResult" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/perf/profile/result/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/perf/profile/result/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -605,7 +643,7 @@ export def "perf-profile-result idGetSinglePerfResult" [
 #
 # GET /api/provider
 # operationId: idChoiceProvider
-export def "provider idChoiceProvider" [
+export def "provider get-choice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -629,7 +667,7 @@ export def "provider idChoiceProvider" [
 #
 # GET /api/provider/capabilities
 # operationId: idGetProviderCapabilities
-export def "provider-capabilities idGetProviderCapabilities" [
+export def "provider-capabilities get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -651,7 +689,7 @@ export def "provider-capabilities idGetProviderCapabilities" [
 #
 # GET /api/provider/extension
 # operationId: idReactComponents
-export def "provider-extension idReactComponents" [
+export def "provider-extension get-react-components" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -673,7 +711,7 @@ export def "provider-extension idReactComponents" [
 #
 # GET /api/providers
 # operationId: idGetProvidersList
-export def "providers idGetProvidersList" [
+export def "providers get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -695,7 +733,7 @@ export def "providers idGetProvidersList" [
 #
 # DELETE /api/system/adapter/manage
 # operationId: idDeleteAdapterConfig
-export def "system-adapter-manage idDeleteAdapterConfig" [
+export def "system-adapter-manage delete-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -719,7 +757,7 @@ export def "system-adapter-manage idDeleteAdapterConfig" [
 #
 # POST /api/system/adapter/manage
 # operationId: idPostAdapterConfig
-export def "system-adapter-manage idPostAdapterConfig" [
+export def "system-adapter-manage create-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -734,17 +772,18 @@ export def "system-adapter-manage idPostAdapterConfig" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/system/adapter/manage")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Handle POST requests for Adapter Operations
 #
 # POST /api/system/adapter/operation
 # operationId: idPostAdapterOperation
-export def "system-adapter-operation idPostAdapterOperation" [
+export def "system-adapter-operation create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -772,7 +811,7 @@ export def "system-adapter-operation idPostAdapterOperation" [
 #
 # GET /api/system/adapters
 # operationId: idGetSystemAdapters
-export def "system-adapters idGetSystemAdapters" [
+export def "system-adapters get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,7 +835,7 @@ export def "system-adapters idGetSystemAdapters" [
 #
 # DELETE /api/system/kubernetes
 # operationId: idDeleteK8SConfig
-export def "system-kubernetes idDeleteK8SConfig" [
+export def "system-kubernetes delete-k8-s-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -818,7 +857,7 @@ export def "system-kubernetes idDeleteK8SConfig" [
 #
 # POST /api/system/kubernetes
 # operationId: idPostK8SConfig
-export def "system-kubernetes idPostK8SConfig" [
+export def "system-kubernetes create-k8-s-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -840,7 +879,7 @@ export def "system-kubernetes idPostK8SConfig" [
 #
 # POST /api/system/kubernetes/contexts
 # operationId: idPostK8SContexts
-export def "system-kubernetes-contexts idPostK8SContexts" [
+export def "system-kubernetes-contexts create-k8-s" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -862,7 +901,7 @@ export def "system-kubernetes-contexts idPostK8SContexts" [
 #
 # GET /api/system/kubernetes/ping
 # operationId: idGetKubernetesPing
-export def "system-kubernetes-ping idGetKubernetesPing" [
+export def "system-kubernetes-ping get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -884,7 +923,7 @@ export def "system-kubernetes-ping idGetKubernetesPing" [
 #
 # GET /api/system/meshsync/grafana
 # operationId: idMeshSyncGrafana
-export def "system-meshsync-grafana idMeshSyncGrafana" [
+export def "system-meshsync-grafana sync-mesh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -906,7 +945,7 @@ export def "system-meshsync-grafana idMeshSyncGrafana" [
 #
 # GET /api/system/meshsync/prometheus
 # operationId: idMeshSyncPrometheus
-export def "system-meshsync-prometheus idMeshSyncPrometheus" [
+export def "system-meshsync-prometheus sync-mesh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -928,7 +967,7 @@ export def "system-meshsync-prometheus idMeshSyncPrometheus" [
 #
 # GET /api/system/sync
 # operationId: idSystemSync
-export def "system-sync idSystemSync" [
+export def "system-sync sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -950,7 +989,7 @@ export def "system-sync idSystemSync" [
 #
 # GET /api/system/version
 # operationId: idGetSystemVersion
-export def "system-version idGetSystemVersion" [
+export def "system-version get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -972,7 +1011,7 @@ export def "system-version idGetSystemVersion" [
 #
 # POST /api/telemetry/metrics/board_import
 # operationId: idPostPrometheusBoardImport
-export def "telemetry-metrics-board-import idPostPrometheusBoardImport" [
+export def "telemetry-metrics-board-import create-prometheus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -994,7 +1033,7 @@ export def "telemetry-metrics-board-import idPostPrometheusBoardImport" [
 #
 # POST /api/telemetry/metrics/boards
 # operationId: idPostPrometheusBoard
-export def "telemetry-metrics-boards idPostPrometheusBoard" [
+export def "telemetry-metrics-boards create-prometheus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1009,17 +1048,18 @@ export def "telemetry-metrics-boards idPostPrometheusBoard" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/telemetry/metrics/boards")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Handle DELETE for Prometheus configuration
 #
 # DELETE /api/telemetry/metrics/config
 # operationId: idDeletePrometheusConfig
-export def "telemetry-metrics-config idDeletePrometheusConfig" [
+export def "telemetry-metrics-config delete-prometheus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1041,7 +1081,7 @@ export def "telemetry-metrics-config idDeletePrometheusConfig" [
 #
 # GET /api/telemetry/metrics/config
 # operationId: idGetPrometheusConfig
-export def "telemetry-metrics-config idGetPrometheusConfig" [
+export def "telemetry-metrics-config get-prometheus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1063,7 +1103,7 @@ export def "telemetry-metrics-config idGetPrometheusConfig" [
 #
 # POST /api/telemetry/metrics/config
 # operationId: idPostPrometheusConfig
-export def "telemetry-metrics-config idPostPrometheusConfig" [
+export def "telemetry-metrics-config create-prometheus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1078,17 +1118,18 @@ export def "telemetry-metrics-config idPostPrometheusConfig" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/telemetry/metrics/config")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Handle GET request for Grafana boards
 #
 # GET /api/telemetry/metrics/grafana/boards
 # operationId: idGetGrafanaBoards
-export def "telemetry-metrics-grafana-boards idGetGrafanaBoards" [
+export def "telemetry-metrics-grafana-boards get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1112,7 +1153,7 @@ export def "telemetry-metrics-grafana-boards idGetGrafanaBoards" [
 #
 # POST /api/telemetry/metrics/grafana/boards
 # operationId: idPostGrafanaBoards
-export def "telemetry-metrics-grafana-boards idPostGrafanaBoards" [
+export def "telemetry-metrics-grafana-boards create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1134,7 +1175,7 @@ export def "telemetry-metrics-grafana-boards idPostGrafanaBoards" [
 #
 # DELETE /api/telemetry/metrics/grafana/config
 # operationId: idDeleteGrafanaConfig
-export def "telemetry-metrics-grafana-config idDeleteGrafanaConfig" [
+export def "telemetry-metrics-grafana-config delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1156,7 +1197,7 @@ export def "telemetry-metrics-grafana-config idDeleteGrafanaConfig" [
 #
 # GET /api/telemetry/metrics/grafana/config
 # operationId: idGetGrafanaConfig
-export def "telemetry-metrics-grafana-config idGetGrafanaConfig" [
+export def "telemetry-metrics-grafana-config get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1178,7 +1219,7 @@ export def "telemetry-metrics-grafana-config idGetGrafanaConfig" [
 #
 # POST /api/telemetry/metrics/grafana/config
 # operationId: idPostGrafanaConfig
-export def "telemetry-metrics-grafana-config idPostGrafanaConfig" [
+export def "telemetry-metrics-grafana-config create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1194,18 +1235,18 @@ export def "telemetry-metrics-grafana-config idPostGrafanaConfig" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/telemetry/metrics/grafana/config")
-  let body = {"grafanaAPIKey": $grafana_api_key, "grafanaURL": $grafana_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"grafanaAPIKey": $grafana_api_key, "grafanaURL": $grafana_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Handle GET request for Grafana ping
 #
 # GET /api/telemetry/metrics/grafana/ping
 # operationId: idGetGrafanaPing
-export def "telemetry-metrics-grafana-ping idGetGrafanaPing" [
+export def "telemetry-metrics-grafana-ping get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1227,7 +1268,7 @@ export def "telemetry-metrics-grafana-ping idGetGrafanaPing" [
 #
 # GET /api/telemetry/metrics/grafana/query
 # operationId: idGetGrafanaQuery
-export def "telemetry-metrics-grafana-query idGetGrafanaQuery" [
+export def "telemetry-metrics-grafana-query get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1249,7 +1290,7 @@ export def "telemetry-metrics-grafana-query idGetGrafanaQuery" [
 #
 # GET /api/telemetry/metrics/grafana/scan
 # operationId: idGetGrafana
-export def "telemetry-metrics-grafana-scan idGetGrafana" [
+export def "telemetry-metrics-grafana-scan get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1271,7 +1312,7 @@ export def "telemetry-metrics-grafana-scan idGetGrafana" [
 #
 # GET /api/telemetry/metrics/ping
 # operationId: idGetPrometheusPing
-export def "telemetry-metrics-ping idGetPrometheusPing" [
+export def "telemetry-metrics-ping get-prometheus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1293,7 +1334,7 @@ export def "telemetry-metrics-ping idGetPrometheusPing" [
 #
 # GET /api/telemetry/metrics/query
 # operationId: idGetPrometheusQuery
-export def "telemetry-metrics-query idGetPrometheusQuery" [
+export def "telemetry-metrics-query get-prometheus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1315,7 +1356,7 @@ export def "telemetry-metrics-query idGetPrometheusQuery" [
 #
 # GET /api/telemetry/metrics/static-board
 # operationId: idGetPrometheusStaticBoard
-export def "telemetry-metrics-static-board idGetPrometheusStaticBoard" [
+export def "telemetry-metrics-static-board get-prometheus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1337,7 +1378,7 @@ export def "telemetry-metrics-static-board idGetPrometheusStaticBoard" [
 #
 # GET /api/user/login
 # operationId: idGetUserLogin
-export def "user-login idGetUserLogin" [
+export def "user-login get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1359,7 +1400,7 @@ export def "user-login idGetUserLogin" [
 #
 # GET /api/user/logout
 # operationId: idGetUserLogout
-export def "user-logout idGetUserLogout" [
+export def "user-logout get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1381,7 +1422,7 @@ export def "user-logout idGetUserLogout" [
 #
 # GET /api/user/performance/profiles
 # operationId: idGetPerformanceProfiles
-export def "user-performance-profiles idGetPerformanceProfiles" [
+export def "user-performance-profiles get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1403,7 +1444,7 @@ export def "user-performance-profiles idGetPerformanceProfiles" [
 #
 # POST /api/user/performance/profiles
 # operationId: idSavePerformanceProfile
-export def "user-performance-profiles idSavePerformanceProfile" [
+export def "user-performance-profiles create-save" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1414,8 +1455,8 @@ export def "user-performance-profiles idSavePerformanceProfile" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --concurrent-request: int # number of concurrent requests (format: int64)
   --duration: string # duration of tests e.g. 30s
-  --endpoints: list # array of urls of performance results
-  --load-generators: list # array of load generators
+  --endpoints: list<string> # array of urls of performance results
+  --load-generators: list<string> # array of load generators
   --name: string # name of performance profile
   --qps: int # qps in integer (format: int64)
   --service-mesh: string # service mesh for performance tests
@@ -1424,18 +1465,18 @@ export def "user-performance-profiles idSavePerformanceProfile" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/user/performance/profiles")
-  let body = {"concurrent_request": $concurrent_request, "duration": $duration, "endpoints": $endpoints, "load_generators": $load_generators, "name": $name, "qps": $qps, "service_mesh": $service_mesh} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"concurrent_request": $concurrent_request, "duration": $duration, "endpoints": $endpoints, "load_generators": $load_generators, "name": $name, "qps": $qps, "service_mesh": $service_mesh} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Handles GET requests for performance results
 #
 # GET /api/user/performance/profiles/results
 # operationId: idGetAllPerformanceResults
-export def "user-performance-profiles-results idGetAllPerformanceResults" [
+export def "user-performance-profiles-results get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1457,7 +1498,7 @@ export def "user-performance-profiles-results idGetAllPerformanceResults" [
 #
 # DELETE /api/user/performance/profiles/{id}
 # operationId: idDeletePerformanceProfile
-export def "user-performance-profiles idDeletePerformanceProfile" [
+export def "user-performance-profiles delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1470,7 +1511,7 @@ export def "user-performance-profiles idDeletePerformanceProfile" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/user/performance/profiles/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/user/performance/profiles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1480,7 +1521,7 @@ export def "user-performance-profiles idDeletePerformanceProfile" [
 #
 # GET /api/user/performance/profiles/{id}
 # operationId: idGetSinglePerformanceProfile
-export def "user-performance-profiles idGetSinglePerformanceProfile" [
+export def "user-performance-profiles get-single" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1493,7 +1534,7 @@ export def "user-performance-profiles idGetSinglePerformanceProfile" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/user/performance/profiles/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/user/performance/profiles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1503,7 +1544,7 @@ export def "user-performance-profiles idGetSinglePerformanceProfile" [
 #
 # GET /api/user/performance/profiles/{id}/results
 # operationId: idGETProfileResults
-export def "user-performance-profiles-results idGETProfileResults" [
+export def "user-performance-profiles-results get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1516,7 +1557,7 @@ export def "user-performance-profiles-results idGETProfileResults" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/user/performance/profiles/{id}/results"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/user/performance/profiles/{id}/results"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1526,7 +1567,7 @@ export def "user-performance-profiles-results idGETProfileResults" [
 #
 # GET /api/user/performance/profiles/{id}/run
 # operationId: idRunPerformanceTest
-export def "user-performance-profiles-run idRunPerformanceTest" [
+export def "user-performance-profiles-run test" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1539,7 +1580,7 @@ export def "user-performance-profiles-run idRunPerformanceTest" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/user/performance/profiles/{id}/run"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/user/performance/profiles/{id}/run"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1549,7 +1590,7 @@ export def "user-performance-profiles-run idRunPerformanceTest" [
 #
 # GET /api/user/prefs
 # operationId: idGetUserTestPrefs
-export def "user-prefs idGetUserTestPrefs" [
+export def "user-prefs get-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1571,7 +1612,7 @@ export def "user-prefs idGetUserTestPrefs" [
 #
 # POST /api/user/prefs
 # operationId: idPostUserTestPrefs
-export def "user-prefs idPostUserTestPrefs" [
+export def "user-prefs create-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1593,7 +1634,7 @@ export def "user-prefs idPostUserTestPrefs" [
 #
 # DELETE /api/user/prefs/perf
 # operationId: idDeleteLoadPreferences
-export def "user-prefs-perf idDeleteLoadPreferences" [
+export def "user-prefs-perf delete-load-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1617,7 +1658,7 @@ export def "user-prefs-perf idDeleteLoadPreferences" [
 #
 # GET /api/user/prefs/perf
 # operationId: idGetLoadPreferences
-export def "user-prefs-perf idGetLoadPreferences" [
+export def "user-prefs-perf get-load-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1641,8 +1682,8 @@ export def "user-prefs-perf idGetLoadPreferences" [
 #
 # POST /api/user/prefs/perf
 # operationId: idPostLoadPreferences
-# --clients item shape: {body?: string, connections?: int, content_type?: string, cookies?: record, endpoint_urls?: list, headers?: record, internal?: bool, load_generator?: string, protocol?: int, rps?: int}
-export def "user-prefs-perf idPostLoadPreferences" [
+# --clients item shape: {body?: string, connections?: int, content_type?: string, cookies?: record, endpoint_urls?: list<string>, headers?: record, internal?: bool, load_generator?: string, protocol?: int, rps?: int}
+export def "user-prefs-perf create-load-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1651,7 +1692,7 @@ export def "user-prefs-perf idPostLoadPreferences" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clients: list # Single or distributed load generators — item shape: {body?: string, connections?: int, content_type?: string, cookies?: record, endpoint_urls?: list, headers?: record, internal?: bool, load_generator?: string, protocol?: int, rps?: int}
+  --clients: list # Single or distributed load generators — item shape: {body?: string, connections?: int, content_type?: string, cookies?: record, endpoint_urls?: list<string>, headers?: record, internal?: bool, load_generator?: string, protocol?: int, rps?: int}
   --duration: string # Length of time the endpoint will be under load
   --id: string
   --labels: record
@@ -1662,18 +1703,18 @@ export def "user-prefs-perf idPostLoadPreferences" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/user/prefs/perf")
-  let body = {"clients": $clients, "duration": $duration, "id": $id, "labels": $labels, "name": $name, "smp_version": $smp_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"clients": $clients, "duration": $duration, "id": $id, "labels": $labels, "name": $name, "smp_version": $smp_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Handle GET reqeuest for Schedules
 #
 # GET /api/user/schedules
 # operationId: idGetSchedules
-export def "user-schedules idGetSchedules" [
+export def "user-schedules get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1695,7 +1736,7 @@ export def "user-schedules idGetSchedules" [
 #
 # POST /api/user/schedules
 # operationId: idPostSchedules
-export def "user-schedules idPostSchedules" [
+export def "user-schedules create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1717,7 +1758,7 @@ export def "user-schedules idPostSchedules" [
 #
 # DELETE /api/user/schedules/{id}
 # operationId: idDeleteSchedules
-export def "user-schedules idDeleteSchedules" [
+export def "user-schedules delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1730,7 +1771,7 @@ export def "user-schedules idDeleteSchedules" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/user/schedules/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/user/schedules/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1740,7 +1781,7 @@ export def "user-schedules idDeleteSchedules" [
 #
 # GET /api/user/schedules/{id}
 # operationId: idGetSingleSchedule
-export def "user-schedules idGetSingleSchedule" [
+export def "user-schedules get-single" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1753,7 +1794,7 @@ export def "user-schedules idGetSingleSchedule" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/user/schedules/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/user/schedules/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1763,7 +1804,7 @@ export def "user-schedules idGetSingleSchedule" [
 #
 # GET /api/user/token
 # operationId: idGetTokenProvider
-export def "user-token idGetTokenProvider" [
+export def "user-token get-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1785,7 +1826,7 @@ export def "user-token idGetTokenProvider" [
 #
 # POST /api/user/token
 # operationId: idPostTokenProvider
-export def "user-token idPostTokenProvider" [
+export def "user-token create-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1807,7 +1848,7 @@ export def "user-token idPostTokenProvider" [
 #
 # GET /provider
 # operationId: idProvider
-export def "provider idProvider" [
+export def "provider get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

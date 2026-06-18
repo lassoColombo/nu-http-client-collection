@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def type-completer [] { ["messages" "voice"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api retrieve-applications" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-applications" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: retrieveApplications
-export def "api retrieve-applications" [
+export def "api get-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,7 +116,7 @@ export def "api retrieve-applications" [
   --api-secret: string # You can find your API secret in your [account overview](https://dashboard.nexmo.com/account-overview)
   --page-size: int # Set the number of items returned on each call to this endpoint. The default is 10 records. (default: 10, e.g. 10)
   --page-index: int # Set the offset from the first page. The default value is `0`. (default: 0, e.g. 0)
-]: nothing -> record<_embedded: any, _links: record<href: string>, count: any, page_index: any, page_size: any> {
+]: nothing -> record<_embedded: record<applications: list<record>>, _links: record<href: string>, count: int, page_index: int, page_size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "api_secret" $api_secret "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "page_index" $page_index "scalar")] | flatten | str join "&"
@@ -142,16 +151,16 @@ export def "api create-application" [
   --status-method: string # The HTTP method used to send event information to `status_url`. The default value is `POST`. For `messages` type applications only. (e.g. POST)
   --status-url: string # Nexmo sends event information asynchronously to this URL when status changes. Required for `messages` type applications only. (e.g. https://example.com/webhooks/status)
   type: string@type-completer # The Nexmo product or products that you access with this application. Currently `voice` and `messages` application types are supported. (e.g. voice)
-]: any -> record<_links: record<href: string>, id: any, keys: record<public_key: string, private_key: string>, messages: record<webhooks: list<record>>, name: any, voice: record<webhooks: list<record>>> {
+]: any -> record<_links: record<href: string>, id: string, keys: record<public_key: string, private_key: string>, messages: record<webhooks: list<record>>, name: string, voice: record<webhooks: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/")
-  let body = {"answer_method": $answer_method, "answer_url": $answer_url, "api_key": $api_key, "api_secret": $api_secret, "event_method": $event_method, "event_url": $event_url, "inbound_method": $inbound_method, "inbound_url": $inbound_url, "name": $name, "status_method": $status_method, "status_url": $status_url, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"answer_method": $answer_method, "answer_url": $answer_url, "api_key": $api_key, "api_secret": $api_secret, "event_method": $event_method, "event_url": $event_url, "inbound_method": $inbound_method, "inbound_url": $inbound_url, "name": $name, "status_method": $status_method, "status_url": $status_url, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Destroy Application
@@ -171,7 +180,7 @@ export def "api delete-application" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/{app_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/{app_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -181,7 +190,7 @@ export def "api delete-application" [
 #
 # GET /{app_id}
 # operationId: retrieveApplication
-export def "api retrieve-application" [
+export def "api get-application" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -193,11 +202,11 @@ export def "api retrieve-application" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # You can find your API key in your [account overview](https://dashboard.nexmo.com/account-overview)
   --api-secret: string # You can find your API secret in your [account overview](https://dashboard.nexmo.com/account-overview)
-]: nothing -> record<_links: record<href: string>, id: any, keys: record<public_key: string>, messages: record<webhooks: list<record>>, name: any, voice: record<webhooks: list<record>>> {
+]: nothing -> record<_links: record<href: string>, id: string, keys: record<public_key: string>, messages: record<webhooks: list<record>>, name: string, voice: record<webhooks: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "api_secret" $api_secret "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/{app_id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/{app_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -224,15 +233,15 @@ export def "api update-application" [
   --event-method: string # The HTTP method used to send event information to `event_url`. The default value is POST. (default: POST, e.g. POST)
   --event-url: string # Nexmo sends event information asynchronously to this URL when status changes. (format: url, e.g. https://example.com/webhooks/event)
   name: string # The name of your application. (e.g. UpdatedApplication)
-  type: string@type-completer # The Nexmo product or products that you access with this application. Currently `voice` and `messages` application types are supported. You  can't change the type of application. (e.g. voice)
-]: any -> record<_links: record<href: string>, id: any, keys: record<public_key: string>, messages: record<webhooks: list<record>>, name: any, voice: record<webhooks: list<record>>> {
+  type: string@type-completer # The Nexmo product or products that you access with this application. Currently `voice` and `messages` application types are supported. You can't change the type of application. (e.g. voice)
+]: any -> record<_links: record<href: string>, id: string, keys: record<public_key: string>, messages: record<webhooks: list<record>>, name: string, voice: record<webhooks: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/{app_id}"))
-  let body = {"answer_method": $answer_method, "answer_url": $answer_url, "api_key": $api_key, "api_secret": $api_secret, "event_method": $event_method, "event_url": $event_url, "name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/{app_id}"))
+  let req_body = {"answer_method": $answer_method, "answer_url": $answer_url, "api_key": $api_key, "api_secret": $api_secret, "event_method": $event_method, "event_url": $event_url, "name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-compute-admin-locations-diskmigrationjobs list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-compute-admin-locations-diskmigrationjobs list-disk-migration-jobs" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/diskmigrationjobs
 # operationId: DiskMigrationJobs_List
-export def "subscriptions-providers-microsoft-compute-admin-locations-diskmigrationjobs list" [
+export def "subscriptions-providers-microsoft-compute-admin-locations-diskmigrationjobs list-disk-migration-jobs" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -110,7 +119,7 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-diskmigrat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/diskmigrationjobs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/diskmigrationjobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,7 +129,7 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-diskmigrat
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/diskmigrationjobs/{migrationId}
 # operationId: DiskMigrationJobs_Get
-export def "subscriptions-providers-microsoft-compute-admin-locations-diskmigrationjobs get" [
+export def "subscriptions-providers-microsoft-compute-admin-locations-diskmigrationjobs get-disk-migration-jobs" [
   subscription_id: string
   location: string
   migration_id: string
@@ -137,7 +146,7 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-diskmigrat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location, migration_id: $migration_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/diskmigrationjobs/{migration_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location), migration_id: (encode-path-segment $migration_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/diskmigrationjobs/{migration_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -147,7 +156,7 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-diskmigrat
 #
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/diskmigrationjobs/{migrationId}
 # operationId: DiskMigrationJobs_Create
-export def "subscriptions-providers-microsoft-compute-admin-locations-diskmigrationjobs create" [
+export def "subscriptions-providers-microsoft-compute-admin-locations-diskmigrationjobs create-disk-migration-jobs" [
   subscription_id: string
   location: string
   migration_id: string
@@ -167,18 +176,19 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-diskmigrat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "targetShare" $target_share "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location, migration_id: $migration_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/diskmigrationjobs/{migration_id}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location), migration_id: (encode-path-segment $migration_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/diskmigrationjobs/{migration_id}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel a disk migration job.
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/diskmigrationjobs/{migrationId}/Cancel
 # operationId: DiskMigrationJobs_Cancel
-export def "subscriptions-providers-microsoft-compute-admin-locations-diskmigrationjobs-cancel cancel" [
+export def "subscriptions-providers-microsoft-compute-admin-locations-diskmigrationjobs-cancel cancel-disk-migration-jobs" [
   subscription_id: string
   location: string
   migration_id: string
@@ -195,7 +205,7 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-diskmigrat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location, migration_id: $migration_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/diskmigrationjobs/{migration_id}/Cancel") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location), migration_id: (encode-path-segment $migration_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/diskmigrationjobs/{migration_id}/Cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

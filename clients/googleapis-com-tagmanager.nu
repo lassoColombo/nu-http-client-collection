@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -78,7 +87,7 @@ def change-status-completer [] { ["added" "changeStatusUnspecified" "deleted" "n
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tagmanager-accounts tag-manager-accounts-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tagmanager-accounts list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -102,7 +111,7 @@ export def commands []: nothing -> table {
 #
 # GET /tagmanager/v2/accounts
 # operationId: tagmanager.accounts.list
-export def "tagmanager-accounts tag-manager-accounts-list" [
+export def "tagmanager-accounts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,7 +147,7 @@ export def "tagmanager-accounts tag-manager-accounts-list" [
 #
 # GET /tagmanager/v2/accounts/containers:lookup
 # operationId: tagmanager.accounts.containers.lookup
-export def "tagmanager-accounts-containers-lookup tag-manager" [
+export def "tagmanager-accounts-containers-lookup get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +182,7 @@ export def "tagmanager-accounts-containers-lookup tag-manager" [
 #
 # GET /tagmanager/v2/{parent}/built_in_variables
 # operationId: tagmanager.accounts.containers.workspaces.built_in_variables.list
-export def "tagmanager-built-in-variables variableslist" [
+export def "tagmanager-built-in-variables list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -199,7 +208,7 @@ export def "tagmanager-built-in-variables variableslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/built_in_variables") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/built_in_variables") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -209,7 +218,7 @@ export def "tagmanager-built-in-variables variableslist" [
 #
 # POST /tagmanager/v2/{parent}/built_in_variables
 # operationId: tagmanager.accounts.containers.workspaces.built_in_variables.create
-export def "tagmanager-built-in-variables variablescreate" [
+export def "tagmanager-built-in-variables create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -230,12 +239,12 @@ export def "tagmanager-built-in-variables variablescreate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --type: list # The types of built-in variables to enable.
+  --type: list<string> # The types of built-in variables to enable.
 ]: nothing -> record<builtInVariable: table<accountId: string, containerId: string, name: string, path: string, type: string, workspaceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "type" $type "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/built_in_variables") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/built_in_variables") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -245,7 +254,7 @@ export def "tagmanager-built-in-variables variablescreate" [
 #
 # GET /tagmanager/v2/{parent}/clients
 # operationId: tagmanager.accounts.containers.workspaces.clients.list
-export def "tagmanager-clients tag-manager-accounts-containers-workspaces-clients-list" [
+export def "tagmanager-clients list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -271,7 +280,7 @@ export def "tagmanager-clients tag-manager-accounts-containers-workspaces-client
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/clients") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/clients") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -282,7 +291,7 @@ export def "tagmanager-clients tag-manager-accounts-containers-workspaces-client
 # POST /tagmanager/v2/{parent}/clients
 # operationId: tagmanager.accounts.containers.workspaces.clients.create
 # --parameter item shape: {key?: string, list?: list, map?: list, type?: "typeUnspecified"|"template"|"integer"|"boolean"|"list"|"map"|"triggerReference"|"tagReference", value?: string}
-export def "tagmanager-clients tag-manager-accounts-containers-workspaces-clients-create" [
+export def "tagmanager-clients create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -321,19 +330,19 @@ export def "tagmanager-clients tag-manager-accounts-containers-workspaces-client
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/clients") $qp)
-  let body = {"accountId": $account_id, "clientId": $client_id, "containerId": $container_id, "fingerprint": $fingerprint, "name": $name, "notes": $notes, "parameter": $parameter, "parentFolderId": $parent_folder_id, "path": $path, "priority": $priority, "tagManagerUrl": $tag_manager_url, "type": $type, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/clients") $qp)
+  let req_body = {"accountId": $account_id, "clientId": $client_id, "containerId": $container_id, "fingerprint": $fingerprint, "name": $name, "notes": $notes, "parameter": $parameter, "parentFolderId": $parent_folder_id, "path": $path, "priority": $priority, "tagManagerUrl": $tag_manager_url, "type": $type, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all Containers that belongs to a GTM Account.
 #
 # GET /tagmanager/v2/{parent}/containers
 # operationId: tagmanager.accounts.containers.list
-export def "tagmanager-containers tag-manager-accounts-containers-list" [
+export def "tagmanager-containers list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -359,7 +368,7 @@ export def "tagmanager-containers tag-manager-accounts-containers-list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/containers") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/containers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -370,7 +379,7 @@ export def "tagmanager-containers tag-manager-accounts-containers-list" [
 # POST /tagmanager/v2/{parent}/containers
 # operationId: tagmanager.accounts.containers.create
 # --features shape: {supportBuiltInVariables?: bool, supportClients?: bool, supportEnvironments?: bool, supportFolders?: bool, supportGtagConfigs?: bool, supportTags?: bool, supportTemplates?: bool, supportTriggers?: bool, supportUserPermissions?: bool, supportVariables?: bool, supportVersions?: bool, supportWorkspaces?: bool, supportZones?: bool}
-export def "tagmanager-containers tag-manager-accounts-containers-create" [
+export def "tagmanager-containers create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -393,35 +402,35 @@ export def "tagmanager-containers tag-manager-accounts-containers-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --account-id: string # GTM Account ID.
   --container-id: string # The Container ID uniquely identifies the GTM Container.
-  --domain-name: list # List of domain names associated with the Container. @mutable tagmanager.accounts.containers.create @mutable tagmanager.accounts.containers.update
+  --domain-name: list<string> # List of domain names associated with the Container. @mutable tagmanager.accounts.containers.create @mutable tagmanager.accounts.containers.update
   --features: record # shape: {supportBuiltInVariables?: bool, supportClients?: bool, supportEnvironments?: bool, supportFolders?: bool, supportGtagConfigs?: bool, supportTags?: bool, supportTemplates?: bool, supportTriggers?: bool, supportUserPermissions?: bool, supportVariables?: bool, supportVersions?: bool, supportWorkspaces?: bool, supportZones?: bool}
   --fingerprint: string # The fingerprint of the GTM Container as computed at storage time. This value is recomputed whenever the account is modified.
   --name: string # Container display name. @mutable tagmanager.accounts.containers.create @mutable tagmanager.accounts.containers.update
   --notes: string # Container Notes. @mutable tagmanager.accounts.containers.create @mutable tagmanager.accounts.containers.update
   --path: string # GTM Container's API relative path.
   --public-id: string # Container Public ID.
-  --tag-ids: list # All Tag IDs that refer to this Container.
+  --tag-ids: list<string> # All Tag IDs that refer to this Container.
   --tag-manager-url: string # Auto generated link to the tag manager UI
-  --tagging-server-urls: list # List of server-side container URLs for the Container. If multiple URLs are provided, all URL paths must match. @mutable tagmanager.accounts.containers.create @mutable tagmanager.accounts.containers.update
-  --usage-context: list # List of Usage Contexts for the Container. Valid values include: web, android, or ios. @mutable tagmanager.accounts.containers.create @mutable tagmanager.accounts.containers.update
+  --tagging-server-urls: list<string> # List of server-side container URLs for the Container. If multiple URLs are provided, all URL paths must match. @mutable tagmanager.accounts.containers.create @mutable tagmanager.accounts.containers.update
+  --usage-context: list<string> # List of Usage Contexts for the Container. Valid values include: web, android, or ios. @mutable tagmanager.accounts.containers.create @mutable tagmanager.accounts.containers.update
 ]: any -> record<accountId: string, containerId: string, domainName: list<string>, features: record<supportBuiltInVariables: bool, supportClients: bool, supportEnvironments: bool, supportFolders: bool, supportGtagConfigs: bool, supportTags: bool, supportTemplates: bool, supportTriggers: bool, supportUserPermissions: bool, supportVariables: bool, supportVersions: bool, supportWorkspaces: bool, supportZones: bool>, fingerprint: string, name: string, notes: string, path: string, publicId: string, tagIds: list<string>, tagManagerUrl: string, taggingServerUrls: list<string>, usageContext: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/containers") $qp)
-  let body = {"accountId": $account_id, "containerId": $container_id, "domainName": $domain_name, "features": $features, "fingerprint": $fingerprint, "name": $name, "notes": $notes, "path": $path, "publicId": $public_id, "tagIds": $tag_ids, "tagManagerUrl": $tag_manager_url, "taggingServerUrls": $tagging_server_urls, "usageContext": $usage_context} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/containers") $qp)
+  let req_body = {"accountId": $account_id, "containerId": $container_id, "domainName": $domain_name, "features": $features, "fingerprint": $fingerprint, "name": $name, "notes": $notes, "path": $path, "publicId": $public_id, "tagIds": $tag_ids, "tagManagerUrl": $tag_manager_url, "taggingServerUrls": $tagging_server_urls, "usageContext": $usage_context} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all Destinations linked to a GTM Container.
 #
 # GET /tagmanager/v2/{parent}/destinations
 # operationId: tagmanager.accounts.containers.destinations.list
-export def "tagmanager-destinations tag-manager-accounts-containers-destinations-list" [
+export def "tagmanager-destinations list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -446,7 +455,7 @@ export def "tagmanager-destinations tag-manager-accounts-containers-destinations
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/destinations") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/destinations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -456,7 +465,7 @@ export def "tagmanager-destinations tag-manager-accounts-containers-destinations
 #
 # POST /tagmanager/v2/{parent}/destinations:link
 # operationId: tagmanager.accounts.containers.destinations.link
-export def "tagmanager-destinations-link tag-manager-accounts-containers" [
+export def "tagmanager-destinations-link create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -483,7 +492,7 @@ export def "tagmanager-destinations-link tag-manager-accounts-containers" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "allowUserPermissionFeatureUpdate" $allow_user_permission_feature_update "scalar") (serialize-qp "destinationId" $destination_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/destinations:link") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/destinations:link") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -493,7 +502,7 @@ export def "tagmanager-destinations-link tag-manager-accounts-containers" [
 #
 # GET /tagmanager/v2/{parent}/environments
 # operationId: tagmanager.accounts.containers.environments.list
-export def "tagmanager-environments tag-manager-accounts-containers-environments-list" [
+export def "tagmanager-environments list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -519,7 +528,7 @@ export def "tagmanager-environments tag-manager-accounts-containers-environments
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/environments") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/environments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -529,7 +538,7 @@ export def "tagmanager-environments tag-manager-accounts-containers-environments
 #
 # POST /tagmanager/v2/{parent}/environments
 # operationId: tagmanager.accounts.containers.environments.create
-export def "tagmanager-environments tag-manager-accounts-containers-environments-create" [
+export def "tagmanager-environments create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -563,26 +572,26 @@ export def "tagmanager-environments tag-manager-accounts-containers-environments
   --path: string # GTM Environment's API relative path.
   --tag-manager-url: string # Auto generated link to the tag manager UI
   --type: string@type-completer # The type of this environment.
-  --body-url: string # Default preview page url for the environment. @mutable tagmanager.accounts.containers.environments.create @mutable tagmanager.accounts.containers.environments.update
+  --url: string # Default preview page url for the environment. @mutable tagmanager.accounts.containers.environments.create @mutable tagmanager.accounts.containers.environments.update
   --workspace-id: string # Represents a link to a quick preview of a workspace.
 ]: any -> record<accountId: string, authorizationCode: string, authorizationTimestamp: string, containerId: string, containerVersionId: string, description: string, enableDebug: bool, environmentId: string, fingerprint: string, name: string, path: string, tagManagerUrl: string, type: string, url: string, workspaceId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/environments") $qp)
-  let body = {"accountId": $account_id, "authorizationCode": $authorization_code, "authorizationTimestamp": $authorization_timestamp, "containerId": $container_id, "containerVersionId": $container_version_id, "description": $description, "enableDebug": $enable_debug, "environmentId": $environment_id, "fingerprint": $fingerprint, "name": $name, "path": $path, "tagManagerUrl": $tag_manager_url, "type": $type, "url": $body_url, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/environments") $qp)
+  let req_body = {"accountId": $account_id, "authorizationCode": $authorization_code, "authorizationTimestamp": $authorization_timestamp, "containerId": $container_id, "containerVersionId": $container_version_id, "description": $description, "enableDebug": $enable_debug, "environmentId": $environment_id, "fingerprint": $fingerprint, "name": $name, "path": $path, "tagManagerUrl": $tag_manager_url, "type": $type, "url": $url, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all GTM Folders of a Container.
 #
 # GET /tagmanager/v2/{parent}/folders
 # operationId: tagmanager.accounts.containers.workspaces.folders.list
-export def "tagmanager-folders tag-manager-accounts-containers-workspaces-folders-list" [
+export def "tagmanager-folders list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -608,7 +617,7 @@ export def "tagmanager-folders tag-manager-accounts-containers-workspaces-folder
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/folders") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/folders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -618,7 +627,7 @@ export def "tagmanager-folders tag-manager-accounts-containers-workspaces-folder
 #
 # POST /tagmanager/v2/{parent}/folders
 # operationId: tagmanager.accounts.containers.workspaces.folders.create
-export def "tagmanager-folders tag-manager-accounts-containers-workspaces-folders-create" [
+export def "tagmanager-folders create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -653,19 +662,19 @@ export def "tagmanager-folders tag-manager-accounts-containers-workspaces-folder
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/folders") $qp)
-  let body = {"accountId": $account_id, "containerId": $container_id, "fingerprint": $fingerprint, "folderId": $folder_id, "name": $name, "notes": $notes, "path": $path, "tagManagerUrl": $tag_manager_url, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/folders") $qp)
+  let req_body = {"accountId": $account_id, "containerId": $container_id, "fingerprint": $fingerprint, "folderId": $folder_id, "name": $name, "notes": $notes, "path": $path, "tagManagerUrl": $tag_manager_url, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all Google tag configs in a Container.
 #
 # GET /tagmanager/v2/{parent}/gtag_config
 # operationId: tagmanager.accounts.containers.workspaces.gtag_config.list
-export def "tagmanager-gtag-config configlist" [
+export def "tagmanager-gtag-config list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -691,7 +700,7 @@ export def "tagmanager-gtag-config configlist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/gtag_config") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/gtag_config") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -702,7 +711,7 @@ export def "tagmanager-gtag-config configlist" [
 # POST /tagmanager/v2/{parent}/gtag_config
 # operationId: tagmanager.accounts.containers.workspaces.gtag_config.create
 # --parameter item shape: {key?: string, list?: list, map?: list, type?: "typeUnspecified"|"template"|"integer"|"boolean"|"list"|"map"|"triggerReference"|"tagReference", value?: string}
-export def "tagmanager-gtag-config configcreate" [
+export def "tagmanager-gtag-config create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -737,19 +746,19 @@ export def "tagmanager-gtag-config configcreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/gtag_config") $qp)
-  let body = {"accountId": $account_id, "containerId": $container_id, "fingerprint": $fingerprint, "gtagConfigId": $gtag_config_id, "parameter": $parameter, "path": $path, "tagManagerUrl": $tag_manager_url, "type": $type, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/gtag_config") $qp)
+  let req_body = {"accountId": $account_id, "containerId": $container_id, "fingerprint": $fingerprint, "gtagConfigId": $gtag_config_id, "parameter": $parameter, "path": $path, "tagManagerUrl": $tag_manager_url, "type": $type, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all GTM Tags of a Container.
 #
 # GET /tagmanager/v2/{parent}/tags
 # operationId: tagmanager.accounts.containers.workspaces.tags.list
-export def "tagmanager-tags tag-manager-accounts-containers-workspaces-tags-list" [
+export def "tagmanager-tags list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -775,7 +784,7 @@ export def "tagmanager-tags tag-manager-accounts-containers-workspaces-tags-list
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/tags") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -791,7 +800,7 @@ export def "tagmanager-tags tag-manager-accounts-containers-workspaces-tags-list
 # --priority shape: {key?: string, list?: list, map?: list, type?: "typeUnspecified"|"template"|"integer"|"boolean"|"list"|"map"|"triggerReference"|"tagReference", value?: string}
 # --setupTag item shape: {stopOnSetupFailure?: bool, tagName?: string}
 # --teardownTag item shape: {stopTeardownOnFailure?: bool, tagName?: string}
-export def "tagmanager-tags tag-manager-accounts-containers-workspaces-tags-create" [
+export def "tagmanager-tags create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -813,13 +822,13 @@ export def "tagmanager-tags tag-manager-accounts-containers-workspaces-tags-crea
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --account-id: string # GTM Account ID.
-  --blocking-rule-id: list # Blocking rule IDs. If any of the listed rules evaluate to true, the tag will not fire. @mutable tagmanager.accounts.containers.workspaces.tags.create @mutable tagmanager.accounts.containers.workspaces.tags.update
-  --blocking-trigger-id: list # Blocking trigger IDs. If any of the listed triggers evaluate to true, the tag will not fire. @mutable tagmanager.accounts.containers.workspaces.tags.create @mutable tagmanager.accounts.containers.workspaces.tags.update
+  --blocking-rule-id: list<string> # Blocking rule IDs. If any of the listed rules evaluate to true, the tag will not fire. @mutable tagmanager.accounts.containers.workspaces.tags.create @mutable tagmanager.accounts.containers.workspaces.tags.update
+  --blocking-trigger-id: list<string> # Blocking trigger IDs. If any of the listed triggers evaluate to true, the tag will not fire. @mutable tagmanager.accounts.containers.workspaces.tags.create @mutable tagmanager.accounts.containers.workspaces.tags.update
   --consent-settings: record # shape: {consentStatus?: "notSet"|"notNeeded"|"needed", consentType?: record}
   --container-id: string # GTM Container ID.
   --fingerprint: string # The fingerprint of the GTM Tag as computed at storage time. This value is recomputed whenever the tag is modified.
-  --firing-rule-id: list # Firing rule IDs. A tag will fire when any of the listed rules are true and all of its blockingRuleIds (if any specified) are false. @mutable tagmanager.accounts.containers.workspaces.tags.create @mutable tagmanager.accounts.containers.workspaces.tags.update
-  --firing-trigger-id: list # Firing trigger IDs. A tag will fire when any of the listed triggers are true and all of its blockingTriggerIds (if any specified) are false. @mutable tagmanager.accounts.containers.workspaces.tags.create @mutable tagmanager.accounts.containers.workspaces.tags.update
+  --firing-rule-id: list<string> # Firing rule IDs. A tag will fire when any of the listed rules are true and all of its blockingRuleIds (if any specified) are false. @mutable tagmanager.accounts.containers.workspaces.tags.create @mutable tagmanager.accounts.containers.workspaces.tags.update
+  --firing-trigger-id: list<string> # Firing trigger IDs. A tag will fire when any of the listed triggers are true and all of its blockingTriggerIds (if any specified) are false. @mutable tagmanager.accounts.containers.workspaces.tags.create @mutable tagmanager.accounts.containers.workspaces.tags.update
   --live-only: oneof<nothing, bool> # If set to true, this tag will only fire in the live environment (e.g. not in preview or debug mode). @mutable tagmanager.accounts.containers.workspaces.tags.create @mutable tagmanager.accounts.containers.workspaces.tags.update
   --monitoring-metadata: record # Represents a Google Tag Manager Parameter. — shape: {key?: string, list?: list, map?: list, type?: "typeUnspecified"|"template"|"integer"|"boolean"|"list"|"map"|"triggerReference"|"tagReference", value?: string}
   --monitoring-metadata-tag-name-key: string # If non-empty, then the tag display name will be included in the monitoring metadata map using the key specified. @mutable tagmanager.accounts.containers.workspaces.tags.create @mutable tagmanager.accounts.containers.workspaces.tags.update
@@ -844,19 +853,19 @@ export def "tagmanager-tags tag-manager-accounts-containers-workspaces-tags-crea
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/tags") $qp)
-  let body = {"accountId": $account_id, "blockingRuleId": $blocking_rule_id, "blockingTriggerId": $blocking_trigger_id, "consentSettings": $consent_settings, "containerId": $container_id, "fingerprint": $fingerprint, "firingRuleId": $firing_rule_id, "firingTriggerId": $firing_trigger_id, "liveOnly": $live_only, "monitoringMetadata": $monitoring_metadata, "monitoringMetadataTagNameKey": $monitoring_metadata_tag_name_key, "name": $name, "notes": $notes, "parameter": $parameter, "parentFolderId": $parent_folder_id, "path": $path, "paused": $paused, "priority": $priority, "scheduleEndMs": $schedule_end_ms, "scheduleStartMs": $schedule_start_ms, "setupTag": $setup_tag, "tagFiringOption": $tag_firing_option, "tagId": $tag_id, "tagManagerUrl": $tag_manager_url, "teardownTag": $teardown_tag, "type": $type, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/tags") $qp)
+  let req_body = {"accountId": $account_id, "blockingRuleId": $blocking_rule_id, "blockingTriggerId": $blocking_trigger_id, "consentSettings": $consent_settings, "containerId": $container_id, "fingerprint": $fingerprint, "firingRuleId": $firing_rule_id, "firingTriggerId": $firing_trigger_id, "liveOnly": $live_only, "monitoringMetadata": $monitoring_metadata, "monitoringMetadataTagNameKey": $monitoring_metadata_tag_name_key, "name": $name, "notes": $notes, "parameter": $parameter, "parentFolderId": $parent_folder_id, "path": $path, "paused": $paused, "priority": $priority, "scheduleEndMs": $schedule_end_ms, "scheduleStartMs": $schedule_start_ms, "setupTag": $setup_tag, "tagFiringOption": $tag_firing_option, "tagId": $tag_id, "tagManagerUrl": $tag_manager_url, "teardownTag": $teardown_tag, "type": $type, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all GTM Templates of a GTM container workspace.
 #
 # GET /tagmanager/v2/{parent}/templates
 # operationId: tagmanager.accounts.containers.workspaces.templates.list
-export def "tagmanager-templates tag-manager-accounts-containers-workspaces-templates-list" [
+export def "tagmanager-templates list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -882,7 +891,7 @@ export def "tagmanager-templates tag-manager-accounts-containers-workspaces-temp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/templates") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/templates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -893,7 +902,7 @@ export def "tagmanager-templates tag-manager-accounts-containers-workspaces-temp
 # POST /tagmanager/v2/{parent}/templates
 # operationId: tagmanager.accounts.containers.workspaces.templates.create
 # --galleryReference shape: {host?: string, isModified?: bool, owner?: string, repository?: string, signature?: string, version?: string}
-export def "tagmanager-templates tag-manager-accounts-containers-workspaces-templates-create" [
+export def "tagmanager-templates create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -929,19 +938,19 @@ export def "tagmanager-templates tag-manager-accounts-containers-workspaces-temp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/templates") $qp)
-  let body = {"accountId": $account_id, "containerId": $container_id, "fingerprint": $fingerprint, "galleryReference": $gallery_reference, "name": $name, "path": $path, "tagManagerUrl": $tag_manager_url, "templateData": $template_data, "templateId": $template_id, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/templates") $qp)
+  let req_body = {"accountId": $account_id, "containerId": $container_id, "fingerprint": $fingerprint, "galleryReference": $gallery_reference, "name": $name, "path": $path, "tagManagerUrl": $tag_manager_url, "templateData": $template_data, "templateId": $template_id, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all GTM Triggers of a Container.
 #
 # GET /tagmanager/v2/{parent}/triggers
 # operationId: tagmanager.accounts.containers.workspaces.triggers.list
-export def "tagmanager-triggers tag-manager-accounts-containers-workspaces-triggers-list" [
+export def "tagmanager-triggers list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -967,7 +976,7 @@ export def "tagmanager-triggers tag-manager-accounts-containers-workspaces-trigg
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/triggers") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/triggers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -998,7 +1007,7 @@ export def "tagmanager-triggers tag-manager-accounts-containers-workspaces-trigg
 # --visiblePercentageMin shape: {key?: string, list?: list, map?: list, type?: "typeUnspecified"|"template"|"integer"|"boolean"|"list"|"map"|"triggerReference"|"tagReference", value?: string}
 # --waitForTags shape: {key?: string, list?: list, map?: list, type?: "typeUnspecified"|"template"|"integer"|"boolean"|"list"|"map"|"triggerReference"|"tagReference", value?: string}
 # --waitForTagsTimeout shape: {key?: string, list?: list, map?: list, type?: "typeUnspecified"|"template"|"integer"|"boolean"|"list"|"map"|"triggerReference"|"tagReference", value?: string}
-export def "tagmanager-triggers tag-manager-accounts-containers-workspaces-triggers-create" [
+export def "tagmanager-triggers create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1056,19 +1065,19 @@ export def "tagmanager-triggers tag-manager-accounts-containers-workspaces-trigg
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/triggers") $qp)
-  let body = {"accountId": $account_id, "autoEventFilter": $auto_event_filter, "checkValidation": $check_validation, "containerId": $container_id, "continuousTimeMinMilliseconds": $continuous_time_min_milliseconds, "customEventFilter": $custom_event_filter, "eventName": $event_name, "filter": $filter, "fingerprint": $fingerprint, "horizontalScrollPercentageList": $horizontal_scroll_percentage_list, "interval": $interval, "intervalSeconds": $interval_seconds, "limit": $limit, "maxTimerLengthSeconds": $max_timer_length_seconds, "name": $name, "notes": $notes, "parameter": $parameter, "parentFolderId": $parent_folder_id, "path": $path, "selector": $selector, "tagManagerUrl": $tag_manager_url, "totalTimeMinMilliseconds": $total_time_min_milliseconds, "triggerId": $trigger_id, "type": $type, "uniqueTriggerId": $unique_trigger_id, "verticalScrollPercentageList": $vertical_scroll_percentage_list, "visibilitySelector": $visibility_selector, "visiblePercentageMax": $visible_percentage_max, "visiblePercentageMin": $visible_percentage_min, "waitForTags": $wait_for_tags, "waitForTagsTimeout": $wait_for_tags_timeout, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/triggers") $qp)
+  let req_body = {"accountId": $account_id, "autoEventFilter": $auto_event_filter, "checkValidation": $check_validation, "containerId": $container_id, "continuousTimeMinMilliseconds": $continuous_time_min_milliseconds, "customEventFilter": $custom_event_filter, "eventName": $event_name, "filter": $filter, "fingerprint": $fingerprint, "horizontalScrollPercentageList": $horizontal_scroll_percentage_list, "interval": $interval, "intervalSeconds": $interval_seconds, "limit": $limit, "maxTimerLengthSeconds": $max_timer_length_seconds, "name": $name, "notes": $notes, "parameter": $parameter, "parentFolderId": $parent_folder_id, "path": $path, "selector": $selector, "tagManagerUrl": $tag_manager_url, "totalTimeMinMilliseconds": $total_time_min_milliseconds, "triggerId": $trigger_id, "type": $type, "uniqueTriggerId": $unique_trigger_id, "verticalScrollPercentageList": $vertical_scroll_percentage_list, "visibilitySelector": $visibility_selector, "visiblePercentageMax": $visible_percentage_max, "visiblePercentageMin": $visible_percentage_min, "waitForTags": $wait_for_tags, "waitForTagsTimeout": $wait_for_tags_timeout, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all users that have access to the account along with Account and Container user access granted to each of them.
 #
 # GET /tagmanager/v2/{parent}/user_permissions
 # operationId: tagmanager.accounts.user_permissions.list
-export def "tagmanager-user-permissions permissionslist" [
+export def "tagmanager-user-permissions list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1094,7 +1103,7 @@ export def "tagmanager-user-permissions permissionslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/user_permissions") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/user_permissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1106,7 +1115,7 @@ export def "tagmanager-user-permissions permissionslist" [
 # operationId: tagmanager.accounts.user_permissions.create
 # --accountAccess shape: {permission?: "accountPermissionUnspecified"|"noAccess"|"user"|"admin"}
 # --containerAccess item shape: {containerId?: string, permission?: "containerPermissionUnspecified"|"noAccess"|"read"|"edit"|"approve"|"publish"}
-export def "tagmanager-user-permissions permissionscreate" [
+export def "tagmanager-user-permissions create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1137,19 +1146,19 @@ export def "tagmanager-user-permissions permissionscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/user_permissions") $qp)
-  let body = {"accountAccess": $account_access, "accountId": $account_id, "containerAccess": $container_access, "emailAddress": $email_address, "path": $path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/user_permissions") $qp)
+  let req_body = {"accountAccess": $account_access, "accountId": $account_id, "containerAccess": $container_access, "emailAddress": $email_address, "path": $path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all GTM Variables of a Container.
 #
 # GET /tagmanager/v2/{parent}/variables
 # operationId: tagmanager.accounts.containers.workspaces.variables.list
-export def "tagmanager-variables tag-manager-accounts-containers-workspaces-variables-list" [
+export def "tagmanager-variables list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1175,7 +1184,7 @@ export def "tagmanager-variables tag-manager-accounts-containers-workspaces-vari
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/variables") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/variables") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1187,7 +1196,7 @@ export def "tagmanager-variables tag-manager-accounts-containers-workspaces-vari
 # operationId: tagmanager.accounts.containers.workspaces.variables.create
 # --formatValue shape: {caseConversionType?: "none"|"lowercase"|"uppercase", convertFalseToValue?: record, convertNullToValue?: record, convertTrueToValue?: record, convertUndefinedToValue?: record}
 # --parameter item shape: {key?: string, list?: list, map?: list, type?: "typeUnspecified"|"template"|"integer"|"boolean"|"list"|"map"|"triggerReference"|"tagReference", value?: string}
-export def "tagmanager-variables tag-manager-accounts-containers-workspaces-variables-create" [
+export def "tagmanager-variables create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1210,8 +1219,8 @@ export def "tagmanager-variables tag-manager-accounts-containers-workspaces-vari
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --account-id: string # GTM Account ID.
   --container-id: string # GTM Container ID.
-  --disabling-trigger-id: list # For mobile containers only: A list of trigger IDs for disabling conditional variables; the variable is enabled if one of the enabling trigger is true while all the disabling trigger are false. Treated as an unordered set. @mutable tagmanager.accounts.containers.workspaces.variables.create @mutable tagmanager.accounts.containers.workspaces.variables.update
-  --enabling-trigger-id: list # For mobile containers only: A list of trigger IDs for enabling conditional variables; the variable is enabled if one of the enabling triggers is true while all the disabling triggers are false. Treated as an unordered set. @mutable tagmanager.accounts.containers.workspaces.variables.create @mutable tagmanager.accounts.containers.workspaces.variables.update
+  --disabling-trigger-id: list<string> # For mobile containers only: A list of trigger IDs for disabling conditional variables; the variable is enabled if one of the enabling trigger is true while all the disabling trigger are false. Treated as an unordered set. @mutable tagmanager.accounts.containers.workspaces.variables.create @mutable tagmanager.accounts.containers.workspaces.variables.update
+  --enabling-trigger-id: list<string> # For mobile containers only: A list of trigger IDs for enabling conditional variables; the variable is enabled if one of the enabling triggers is true while all the disabling triggers are false. Treated as an unordered set. @mutable tagmanager.accounts.containers.workspaces.variables.create @mutable tagmanager.accounts.containers.workspaces.variables.update
   --fingerprint: string # The fingerprint of the GTM Variable as computed at storage time. This value is recomputed whenever the variable is modified.
   --format-value: record # shape: {caseConversionType?: "none"|"lowercase"|"uppercase", convertFalseToValue?: record, convertNullToValue?: record, convertTrueToValue?: record, convertUndefinedToValue?: record}
   --name: string # Variable display name. @mutable tagmanager.accounts.containers.workspaces.variables.create @mutable tagmanager.accounts.containers.workspaces.variables.update
@@ -1230,19 +1239,19 @@ export def "tagmanager-variables tag-manager-accounts-containers-workspaces-vari
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/variables") $qp)
-  let body = {"accountId": $account_id, "containerId": $container_id, "disablingTriggerId": $disabling_trigger_id, "enablingTriggerId": $enabling_trigger_id, "fingerprint": $fingerprint, "formatValue": $format_value, "name": $name, "notes": $notes, "parameter": $parameter, "parentFolderId": $parent_folder_id, "path": $path, "scheduleEndMs": $schedule_end_ms, "scheduleStartMs": $schedule_start_ms, "tagManagerUrl": $tag_manager_url, "type": $type, "variableId": $variable_id, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/variables") $qp)
+  let req_body = {"accountId": $account_id, "containerId": $container_id, "disablingTriggerId": $disabling_trigger_id, "enablingTriggerId": $enabling_trigger_id, "fingerprint": $fingerprint, "formatValue": $format_value, "name": $name, "notes": $notes, "parameter": $parameter, "parentFolderId": $parent_folder_id, "path": $path, "scheduleEndMs": $schedule_end_ms, "scheduleStartMs": $schedule_start_ms, "tagManagerUrl": $tag_manager_url, "type": $type, "variableId": $variable_id, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all Container Versions of a GTM Container.
 #
 # GET /tagmanager/v2/{parent}/version_headers
 # operationId: tagmanager.accounts.containers.version_headers.list
-export def "tagmanager-version-headers headerslist" [
+export def "tagmanager-version-headers list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1269,7 +1278,7 @@ export def "tagmanager-version-headers headerslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/version_headers") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/version_headers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1279,7 +1288,7 @@ export def "tagmanager-version-headers headerslist" [
 #
 # GET /tagmanager/v2/{parent}/version_headers:latest
 # operationId: tagmanager.accounts.containers.version_headers.latest
-export def "tagmanager-version-headers-latest headerslatest" [
+export def "tagmanager-version-headers-latest get" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1304,7 +1313,7 @@ export def "tagmanager-version-headers-latest headerslatest" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/version_headers:latest") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/version_headers:latest") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1314,7 +1323,7 @@ export def "tagmanager-version-headers-latest headerslatest" [
 #
 # GET /tagmanager/v2/{parent}/versions:live
 # operationId: tagmanager.accounts.containers.versions.live
-export def "tagmanager-versions-live tag-manager-accounts-containers" [
+export def "tagmanager-versions-live get" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1339,7 +1348,7 @@ export def "tagmanager-versions-live tag-manager-accounts-containers" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/versions:live") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/versions:live") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1349,7 +1358,7 @@ export def "tagmanager-versions-live tag-manager-accounts-containers" [
 #
 # GET /tagmanager/v2/{parent}/workspaces
 # operationId: tagmanager.accounts.containers.workspaces.list
-export def "tagmanager-workspaces tag-manager-accounts-containers-workspaces-list" [
+export def "tagmanager-workspaces list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1375,7 +1384,7 @@ export def "tagmanager-workspaces tag-manager-accounts-containers-workspaces-lis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/workspaces") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/workspaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1385,7 +1394,7 @@ export def "tagmanager-workspaces tag-manager-accounts-containers-workspaces-lis
 #
 # POST /tagmanager/v2/{parent}/workspaces
 # operationId: tagmanager.accounts.containers.workspaces.create
-export def "tagmanager-workspaces tag-manager-accounts-containers-workspaces-create" [
+export def "tagmanager-workspaces create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1419,19 +1428,19 @@ export def "tagmanager-workspaces tag-manager-accounts-containers-workspaces-cre
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/workspaces") $qp)
-  let body = {"accountId": $account_id, "containerId": $container_id, "description": $description, "fingerprint": $fingerprint, "name": $name, "path": $path, "tagManagerUrl": $tag_manager_url, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/workspaces") $qp)
+  let req_body = {"accountId": $account_id, "containerId": $container_id, "description": $description, "fingerprint": $fingerprint, "name": $name, "path": $path, "tagManagerUrl": $tag_manager_url, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all GTM Zones of a GTM container workspace.
 #
 # GET /tagmanager/v2/{parent}/zones
 # operationId: tagmanager.accounts.containers.workspaces.zones.list
-export def "tagmanager-zones tag-manager-accounts-containers-workspaces-zones-list" [
+export def "tagmanager-zones list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1457,7 +1466,7 @@ export def "tagmanager-zones tag-manager-accounts-containers-workspaces-zones-li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/zones") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/zones") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1467,10 +1476,10 @@ export def "tagmanager-zones tag-manager-accounts-containers-workspaces-zones-li
 #
 # POST /tagmanager/v2/{parent}/zones
 # operationId: tagmanager.accounts.containers.workspaces.zones.create
-# --boundary shape: {condition?: list, customEvaluationTriggerId?: list}
+# --boundary shape: {condition?: list, customEvaluationTriggerId?: list<string>}
 # --childContainer item shape: {nickname?: string, publicId?: string}
-# --typeRestriction shape: {enable?: bool, whitelistedTypeId?: list}
-export def "tagmanager-zones tag-manager-accounts-containers-workspaces-zones-create" [
+# --typeRestriction shape: {enable?: bool, whitelistedTypeId?: list<string>}
+export def "tagmanager-zones create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1492,7 +1501,7 @@ export def "tagmanager-zones tag-manager-accounts-containers-workspaces-zones-cr
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --account-id: string # GTM Account ID.
-  --boundary: record # Represents a Zone's boundaries. — shape: {condition?: list, customEvaluationTriggerId?: list}
+  --boundary: record # Represents a Zone's boundaries. — shape: {condition?: list, customEvaluationTriggerId?: list<string>}
   --child-container: list # Containers that are children of this Zone. — item shape: {nickname?: string, publicId?: string}
   --container-id: string # GTM Container ID.
   --fingerprint: string # The fingerprint of the GTM Zone as computed at storage time. This value is recomputed whenever the zone is modified.
@@ -1500,7 +1509,7 @@ export def "tagmanager-zones tag-manager-accounts-containers-workspaces-zones-cr
   --notes: string # User notes on how to apply this zone in the container.
   --path: string # GTM Zone's API relative path.
   --tag-manager-url: string # Auto generated link to the tag manager UI
-  --type-restriction: record # Represents a Zone's type restrictions. — shape: {enable?: bool, whitelistedTypeId?: list}
+  --type-restriction: record # Represents a Zone's type restrictions. — shape: {enable?: bool, whitelistedTypeId?: list<string>}
   --workspace-id: string # GTM Workspace ID.
   --zone-id: string # The Zone ID uniquely identifies the GTM Zone.
 ]: any -> record<accountId: string, boundary: record<condition: list<record>, customEvaluationTriggerId: list<string>>, childContainer: table<nickname: string, publicId: string>, containerId: string, fingerprint: string, name: string, notes: string, path: string, tagManagerUrl: string, typeRestriction: record<enable: bool, whitelistedTypeId: list<string>>, workspaceId: string, zoneId: string> {
@@ -1508,19 +1517,19 @@ export def "tagmanager-zones tag-manager-accounts-containers-workspaces-zones-cr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/tagmanager/v2/{parent}/zones") $qp)
-  let body = {"accountId": $account_id, "boundary": $boundary, "childContainer": $child_container, "containerId": $container_id, "fingerprint": $fingerprint, "name": $name, "notes": $notes, "path": $path, "tagManagerUrl": $tag_manager_url, "typeRestriction": $type_restriction, "workspaceId": $workspace_id, "zoneId": $zone_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/zones") $qp)
+  let req_body = {"accountId": $account_id, "boundary": $boundary, "childContainer": $child_container, "containerId": $container_id, "fingerprint": $fingerprint, "name": $name, "notes": $notes, "path": $path, "tagManagerUrl": $tag_manager_url, "typeRestriction": $type_restriction, "workspaceId": $workspace_id, "zoneId": $zone_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes a user from the account, revoking access to it and all of its containers.
 #
 # DELETE /tagmanager/v2/{path}
 # operationId: tagmanager.accounts.user_permissions.delete
-export def "tagmanager permissionsdelete" [
+export def "tagmanager delete" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1541,12 +1550,12 @@ export def "tagmanager permissionsdelete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --type: list # The types of built-in variables to delete.
+  --type: list<string> # The types of built-in variables to delete.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "type" $type "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/tagmanager/v2/{path}") $qp)
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1556,7 +1565,7 @@ export def "tagmanager permissionsdelete" [
 #
 # GET /tagmanager/v2/{path}
 # operationId: tagmanager.accounts.user_permissions.get
-export def "tagmanager permissionsget" [
+export def "tagmanager get" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1582,7 +1591,7 @@ export def "tagmanager permissionsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "containerVersionId" $container_version_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/tagmanager/v2/{path}") $qp)
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1594,7 +1603,7 @@ export def "tagmanager permissionsget" [
 # operationId: tagmanager.accounts.user_permissions.update
 # --accountAccess shape: {permission?: "accountPermissionUnspecified"|"noAccess"|"user"|"admin"}
 # --containerAccess item shape: {containerId?: string, permission?: "containerPermissionUnspecified"|"noAccess"|"read"|"edit"|"approve"|"publish"}
-export def "tagmanager permissionsupdate" [
+export def "tagmanager update" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1626,19 +1635,19 @@ export def "tagmanager permissionsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fingerprint" $fingerprint "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/tagmanager/v2/{path}") $qp)
-  let body = {"accountAccess": $account_access, "accountId": $account_id, "containerAccess": $container_access, "emailAddress": $email_address, "path": $body_path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}") $qp)
+  let req_body = {"accountAccess": $account_access, "accountId": $account_id, "containerAccess": $container_access, "emailAddress": $email_address, "path": $body_path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reverts changes to a GTM Built-In Variables in a GTM Workspace.
 #
 # POST /tagmanager/v2/{path}/built_in_variables:revert
 # operationId: tagmanager.accounts.containers.workspaces.built_in_variables.revert
-export def "tagmanager-built-in-variables-revert variablesrevert" [
+export def "tagmanager-built-in-variables-revert create" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1664,7 +1673,7 @@ export def "tagmanager-built-in-variables-revert variablesrevert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/tagmanager/v2/{path}/built_in_variables:revert") $qp)
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}/built_in_variables:revert") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1674,7 +1683,7 @@ export def "tagmanager-built-in-variables-revert variablesrevert" [
 #
 # GET /tagmanager/v2/{path}/status
 # operationId: tagmanager.accounts.containers.workspaces.getStatus
-export def "tagmanager-status tag-manager-accounts-containers-workspaces-get" [
+export def "tagmanager-status get" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1699,7 +1708,7 @@ export def "tagmanager-status tag-manager-accounts-containers-workspaces-get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/tagmanager/v2/{path}/status") $qp)
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}/status") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1709,7 +1718,7 @@ export def "tagmanager-status tag-manager-accounts-containers-workspaces-get" [
 #
 # POST /tagmanager/v2/{path}:combine
 # operationId: tagmanager.accounts.containers.combine
-export def "tagmanager tag-manager-accounts-containers-combine" [
+export def "tagmanager create-combine" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1737,7 +1746,7 @@ export def "tagmanager tag-manager-accounts-containers-combine" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "allowUserPermissionFeatureUpdate" $allow_user_permission_feature_update "scalar") (serialize-qp "containerId" $container_id "scalar") (serialize-qp "settingSource" $setting_source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/tagmanager/v2/{path}:combine") $qp)
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:combine") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1747,7 +1756,7 @@ export def "tagmanager tag-manager-accounts-containers-combine" [
 #
 # POST /tagmanager/v2/{path}:create_version
 # operationId: tagmanager.accounts.containers.workspaces.create_version
-export def "tagmanager version" [
+export def "tagmanager create-version" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1775,19 +1784,19 @@ export def "tagmanager version" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/tagmanager/v2/{path}:create_version") $qp)
-  let body = {"name": $name, "notes": $notes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:create_version") $qp)
+  let req_body = {"name": $name, "notes": $notes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all entities in a GTM Folder.
 #
 # POST /tagmanager/v2/{path}:entities
 # operationId: tagmanager.accounts.containers.workspaces.folders.entities
-export def "tagmanager tag-manager-accounts-containers-workspaces-folders-entities" [
+export def "tagmanager create-entities" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1813,7 +1822,7 @@ export def "tagmanager tag-manager-accounts-containers-workspaces-folders-entiti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/tagmanager/v2/{path}:entities") $qp)
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:entities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1823,7 +1832,7 @@ export def "tagmanager tag-manager-accounts-containers-workspaces-folders-entiti
 #
 # POST /tagmanager/v2/{path}:move_entities_to_folder
 # operationId: tagmanager.accounts.containers.workspaces.folders.move_entities_to_folder
-export def "tagmanager folder" [
+export def "tagmanager move-entities-to-folder" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1844,9 +1853,9 @@ export def "tagmanager folder" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --tag-id: list # The tags to be moved to the folder.
-  --trigger-id: list # The triggers to be moved to the folder.
-  --variable-id: list # The variables to be moved to the folder.
+  --tag-id: list<string> # The tags to be moved to the folder.
+  --trigger-id: list<string> # The triggers to be moved to the folder.
+  --variable-id: list<string> # The variables to be moved to the folder.
   --account-id: string # GTM Account ID.
   --container-id: string # GTM Container ID.
   --fingerprint: string # The fingerprint of the GTM Folder as computed at storage time. This value is recomputed whenever the folder is modified.
@@ -1861,19 +1870,19 @@ export def "tagmanager folder" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "tagId" $tag_id "multi") (serialize-qp "triggerId" $trigger_id "multi") (serialize-qp "variableId" $variable_id "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/tagmanager/v2/{path}:move_entities_to_folder") $qp)
-  let body = {"accountId": $account_id, "containerId": $container_id, "fingerprint": $fingerprint, "folderId": $folder_id, "name": $name, "notes": $notes, "path": $body_path, "tagManagerUrl": $tag_manager_url, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:move_entities_to_folder") $qp)
+  let req_body = {"accountId": $account_id, "containerId": $container_id, "fingerprint": $fingerprint, "folderId": $folder_id, "name": $name, "notes": $notes, "path": $body_path, "tagManagerUrl": $tag_manager_url, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Move Tag ID out of a Container.
 #
 # POST /tagmanager/v2/{path}:move_tag_id
 # operationId: tagmanager.accounts.containers.move_tag_id
-export def "tagmanager id" [
+export def "tagmanager move-tag" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1904,7 +1913,7 @@ export def "tagmanager id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "allowUserPermissionFeatureUpdate" $allow_user_permission_feature_update "scalar") (serialize-qp "copySettings" $copy_settings "scalar") (serialize-qp "copyTermsOfService" $copy_terms_of_service "scalar") (serialize-qp "copyUsers" $copy_users "scalar") (serialize-qp "tagId" $tag_id "scalar") (serialize-qp "tagName" $tag_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/tagmanager/v2/{path}:move_tag_id") $qp)
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:move_tag_id") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1914,7 +1923,7 @@ export def "tagmanager id" [
 #
 # POST /tagmanager/v2/{path}:publish
 # operationId: tagmanager.accounts.containers.versions.publish
-export def "tagmanager tag-manager-accounts-containers-versions-publish" [
+export def "tagmanager publish" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1940,7 +1949,7 @@ export def "tagmanager tag-manager-accounts-containers-versions-publish" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fingerprint" $fingerprint "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/tagmanager/v2/{path}:publish") $qp)
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:publish") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1950,7 +1959,7 @@ export def "tagmanager tag-manager-accounts-containers-versions-publish" [
 #
 # POST /tagmanager/v2/{path}:quick_preview
 # operationId: tagmanager.accounts.containers.workspaces.quick_preview
-export def "tagmanager preview" [
+export def "tagmanager create-quick-preview" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1975,7 +1984,7 @@ export def "tagmanager preview" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/tagmanager/v2/{path}:quick_preview") $qp)
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:quick_preview") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1985,7 +1994,7 @@ export def "tagmanager preview" [
 #
 # POST /tagmanager/v2/{path}:reauthorize
 # operationId: tagmanager.accounts.containers.environments.reauthorize
-export def "tagmanager tag-manager-accounts-containers-environments-reauthorize" [
+export def "tagmanager create-reauthorize" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2019,19 +2028,19 @@ export def "tagmanager tag-manager-accounts-containers-environments-reauthorize"
   --body-path: string # GTM Environment's API relative path.
   --tag-manager-url: string # Auto generated link to the tag manager UI
   --type: string@type-completer # The type of this environment.
-  --body-url: string # Default preview page url for the environment. @mutable tagmanager.accounts.containers.environments.create @mutable tagmanager.accounts.containers.environments.update
+  --url: string # Default preview page url for the environment. @mutable tagmanager.accounts.containers.environments.create @mutable tagmanager.accounts.containers.environments.update
   --workspace-id: string # Represents a link to a quick preview of a workspace.
 ]: any -> record<accountId: string, authorizationCode: string, authorizationTimestamp: string, containerId: string, containerVersionId: string, description: string, enableDebug: bool, environmentId: string, fingerprint: string, name: string, path: string, tagManagerUrl: string, type: string, url: string, workspaceId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/tagmanager/v2/{path}:reauthorize") $qp)
-  let body = {"accountId": $account_id, "authorizationCode": $authorization_code, "authorizationTimestamp": $authorization_timestamp, "containerId": $container_id, "containerVersionId": $container_version_id, "description": $description, "enableDebug": $enable_debug, "environmentId": $environment_id, "fingerprint": $fingerprint, "name": $name, "path": $body_path, "tagManagerUrl": $tag_manager_url, "type": $type, "url": $body_url, "workspaceId": $workspace_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:reauthorize") $qp)
+  let req_body = {"accountId": $account_id, "authorizationCode": $authorization_code, "authorizationTimestamp": $authorization_timestamp, "containerId": $container_id, "containerVersionId": $container_version_id, "description": $description, "enableDebug": $enable_debug, "environmentId": $environment_id, "fingerprint": $fingerprint, "name": $name, "path": $body_path, "tagManagerUrl": $tag_manager_url, "type": $type, "url": $url, "workspaceId": $workspace_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Resolves a merge conflict for a workspace entity by updating it to the resolved entity passed in the request.
@@ -2040,10 +2049,10 @@ export def "tagmanager tag-manager-accounts-containers-environments-reauthorize"
 # operationId: tagmanager.accounts.containers.workspaces.resolve_conflict
 # --client shape: {accountId?: string, clientId?: string, containerId?: string, fingerprint?: string, name?: string, notes?: string, parameter?: list, parentFolderId?: string, path?: string, priority?: int, tagManagerUrl?: string, type?: string, workspaceId?: string}
 # --folder shape: {accountId?: string, containerId?: string, fingerprint?: string, folderId?: string, name?: string, notes?: string, path?: string, tagManagerUrl?: string, workspaceId?: string}
-# --tag shape: {accountId?: string, blockingRuleId?: list, blockingTriggerId?: list, consentSettings?: record, containerId?: string, fingerprint?: string, firingRuleId?: list, firingTriggerId?: list, liveOnly?: bool, monitoringMetadata?: record, monitoringMetadataTagNameKey?: string, name?: string, notes?: string, parameter?: list, parentFolderId?: string, path?: string, paused?: bool, priority?: record, scheduleEndMs?: string, scheduleStartMs?: string, setupTag?: list, tagFiringOption?: "tagFiringOptionUnspecified"|"unlimited"|"oncePerEvent"|"oncePerLoad", tagId?: string, tagManagerUrl?: string, teardownTag?: list, type?: string, workspaceId?: string}
-# --trigger shape: {accountId?: string, autoEventFilter?: list, checkValidation?: record, containerId?: string, continuousTimeMinMilliseconds?: record, customEventFilter?: list, eventName?: record, filter?: list, fingerprint?: string, horizontalScrollPercentageList?: record, interval?: record, intervalSeconds?: record, limit?: record, maxTimerLengthSeconds?: record, name?: string, notes?: string, parameter?: list, parentFolderId?: string, path?: string, selector?: record, tagManagerUrl?: string, totalTimeMinMilliseconds?: record, triggerId?: string, type?: "eventTypeUnspecified"|"pageview"|"domReady"|"windowLoaded"|"customEvent"|"triggerGroup"|"init"|"consentInit"|"serverPageview"|"always"|"firebaseAppException"|"firebaseAppUpdate"|"firebaseCampaign"|"firebaseFirstOpen"|"firebaseInAppPurchase"|"firebaseNotificationDismiss"|"firebaseNotificationForeground"|"firebaseNotificationOpen"|"firebaseNotificationReceive"|"firebaseOsUpdate"|"firebaseSessionStart"|"firebaseUserEngagement"|"formSubmission"|"click"|"linkClick"|"jsError"|"historyChange"|"timer"|"ampClick"|"ampTimer"|"ampScroll"|"ampVisibility"|"youTubeVideo"|"scrollDepth"|"elementVisibility", uniqueTriggerId?: record, verticalScrollPercentageList?: record, visibilitySelector?: record, visiblePercentageMax?: record, visiblePercentageMin?: record, waitForTags?: record, waitForTagsTimeout?: record, workspaceId?: string}
-# --variable shape: {accountId?: string, containerId?: string, disablingTriggerId?: list, enablingTriggerId?: list, fingerprint?: string, formatValue?: record, name?: string, notes?: string, parameter?: list, parentFolderId?: string, path?: string, scheduleEndMs?: string, scheduleStartMs?: string, tagManagerUrl?: string, type?: string, variableId?: string, workspaceId?: string}
-export def "tagmanager conflict" [
+# --tag shape: {accountId?: string, blockingRuleId?: list<string>, blockingTriggerId?: list<string>, consentSettings?: record, containerId?: string, fingerprint?: string, firingRuleId?: list<string>, firingTriggerId?: list<string>, liveOnly?: bool, monitoringMetadata?: record, monitoringMetadataTagNameKey?: string, name?: string, notes?: string, parameter?: list, parentFolderId?: string, path?: string, paused?: bool, priority?: record, scheduleEndMs?: string, scheduleStartMs?: string, setupTag?: list, ... (6 more fields)}
+# --trigger shape: {accountId?: string, autoEventFilter?: list, checkValidation?: record, containerId?: string, continuousTimeMinMilliseconds?: record, customEventFilter?: list, eventName?: record, filter?: list, fingerprint?: string, horizontalScrollPercentageList?: record, interval?: record, intervalSeconds?: record, limit?: record, maxTimerLengthSeconds?: record, name?: string, notes?: string, parameter?: list, parentFolderId?: string, path?: string, selector?: record, tagManagerUrl?: string, ... (11 more fields)}
+# --variable shape: {accountId?: string, containerId?: string, disablingTriggerId?: list<string>, enablingTriggerId?: list<string>, fingerprint?: string, formatValue?: record, name?: string, notes?: string, parameter?: list, parentFolderId?: string, path?: string, scheduleEndMs?: string, scheduleStartMs?: string, tagManagerUrl?: string, type?: string, variableId?: string, workspaceId?: string}
+export def "tagmanager create-resolve-conflict" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2068,27 +2077,27 @@ export def "tagmanager conflict" [
   --change-status: string@change-status-completer # Represents how the entity has been changed in the workspace.
   --client: record # shape: {accountId?: string, clientId?: string, containerId?: string, fingerprint?: string, name?: string, notes?: string, parameter?: list, parentFolderId?: string, path?: string, priority?: int, tagManagerUrl?: string, type?: string, workspaceId?: string}
   --folder: record # Represents a Google Tag Manager Folder. — shape: {accountId?: string, containerId?: string, fingerprint?: string, folderId?: string, name?: string, notes?: string, path?: string, tagManagerUrl?: string, workspaceId?: string}
-  --tag: record # Represents a Google Tag Manager Tag. — shape: {accountId?: string, blockingRuleId?: list, blockingTriggerId?: list, consentSettings?: record, containerId?: string, fingerprint?: string, firingRuleId?: list, firingTriggerId?: list, liveOnly?: bool, monitoringMetadata?: record, monitoringMetadataTagNameKey?: string, name?: string, notes?: string, parameter?: list, parentFolderId?: string, path?: string, paused?: bool, priority?: record, scheduleEndMs?: string, scheduleStartMs?: string, setupTag?: list, tagFiringOption?: "tagFiringOptionUnspecified"|"unlimited"|"oncePerEvent"|"oncePerLoad", tagId?: string, tagManagerUrl?: string, teardownTag?: list, type?: string, workspaceId?: string}
-  --trigger: record # Represents a Google Tag Manager Trigger — shape: {accountId?: string, autoEventFilter?: list, checkValidation?: record, containerId?: string, continuousTimeMinMilliseconds?: record, customEventFilter?: list, eventName?: record, filter?: list, fingerprint?: string, horizontalScrollPercentageList?: record, interval?: record, intervalSeconds?: record, limit?: record, maxTimerLengthSeconds?: record, name?: string, notes?: string, parameter?: list, parentFolderId?: string, path?: string, selector?: record, tagManagerUrl?: string, totalTimeMinMilliseconds?: record, triggerId?: string, type?: "eventTypeUnspecified"|"pageview"|"domReady"|"windowLoaded"|"customEvent"|"triggerGroup"|"init"|"consentInit"|"serverPageview"|"always"|"firebaseAppException"|"firebaseAppUpdate"|"firebaseCampaign"|"firebaseFirstOpen"|"firebaseInAppPurchase"|"firebaseNotificationDismiss"|"firebaseNotificationForeground"|"firebaseNotificationOpen"|"firebaseNotificationReceive"|"firebaseOsUpdate"|"firebaseSessionStart"|"firebaseUserEngagement"|"formSubmission"|"click"|"linkClick"|"jsError"|"historyChange"|"timer"|"ampClick"|"ampTimer"|"ampScroll"|"ampVisibility"|"youTubeVideo"|"scrollDepth"|"elementVisibility", uniqueTriggerId?: record, verticalScrollPercentageList?: record, visibilitySelector?: record, visiblePercentageMax?: record, visiblePercentageMin?: record, waitForTags?: record, waitForTagsTimeout?: record, workspaceId?: string}
-  --variable: record # Represents a Google Tag Manager Variable. — shape: {accountId?: string, containerId?: string, disablingTriggerId?: list, enablingTriggerId?: list, fingerprint?: string, formatValue?: record, name?: string, notes?: string, parameter?: list, parentFolderId?: string, path?: string, scheduleEndMs?: string, scheduleStartMs?: string, tagManagerUrl?: string, type?: string, variableId?: string, workspaceId?: string}
+  --tag: record # Represents a Google Tag Manager Tag. — shape: {accountId?: string, blockingRuleId?: list<string>, blockingTriggerId?: list<string>, consentSettings?: record, containerId?: string, fingerprint?: string, firingRuleId?: list<string>, firingTriggerId?: list<string>, liveOnly?: bool, monitoringMetadata?: record, monitoringMetadataTagNameKey?: string, name?: string, notes?: string, parameter?: list, parentFolderId?: string, path?: string, paused?: bool, priority?: record, scheduleEndMs?: string, scheduleStartMs?: string, setupTag?: list, ... (6 more fields)}
+  --trigger: record # Represents a Google Tag Manager Trigger — shape: {accountId?: string, autoEventFilter?: list, checkValidation?: record, containerId?: string, continuousTimeMinMilliseconds?: record, customEventFilter?: list, eventName?: record, filter?: list, fingerprint?: string, horizontalScrollPercentageList?: record, interval?: record, intervalSeconds?: record, limit?: record, maxTimerLengthSeconds?: record, name?: string, notes?: string, parameter?: list, parentFolderId?: string, path?: string, selector?: record, tagManagerUrl?: string, ... (11 more fields)}
+  --variable: record # Represents a Google Tag Manager Variable. — shape: {accountId?: string, containerId?: string, disablingTriggerId?: list<string>, enablingTriggerId?: list<string>, fingerprint?: string, formatValue?: record, name?: string, notes?: string, parameter?: list, parentFolderId?: string, path?: string, scheduleEndMs?: string, scheduleStartMs?: string, tagManagerUrl?: string, type?: string, variableId?: string, workspaceId?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fingerprint" $fingerprint "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/tagmanager/v2/{path}:resolve_conflict") $qp)
-  let body = {"changeStatus": $change_status, "client": $client, "folder": $folder, "tag": $tag, "trigger": $trigger, "variable": $variable} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:resolve_conflict") $qp)
+  let req_body = {"changeStatus": $change_status, "client": $client, "folder": $folder, "tag": $tag, "trigger": $trigger, "variable": $variable} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reverts changes to a GTM Zone in a GTM Workspace.
 #
 # POST /tagmanager/v2/{path}:revert
 # operationId: tagmanager.accounts.containers.workspaces.zones.revert
-export def "tagmanager tag-manager-accounts-containers-workspaces-zones-revert" [
+export def "tagmanager create-revert" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2114,7 +2123,7 @@ export def "tagmanager tag-manager-accounts-containers-workspaces-zones-revert" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fingerprint" $fingerprint "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/tagmanager/v2/{path}:revert") $qp)
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:revert") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2124,7 +2133,7 @@ export def "tagmanager tag-manager-accounts-containers-workspaces-zones-revert" 
 #
 # POST /tagmanager/v2/{path}:set_latest
 # operationId: tagmanager.accounts.containers.versions.set_latest
-export def "tagmanager latest" [
+export def "tagmanager update-latest" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2149,7 +2158,7 @@ export def "tagmanager latest" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/tagmanager/v2/{path}:set_latest") $qp)
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:set_latest") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2159,7 +2168,7 @@ export def "tagmanager latest" [
 #
 # GET /tagmanager/v2/{path}:snippet
 # operationId: tagmanager.accounts.containers.snippet
-export def "tagmanager tag-manager-accounts-containers-snippet" [
+export def "tagmanager get-snippet" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2184,7 +2193,7 @@ export def "tagmanager tag-manager-accounts-containers-snippet" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/tagmanager/v2/{path}:snippet") $qp)
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:snippet") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2194,7 +2203,7 @@ export def "tagmanager tag-manager-accounts-containers-snippet" [
 #
 # POST /tagmanager/v2/{path}:sync
 # operationId: tagmanager.accounts.containers.workspaces.sync
-export def "tagmanager tag-manager-accounts-containers-workspaces-sync" [
+export def "tagmanager sync" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2219,7 +2228,7 @@ export def "tagmanager tag-manager-accounts-containers-workspaces-sync" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/tagmanager/v2/{path}:sync") $qp)
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:sync") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2229,7 +2238,7 @@ export def "tagmanager tag-manager-accounts-containers-workspaces-sync" [
 #
 # POST /tagmanager/v2/{path}:undelete
 # operationId: tagmanager.accounts.containers.versions.undelete
-export def "tagmanager tag-manager-accounts-containers-versions-undelete" [
+export def "tagmanager create-undelete" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2254,7 +2263,7 @@ export def "tagmanager tag-manager-accounts-containers-versions-undelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({path: $path} | format pattern "/tagmanager/v2/{path}:undelete") $qp)
+  let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:undelete") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

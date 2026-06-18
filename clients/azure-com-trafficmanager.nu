@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-network-check-traffic-manager-name-availability check-traffic-manager-relative-dns" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-network-check-traffic-manager-name-availability check-profiles-relative-dns" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # POST /providers/Microsoft.Network/checkTrafficManagerNameAvailability
 # operationId: Profiles_CheckTrafficManagerRelativeDnsNameAvailability
-export def "providers-microsoft-network-check-traffic-manager-name-availability check-traffic-manager-relative-dns" [
+export def "providers-microsoft-network-check-traffic-manager-name-availability check-profiles-relative-dns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,11 +120,11 @@ export def "providers-microsoft-network-check-traffic-manager-name-availability 
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Network/checkTrafficManagerNameAvailability" $qp)
-  let body = {"name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the default Geographic Hierarchy used by the Geographic traffic routing method.
@@ -161,7 +170,7 @@ export def "subscriptions-providers-microsoft-network-traffic-manager-user-metri
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/trafficManagerUserMetricsKeys/default") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/trafficManagerUserMetricsKeys/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -186,7 +195,7 @@ export def "subscriptions-providers-microsoft-network-traffic-manager-user-metri
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/trafficManagerUserMetricsKeys/default") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/trafficManagerUserMetricsKeys/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -211,7 +220,7 @@ export def "subscriptions-providers-microsoft-network-traffic-manager-user-metri
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/trafficManagerUserMetricsKeys/default") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/trafficManagerUserMetricsKeys/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -221,7 +230,7 @@ export def "subscriptions-providers-microsoft-network-traffic-manager-user-metri
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/trafficmanagerprofiles
 # operationId: Profiles_ListBySubscription
-export def "subscriptions-providers-microsoft-network-trafficmanagerprofiles list-by" [
+export def "subscriptions-providers-microsoft-network-trafficmanagerprofiles list-profiles" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -236,7 +245,7 @@ export def "subscriptions-providers-microsoft-network-trafficmanagerprofiles lis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/trafficmanagerprofiles") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/trafficmanagerprofiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -246,7 +255,7 @@ export def "subscriptions-providers-microsoft-network-trafficmanagerprofiles lis
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/trafficmanagerprofiles
 # operationId: Profiles_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles list-profiles" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -262,7 +271,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -272,7 +281,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/trafficmanagerprofiles/{profileName}
 # operationId: Profiles_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles delete-by-subscriptionId-resourceGroupName-profileName" [
+export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles delete-profiles" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -289,7 +298,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -299,7 +308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/trafficmanagerprofiles/{profileName}
 # operationId: Profiles_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles get-by-subscriptionId-resourceGroupName-profileName" [
+export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles get-profiles" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -316,7 +325,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -327,7 +336,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/trafficmanagerprofiles/{profileName}
 # operationId: Profiles_Update
 # --properties shape: {dnsConfig?: any, endpoints?: list, maxReturn?: int, monitorConfig?: any, profileStatus?: "Enabled"|"Disabled", trafficRoutingMethod?: "Performance"|"Priority"|"Weighted"|"Geographic"|"MultiValue"|"Subnet", trafficViewEnrollmentStatus?: "Enabled"|"Disabled"}
-export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles update-by-subscriptionId-resourceGroupName-profileName" [
+export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles update-profiles" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -348,12 +357,12 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or update a Traffic Manager profile.
@@ -361,7 +370,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/trafficmanagerprofiles/{profileName}
 # operationId: Profiles_CreateOrUpdate
 # --properties shape: {dnsConfig?: any, endpoints?: list, maxReturn?: int, monitorConfig?: any, profileStatus?: "Enabled"|"Disabled", trafficRoutingMethod?: "Performance"|"Priority"|"Weighted"|"Geographic"|"MultiValue"|"Subnet", trafficViewEnrollmentStatus?: "Enabled"|"Disabled"}
-export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles create-or-update-by-subscriptionId-resourceGroupName-profileName" [
+export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles create-profiles-or-update" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -382,12 +391,12 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}") $qp)
-  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets latest heatmap for Traffic Manager profile.
@@ -407,14 +416,14 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --top-left: list # The top left latitude,longitude pair of the rectangular viewport to query for. (allows empty value)
-  --bot-right: list # The bottom right latitude,longitude pair of the rectangular viewport to query for. (allows empty value)
+  --top-left: list<float> # The top left latitude,longitude pair of the rectangular viewport to query for. (allows empty value)
+  --bot-right: list<float> # The bottom right latitude,longitude pair of the rectangular viewport to query for. (allows empty value)
   --api-version: string # Client Api Version.
 ]: nothing -> record<properties: record<endTime: string, endpoints: list<record>, startTime: string, trafficFlows: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "topLeft" $top_left "csv") (serialize-qp "botRight" $bot_right "csv") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, heat_map_type: $heat_map_type} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}/heatMaps/{heat_map_type}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), heat_map_type: (encode-path-segment $heat_map_type)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}/heatMaps/{heat_map_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -424,7 +433,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/trafficmanagerprofiles/{profileName}/{endpointType}/{endpointName}
 # operationId: Endpoints_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles delete-by-subscriptionId-resourceGroupName-profileName-endpointType-endpointName" [
+export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles delete-endpoints" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -443,7 +452,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_type: $endpoint_type, endpoint_name: $endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}/{endpoint_type}/{endpoint_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_type: (encode-path-segment $endpoint_type), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}/{endpoint_type}/{endpoint_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -453,7 +462,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/trafficmanagerprofiles/{profileName}/{endpointType}/{endpointName}
 # operationId: Endpoints_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles get-by-subscriptionId-resourceGroupName-profileName-endpointType-endpointName" [
+export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles get-endpoints" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -472,7 +481,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_type: $endpoint_type, endpoint_name: $endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}/{endpoint_type}/{endpoint_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_type: (encode-path-segment $endpoint_type), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}/{endpoint_type}/{endpoint_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -482,8 +491,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/trafficmanagerprofiles/{profileName}/{endpointType}/{endpointName}
 # operationId: Endpoints_Update
-# --properties shape: {customHeaders?: list, endpointLocation?: string, endpointMonitorStatus?: "CheckingEndpoint"|"Online"|"Degraded"|"Disabled"|"Inactive"|"Stopped", endpointStatus?: "Enabled"|"Disabled", geoMapping?: list, minChildEndpoints?: int, priority?: int, subnets?: list, target?: string, targetResourceId?: string, weight?: int}
-export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles update-by-subscriptionId-resourceGroupName-profileName-endpointType-endpointName" [
+# --properties shape: {customHeaders?: list, endpointLocation?: string, endpointMonitorStatus?: "CheckingEndpoint"|"Online"|"Degraded"|"Disabled"|"Inactive"|"Stopped", endpointStatus?: "Enabled"|"Disabled", geoMapping?: list<string>, minChildEndpoints?: int, priority?: int, subnets?: list, target?: string, targetResourceId?: string, weight?: int}
+export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles update-endpoints" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -498,26 +507,26 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --properties: any # Class representing a Traffic Manager endpoint properties. — shape: {customHeaders?: list, endpointLocation?: string, endpointMonitorStatus?: "CheckingEndpoint"|"Online"|"Degraded"|"Disabled"|"Inactive"|"Stopped", endpointStatus?: "Enabled"|"Disabled", geoMapping?: list, minChildEndpoints?: int, priority?: int, subnets?: list, target?: string, targetResourceId?: string, weight?: int}
+  --properties: any # Class representing a Traffic Manager endpoint properties. — shape: {customHeaders?: list, endpointLocation?: string, endpointMonitorStatus?: "CheckingEndpoint"|"Online"|"Degraded"|"Disabled"|"Inactive"|"Stopped", endpointStatus?: "Enabled"|"Disabled", geoMapping?: list<string>, minChildEndpoints?: int, priority?: int, subnets?: list, target?: string, targetResourceId?: string, weight?: int}
 ]: any -> record<properties: record<customHeaders: list<record>, endpointLocation: string, endpointMonitorStatus: string, endpointStatus: string, geoMapping: list<string>, minChildEndpoints: int, priority: int, subnets: list<record>, target: string, targetResourceId: string, weight: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_type: $endpoint_type, endpoint_name: $endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}/{endpoint_type}/{endpoint_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_type: (encode-path-segment $endpoint_type), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}/{endpoint_type}/{endpoint_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create or update a Traffic Manager endpoint.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/trafficmanagerprofiles/{profileName}/{endpointType}/{endpointName}
 # operationId: Endpoints_CreateOrUpdate
-# --properties shape: {customHeaders?: list, endpointLocation?: string, endpointMonitorStatus?: "CheckingEndpoint"|"Online"|"Degraded"|"Disabled"|"Inactive"|"Stopped", endpointStatus?: "Enabled"|"Disabled", geoMapping?: list, minChildEndpoints?: int, priority?: int, subnets?: list, target?: string, targetResourceId?: string, weight?: int}
-export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles create-or-update-by-subscriptionId-resourceGroupName-profileName-endpointType-endpointName" [
+# --properties shape: {customHeaders?: list, endpointLocation?: string, endpointMonitorStatus?: "CheckingEndpoint"|"Online"|"Degraded"|"Disabled"|"Inactive"|"Stopped", endpointStatus?: "Enabled"|"Disabled", geoMapping?: list<string>, minChildEndpoints?: int, priority?: int, subnets?: list, target?: string, targetResourceId?: string, weight?: int}
+export def "subscriptions-resource-groups-providers-microsoft-network-trafficmanagerprofiles create-endpoints-or-update" [
   subscription_id: string
   resource_group_name: string
   profile_name: string
@@ -532,16 +541,16 @@ export def "subscriptions-resource-groups-providers-microsoft-network-trafficman
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --properties: any # Class representing a Traffic Manager endpoint properties. — shape: {customHeaders?: list, endpointLocation?: string, endpointMonitorStatus?: "CheckingEndpoint"|"Online"|"Degraded"|"Disabled"|"Inactive"|"Stopped", endpointStatus?: "Enabled"|"Disabled", geoMapping?: list, minChildEndpoints?: int, priority?: int, subnets?: list, target?: string, targetResourceId?: string, weight?: int}
+  --properties: any # Class representing a Traffic Manager endpoint properties. — shape: {customHeaders?: list, endpointLocation?: string, endpointMonitorStatus?: "CheckingEndpoint"|"Online"|"Degraded"|"Disabled"|"Inactive"|"Stopped", endpointStatus?: "Enabled"|"Disabled", geoMapping?: list<string>, minChildEndpoints?: int, priority?: int, subnets?: list, target?: string, targetResourceId?: string, weight?: int}
 ]: any -> record<properties: record<customHeaders: list<record>, endpointLocation: string, endpointMonitorStatus: string, endpointStatus: string, geoMapping: list<string>, minChildEndpoints: int, priority: int, subnets: list<record>, target: string, targetResourceId: string, weight: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, profile_name: $profile_name, endpoint_type: $endpoint_type, endpoint_name: $endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}/{endpoint_type}/{endpoint_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), profile_name: (encode-path-segment $profile_name), endpoint_type: (encode-path-segment $endpoint_type), endpoint_name: (encode-path-segment $endpoint_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/trafficmanagerprofiles/{profile_name}/{endpoint_type}/{endpoint_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

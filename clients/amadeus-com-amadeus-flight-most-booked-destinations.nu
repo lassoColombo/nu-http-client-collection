@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -104,12 +113,12 @@ export def "travel-analytics-air-traffic-booked get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --origin-city-code: string # Code for the origin city following IATA standard ([IATA table codes](http://www.iata.org/publications/Pages/code-search.aspx)). - e.g. BOS for Boston (e.g. MAD)
-  --period: string # period when consumers are traveling. * It can be a month only.  * ISO format must be used - e.g. 2015-05.  * Period ranges are not supported.  * Only periods from 2011-01 up to previous month are valid.  * Future dates are not supported.  (e.g. 2017-08)
+  --period: string # period when consumers are traveling. * It can be a month only. * ISO format must be used - e.g. 2015-05. * Period ranges are not supported. * Only periods from 2011-01 up to previous month are valid. * Future dates are not supported. (e.g. 2017-08)
   --max: float # maximum number of destinations in the response. Default value is 10 and maximum value is 50. (format: integer, default: 10)
-  --fields: string # list of attributes desired in the response or list of attributes to remove from the response (with "-" before fields)  * The attributes names must contain the whole path (except resource name) e.g. travelers
+  --fields: string # list of attributes desired in the response or list of attributes to remove from the response (with "-" before fields) * The attributes names must contain the whole path (except resource name) e.g. travelers
   --page-limit: int # maximum items in one page (default: 10)
   --page-offset: int # start index of the requested page (default: 0)
-  --qp-sort: string@sort-completer # defines on which attribute the sorting will be done: * analytics.flights.score - sort destinations by flights score (decreasing) * analytics.travelers.score - sort destination by traveler's score (decreasing)  (default: analytics.travelers.score)
+  --qp-sort: string@sort-completer # defines on which attribute the sorting will be done: * analytics.flights.score - sort destinations by flights score (decreasing) * analytics.travelers.score - sort destination by traveler's score (decreasing) (default: analytics.travelers.score)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

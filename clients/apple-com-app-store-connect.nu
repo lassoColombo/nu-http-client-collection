@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "age-rating-declarations instance" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "age-rating-declarations update-instance" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # operationId: ageRatingDeclarations-update_instance
 # --data shape: {attributes?: record, id: string, type: "ageRatingDeclarations"}
-export def "age-rating-declarations instance" [
+export def "age-rating-declarations update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -108,18 +117,18 @@ export def "age-rating-declarations instance" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/ageRatingDeclarations/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/ageRatingDeclarations/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/appCategories
 #
 # operationId: appCategories-get_collection
-export def "app-categories collection" [
+export def "app-categories get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,11 +137,11 @@ export def "app-categories collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-platforms: list # filter by attribute 'platforms'
-  --exists-parent: list # filter by existence or non-existence of related 'parent'
-  --fields-app-categories: list # the fields to include for returned resources of type appCategories
+  --filter-platforms: list<string> # filter by attribute 'platforms'
+  --exists-parent: list<string> # filter by existence or non-existence of related 'parent'
+  --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
+  --include: list<string> # comma-separated list of relationships to include
   --limit-subcategories: int # maximum number of related subcategories returned (when they are included)
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -147,7 +156,7 @@ export def "app-categories collection" [
 # GET /v1/appCategories/{id}
 #
 # operationId: appCategories-get_instance
-export def "app-categories instance" [
+export def "app-categories get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,14 +166,14 @@ export def "app-categories instance" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-categories: list # the fields to include for returned resources of type appCategories
-  --include: list # comma-separated list of relationships to include
+  --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
+  --include: list<string> # comma-separated list of relationships to include
   --limit-subcategories: int # maximum number of related subcategories returned (when they are included)
 ]: nothing -> record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appCategories]" $fields_app_categories "csv") (serialize-qp "include" $include "csv") (serialize-qp "limit[subcategories]" $limit_subcategories "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appCategories/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appCategories/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,7 +182,7 @@ export def "app-categories instance" [
 # GET /v1/appCategories/{id}/parent
 #
 # operationId: appCategories-parent-get_to_one_related
-export def "app-categories-parent related" [
+export def "app-categories-parent get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -183,12 +192,12 @@ export def "app-categories-parent related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-categories: list # the fields to include for returned resources of type appCategories
+  --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
 ]: nothing -> record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appCategories]" $fields_app_categories "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appCategories/{id}/parent") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appCategories/{id}/parent") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -197,7 +206,7 @@ export def "app-categories-parent related" [
 # GET /v1/appCategories/{id}/subcategories
 #
 # operationId: appCategories-subcategories-get_to_many_related
-export def "app-categories-subcategories related" [
+export def "app-categories-subcategories get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -207,13 +216,13 @@ export def "app-categories-subcategories related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-categories: list # the fields to include for returned resources of type appCategories
+  --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appCategories]" $fields_app_categories "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appCategories/{id}/subcategories") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appCategories/{id}/subcategories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -222,7 +231,7 @@ export def "app-categories-subcategories related" [
 # GET /v1/appEncryptionDeclarations
 #
 # operationId: appEncryptionDeclarations-get_collection
-export def "app-encryption-declarations collection" [
+export def "app-encryption-declarations get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,13 +240,13 @@ export def "app-encryption-declarations collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-platform: list # filter by attribute 'platform'
-  --filter-app: list # filter by id(s) of related 'app'
-  --filter-builds: list # filter by id(s) of related 'builds'
-  --fields-app-encryption-declarations: list # the fields to include for returned resources of type appEncryptionDeclarations
+  --filter-platform: list<string> # filter by attribute 'platform'
+  --filter-app: list<string> # filter by id(s) of related 'app'
+  --filter-builds: list<string> # filter by id(s) of related 'builds'
+  --fields-app-encryption-declarations: list<string> # the fields to include for returned resources of type appEncryptionDeclarations
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -251,7 +260,7 @@ export def "app-encryption-declarations collection" [
 # GET /v1/appEncryptionDeclarations/{id}
 #
 # operationId: appEncryptionDeclarations-get_instance
-export def "app-encryption-declarations instance" [
+export def "app-encryption-declarations get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -261,14 +270,14 @@ export def "app-encryption-declarations instance" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-encryption-declarations: list # the fields to include for returned resources of type appEncryptionDeclarations
-  --include: list # comma-separated list of relationships to include
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-app-encryption-declarations: list<string> # the fields to include for returned resources of type appEncryptionDeclarations
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
 ]: nothing -> record<data: record<attributes: record<appEncryptionDeclarationState: string, availableOnFrenchStore: bool, codeValue: string, containsProprietaryCryptography: bool, containsThirdPartyCryptography: bool, documentName: string, documentType: string, documentUrl: string, exempt: bool, platform: string, uploadedDate: string, usesEncryption: bool>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appEncryptionDeclarations]" $fields_app_encryption_declarations "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[apps]" $fields_apps "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appEncryptionDeclarations/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appEncryptionDeclarations/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -277,7 +286,7 @@ export def "app-encryption-declarations instance" [
 # GET /v1/appEncryptionDeclarations/{id}/app
 #
 # operationId: appEncryptionDeclarations-app-get_to_one_related
-export def "app-encryption-declarations-app related" [
+export def "app-encryption-declarations-app get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,12 +296,12 @@ export def "app-encryption-declarations-app related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
 ]: nothing -> record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[apps]" $fields_apps "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appEncryptionDeclarations/{id}/app") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appEncryptionDeclarations/{id}/app") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -302,7 +311,7 @@ export def "app-encryption-declarations-app related" [
 #
 # operationId: appEncryptionDeclarations-builds-create_to_many_relationship
 # --data item shape: {id: string, type: "builds"}
-export def "app-encryption-declarations-relationships-builds relationship" [
+export def "app-encryption-declarations-relationships-builds create-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -317,19 +326,19 @@ export def "app-encryption-declarations-relationships-builds relationship" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appEncryptionDeclarations/{id}/relationships/builds"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appEncryptionDeclarations/{id}/relationships/builds"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /v1/appInfoLocalizations
 #
 # operationId: appInfoLocalizations-create_instance
 # --data shape: {attributes: record, relationships: record, type: "appInfoLocalizations"}
-export def "app-info-localizations instance" [
+export def "app-info-localizations create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,17 +353,17 @@ export def "app-info-localizations instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/appInfoLocalizations")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/appInfoLocalizations/{id}
 #
 # operationId: appInfoLocalizations-delete_instance
-export def "app-info-localizations instance-by-id" [
+export def "app-info-localizations delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -367,7 +376,7 @@ export def "app-info-localizations instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appInfoLocalizations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appInfoLocalizations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -376,7 +385,7 @@ export def "app-info-localizations instance-by-id" [
 # GET /v1/appInfoLocalizations/{id}
 #
 # operationId: appInfoLocalizations-get_instance
-export def "app-info-localizations instance-by-id-1" [
+export def "app-info-localizations get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -386,13 +395,13 @@ export def "app-info-localizations instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-info-localizations: list # the fields to include for returned resources of type appInfoLocalizations
-  --include: list # comma-separated list of relationships to include
+  --fields-app-info-localizations: list<string> # the fields to include for returned resources of type appInfoLocalizations
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: record<attributes: record<locale: string, name: string, privacyPolicyText: string, privacyPolicyUrl: string, subtitle: string>, id: string, links: record<self: string>, relationships: record<appInfo: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appInfoLocalizations]" $fields_app_info_localizations "csv") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appInfoLocalizations/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appInfoLocalizations/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -402,7 +411,7 @@ export def "app-info-localizations instance-by-id-1" [
 #
 # operationId: appInfoLocalizations-update_instance
 # --data shape: {attributes?: record, id: string, type: "appInfoLocalizations"}
-export def "app-info-localizations instance-by-id-2" [
+export def "app-info-localizations update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -417,18 +426,18 @@ export def "app-info-localizations instance-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appInfoLocalizations/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appInfoLocalizations/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/appInfos/{id}
 #
 # operationId: appInfos-get_instance
-export def "app-infos instance-by-id" [
+export def "app-infos get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -438,17 +447,17 @@ export def "app-infos instance-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-infos: list # the fields to include for returned resources of type appInfos
-  --include: list # comma-separated list of relationships to include
-  --fields-age-rating-declarations: list # the fields to include for returned resources of type ageRatingDeclarations
-  --fields-app-categories: list # the fields to include for returned resources of type appCategories
-  --fields-app-info-localizations: list # the fields to include for returned resources of type appInfoLocalizations
+  --fields-app-infos: list<string> # the fields to include for returned resources of type appInfos
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-age-rating-declarations: list<string> # the fields to include for returned resources of type ageRatingDeclarations
+  --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
+  --fields-app-info-localizations: list<string> # the fields to include for returned resources of type appInfoLocalizations
   --limit-app-info-localizations: int # maximum number of related appInfoLocalizations returned (when they are included)
 ]: nothing -> record<data: record<attributes: record<appStoreAgeRating: string, appStoreState: string, brazilAgeRating: string, kidsAgeBand: string>, id: string, links: record<self: string>, relationships: record<ageRatingDeclaration: record, app: record, appInfoLocalizations: record, primaryCategory: record, primarySubcategoryOne: record, primarySubcategoryTwo: record, secondaryCategory: record, secondarySubcategoryOne: record, secondarySubcategoryTwo: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appInfos]" $fields_app_infos "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[ageRatingDeclarations]" $fields_age_rating_declarations "csv") (serialize-qp "fields[appCategories]" $fields_app_categories "csv") (serialize-qp "fields[appInfoLocalizations]" $fields_app_info_localizations "csv") (serialize-qp "limit[appInfoLocalizations]" $limit_app_info_localizations "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appInfos/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appInfos/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -458,7 +467,7 @@ export def "app-infos instance-by-id" [
 #
 # operationId: appInfos-update_instance
 # --data shape: {id: string, relationships?: record, type: "appInfos"}
-export def "app-infos instance-by-id-1" [
+export def "app-infos update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -473,18 +482,18 @@ export def "app-infos instance-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appInfos/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appInfos/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/appInfos/{id}/ageRatingDeclaration
 #
 # operationId: appInfos-ageRatingDeclaration-get_to_one_related
-export def "app-infos-age-rating-declaration related" [
+export def "app-infos-age-rating-declaration get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -494,12 +503,12 @@ export def "app-infos-age-rating-declaration related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-age-rating-declarations: list # the fields to include for returned resources of type ageRatingDeclarations
+  --fields-age-rating-declarations: list<string> # the fields to include for returned resources of type ageRatingDeclarations
 ]: nothing -> record<data: record<attributes: record<alcoholTobaccoOrDrugUseOrReferences: string, contests: string, gambling: bool, gamblingAndContests: bool, gamblingSimulated: string, horrorOrFearThemes: string, kidsAgeBand: string, matureOrSuggestiveThemes: string, medicalOrTreatmentInformation: string, profanityOrCrudeHumor: string, seventeenPlus: bool, sexualContentGraphicAndNudity: string, sexualContentOrNudity: string, unrestrictedWebAccess: bool, violenceCartoonOrFantasy: string, violenceRealistic: string, violenceRealisticProlongedGraphicOrSadistic: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[ageRatingDeclarations]" $fields_age_rating_declarations "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appInfos/{id}/ageRatingDeclaration") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appInfos/{id}/ageRatingDeclaration") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -508,7 +517,7 @@ export def "app-infos-age-rating-declaration related" [
 # GET /v1/appInfos/{id}/appInfoLocalizations
 #
 # operationId: appInfos-appInfoLocalizations-get_to_many_related
-export def "app-infos-app-info-localizations related" [
+export def "app-infos-app-info-localizations get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -518,16 +527,16 @@ export def "app-infos-app-info-localizations related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-locale: list # filter by attribute 'locale'
-  --fields-app-infos: list # the fields to include for returned resources of type appInfos
-  --fields-app-info-localizations: list # the fields to include for returned resources of type appInfoLocalizations
+  --filter-locale: list<string> # filter by attribute 'locale'
+  --fields-app-infos: list<string> # the fields to include for returned resources of type appInfos
+  --fields-app-info-localizations: list<string> # the fields to include for returned resources of type appInfoLocalizations
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[locale]" $filter_locale "csv") (serialize-qp "fields[appInfos]" $fields_app_infos "csv") (serialize-qp "fields[appInfoLocalizations]" $fields_app_info_localizations "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appInfos/{id}/appInfoLocalizations") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appInfos/{id}/appInfoLocalizations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -536,7 +545,7 @@ export def "app-infos-app-info-localizations related" [
 # GET /v1/appInfos/{id}/primaryCategory
 #
 # operationId: appInfos-primaryCategory-get_to_one_related
-export def "app-infos-primary-category related" [
+export def "app-infos-primary-category get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -546,12 +555,12 @@ export def "app-infos-primary-category related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-categories: list # the fields to include for returned resources of type appCategories
+  --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
 ]: nothing -> record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appCategories]" $fields_app_categories "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appInfos/{id}/primaryCategory") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appInfos/{id}/primaryCategory") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -560,7 +569,7 @@ export def "app-infos-primary-category related" [
 # GET /v1/appInfos/{id}/primarySubcategoryOne
 #
 # operationId: appInfos-primarySubcategoryOne-get_to_one_related
-export def "app-infos-primary-subcategory-one related" [
+export def "app-infos-primary-subcategory-one get-to-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -570,12 +579,12 @@ export def "app-infos-primary-subcategory-one related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-categories: list # the fields to include for returned resources of type appCategories
+  --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
 ]: nothing -> record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appCategories]" $fields_app_categories "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appInfos/{id}/primarySubcategoryOne") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appInfos/{id}/primarySubcategoryOne") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -584,7 +593,7 @@ export def "app-infos-primary-subcategory-one related" [
 # GET /v1/appInfos/{id}/primarySubcategoryTwo
 #
 # operationId: appInfos-primarySubcategoryTwo-get_to_one_related
-export def "app-infos-primary-subcategory-two related" [
+export def "app-infos-primary-subcategory-two get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -594,12 +603,12 @@ export def "app-infos-primary-subcategory-two related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-categories: list # the fields to include for returned resources of type appCategories
+  --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
 ]: nothing -> record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appCategories]" $fields_app_categories "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appInfos/{id}/primarySubcategoryTwo") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appInfos/{id}/primarySubcategoryTwo") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -608,7 +617,7 @@ export def "app-infos-primary-subcategory-two related" [
 # GET /v1/appInfos/{id}/secondaryCategory
 #
 # operationId: appInfos-secondaryCategory-get_to_one_related
-export def "app-infos-secondary-category related" [
+export def "app-infos-secondary-category get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -618,12 +627,12 @@ export def "app-infos-secondary-category related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-categories: list # the fields to include for returned resources of type appCategories
+  --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
 ]: nothing -> record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appCategories]" $fields_app_categories "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appInfos/{id}/secondaryCategory") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appInfos/{id}/secondaryCategory") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -632,7 +641,7 @@ export def "app-infos-secondary-category related" [
 # GET /v1/appInfos/{id}/secondarySubcategoryOne
 #
 # operationId: appInfos-secondarySubcategoryOne-get_to_one_related
-export def "app-infos-secondary-subcategory-one related" [
+export def "app-infos-secondary-subcategory-one get-to-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -642,12 +651,12 @@ export def "app-infos-secondary-subcategory-one related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-categories: list # the fields to include for returned resources of type appCategories
+  --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
 ]: nothing -> record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appCategories]" $fields_app_categories "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appInfos/{id}/secondarySubcategoryOne") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appInfos/{id}/secondarySubcategoryOne") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -656,7 +665,7 @@ export def "app-infos-secondary-subcategory-one related" [
 # GET /v1/appInfos/{id}/secondarySubcategoryTwo
 #
 # operationId: appInfos-secondarySubcategoryTwo-get_to_one_related
-export def "app-infos-secondary-subcategory-two related" [
+export def "app-infos-secondary-subcategory-two get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -666,12 +675,12 @@ export def "app-infos-secondary-subcategory-two related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-categories: list # the fields to include for returned resources of type appCategories
+  --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
 ]: nothing -> record<data: record<attributes: record<platforms: list>, id: string, links: record<self: string>, relationships: record<parent: record, subcategories: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appCategories]" $fields_app_categories "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appInfos/{id}/secondarySubcategoryTwo") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appInfos/{id}/secondarySubcategoryTwo") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -681,7 +690,7 @@ export def "app-infos-secondary-subcategory-two related" [
 #
 # operationId: appPreOrders-create_instance
 # --data shape: {attributes?: record, relationships: record, type: "appPreOrders"}
-export def "app-pre-orders instance" [
+export def "app-pre-orders create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -696,17 +705,17 @@ export def "app-pre-orders instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/appPreOrders")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/appPreOrders/{id}
 #
 # operationId: appPreOrders-delete_instance
-export def "app-pre-orders instance-by-id" [
+export def "app-pre-orders delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -719,7 +728,7 @@ export def "app-pre-orders instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appPreOrders/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appPreOrders/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -728,7 +737,7 @@ export def "app-pre-orders instance-by-id" [
 # GET /v1/appPreOrders/{id}
 #
 # operationId: appPreOrders-get_instance
-export def "app-pre-orders instance-by-id-1" [
+export def "app-pre-orders get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -738,13 +747,13 @@ export def "app-pre-orders instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-pre-orders: list # the fields to include for returned resources of type appPreOrders
-  --include: list # comma-separated list of relationships to include
+  --fields-app-pre-orders: list<string> # the fields to include for returned resources of type appPreOrders
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: record<attributes: record<appReleaseDate: string, preOrderAvailableDate: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appPreOrders]" $fields_app_pre_orders "csv") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appPreOrders/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appPreOrders/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -754,7 +763,7 @@ export def "app-pre-orders instance-by-id-1" [
 #
 # operationId: appPreOrders-update_instance
 # --data shape: {attributes?: record, id: string, type: "appPreOrders"}
-export def "app-pre-orders instance-by-id-2" [
+export def "app-pre-orders update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -769,19 +778,19 @@ export def "app-pre-orders instance-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appPreOrders/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appPreOrders/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /v1/appPreviewSets
 #
 # operationId: appPreviewSets-create_instance
 # --data shape: {attributes: record, relationships: record, type: "appPreviewSets"}
-export def "app-preview-sets instance" [
+export def "app-preview-sets create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,17 +805,17 @@ export def "app-preview-sets instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/appPreviewSets")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/appPreviewSets/{id}
 #
 # operationId: appPreviewSets-delete_instance
-export def "app-preview-sets instance-by-id" [
+export def "app-preview-sets delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -819,7 +828,7 @@ export def "app-preview-sets instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appPreviewSets/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appPreviewSets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -828,7 +837,7 @@ export def "app-preview-sets instance-by-id" [
 # GET /v1/appPreviewSets/{id}
 #
 # operationId: appPreviewSets-get_instance
-export def "app-preview-sets instance-by-id-1" [
+export def "app-preview-sets get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -838,15 +847,15 @@ export def "app-preview-sets instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-preview-sets: list # the fields to include for returned resources of type appPreviewSets
-  --include: list # comma-separated list of relationships to include
-  --fields-app-previews: list # the fields to include for returned resources of type appPreviews
+  --fields-app-preview-sets: list<string> # the fields to include for returned resources of type appPreviewSets
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-app-previews: list<string> # the fields to include for returned resources of type appPreviews
   --limit-app-previews: int # maximum number of related appPreviews returned (when they are included)
 ]: nothing -> record<data: record<attributes: record<previewType: string>, id: string, links: record<self: string>, relationships: record<appPreviews: record, appStoreVersionLocalization: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appPreviewSets]" $fields_app_preview_sets "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[appPreviews]" $fields_app_previews "csv") (serialize-qp "limit[appPreviews]" $limit_app_previews "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appPreviewSets/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appPreviewSets/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -855,7 +864,7 @@ export def "app-preview-sets instance-by-id-1" [
 # GET /v1/appPreviewSets/{id}/appPreviews
 #
 # operationId: appPreviewSets-appPreviews-get_to_many_related
-export def "app-preview-sets-app-previews related" [
+export def "app-preview-sets-app-previews get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -865,15 +874,15 @@ export def "app-preview-sets-app-previews related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-previews: list # the fields to include for returned resources of type appPreviews
-  --fields-app-preview-sets: list # the fields to include for returned resources of type appPreviewSets
+  --fields-app-previews: list<string> # the fields to include for returned resources of type appPreviews
+  --fields-app-preview-sets: list<string> # the fields to include for returned resources of type appPreviewSets
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appPreviews]" $fields_app_previews "csv") (serialize-qp "fields[appPreviewSets]" $fields_app_preview_sets "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appPreviewSets/{id}/appPreviews") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appPreviewSets/{id}/appPreviews") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -882,7 +891,7 @@ export def "app-preview-sets-app-previews related" [
 # GET /v1/appPreviewSets/{id}/relationships/appPreviews
 #
 # operationId: appPreviewSets-appPreviews-get_to_many_relationship
-export def "app-preview-sets-relationships-app-previews relationship-by-id" [
+export def "app-preview-sets-relationships-app-previews get-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -897,7 +906,7 @@ export def "app-preview-sets-relationships-app-previews relationship-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appPreviewSets/{id}/relationships/appPreviews") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appPreviewSets/{id}/relationships/appPreviews") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -907,7 +916,7 @@ export def "app-preview-sets-relationships-app-previews relationship-by-id" [
 #
 # operationId: appPreviewSets-appPreviews-replace_to_many_relationship
 # --data item shape: {id: string, type: "appPreviews"}
-export def "app-preview-sets-relationships-app-previews relationship-by-id-1" [
+export def "app-preview-sets-relationships-app-previews update-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -922,19 +931,19 @@ export def "app-preview-sets-relationships-app-previews relationship-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appPreviewSets/{id}/relationships/appPreviews"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appPreviewSets/{id}/relationships/appPreviews"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /v1/appPreviews
 #
 # operationId: appPreviews-create_instance
 # --data shape: {attributes: record, relationships: record, type: "appPreviews"}
-export def "app-previews instance" [
+export def "app-previews create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -949,17 +958,17 @@ export def "app-previews instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/appPreviews")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/appPreviews/{id}
 #
 # operationId: appPreviews-delete_instance
-export def "app-previews instance-by-id" [
+export def "app-previews delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -972,7 +981,7 @@ export def "app-previews instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appPreviews/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appPreviews/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -981,7 +990,7 @@ export def "app-previews instance-by-id" [
 # GET /v1/appPreviews/{id}
 #
 # operationId: appPreviews-get_instance
-export def "app-previews instance-by-id-1" [
+export def "app-previews get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -991,13 +1000,13 @@ export def "app-previews instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-previews: list # the fields to include for returned resources of type appPreviews
-  --include: list # comma-separated list of relationships to include
+  --fields-app-previews: list<string> # the fields to include for returned resources of type appPreviews
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, mimeType: string, previewFrameTimeCode: string, previewImage: record, sourceFileChecksum: string, uploadOperations: list, videoUrl: string>, id: string, links: record<self: string>, relationships: record<appPreviewSet: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appPreviews]" $fields_app_previews "csv") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appPreviews/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appPreviews/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1007,7 +1016,7 @@ export def "app-previews instance-by-id-1" [
 #
 # operationId: appPreviews-update_instance
 # --data shape: {attributes?: record, id: string, type: "appPreviews"}
-export def "app-previews instance-by-id-2" [
+export def "app-previews update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1022,18 +1031,18 @@ export def "app-previews instance-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appPreviews/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appPreviews/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/appPricePoints
 #
 # operationId: appPricePoints-get_collection
-export def "app-price-points collection" [
+export def "app-price-points get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1042,12 +1051,12 @@ export def "app-price-points collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-price-tier: list # filter by id(s) of related 'priceTier'
-  --filter-territory: list # filter by id(s) of related 'territory'
-  --fields-app-price-points: list # the fields to include for returned resources of type appPricePoints
+  --filter-price-tier: list<string> # filter by id(s) of related 'priceTier'
+  --filter-territory: list<string> # filter by id(s) of related 'territory'
+  --fields-app-price-points: list<string> # the fields to include for returned resources of type appPricePoints
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
-  --fields-territories: list # the fields to include for returned resources of type territories
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-territories: list<string> # the fields to include for returned resources of type territories
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1061,7 +1070,7 @@ export def "app-price-points collection" [
 # GET /v1/appPricePoints/{id}
 #
 # operationId: appPricePoints-get_instance
-export def "app-price-points instance" [
+export def "app-price-points get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1071,14 +1080,14 @@ export def "app-price-points instance" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-price-points: list # the fields to include for returned resources of type appPricePoints
-  --include: list # comma-separated list of relationships to include
-  --fields-territories: list # the fields to include for returned resources of type territories
+  --fields-app-price-points: list<string> # the fields to include for returned resources of type appPricePoints
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-territories: list<string> # the fields to include for returned resources of type territories
 ]: nothing -> record<data: record<attributes: record<customerPrice: string, proceeds: string>, id: string, links: record<self: string>, relationships: record<priceTier: record, territory: record>, type: string>, included: table<attributes: record, id: string, links: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appPricePoints]" $fields_app_price_points "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[territories]" $fields_territories "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appPricePoints/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appPricePoints/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1087,7 +1096,7 @@ export def "app-price-points instance" [
 # GET /v1/appPricePoints/{id}/territory
 #
 # operationId: appPricePoints-territory-get_to_one_related
-export def "app-price-points-territory related" [
+export def "app-price-points-territory get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1097,12 +1106,12 @@ export def "app-price-points-territory related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-territories: list # the fields to include for returned resources of type territories
+  --fields-territories: list<string> # the fields to include for returned resources of type territories
 ]: nothing -> record<data: record<attributes: record<currency: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[territories]" $fields_territories "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appPricePoints/{id}/territory") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appPricePoints/{id}/territory") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1111,7 +1120,7 @@ export def "app-price-points-territory related" [
 # GET /v1/appPriceTiers
 #
 # operationId: appPriceTiers-get_collection
-export def "app-price-tiers collection" [
+export def "app-price-tiers get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1120,11 +1129,11 @@ export def "app-price-tiers collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-id: list # filter by id(s)
-  --fields-app-price-tiers: list # the fields to include for returned resources of type appPriceTiers
+  --filter-id: list<string> # filter by id(s)
+  --fields-app-price-tiers: list<string> # the fields to include for returned resources of type appPriceTiers
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
-  --fields-app-price-points: list # the fields to include for returned resources of type appPricePoints
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-app-price-points: list<string> # the fields to include for returned resources of type appPricePoints
   --limit-price-points: int # maximum number of related pricePoints returned (when they are included)
 ]: nothing -> record<data: table<id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1139,7 +1148,7 @@ export def "app-price-tiers collection" [
 # GET /v1/appPriceTiers/{id}
 #
 # operationId: appPriceTiers-get_instance
-export def "app-price-tiers instance" [
+export def "app-price-tiers get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1149,15 +1158,15 @@ export def "app-price-tiers instance" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-price-tiers: list # the fields to include for returned resources of type appPriceTiers
-  --include: list # comma-separated list of relationships to include
-  --fields-app-price-points: list # the fields to include for returned resources of type appPricePoints
+  --fields-app-price-tiers: list<string> # the fields to include for returned resources of type appPriceTiers
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-app-price-points: list<string> # the fields to include for returned resources of type appPricePoints
   --limit-price-points: int # maximum number of related pricePoints returned (when they are included)
 ]: nothing -> record<data: record<id: string, links: record<self: string>, relationships: record<pricePoints: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appPriceTiers]" $fields_app_price_tiers "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[appPricePoints]" $fields_app_price_points "csv") (serialize-qp "limit[pricePoints]" $limit_price_points "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appPriceTiers/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appPriceTiers/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1166,7 +1175,7 @@ export def "app-price-tiers instance" [
 # GET /v1/appPriceTiers/{id}/pricePoints
 #
 # operationId: appPriceTiers-pricePoints-get_to_many_related
-export def "app-price-tiers-price-points related" [
+export def "app-price-tiers-price-points get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1176,13 +1185,13 @@ export def "app-price-tiers-price-points related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-price-points: list # the fields to include for returned resources of type appPricePoints
+  --fields-app-price-points: list<string> # the fields to include for returned resources of type appPricePoints
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appPricePoints]" $fields_app_price_points "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appPriceTiers/{id}/pricePoints") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appPriceTiers/{id}/pricePoints") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1191,7 +1200,7 @@ export def "app-price-tiers-price-points related" [
 # GET /v1/appPrices/{id}
 #
 # operationId: appPrices-get_instance
-export def "app-prices instance" [
+export def "app-prices get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1201,13 +1210,13 @@ export def "app-prices instance" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-prices: list # the fields to include for returned resources of type appPrices
-  --include: list # comma-separated list of relationships to include
+  --fields-app-prices: list<string> # the fields to include for returned resources of type appPrices
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: record<id: string, links: record<self: string>, relationships: record<app: record, priceTier: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appPrices]" $fields_app_prices "csv") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appPrices/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appPrices/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1217,7 +1226,7 @@ export def "app-prices instance" [
 #
 # operationId: appScreenshotSets-create_instance
 # --data shape: {attributes: record, relationships: record, type: "appScreenshotSets"}
-export def "app-screenshot-sets instance" [
+export def "app-screenshot-sets create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1232,17 +1241,17 @@ export def "app-screenshot-sets instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/appScreenshotSets")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/appScreenshotSets/{id}
 #
 # operationId: appScreenshotSets-delete_instance
-export def "app-screenshot-sets instance-by-id" [
+export def "app-screenshot-sets delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1255,7 +1264,7 @@ export def "app-screenshot-sets instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appScreenshotSets/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appScreenshotSets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1264,7 +1273,7 @@ export def "app-screenshot-sets instance-by-id" [
 # GET /v1/appScreenshotSets/{id}
 #
 # operationId: appScreenshotSets-get_instance
-export def "app-screenshot-sets instance-by-id-1" [
+export def "app-screenshot-sets get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1274,15 +1283,15 @@ export def "app-screenshot-sets instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-screenshot-sets: list # the fields to include for returned resources of type appScreenshotSets
-  --include: list # comma-separated list of relationships to include
-  --fields-app-screenshots: list # the fields to include for returned resources of type appScreenshots
+  --fields-app-screenshot-sets: list<string> # the fields to include for returned resources of type appScreenshotSets
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-app-screenshots: list<string> # the fields to include for returned resources of type appScreenshots
   --limit-app-screenshots: int # maximum number of related appScreenshots returned (when they are included)
 ]: nothing -> record<data: record<attributes: record<screenshotDisplayType: string>, id: string, links: record<self: string>, relationships: record<appScreenshots: record, appStoreVersionLocalization: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appScreenshotSets]" $fields_app_screenshot_sets "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[appScreenshots]" $fields_app_screenshots "csv") (serialize-qp "limit[appScreenshots]" $limit_app_screenshots "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appScreenshotSets/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appScreenshotSets/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1291,7 +1300,7 @@ export def "app-screenshot-sets instance-by-id-1" [
 # GET /v1/appScreenshotSets/{id}/appScreenshots
 #
 # operationId: appScreenshotSets-appScreenshots-get_to_many_related
-export def "app-screenshot-sets-app-screenshots related" [
+export def "app-screenshot-sets-app-screenshots get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1301,15 +1310,15 @@ export def "app-screenshot-sets-app-screenshots related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-screenshot-sets: list # the fields to include for returned resources of type appScreenshotSets
-  --fields-app-screenshots: list # the fields to include for returned resources of type appScreenshots
+  --fields-app-screenshot-sets: list<string> # the fields to include for returned resources of type appScreenshotSets
+  --fields-app-screenshots: list<string> # the fields to include for returned resources of type appScreenshots
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appScreenshotSets]" $fields_app_screenshot_sets "csv") (serialize-qp "fields[appScreenshots]" $fields_app_screenshots "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appScreenshotSets/{id}/appScreenshots") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appScreenshotSets/{id}/appScreenshots") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1318,7 +1327,7 @@ export def "app-screenshot-sets-app-screenshots related" [
 # GET /v1/appScreenshotSets/{id}/relationships/appScreenshots
 #
 # operationId: appScreenshotSets-appScreenshots-get_to_many_relationship
-export def "app-screenshot-sets-relationships-app-screenshots relationship-by-id" [
+export def "app-screenshot-sets-relationships-app-screenshots get-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1333,7 +1342,7 @@ export def "app-screenshot-sets-relationships-app-screenshots relationship-by-id
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appScreenshotSets/{id}/relationships/appScreenshots") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appScreenshotSets/{id}/relationships/appScreenshots") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1343,7 +1352,7 @@ export def "app-screenshot-sets-relationships-app-screenshots relationship-by-id
 #
 # operationId: appScreenshotSets-appScreenshots-replace_to_many_relationship
 # --data item shape: {id: string, type: "appScreenshots"}
-export def "app-screenshot-sets-relationships-app-screenshots relationship-by-id-1" [
+export def "app-screenshot-sets-relationships-app-screenshots update-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1358,19 +1367,19 @@ export def "app-screenshot-sets-relationships-app-screenshots relationship-by-id
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appScreenshotSets/{id}/relationships/appScreenshots"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appScreenshotSets/{id}/relationships/appScreenshots"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /v1/appScreenshots
 #
 # operationId: appScreenshots-create_instance
 # --data shape: {attributes: record, relationships: record, type: "appScreenshots"}
-export def "app-screenshots instance" [
+export def "app-screenshots create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1385,17 +1394,17 @@ export def "app-screenshots instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/appScreenshots")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/appScreenshots/{id}
 #
 # operationId: appScreenshots-delete_instance
-export def "app-screenshots instance-by-id" [
+export def "app-screenshots delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1408,7 +1417,7 @@ export def "app-screenshots instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appScreenshots/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appScreenshots/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1417,7 +1426,7 @@ export def "app-screenshots instance-by-id" [
 # GET /v1/appScreenshots/{id}
 #
 # operationId: appScreenshots-get_instance
-export def "app-screenshots instance-by-id-1" [
+export def "app-screenshots get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1427,13 +1436,13 @@ export def "app-screenshots instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-screenshots: list # the fields to include for returned resources of type appScreenshots
-  --include: list # comma-separated list of relationships to include
+  --fields-app-screenshots: list<string> # the fields to include for returned resources of type appScreenshots
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: record<attributes: record<assetDeliveryState: record, assetToken: string, assetType: string, fileName: string, fileSize: int, imageAsset: record, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appScreenshotSet: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appScreenshots]" $fields_app_screenshots "csv") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appScreenshots/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appScreenshots/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1443,7 +1452,7 @@ export def "app-screenshots instance-by-id-1" [
 #
 # operationId: appScreenshots-update_instance
 # --data shape: {attributes?: record, id: string, type: "appScreenshots"}
-export def "app-screenshots instance-by-id-2" [
+export def "app-screenshots update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1458,19 +1467,19 @@ export def "app-screenshots instance-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appScreenshots/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appScreenshots/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /v1/appStoreReviewAttachments
 #
 # operationId: appStoreReviewAttachments-create_instance
 # --data shape: {attributes: record, relationships: record, type: "appStoreReviewAttachments"}
-export def "app-store-review-attachments instance" [
+export def "app-store-review-attachments create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1485,17 +1494,17 @@ export def "app-store-review-attachments instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/appStoreReviewAttachments")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/appStoreReviewAttachments/{id}
 #
 # operationId: appStoreReviewAttachments-delete_instance
-export def "app-store-review-attachments instance-by-id" [
+export def "app-store-review-attachments delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1508,7 +1517,7 @@ export def "app-store-review-attachments instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreReviewAttachments/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreReviewAttachments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1517,7 +1526,7 @@ export def "app-store-review-attachments instance-by-id" [
 # GET /v1/appStoreReviewAttachments/{id}
 #
 # operationId: appStoreReviewAttachments-get_instance
-export def "app-store-review-attachments instance-by-id-1" [
+export def "app-store-review-attachments get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1527,13 +1536,13 @@ export def "app-store-review-attachments instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-store-review-attachments: list # the fields to include for returned resources of type appStoreReviewAttachments
-  --include: list # comma-separated list of relationships to include
+  --fields-app-store-review-attachments: list<string> # the fields to include for returned resources of type appStoreReviewAttachments
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appStoreReviewDetail: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appStoreReviewAttachments]" $fields_app_store_review_attachments "csv") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreReviewAttachments/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreReviewAttachments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1543,7 +1552,7 @@ export def "app-store-review-attachments instance-by-id-1" [
 #
 # operationId: appStoreReviewAttachments-update_instance
 # --data shape: {attributes?: record, id: string, type: "appStoreReviewAttachments"}
-export def "app-store-review-attachments instance-by-id-2" [
+export def "app-store-review-attachments update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1558,19 +1567,19 @@ export def "app-store-review-attachments instance-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreReviewAttachments/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreReviewAttachments/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /v1/appStoreReviewDetails
 #
 # operationId: appStoreReviewDetails-create_instance
 # --data shape: {attributes?: record, relationships: record, type: "appStoreReviewDetails"}
-export def "app-store-review-details instance" [
+export def "app-store-review-details create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1585,17 +1594,17 @@ export def "app-store-review-details instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/appStoreReviewDetails")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/appStoreReviewDetails/{id}
 #
 # operationId: appStoreReviewDetails-get_instance
-export def "app-store-review-details instance-by-id" [
+export def "app-store-review-details get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1605,15 +1614,15 @@ export def "app-store-review-details instance-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-store-review-details: list # the fields to include for returned resources of type appStoreReviewDetails
-  --include: list # comma-separated list of relationships to include
-  --fields-app-store-review-attachments: list # the fields to include for returned resources of type appStoreReviewAttachments
+  --fields-app-store-review-details: list<string> # the fields to include for returned resources of type appStoreReviewDetails
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-app-store-review-attachments: list<string> # the fields to include for returned resources of type appStoreReviewAttachments
   --limit-app-store-review-attachments: int # maximum number of related appStoreReviewAttachments returned (when they are included)
 ]: nothing -> record<data: record<attributes: record<contactEmail: string, contactFirstName: string, contactLastName: string, contactPhone: string, demoAccountName: string, demoAccountPassword: string, demoAccountRequired: bool, notes: string>, id: string, links: record<self: string>, relationships: record<appStoreReviewAttachments: record, appStoreVersion: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appStoreReviewDetails]" $fields_app_store_review_details "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[appStoreReviewAttachments]" $fields_app_store_review_attachments "csv") (serialize-qp "limit[appStoreReviewAttachments]" $limit_app_store_review_attachments "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreReviewDetails/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreReviewDetails/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1623,7 +1632,7 @@ export def "app-store-review-details instance-by-id" [
 #
 # operationId: appStoreReviewDetails-update_instance
 # --data shape: {attributes?: record, id: string, type: "appStoreReviewDetails"}
-export def "app-store-review-details instance-by-id-1" [
+export def "app-store-review-details update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1638,18 +1647,18 @@ export def "app-store-review-details instance-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreReviewDetails/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreReviewDetails/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/appStoreReviewDetails/{id}/appStoreReviewAttachments
 #
 # operationId: appStoreReviewDetails-appStoreReviewAttachments-get_to_many_related
-export def "app-store-review-details-app-store-review-attachments related" [
+export def "app-store-review-details-app-store-review-attachments get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1659,15 +1668,15 @@ export def "app-store-review-details-app-store-review-attachments related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-store-review-details: list # the fields to include for returned resources of type appStoreReviewDetails
-  --fields-app-store-review-attachments: list # the fields to include for returned resources of type appStoreReviewAttachments
+  --fields-app-store-review-details: list<string> # the fields to include for returned resources of type appStoreReviewDetails
+  --fields-app-store-review-attachments: list<string> # the fields to include for returned resources of type appStoreReviewAttachments
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appStoreReviewDetails]" $fields_app_store_review_details "csv") (serialize-qp "fields[appStoreReviewAttachments]" $fields_app_store_review_attachments "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreReviewDetails/{id}/appStoreReviewAttachments") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreReviewDetails/{id}/appStoreReviewAttachments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1677,7 +1686,7 @@ export def "app-store-review-details-app-store-review-attachments related" [
 #
 # operationId: appStoreVersionLocalizations-create_instance
 # --data shape: {attributes: record, relationships: record, type: "appStoreVersionLocalizations"}
-export def "app-store-version-localizations instance" [
+export def "app-store-version-localizations create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1692,17 +1701,17 @@ export def "app-store-version-localizations instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/appStoreVersionLocalizations")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/appStoreVersionLocalizations/{id}
 #
 # operationId: appStoreVersionLocalizations-delete_instance
-export def "app-store-version-localizations instance-by-id" [
+export def "app-store-version-localizations delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1715,7 +1724,7 @@ export def "app-store-version-localizations instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersionLocalizations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersionLocalizations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1724,7 +1733,7 @@ export def "app-store-version-localizations instance-by-id" [
 # GET /v1/appStoreVersionLocalizations/{id}
 #
 # operationId: appStoreVersionLocalizations-get_instance
-export def "app-store-version-localizations instance-by-id-1" [
+export def "app-store-version-localizations get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1734,17 +1743,17 @@ export def "app-store-version-localizations instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-store-version-localizations: list # the fields to include for returned resources of type appStoreVersionLocalizations
-  --include: list # comma-separated list of relationships to include
-  --fields-app-screenshot-sets: list # the fields to include for returned resources of type appScreenshotSets
-  --fields-app-preview-sets: list # the fields to include for returned resources of type appPreviewSets
+  --fields-app-store-version-localizations: list<string> # the fields to include for returned resources of type appStoreVersionLocalizations
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-app-screenshot-sets: list<string> # the fields to include for returned resources of type appScreenshotSets
+  --fields-app-preview-sets: list<string> # the fields to include for returned resources of type appPreviewSets
   --limit-app-preview-sets: int # maximum number of related appPreviewSets returned (when they are included)
   --limit-app-screenshot-sets: int # maximum number of related appScreenshotSets returned (when they are included)
 ]: nothing -> record<data: record<attributes: record<description: string, keywords: string, locale: string, marketingUrl: string, promotionalText: string, supportUrl: string, whatsNew: string>, id: string, links: record<self: string>, relationships: record<appPreviewSets: record, appScreenshotSets: record, appStoreVersion: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appStoreVersionLocalizations]" $fields_app_store_version_localizations "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[appScreenshotSets]" $fields_app_screenshot_sets "csv") (serialize-qp "fields[appPreviewSets]" $fields_app_preview_sets "csv") (serialize-qp "limit[appPreviewSets]" $limit_app_preview_sets "scalar") (serialize-qp "limit[appScreenshotSets]" $limit_app_screenshot_sets "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersionLocalizations/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersionLocalizations/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1754,7 +1763,7 @@ export def "app-store-version-localizations instance-by-id-1" [
 #
 # operationId: appStoreVersionLocalizations-update_instance
 # --data shape: {attributes?: record, id: string, type: "appStoreVersionLocalizations"}
-export def "app-store-version-localizations instance-by-id-2" [
+export def "app-store-version-localizations update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1769,18 +1778,18 @@ export def "app-store-version-localizations instance-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersionLocalizations/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersionLocalizations/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/appStoreVersionLocalizations/{id}/appPreviewSets
 #
 # operationId: appStoreVersionLocalizations-appPreviewSets-get_to_many_related
-export def "app-store-version-localizations-app-preview-sets related" [
+export def "app-store-version-localizations-app-preview-sets get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1790,17 +1799,17 @@ export def "app-store-version-localizations-app-preview-sets related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-preview-type: list # filter by attribute 'previewType'
-  --fields-app-store-version-localizations: list # the fields to include for returned resources of type appStoreVersionLocalizations
-  --fields-app-previews: list # the fields to include for returned resources of type appPreviews
-  --fields-app-preview-sets: list # the fields to include for returned resources of type appPreviewSets
+  --filter-preview-type: list<string> # filter by attribute 'previewType'
+  --fields-app-store-version-localizations: list<string> # the fields to include for returned resources of type appStoreVersionLocalizations
+  --fields-app-previews: list<string> # the fields to include for returned resources of type appPreviews
+  --fields-app-preview-sets: list<string> # the fields to include for returned resources of type appPreviewSets
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[previewType]" $filter_preview_type "csv") (serialize-qp "fields[appStoreVersionLocalizations]" $fields_app_store_version_localizations "csv") (serialize-qp "fields[appPreviews]" $fields_app_previews "csv") (serialize-qp "fields[appPreviewSets]" $fields_app_preview_sets "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersionLocalizations/{id}/appPreviewSets") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersionLocalizations/{id}/appPreviewSets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1809,7 +1818,7 @@ export def "app-store-version-localizations-app-preview-sets related" [
 # GET /v1/appStoreVersionLocalizations/{id}/appScreenshotSets
 #
 # operationId: appStoreVersionLocalizations-appScreenshotSets-get_to_many_related
-export def "app-store-version-localizations-app-screenshot-sets related" [
+export def "app-store-version-localizations-app-screenshot-sets get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1819,17 +1828,17 @@ export def "app-store-version-localizations-app-screenshot-sets related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-screenshot-display-type: list # filter by attribute 'screenshotDisplayType'
-  --fields-app-store-version-localizations: list # the fields to include for returned resources of type appStoreVersionLocalizations
-  --fields-app-screenshot-sets: list # the fields to include for returned resources of type appScreenshotSets
-  --fields-app-screenshots: list # the fields to include for returned resources of type appScreenshots
+  --filter-screenshot-display-type: list<string> # filter by attribute 'screenshotDisplayType'
+  --fields-app-store-version-localizations: list<string> # the fields to include for returned resources of type appStoreVersionLocalizations
+  --fields-app-screenshot-sets: list<string> # the fields to include for returned resources of type appScreenshotSets
+  --fields-app-screenshots: list<string> # the fields to include for returned resources of type appScreenshots
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[screenshotDisplayType]" $filter_screenshot_display_type "csv") (serialize-qp "fields[appStoreVersionLocalizations]" $fields_app_store_version_localizations "csv") (serialize-qp "fields[appScreenshotSets]" $fields_app_screenshot_sets "csv") (serialize-qp "fields[appScreenshots]" $fields_app_screenshots "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersionLocalizations/{id}/appScreenshotSets") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersionLocalizations/{id}/appScreenshotSets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1839,7 +1848,7 @@ export def "app-store-version-localizations-app-screenshot-sets related" [
 #
 # operationId: appStoreVersionPhasedReleases-create_instance
 # --data shape: {attributes?: record, relationships: record, type: "appStoreVersionPhasedReleases"}
-export def "app-store-version-phased-releases instance" [
+export def "app-store-version-phased-releases create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1854,17 +1863,17 @@ export def "app-store-version-phased-releases instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/appStoreVersionPhasedReleases")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/appStoreVersionPhasedReleases/{id}
 #
 # operationId: appStoreVersionPhasedReleases-delete_instance
-export def "app-store-version-phased-releases instance-by-id" [
+export def "app-store-version-phased-releases delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1877,7 +1886,7 @@ export def "app-store-version-phased-releases instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersionPhasedReleases/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersionPhasedReleases/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1887,7 +1896,7 @@ export def "app-store-version-phased-releases instance-by-id" [
 #
 # operationId: appStoreVersionPhasedReleases-update_instance
 # --data shape: {attributes?: record, id: string, type: "appStoreVersionPhasedReleases"}
-export def "app-store-version-phased-releases instance-by-id-1" [
+export def "app-store-version-phased-releases update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1902,19 +1911,19 @@ export def "app-store-version-phased-releases instance-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersionPhasedReleases/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersionPhasedReleases/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /v1/appStoreVersionSubmissions
 #
 # operationId: appStoreVersionSubmissions-create_instance
 # --data shape: {relationships: record, type: "appStoreVersionSubmissions"}
-export def "app-store-version-submissions instance" [
+export def "app-store-version-submissions create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1929,17 +1938,17 @@ export def "app-store-version-submissions instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/appStoreVersionSubmissions")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/appStoreVersionSubmissions/{id}
 #
 # operationId: appStoreVersionSubmissions-delete_instance
-export def "app-store-version-submissions instance-by-id" [
+export def "app-store-version-submissions delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1952,7 +1961,7 @@ export def "app-store-version-submissions instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersionSubmissions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersionSubmissions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1962,7 +1971,7 @@ export def "app-store-version-submissions instance-by-id" [
 #
 # operationId: appStoreVersions-create_instance
 # --data shape: {attributes: record, relationships: record, type: "appStoreVersions"}
-export def "app-store-versions instance" [
+export def "app-store-versions create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1977,17 +1986,17 @@ export def "app-store-versions instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/appStoreVersions")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/appStoreVersions/{id}
 #
 # operationId: appStoreVersions-delete_instance
-export def "app-store-versions instance-by-id" [
+export def "app-store-versions delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2000,7 +2009,7 @@ export def "app-store-versions instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2010,7 +2019,7 @@ export def "app-store-versions instance-by-id" [
 #
 # operationId: appStoreVersions-get_instance
 @deprecated --flag fields-age-rating-declarations
-export def "app-store-versions instance-by-id-1" [
+export def "app-store-versions get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2020,22 +2029,22 @@ export def "app-store-versions instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-store-versions: list # the fields to include for returned resources of type appStoreVersions
-  --include: list # comma-separated list of relationships to include
-  --fields-app-store-version-localizations: list # the fields to include for returned resources of type appStoreVersionLocalizations
-  --fields-idfa-declarations: list # the fields to include for returned resources of type idfaDeclarations
-  --fields-routing-app-coverages: list # the fields to include for returned resources of type routingAppCoverages
-  --fields-app-store-version-phased-releases: list # the fields to include for returned resources of type appStoreVersionPhasedReleases
-  --fields-age-rating-declarations: list # the fields to include for returned resources of type ageRatingDeclarations (DEPRECATED)
-  --fields-app-store-review-details: list # the fields to include for returned resources of type appStoreReviewDetails
-  --fields-builds: list # the fields to include for returned resources of type builds
-  --fields-app-store-version-submissions: list # the fields to include for returned resources of type appStoreVersionSubmissions
+  --fields-app-store-versions: list<string> # the fields to include for returned resources of type appStoreVersions
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-app-store-version-localizations: list<string> # the fields to include for returned resources of type appStoreVersionLocalizations
+  --fields-idfa-declarations: list<string> # the fields to include for returned resources of type idfaDeclarations
+  --fields-routing-app-coverages: list<string> # the fields to include for returned resources of type routingAppCoverages
+  --fields-app-store-version-phased-releases: list<string> # the fields to include for returned resources of type appStoreVersionPhasedReleases
+  --fields-age-rating-declarations: list<string> # the fields to include for returned resources of type ageRatingDeclarations (DEPRECATED)
+  --fields-app-store-review-details: list<string> # the fields to include for returned resources of type appStoreReviewDetails
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
+  --fields-app-store-version-submissions: list<string> # the fields to include for returned resources of type appStoreVersionSubmissions
   --limit-app-store-version-localizations: int # maximum number of related appStoreVersionLocalizations returned (when they are included)
 ]: nothing -> record<data: record<attributes: record<appStoreState: string, copyright: string, createdDate: string, downloadable: bool, earliestReleaseDate: string, platform: string, releaseType: string, usesIdfa: bool, versionString: string>, id: string, links: record<self: string>, relationships: record<ageRatingDeclaration: record, app: record, appStoreReviewDetail: record, appStoreVersionLocalizations: record, appStoreVersionPhasedRelease: record, appStoreVersionSubmission: record, build: record, idfaDeclaration: record, routingAppCoverage: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appStoreVersions]" $fields_app_store_versions "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[appStoreVersionLocalizations]" $fields_app_store_version_localizations "csv") (serialize-qp "fields[idfaDeclarations]" $fields_idfa_declarations "csv") (serialize-qp "fields[routingAppCoverages]" $fields_routing_app_coverages "csv") (serialize-qp "fields[appStoreVersionPhasedReleases]" $fields_app_store_version_phased_releases "csv") (serialize-qp "fields[ageRatingDeclarations]" $fields_age_rating_declarations "csv") (serialize-qp "fields[appStoreReviewDetails]" $fields_app_store_review_details "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "fields[appStoreVersionSubmissions]" $fields_app_store_version_submissions "csv") (serialize-qp "limit[appStoreVersionLocalizations]" $limit_app_store_version_localizations "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersions/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2045,7 +2054,7 @@ export def "app-store-versions instance-by-id-1" [
 #
 # operationId: appStoreVersions-update_instance
 # --data shape: {attributes?: record, id: string, relationships?: record, type: "appStoreVersions"}
-export def "app-store-versions instance-by-id-2" [
+export def "app-store-versions update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2060,12 +2069,12 @@ export def "app-store-versions instance-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersions/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersions/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/appStoreVersions/{id}/ageRatingDeclaration
@@ -2074,7 +2083,7 @@ export def "app-store-versions instance-by-id-2" [
 # operationId: appStoreVersions-ageRatingDeclaration-get_to_one_related
 @deprecated
 @deprecated --flag fields-age-rating-declarations
-export def "app-store-versions-age-rating-declaration related" [
+export def "app-store-versions-age-rating-declaration get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2084,12 +2093,12 @@ export def "app-store-versions-age-rating-declaration related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-age-rating-declarations: list # the fields to include for returned resources of type ageRatingDeclarations (DEPRECATED)
+  --fields-age-rating-declarations: list<string> # the fields to include for returned resources of type ageRatingDeclarations (DEPRECATED)
 ]: nothing -> record<data: record<attributes: record<alcoholTobaccoOrDrugUseOrReferences: string, contests: string, gambling: bool, gamblingAndContests: bool, gamblingSimulated: string, horrorOrFearThemes: string, kidsAgeBand: string, matureOrSuggestiveThemes: string, medicalOrTreatmentInformation: string, profanityOrCrudeHumor: string, seventeenPlus: bool, sexualContentGraphicAndNudity: string, sexualContentOrNudity: string, unrestrictedWebAccess: bool, violenceCartoonOrFantasy: string, violenceRealistic: string, violenceRealisticProlongedGraphicOrSadistic: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[ageRatingDeclarations]" $fields_age_rating_declarations "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersions/{id}/ageRatingDeclaration") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersions/{id}/ageRatingDeclaration") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2098,7 +2107,7 @@ export def "app-store-versions-age-rating-declaration related" [
 # GET /v1/appStoreVersions/{id}/appStoreReviewDetail
 #
 # operationId: appStoreVersions-appStoreReviewDetail-get_to_one_related
-export def "app-store-versions-app-store-review-detail related" [
+export def "app-store-versions-app-store-review-detail get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2108,15 +2117,15 @@ export def "app-store-versions-app-store-review-detail related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-store-review-details: list # the fields to include for returned resources of type appStoreReviewDetails
-  --fields-app-store-versions: list # the fields to include for returned resources of type appStoreVersions
-  --fields-app-store-review-attachments: list # the fields to include for returned resources of type appStoreReviewAttachments
-  --include: list # comma-separated list of relationships to include
+  --fields-app-store-review-details: list<string> # the fields to include for returned resources of type appStoreReviewDetails
+  --fields-app-store-versions: list<string> # the fields to include for returned resources of type appStoreVersions
+  --fields-app-store-review-attachments: list<string> # the fields to include for returned resources of type appStoreReviewAttachments
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: record<attributes: record<contactEmail: string, contactFirstName: string, contactLastName: string, contactPhone: string, demoAccountName: string, demoAccountPassword: string, demoAccountRequired: bool, notes: string>, id: string, links: record<self: string>, relationships: record<appStoreReviewAttachments: record, appStoreVersion: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appStoreReviewDetails]" $fields_app_store_review_details "csv") (serialize-qp "fields[appStoreVersions]" $fields_app_store_versions "csv") (serialize-qp "fields[appStoreReviewAttachments]" $fields_app_store_review_attachments "csv") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersions/{id}/appStoreReviewDetail") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersions/{id}/appStoreReviewDetail") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2125,7 +2134,7 @@ export def "app-store-versions-app-store-review-detail related" [
 # GET /v1/appStoreVersions/{id}/appStoreVersionLocalizations
 #
 # operationId: appStoreVersions-appStoreVersionLocalizations-get_to_many_related
-export def "app-store-versions-app-store-version-localizations related" [
+export def "app-store-versions-app-store-version-localizations get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2135,13 +2144,13 @@ export def "app-store-versions-app-store-version-localizations related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-store-version-localizations: list # the fields to include for returned resources of type appStoreVersionLocalizations
+  --fields-app-store-version-localizations: list<string> # the fields to include for returned resources of type appStoreVersionLocalizations
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appStoreVersionLocalizations]" $fields_app_store_version_localizations "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersions/{id}/appStoreVersionLocalizations") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersions/{id}/appStoreVersionLocalizations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2150,7 +2159,7 @@ export def "app-store-versions-app-store-version-localizations related" [
 # GET /v1/appStoreVersions/{id}/appStoreVersionPhasedRelease
 #
 # operationId: appStoreVersions-appStoreVersionPhasedRelease-get_to_one_related
-export def "app-store-versions-app-store-version-phased-release related" [
+export def "app-store-versions-app-store-version-phased-release get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2160,12 +2169,12 @@ export def "app-store-versions-app-store-version-phased-release related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-store-version-phased-releases: list # the fields to include for returned resources of type appStoreVersionPhasedReleases
+  --fields-app-store-version-phased-releases: list<string> # the fields to include for returned resources of type appStoreVersionPhasedReleases
 ]: nothing -> record<data: record<attributes: record<currentDayNumber: int, phasedReleaseState: string, startDate: string, totalPauseDuration: int>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appStoreVersionPhasedReleases]" $fields_app_store_version_phased_releases "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersions/{id}/appStoreVersionPhasedRelease") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersions/{id}/appStoreVersionPhasedRelease") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2174,7 +2183,7 @@ export def "app-store-versions-app-store-version-phased-release related" [
 # GET /v1/appStoreVersions/{id}/appStoreVersionSubmission
 #
 # operationId: appStoreVersions-appStoreVersionSubmission-get_to_one_related
-export def "app-store-versions-app-store-version-submission related" [
+export def "app-store-versions-app-store-version-submission get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2184,14 +2193,14 @@ export def "app-store-versions-app-store-version-submission related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-store-versions: list # the fields to include for returned resources of type appStoreVersions
-  --fields-app-store-version-submissions: list # the fields to include for returned resources of type appStoreVersionSubmissions
-  --include: list # comma-separated list of relationships to include
+  --fields-app-store-versions: list<string> # the fields to include for returned resources of type appStoreVersions
+  --fields-app-store-version-submissions: list<string> # the fields to include for returned resources of type appStoreVersionSubmissions
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: record<id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appStoreVersions]" $fields_app_store_versions "csv") (serialize-qp "fields[appStoreVersionSubmissions]" $fields_app_store_version_submissions "csv") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersions/{id}/appStoreVersionSubmission") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersions/{id}/appStoreVersionSubmission") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2200,7 +2209,7 @@ export def "app-store-versions-app-store-version-submission related" [
 # GET /v1/appStoreVersions/{id}/build
 #
 # operationId: appStoreVersions-build-get_to_one_related
-export def "app-store-versions-build related" [
+export def "app-store-versions-build get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2210,12 +2219,12 @@ export def "app-store-versions-build related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-builds: list # the fields to include for returned resources of type builds
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
 ]: nothing -> record<data: record<attributes: record<expirationDate: string, expired: bool, iconAssetToken: record, minOsVersion: string, processingState: string, uploadedDate: string, usesNonExemptEncryption: bool, version: string>, id: string, links: record<self: string>, relationships: record<app: record, appEncryptionDeclaration: record, appStoreVersion: record, betaAppReviewSubmission: record, betaBuildLocalizations: record, buildBetaDetail: record, icons: record, individualTesters: record, preReleaseVersion: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[builds]" $fields_builds "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersions/{id}/build") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersions/{id}/build") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2224,7 +2233,7 @@ export def "app-store-versions-build related" [
 # GET /v1/appStoreVersions/{id}/idfaDeclaration
 #
 # operationId: appStoreVersions-idfaDeclaration-get_to_one_related
-export def "app-store-versions-idfa-declaration related" [
+export def "app-store-versions-idfa-declaration get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2234,12 +2243,12 @@ export def "app-store-versions-idfa-declaration related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-idfa-declarations: list # the fields to include for returned resources of type idfaDeclarations
+  --fields-idfa-declarations: list<string> # the fields to include for returned resources of type idfaDeclarations
 ]: nothing -> record<data: record<attributes: record<attributesActionWithPreviousAd: bool, attributesAppInstallationToPreviousAd: bool, honorsLimitedAdTracking: bool, servesAds: bool>, id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[idfaDeclarations]" $fields_idfa_declarations "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersions/{id}/idfaDeclaration") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersions/{id}/idfaDeclaration") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2248,7 +2257,7 @@ export def "app-store-versions-idfa-declaration related" [
 # GET /v1/appStoreVersions/{id}/relationships/build
 #
 # operationId: appStoreVersions-build-get_to_one_relationship
-export def "app-store-versions-relationships-build relationship-by-id" [
+export def "app-store-versions-relationships-build get-to-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2261,7 +2270,7 @@ export def "app-store-versions-relationships-build relationship-by-id" [
 ]: nothing -> record<data: record<id: string, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersions/{id}/relationships/build"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersions/{id}/relationships/build"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2271,7 +2280,7 @@ export def "app-store-versions-relationships-build relationship-by-id" [
 #
 # operationId: appStoreVersions-build-update_to_one_relationship
 # --data shape: {id: string, type: "builds"}
-export def "app-store-versions-relationships-build relationship-by-id-1" [
+export def "app-store-versions-relationships-build update-to-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2286,18 +2295,18 @@ export def "app-store-versions-relationships-build relationship-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersions/{id}/relationships/build"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersions/{id}/relationships/build"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/appStoreVersions/{id}/routingAppCoverage
 #
 # operationId: appStoreVersions-routingAppCoverage-get_to_one_related
-export def "app-store-versions-routing-app-coverage related" [
+export def "app-store-versions-routing-app-coverage get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2307,12 +2316,12 @@ export def "app-store-versions-routing-app-coverage related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-routing-app-coverages: list # the fields to include for returned resources of type routingAppCoverages
+  --fields-routing-app-coverages: list<string> # the fields to include for returned resources of type routingAppCoverages
 ]: nothing -> record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[routingAppCoverages]" $fields_routing_app_coverages "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/appStoreVersions/{id}/routingAppCoverage") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/appStoreVersions/{id}/routingAppCoverage") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2321,7 +2330,7 @@ export def "app-store-versions-routing-app-coverage related" [
 # GET /v1/apps
 #
 # operationId: apps-get_collection
-export def "apps collection" [
+export def "apps get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2330,33 +2339,33 @@ export def "apps collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-app-store-versions-app-store-state: list # filter by attribute 'appStoreVersions.appStoreState'
-  --filter-app-store-versions-platform: list # filter by attribute 'appStoreVersions.platform'
-  --filter-bundle-id: list # filter by attribute 'bundleId'
-  --filter-name: list # filter by attribute 'name'
-  --filter-sku: list # filter by attribute 'sku'
-  --filter-app-store-versions: list # filter by id(s) of related 'appStoreVersions'
-  --filter-id: list # filter by id(s)
-  --exists-game-center-enabled-versions: list # filter by existence or non-existence of related 'gameCenterEnabledVersions'
-  --qp-sort: list # comma-separated list of sort expressions; resources will be sorted as specified
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --filter-app-store-versions-app-store-state: list<string> # filter by attribute 'appStoreVersions.appStoreState'
+  --filter-app-store-versions-platform: list<string> # filter by attribute 'appStoreVersions.platform'
+  --filter-bundle-id: list<string> # filter by attribute 'bundleId'
+  --filter-name: list<string> # filter by attribute 'name'
+  --filter-sku: list<string> # filter by attribute 'sku'
+  --filter-app-store-versions: list<string> # filter by id(s) of related 'appStoreVersions'
+  --filter-id: list<string> # filter by id(s)
+  --exists-game-center-enabled-versions: list<string> # filter by existence or non-existence of related 'gameCenterEnabledVersions'
+  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
-  --fields-beta-groups: list # the fields to include for returned resources of type betaGroups
-  --fields-perf-power-metrics: list # the fields to include for returned resources of type perfPowerMetrics
-  --fields-app-infos: list # the fields to include for returned resources of type appInfos
-  --fields-app-pre-orders: list # the fields to include for returned resources of type appPreOrders
-  --fields-pre-release-versions: list # the fields to include for returned resources of type preReleaseVersions
-  --fields-app-prices: list # the fields to include for returned resources of type appPrices
-  --fields-in-app-purchases: list # the fields to include for returned resources of type inAppPurchases
-  --fields-beta-app-review-details: list # the fields to include for returned resources of type betaAppReviewDetails
-  --fields-territories: list # the fields to include for returned resources of type territories
-  --fields-game-center-enabled-versions: list # the fields to include for returned resources of type gameCenterEnabledVersions
-  --fields-app-store-versions: list # the fields to include for returned resources of type appStoreVersions
-  --fields-builds: list # the fields to include for returned resources of type builds
-  --fields-beta-app-localizations: list # the fields to include for returned resources of type betaAppLocalizations
-  --fields-beta-license-agreements: list # the fields to include for returned resources of type betaLicenseAgreements
-  --fields-end-user-license-agreements: list # the fields to include for returned resources of type endUserLicenseAgreements
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-beta-groups: list<string> # the fields to include for returned resources of type betaGroups
+  --fields-perf-power-metrics: list<string> # the fields to include for returned resources of type perfPowerMetrics
+  --fields-app-infos: list<string> # the fields to include for returned resources of type appInfos
+  --fields-app-pre-orders: list<string> # the fields to include for returned resources of type appPreOrders
+  --fields-pre-release-versions: list<string> # the fields to include for returned resources of type preReleaseVersions
+  --fields-app-prices: list<string> # the fields to include for returned resources of type appPrices
+  --fields-in-app-purchases: list<string> # the fields to include for returned resources of type inAppPurchases
+  --fields-beta-app-review-details: list<string> # the fields to include for returned resources of type betaAppReviewDetails
+  --fields-territories: list<string> # the fields to include for returned resources of type territories
+  --fields-game-center-enabled-versions: list<string> # the fields to include for returned resources of type gameCenterEnabledVersions
+  --fields-app-store-versions: list<string> # the fields to include for returned resources of type appStoreVersions
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
+  --fields-beta-app-localizations: list<string> # the fields to include for returned resources of type betaAppLocalizations
+  --fields-beta-license-agreements: list<string> # the fields to include for returned resources of type betaLicenseAgreements
+  --fields-end-user-license-agreements: list<string> # the fields to include for returned resources of type endUserLicenseAgreements
   --limit-app-infos: int # maximum number of related appInfos returned (when they are included)
   --limit-app-store-versions: int # maximum number of related appStoreVersions returned (when they are included)
   --limit-available-territories: int # maximum number of related availableTerritories returned (when they are included)
@@ -2380,7 +2389,7 @@ export def "apps collection" [
 # GET /v1/apps/{id}
 #
 # operationId: apps-get_instance
-export def "apps instance-by-id" [
+export def "apps get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2390,23 +2399,23 @@ export def "apps instance-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-apps: list # the fields to include for returned resources of type apps
-  --include: list # comma-separated list of relationships to include
-  --fields-beta-groups: list # the fields to include for returned resources of type betaGroups
-  --fields-perf-power-metrics: list # the fields to include for returned resources of type perfPowerMetrics
-  --fields-app-infos: list # the fields to include for returned resources of type appInfos
-  --fields-app-pre-orders: list # the fields to include for returned resources of type appPreOrders
-  --fields-pre-release-versions: list # the fields to include for returned resources of type preReleaseVersions
-  --fields-app-prices: list # the fields to include for returned resources of type appPrices
-  --fields-in-app-purchases: list # the fields to include for returned resources of type inAppPurchases
-  --fields-beta-app-review-details: list # the fields to include for returned resources of type betaAppReviewDetails
-  --fields-territories: list # the fields to include for returned resources of type territories
-  --fields-game-center-enabled-versions: list # the fields to include for returned resources of type gameCenterEnabledVersions
-  --fields-app-store-versions: list # the fields to include for returned resources of type appStoreVersions
-  --fields-builds: list # the fields to include for returned resources of type builds
-  --fields-beta-app-localizations: list # the fields to include for returned resources of type betaAppLocalizations
-  --fields-beta-license-agreements: list # the fields to include for returned resources of type betaLicenseAgreements
-  --fields-end-user-license-agreements: list # the fields to include for returned resources of type endUserLicenseAgreements
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-beta-groups: list<string> # the fields to include for returned resources of type betaGroups
+  --fields-perf-power-metrics: list<string> # the fields to include for returned resources of type perfPowerMetrics
+  --fields-app-infos: list<string> # the fields to include for returned resources of type appInfos
+  --fields-app-pre-orders: list<string> # the fields to include for returned resources of type appPreOrders
+  --fields-pre-release-versions: list<string> # the fields to include for returned resources of type preReleaseVersions
+  --fields-app-prices: list<string> # the fields to include for returned resources of type appPrices
+  --fields-in-app-purchases: list<string> # the fields to include for returned resources of type inAppPurchases
+  --fields-beta-app-review-details: list<string> # the fields to include for returned resources of type betaAppReviewDetails
+  --fields-territories: list<string> # the fields to include for returned resources of type territories
+  --fields-game-center-enabled-versions: list<string> # the fields to include for returned resources of type gameCenterEnabledVersions
+  --fields-app-store-versions: list<string> # the fields to include for returned resources of type appStoreVersions
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
+  --fields-beta-app-localizations: list<string> # the fields to include for returned resources of type betaAppLocalizations
+  --fields-beta-license-agreements: list<string> # the fields to include for returned resources of type betaLicenseAgreements
+  --fields-end-user-license-agreements: list<string> # the fields to include for returned resources of type endUserLicenseAgreements
   --limit-app-infos: int # maximum number of related appInfos returned (when they are included)
   --limit-app-store-versions: int # maximum number of related appStoreVersions returned (when they are included)
   --limit-available-territories: int # maximum number of related availableTerritories returned (when they are included)
@@ -2421,7 +2430,7 @@ export def "apps instance-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[betaGroups]" $fields_beta_groups "csv") (serialize-qp "fields[perfPowerMetrics]" $fields_perf_power_metrics "csv") (serialize-qp "fields[appInfos]" $fields_app_infos "csv") (serialize-qp "fields[appPreOrders]" $fields_app_pre_orders "csv") (serialize-qp "fields[preReleaseVersions]" $fields_pre_release_versions "csv") (serialize-qp "fields[appPrices]" $fields_app_prices "csv") (serialize-qp "fields[inAppPurchases]" $fields_in_app_purchases "csv") (serialize-qp "fields[betaAppReviewDetails]" $fields_beta_app_review_details "csv") (serialize-qp "fields[territories]" $fields_territories "csv") (serialize-qp "fields[gameCenterEnabledVersions]" $fields_game_center_enabled_versions "csv") (serialize-qp "fields[appStoreVersions]" $fields_app_store_versions "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "fields[betaAppLocalizations]" $fields_beta_app_localizations "csv") (serialize-qp "fields[betaLicenseAgreements]" $fields_beta_license_agreements "csv") (serialize-qp "fields[endUserLicenseAgreements]" $fields_end_user_license_agreements "csv") (serialize-qp "limit[appInfos]" $limit_app_infos "scalar") (serialize-qp "limit[appStoreVersions]" $limit_app_store_versions "scalar") (serialize-qp "limit[availableTerritories]" $limit_available_territories "scalar") (serialize-qp "limit[betaAppLocalizations]" $limit_beta_app_localizations "scalar") (serialize-qp "limit[betaGroups]" $limit_beta_groups "scalar") (serialize-qp "limit[builds]" $limit_builds "scalar") (serialize-qp "limit[gameCenterEnabledVersions]" $limit_game_center_enabled_versions "scalar") (serialize-qp "limit[inAppPurchases]" $limit_in_app_purchases "scalar") (serialize-qp "limit[preReleaseVersions]" $limit_pre_release_versions "scalar") (serialize-qp "limit[prices]" $limit_prices "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/apps/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2431,7 +2440,7 @@ export def "apps instance-by-id" [
 #
 # operationId: apps-update_instance
 # --data shape: {attributes?: record, id: string, relationships?: record, type: "apps"}
-export def "apps instance-by-id-1" [
+export def "apps update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2446,18 +2455,18 @@ export def "apps instance-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/apps/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/apps/{id}/appInfos
 #
 # operationId: apps-appInfos-get_to_many_related
-export def "apps-app-infos related" [
+export def "apps-app-infos get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2467,18 +2476,18 @@ export def "apps-app-infos related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-age-rating-declarations: list # the fields to include for returned resources of type ageRatingDeclarations
-  --fields-app-infos: list # the fields to include for returned resources of type appInfos
-  --fields-app-categories: list # the fields to include for returned resources of type appCategories
-  --fields-app-info-localizations: list # the fields to include for returned resources of type appInfoLocalizations
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-age-rating-declarations: list<string> # the fields to include for returned resources of type ageRatingDeclarations
+  --fields-app-infos: list<string> # the fields to include for returned resources of type appInfos
+  --fields-app-categories: list<string> # the fields to include for returned resources of type appCategories
+  --fields-app-info-localizations: list<string> # the fields to include for returned resources of type appInfoLocalizations
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[ageRatingDeclarations]" $fields_age_rating_declarations "csv") (serialize-qp "fields[appInfos]" $fields_app_infos "csv") (serialize-qp "fields[appCategories]" $fields_app_categories "csv") (serialize-qp "fields[appInfoLocalizations]" $fields_app_info_localizations "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/apps/{id}/appInfos") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}/appInfos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2487,7 +2496,7 @@ export def "apps-app-infos related" [
 # GET /v1/apps/{id}/appStoreVersions
 #
 # operationId: apps-appStoreVersions-get_to_many_related
-export def "apps-app-store-versions related" [
+export def "apps-app-store-versions get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2497,27 +2506,27 @@ export def "apps-app-store-versions related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-app-store-state: list # filter by attribute 'appStoreState'
-  --filter-platform: list # filter by attribute 'platform'
-  --filter-version-string: list # filter by attribute 'versionString'
-  --filter-id: list # filter by id(s)
-  --fields-idfa-declarations: list # the fields to include for returned resources of type idfaDeclarations
-  --fields-app-store-version-localizations: list # the fields to include for returned resources of type appStoreVersionLocalizations
-  --fields-routing-app-coverages: list # the fields to include for returned resources of type routingAppCoverages
-  --fields-app-store-version-phased-releases: list # the fields to include for returned resources of type appStoreVersionPhasedReleases
-  --fields-age-rating-declarations: list # the fields to include for returned resources of type ageRatingDeclarations
-  --fields-app-store-review-details: list # the fields to include for returned resources of type appStoreReviewDetails
-  --fields-app-store-versions: list # the fields to include for returned resources of type appStoreVersions
-  --fields-builds: list # the fields to include for returned resources of type builds
-  --fields-app-store-version-submissions: list # the fields to include for returned resources of type appStoreVersionSubmissions
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --filter-app-store-state: list<string> # filter by attribute 'appStoreState'
+  --filter-platform: list<string> # filter by attribute 'platform'
+  --filter-version-string: list<string> # filter by attribute 'versionString'
+  --filter-id: list<string> # filter by id(s)
+  --fields-idfa-declarations: list<string> # the fields to include for returned resources of type idfaDeclarations
+  --fields-app-store-version-localizations: list<string> # the fields to include for returned resources of type appStoreVersionLocalizations
+  --fields-routing-app-coverages: list<string> # the fields to include for returned resources of type routingAppCoverages
+  --fields-app-store-version-phased-releases: list<string> # the fields to include for returned resources of type appStoreVersionPhasedReleases
+  --fields-age-rating-declarations: list<string> # the fields to include for returned resources of type ageRatingDeclarations
+  --fields-app-store-review-details: list<string> # the fields to include for returned resources of type appStoreReviewDetails
+  --fields-app-store-versions: list<string> # the fields to include for returned resources of type appStoreVersions
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
+  --fields-app-store-version-submissions: list<string> # the fields to include for returned resources of type appStoreVersionSubmissions
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[appStoreState]" $filter_app_store_state "csv") (serialize-qp "filter[platform]" $filter_platform "csv") (serialize-qp "filter[versionString]" $filter_version_string "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "fields[idfaDeclarations]" $fields_idfa_declarations "csv") (serialize-qp "fields[appStoreVersionLocalizations]" $fields_app_store_version_localizations "csv") (serialize-qp "fields[routingAppCoverages]" $fields_routing_app_coverages "csv") (serialize-qp "fields[appStoreVersionPhasedReleases]" $fields_app_store_version_phased_releases "csv") (serialize-qp "fields[ageRatingDeclarations]" $fields_age_rating_declarations "csv") (serialize-qp "fields[appStoreReviewDetails]" $fields_app_store_review_details "csv") (serialize-qp "fields[appStoreVersions]" $fields_app_store_versions "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "fields[appStoreVersionSubmissions]" $fields_app_store_version_submissions "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/apps/{id}/appStoreVersions") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}/appStoreVersions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2526,7 +2535,7 @@ export def "apps-app-store-versions related" [
 # GET /v1/apps/{id}/availableTerritories
 #
 # operationId: apps-availableTerritories-get_to_many_related
-export def "apps-available-territories related" [
+export def "apps-available-territories get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2536,13 +2545,13 @@ export def "apps-available-territories related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-territories: list # the fields to include for returned resources of type territories
+  --fields-territories: list<string> # the fields to include for returned resources of type territories
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[territories]" $fields_territories "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/apps/{id}/availableTerritories") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}/availableTerritories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2551,7 +2560,7 @@ export def "apps-available-territories related" [
 # GET /v1/apps/{id}/betaAppLocalizations
 #
 # operationId: apps-betaAppLocalizations-get_to_many_related
-export def "apps-beta-app-localizations related" [
+export def "apps-beta-app-localizations get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2561,13 +2570,13 @@ export def "apps-beta-app-localizations related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-beta-app-localizations: list # the fields to include for returned resources of type betaAppLocalizations
+  --fields-beta-app-localizations: list<string> # the fields to include for returned resources of type betaAppLocalizations
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[betaAppLocalizations]" $fields_beta_app_localizations "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/apps/{id}/betaAppLocalizations") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}/betaAppLocalizations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2576,7 +2585,7 @@ export def "apps-beta-app-localizations related" [
 # GET /v1/apps/{id}/betaAppReviewDetail
 #
 # operationId: apps-betaAppReviewDetail-get_to_one_related
-export def "apps-beta-app-review-detail related" [
+export def "apps-beta-app-review-detail get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2586,12 +2595,12 @@ export def "apps-beta-app-review-detail related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-beta-app-review-details: list # the fields to include for returned resources of type betaAppReviewDetails
+  --fields-beta-app-review-details: list<string> # the fields to include for returned resources of type betaAppReviewDetails
 ]: nothing -> record<data: record<attributes: record<contactEmail: string, contactFirstName: string, contactLastName: string, contactPhone: string, demoAccountName: string, demoAccountPassword: string, demoAccountRequired: bool, notes: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[betaAppReviewDetails]" $fields_beta_app_review_details "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/apps/{id}/betaAppReviewDetail") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}/betaAppReviewDetail") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2600,7 +2609,7 @@ export def "apps-beta-app-review-detail related" [
 # GET /v1/apps/{id}/betaGroups
 #
 # operationId: apps-betaGroups-get_to_many_related
-export def "apps-beta-groups related" [
+export def "apps-beta-groups get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2610,13 +2619,13 @@ export def "apps-beta-groups related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-beta-groups: list # the fields to include for returned resources of type betaGroups
+  --fields-beta-groups: list<string> # the fields to include for returned resources of type betaGroups
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[betaGroups]" $fields_beta_groups "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/apps/{id}/betaGroups") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}/betaGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2625,7 +2634,7 @@ export def "apps-beta-groups related" [
 # GET /v1/apps/{id}/betaLicenseAgreement
 #
 # operationId: apps-betaLicenseAgreement-get_to_one_related
-export def "apps-beta-license-agreement related" [
+export def "apps-beta-license-agreement get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2635,12 +2644,12 @@ export def "apps-beta-license-agreement related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-beta-license-agreements: list # the fields to include for returned resources of type betaLicenseAgreements
+  --fields-beta-license-agreements: list<string> # the fields to include for returned resources of type betaLicenseAgreements
 ]: nothing -> record<data: record<attributes: record<agreementText: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[betaLicenseAgreements]" $fields_beta_license_agreements "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/apps/{id}/betaLicenseAgreement") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}/betaLicenseAgreement") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2649,7 +2658,7 @@ export def "apps-beta-license-agreement related" [
 # GET /v1/apps/{id}/builds
 #
 # operationId: apps-builds-get_to_many_related
-export def "apps-builds related" [
+export def "apps-builds get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2659,13 +2668,13 @@ export def "apps-builds related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-builds: list # the fields to include for returned resources of type builds
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/apps/{id}/builds") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}/builds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2674,7 +2683,7 @@ export def "apps-builds related" [
 # GET /v1/apps/{id}/endUserLicenseAgreement
 #
 # operationId: apps-endUserLicenseAgreement-get_to_one_related
-export def "apps-end-user-license-agreement related" [
+export def "apps-end-user-license-agreement get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2684,12 +2693,12 @@ export def "apps-end-user-license-agreement related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-end-user-license-agreements: list # the fields to include for returned resources of type endUserLicenseAgreements
+  --fields-end-user-license-agreements: list<string> # the fields to include for returned resources of type endUserLicenseAgreements
 ]: nothing -> record<data: record<attributes: record<agreementText: string>, id: string, links: record<self: string>, relationships: record<app: record, territories: record>, type: string>, included: table<attributes: record, id: string, links: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[endUserLicenseAgreements]" $fields_end_user_license_agreements "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/apps/{id}/endUserLicenseAgreement") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}/endUserLicenseAgreement") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2698,7 +2707,7 @@ export def "apps-end-user-license-agreement related" [
 # GET /v1/apps/{id}/gameCenterEnabledVersions
 #
 # operationId: apps-gameCenterEnabledVersions-get_to_many_related
-export def "apps-game-center-enabled-versions related" [
+export def "apps-game-center-enabled-versions get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2708,19 +2717,19 @@ export def "apps-game-center-enabled-versions related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-platform: list # filter by attribute 'platform'
-  --filter-version-string: list # filter by attribute 'versionString'
-  --filter-id: list # filter by id(s)
-  --qp-sort: list # comma-separated list of sort expressions; resources will be sorted as specified
-  --fields-game-center-enabled-versions: list # the fields to include for returned resources of type gameCenterEnabledVersions
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --filter-platform: list<string> # filter by attribute 'platform'
+  --filter-version-string: list<string> # filter by attribute 'versionString'
+  --filter-id: list<string> # filter by id(s)
+  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --fields-game-center-enabled-versions: list<string> # the fields to include for returned resources of type gameCenterEnabledVersions
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[platform]" $filter_platform "csv") (serialize-qp "filter[versionString]" $filter_version_string "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "fields[gameCenterEnabledVersions]" $fields_game_center_enabled_versions "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/apps/{id}/gameCenterEnabledVersions") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}/gameCenterEnabledVersions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2729,7 +2738,7 @@ export def "apps-game-center-enabled-versions related" [
 # GET /v1/apps/{id}/inAppPurchases
 #
 # operationId: apps-inAppPurchases-get_to_many_related
-export def "apps-in-app-purchases related" [
+export def "apps-in-app-purchases get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2739,18 +2748,18 @@ export def "apps-in-app-purchases related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-in-app-purchase-type: list # filter by attribute 'inAppPurchaseType'
-  --filter-can-be-submitted: list # filter by canBeSubmitted
-  --qp-sort: list # comma-separated list of sort expressions; resources will be sorted as specified
-  --fields-in-app-purchases: list # the fields to include for returned resources of type inAppPurchases
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --filter-in-app-purchase-type: list<string> # filter by attribute 'inAppPurchaseType'
+  --filter-can-be-submitted: list<string> # filter by canBeSubmitted
+  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --fields-in-app-purchases: list<string> # the fields to include for returned resources of type inAppPurchases
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[inAppPurchaseType]" $filter_in_app_purchase_type "csv") (serialize-qp "filter[canBeSubmitted]" $filter_can_be_submitted "csv") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "fields[inAppPurchases]" $fields_in_app_purchases "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/apps/{id}/inAppPurchases") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}/inAppPurchases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2759,7 +2768,7 @@ export def "apps-in-app-purchases related" [
 # GET /v1/apps/{id}/perfPowerMetrics
 #
 # operationId: apps-perfPowerMetrics-get_to_many_related
-export def "apps-perf-power-metrics related" [
+export def "apps-perf-power-metrics get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2769,14 +2778,14 @@ export def "apps-perf-power-metrics related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-device-type: list # filter by attribute 'deviceType'
-  --filter-metric-type: list # filter by attribute 'metricType'
-  --filter-platform: list # filter by attribute 'platform'
+  --filter-device-type: list<string> # filter by attribute 'deviceType'
+  --filter-metric-type: list<string> # filter by attribute 'metricType'
+  --filter-platform: list<string> # filter by attribute 'platform'
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[deviceType]" $filter_device_type "csv") (serialize-qp "filter[metricType]" $filter_metric_type "csv") (serialize-qp "filter[platform]" $filter_platform "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/apps/{id}/perfPowerMetrics") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}/perfPowerMetrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2785,7 +2794,7 @@ export def "apps-perf-power-metrics related" [
 # GET /v1/apps/{id}/preOrder
 #
 # operationId: apps-preOrder-get_to_one_related
-export def "apps-pre-order related" [
+export def "apps-pre-order get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2795,12 +2804,12 @@ export def "apps-pre-order related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-pre-orders: list # the fields to include for returned resources of type appPreOrders
+  --fields-app-pre-orders: list<string> # the fields to include for returned resources of type appPreOrders
 ]: nothing -> record<data: record<attributes: record<appReleaseDate: string, preOrderAvailableDate: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appPreOrders]" $fields_app_pre_orders "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/apps/{id}/preOrder") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}/preOrder") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2809,7 +2818,7 @@ export def "apps-pre-order related" [
 # GET /v1/apps/{id}/preReleaseVersions
 #
 # operationId: apps-preReleaseVersions-get_to_many_related
-export def "apps-pre-release-versions related" [
+export def "apps-pre-release-versions get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2819,13 +2828,13 @@ export def "apps-pre-release-versions related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-pre-release-versions: list # the fields to include for returned resources of type preReleaseVersions
+  --fields-pre-release-versions: list<string> # the fields to include for returned resources of type preReleaseVersions
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[preReleaseVersions]" $fields_pre_release_versions "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/apps/{id}/preReleaseVersions") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}/preReleaseVersions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2834,7 +2843,7 @@ export def "apps-pre-release-versions related" [
 # GET /v1/apps/{id}/prices
 #
 # operationId: apps-prices-get_to_many_related
-export def "apps-prices related" [
+export def "apps-prices get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2844,16 +2853,16 @@ export def "apps-prices related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-prices: list # the fields to include for returned resources of type appPrices
-  --fields-app-price-tiers: list # the fields to include for returned resources of type appPriceTiers
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-app-prices: list<string> # the fields to include for returned resources of type appPrices
+  --fields-app-price-tiers: list<string> # the fields to include for returned resources of type appPriceTiers
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: table<id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appPrices]" $fields_app_prices "csv") (serialize-qp "fields[appPriceTiers]" $fields_app_price_tiers "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/apps/{id}/prices") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}/prices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2863,7 +2872,7 @@ export def "apps-prices related" [
 #
 # operationId: apps-betaTesters-delete_to_many_relationship
 # --data item shape: {id: string, type: "betaTesters"}
-export def "apps-relationships-beta-testers relationship" [
+export def "apps-relationships-beta-testers delete-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2878,18 +2887,18 @@ export def "apps-relationships-beta-testers relationship" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/apps/{id}/relationships/betaTesters"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/apps/{id}/relationships/betaTesters"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/betaAppLocalizations
 #
 # operationId: betaAppLocalizations-get_collection
-export def "beta-app-localizations collection" [
+export def "beta-app-localizations get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2898,12 +2907,12 @@ export def "beta-app-localizations collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-locale: list # filter by attribute 'locale'
-  --filter-app: list # filter by id(s) of related 'app'
-  --fields-beta-app-localizations: list # the fields to include for returned resources of type betaAppLocalizations
+  --filter-locale: list<string> # filter by attribute 'locale'
+  --filter-app: list<string> # filter by id(s) of related 'app'
+  --fields-beta-app-localizations: list<string> # the fields to include for returned resources of type betaAppLocalizations
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2918,7 +2927,7 @@ export def "beta-app-localizations collection" [
 #
 # operationId: betaAppLocalizations-create_instance
 # --data shape: {attributes: record, relationships: record, type: "betaAppLocalizations"}
-export def "beta-app-localizations instance" [
+export def "beta-app-localizations create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2933,17 +2942,17 @@ export def "beta-app-localizations instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/betaAppLocalizations")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/betaAppLocalizations/{id}
 #
 # operationId: betaAppLocalizations-delete_instance
-export def "beta-app-localizations instance-by-id" [
+export def "beta-app-localizations delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2956,7 +2965,7 @@ export def "beta-app-localizations instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaAppLocalizations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaAppLocalizations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2965,7 +2974,7 @@ export def "beta-app-localizations instance-by-id" [
 # GET /v1/betaAppLocalizations/{id}
 #
 # operationId: betaAppLocalizations-get_instance
-export def "beta-app-localizations instance-by-id-1" [
+export def "beta-app-localizations get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2975,14 +2984,14 @@ export def "beta-app-localizations instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-beta-app-localizations: list # the fields to include for returned resources of type betaAppLocalizations
-  --include: list # comma-separated list of relationships to include
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-beta-app-localizations: list<string> # the fields to include for returned resources of type betaAppLocalizations
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
 ]: nothing -> record<data: record<attributes: record<description: string, feedbackEmail: string, locale: string, marketingUrl: string, privacyPolicyUrl: string, tvOsPrivacyPolicy: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[betaAppLocalizations]" $fields_beta_app_localizations "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[apps]" $fields_apps "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaAppLocalizations/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaAppLocalizations/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2992,7 +3001,7 @@ export def "beta-app-localizations instance-by-id-1" [
 #
 # operationId: betaAppLocalizations-update_instance
 # --data shape: {attributes?: record, id: string, type: "betaAppLocalizations"}
-export def "beta-app-localizations instance-by-id-2" [
+export def "beta-app-localizations update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3007,18 +3016,18 @@ export def "beta-app-localizations instance-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaAppLocalizations/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaAppLocalizations/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/betaAppLocalizations/{id}/app
 #
 # operationId: betaAppLocalizations-app-get_to_one_related
-export def "beta-app-localizations-app related" [
+export def "beta-app-localizations-app get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3028,12 +3037,12 @@ export def "beta-app-localizations-app related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
 ]: nothing -> record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[apps]" $fields_apps "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaAppLocalizations/{id}/app") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaAppLocalizations/{id}/app") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3042,7 +3051,7 @@ export def "beta-app-localizations-app related" [
 # GET /v1/betaAppReviewDetails
 #
 # operationId: betaAppReviewDetails-get_collection
-export def "beta-app-review-details collection" [
+export def "beta-app-review-details get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3051,11 +3060,11 @@ export def "beta-app-review-details collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-app: list # filter by id(s) of related 'app'
-  --fields-beta-app-review-details: list # the fields to include for returned resources of type betaAppReviewDetails
+  --filter-app: list<string> # filter by id(s) of related 'app'
+  --fields-beta-app-review-details: list<string> # the fields to include for returned resources of type betaAppReviewDetails
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3069,7 +3078,7 @@ export def "beta-app-review-details collection" [
 # GET /v1/betaAppReviewDetails/{id}
 #
 # operationId: betaAppReviewDetails-get_instance
-export def "beta-app-review-details instance-by-id" [
+export def "beta-app-review-details get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3079,14 +3088,14 @@ export def "beta-app-review-details instance-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-beta-app-review-details: list # the fields to include for returned resources of type betaAppReviewDetails
-  --include: list # comma-separated list of relationships to include
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-beta-app-review-details: list<string> # the fields to include for returned resources of type betaAppReviewDetails
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
 ]: nothing -> record<data: record<attributes: record<contactEmail: string, contactFirstName: string, contactLastName: string, contactPhone: string, demoAccountName: string, demoAccountPassword: string, demoAccountRequired: bool, notes: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[betaAppReviewDetails]" $fields_beta_app_review_details "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[apps]" $fields_apps "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaAppReviewDetails/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaAppReviewDetails/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3096,7 +3105,7 @@ export def "beta-app-review-details instance-by-id" [
 #
 # operationId: betaAppReviewDetails-update_instance
 # --data shape: {attributes?: record, id: string, type: "betaAppReviewDetails"}
-export def "beta-app-review-details instance-by-id-1" [
+export def "beta-app-review-details update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3111,18 +3120,18 @@ export def "beta-app-review-details instance-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaAppReviewDetails/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaAppReviewDetails/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/betaAppReviewDetails/{id}/app
 #
 # operationId: betaAppReviewDetails-app-get_to_one_related
-export def "beta-app-review-details-app related" [
+export def "beta-app-review-details-app get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3132,12 +3141,12 @@ export def "beta-app-review-details-app related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
 ]: nothing -> record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[apps]" $fields_apps "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaAppReviewDetails/{id}/app") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaAppReviewDetails/{id}/app") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3146,7 +3155,7 @@ export def "beta-app-review-details-app related" [
 # GET /v1/betaAppReviewSubmissions
 #
 # operationId: betaAppReviewSubmissions-get_collection
-export def "beta-app-review-submissions collection" [
+export def "beta-app-review-submissions get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3155,12 +3164,12 @@ export def "beta-app-review-submissions collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-beta-review-state: list # filter by attribute 'betaReviewState'
-  --filter-build: list # filter by id(s) of related 'build'
-  --fields-beta-app-review-submissions: list # the fields to include for returned resources of type betaAppReviewSubmissions
+  --filter-beta-review-state: list<string> # filter by attribute 'betaReviewState'
+  --filter-build: list<string> # filter by id(s) of related 'build'
+  --fields-beta-app-review-submissions: list<string> # the fields to include for returned resources of type betaAppReviewSubmissions
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
-  --fields-builds: list # the fields to include for returned resources of type builds
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3175,7 +3184,7 @@ export def "beta-app-review-submissions collection" [
 #
 # operationId: betaAppReviewSubmissions-create_instance
 # --data shape: {relationships: record, type: "betaAppReviewSubmissions"}
-export def "beta-app-review-submissions instance" [
+export def "beta-app-review-submissions create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3190,17 +3199,17 @@ export def "beta-app-review-submissions instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/betaAppReviewSubmissions")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/betaAppReviewSubmissions/{id}
 #
 # operationId: betaAppReviewSubmissions-get_instance
-export def "beta-app-review-submissions instance-by-id" [
+export def "beta-app-review-submissions get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3210,14 +3219,14 @@ export def "beta-app-review-submissions instance-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-beta-app-review-submissions: list # the fields to include for returned resources of type betaAppReviewSubmissions
-  --include: list # comma-separated list of relationships to include
-  --fields-builds: list # the fields to include for returned resources of type builds
+  --fields-beta-app-review-submissions: list<string> # the fields to include for returned resources of type betaAppReviewSubmissions
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
 ]: nothing -> record<data: record<attributes: record<betaReviewState: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[betaAppReviewSubmissions]" $fields_beta_app_review_submissions "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[builds]" $fields_builds "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaAppReviewSubmissions/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaAppReviewSubmissions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3226,7 +3235,7 @@ export def "beta-app-review-submissions instance-by-id" [
 # GET /v1/betaAppReviewSubmissions/{id}/build
 #
 # operationId: betaAppReviewSubmissions-build-get_to_one_related
-export def "beta-app-review-submissions-build related" [
+export def "beta-app-review-submissions-build get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3236,12 +3245,12 @@ export def "beta-app-review-submissions-build related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-builds: list # the fields to include for returned resources of type builds
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
 ]: nothing -> record<data: record<attributes: record<expirationDate: string, expired: bool, iconAssetToken: record, minOsVersion: string, processingState: string, uploadedDate: string, usesNonExemptEncryption: bool, version: string>, id: string, links: record<self: string>, relationships: record<app: record, appEncryptionDeclaration: record, appStoreVersion: record, betaAppReviewSubmission: record, betaBuildLocalizations: record, buildBetaDetail: record, icons: record, individualTesters: record, preReleaseVersion: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[builds]" $fields_builds "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaAppReviewSubmissions/{id}/build") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaAppReviewSubmissions/{id}/build") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3250,7 +3259,7 @@ export def "beta-app-review-submissions-build related" [
 # GET /v1/betaBuildLocalizations
 #
 # operationId: betaBuildLocalizations-get_collection
-export def "beta-build-localizations collection" [
+export def "beta-build-localizations get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3259,12 +3268,12 @@ export def "beta-build-localizations collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-locale: list # filter by attribute 'locale'
-  --filter-build: list # filter by id(s) of related 'build'
-  --fields-beta-build-localizations: list # the fields to include for returned resources of type betaBuildLocalizations
+  --filter-locale: list<string> # filter by attribute 'locale'
+  --filter-build: list<string> # filter by id(s) of related 'build'
+  --fields-beta-build-localizations: list<string> # the fields to include for returned resources of type betaBuildLocalizations
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
-  --fields-builds: list # the fields to include for returned resources of type builds
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3279,7 +3288,7 @@ export def "beta-build-localizations collection" [
 #
 # operationId: betaBuildLocalizations-create_instance
 # --data shape: {attributes: record, relationships: record, type: "betaBuildLocalizations"}
-export def "beta-build-localizations instance" [
+export def "beta-build-localizations create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3294,17 +3303,17 @@ export def "beta-build-localizations instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/betaBuildLocalizations")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/betaBuildLocalizations/{id}
 #
 # operationId: betaBuildLocalizations-delete_instance
-export def "beta-build-localizations instance-by-id" [
+export def "beta-build-localizations delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3317,7 +3326,7 @@ export def "beta-build-localizations instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaBuildLocalizations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaBuildLocalizations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3326,7 +3335,7 @@ export def "beta-build-localizations instance-by-id" [
 # GET /v1/betaBuildLocalizations/{id}
 #
 # operationId: betaBuildLocalizations-get_instance
-export def "beta-build-localizations instance-by-id-1" [
+export def "beta-build-localizations get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3336,14 +3345,14 @@ export def "beta-build-localizations instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-beta-build-localizations: list # the fields to include for returned resources of type betaBuildLocalizations
-  --include: list # comma-separated list of relationships to include
-  --fields-builds: list # the fields to include for returned resources of type builds
+  --fields-beta-build-localizations: list<string> # the fields to include for returned resources of type betaBuildLocalizations
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
 ]: nothing -> record<data: record<attributes: record<locale: string, whatsNew: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[betaBuildLocalizations]" $fields_beta_build_localizations "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[builds]" $fields_builds "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaBuildLocalizations/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaBuildLocalizations/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3353,7 +3362,7 @@ export def "beta-build-localizations instance-by-id-1" [
 #
 # operationId: betaBuildLocalizations-update_instance
 # --data shape: {attributes?: record, id: string, type: "betaBuildLocalizations"}
-export def "beta-build-localizations instance-by-id-2" [
+export def "beta-build-localizations update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3368,18 +3377,18 @@ export def "beta-build-localizations instance-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaBuildLocalizations/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaBuildLocalizations/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/betaBuildLocalizations/{id}/build
 #
 # operationId: betaBuildLocalizations-build-get_to_one_related
-export def "beta-build-localizations-build related" [
+export def "beta-build-localizations-build get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3389,12 +3398,12 @@ export def "beta-build-localizations-build related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-builds: list # the fields to include for returned resources of type builds
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
 ]: nothing -> record<data: record<attributes: record<expirationDate: string, expired: bool, iconAssetToken: record, minOsVersion: string, processingState: string, uploadedDate: string, usesNonExemptEncryption: bool, version: string>, id: string, links: record<self: string>, relationships: record<app: record, appEncryptionDeclaration: record, appStoreVersion: record, betaAppReviewSubmission: record, betaBuildLocalizations: record, buildBetaDetail: record, icons: record, individualTesters: record, preReleaseVersion: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[builds]" $fields_builds "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaBuildLocalizations/{id}/build") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaBuildLocalizations/{id}/build") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3403,7 +3412,7 @@ export def "beta-build-localizations-build related" [
 # GET /v1/betaGroups
 #
 # operationId: betaGroups-get_collection
-export def "beta-groups collection" [
+export def "beta-groups get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3412,21 +3421,21 @@ export def "beta-groups collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-is-internal-group: list # filter by attribute 'isInternalGroup'
-  --filter-name: list # filter by attribute 'name'
-  --filter-public-link: list # filter by attribute 'publicLink'
-  --filter-public-link-enabled: list # filter by attribute 'publicLinkEnabled'
-  --filter-public-link-limit-enabled: list # filter by attribute 'publicLinkLimitEnabled'
-  --filter-app: list # filter by id(s) of related 'app'
-  --filter-builds: list # filter by id(s) of related 'builds'
-  --filter-id: list # filter by id(s)
-  --qp-sort: list # comma-separated list of sort expressions; resources will be sorted as specified
-  --fields-beta-groups: list # the fields to include for returned resources of type betaGroups
+  --filter-is-internal-group: list<string> # filter by attribute 'isInternalGroup'
+  --filter-name: list<string> # filter by attribute 'name'
+  --filter-public-link: list<string> # filter by attribute 'publicLink'
+  --filter-public-link-enabled: list<string> # filter by attribute 'publicLinkEnabled'
+  --filter-public-link-limit-enabled: list<string> # filter by attribute 'publicLinkLimitEnabled'
+  --filter-app: list<string> # filter by id(s) of related 'app'
+  --filter-builds: list<string> # filter by id(s) of related 'builds'
+  --filter-id: list<string> # filter by id(s)
+  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --fields-beta-groups: list<string> # the fields to include for returned resources of type betaGroups
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
-  --fields-builds: list # the fields to include for returned resources of type builds
-  --fields-beta-testers: list # the fields to include for returned resources of type betaTesters
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
+  --fields-beta-testers: list<string> # the fields to include for returned resources of type betaTesters
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-beta-testers: int # maximum number of related betaTesters returned (when they are included)
   --limit-builds: int # maximum number of related builds returned (when they are included)
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
@@ -3443,7 +3452,7 @@ export def "beta-groups collection" [
 #
 # operationId: betaGroups-create_instance
 # --data shape: {attributes: record, relationships: record, type: "betaGroups"}
-export def "beta-groups instance" [
+export def "beta-groups create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3458,17 +3467,17 @@ export def "beta-groups instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/betaGroups")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/betaGroups/{id}
 #
 # operationId: betaGroups-delete_instance
-export def "beta-groups instance-by-id" [
+export def "beta-groups delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3481,7 +3490,7 @@ export def "beta-groups instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaGroups/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaGroups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3490,7 +3499,7 @@ export def "beta-groups instance-by-id" [
 # GET /v1/betaGroups/{id}
 #
 # operationId: betaGroups-get_instance
-export def "beta-groups instance-by-id-1" [
+export def "beta-groups get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3500,18 +3509,18 @@ export def "beta-groups instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-beta-groups: list # the fields to include for returned resources of type betaGroups
-  --include: list # comma-separated list of relationships to include
-  --fields-builds: list # the fields to include for returned resources of type builds
-  --fields-beta-testers: list # the fields to include for returned resources of type betaTesters
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-beta-groups: list<string> # the fields to include for returned resources of type betaGroups
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
+  --fields-beta-testers: list<string> # the fields to include for returned resources of type betaTesters
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-beta-testers: int # maximum number of related betaTesters returned (when they are included)
   --limit-builds: int # maximum number of related builds returned (when they are included)
 ]: nothing -> record<data: record<attributes: record<createdDate: string, feedbackEnabled: bool, isInternalGroup: bool, name: string, publicLink: string, publicLinkEnabled: bool, publicLinkId: string, publicLinkLimit: int, publicLinkLimitEnabled: bool>, id: string, links: record<self: string>, relationships: record<app: record, betaTesters: record, builds: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[betaGroups]" $fields_beta_groups "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "fields[betaTesters]" $fields_beta_testers "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[betaTesters]" $limit_beta_testers "scalar") (serialize-qp "limit[builds]" $limit_builds "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaGroups/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaGroups/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3521,7 +3530,7 @@ export def "beta-groups instance-by-id-1" [
 #
 # operationId: betaGroups-update_instance
 # --data shape: {attributes?: record, id: string, type: "betaGroups"}
-export def "beta-groups instance-by-id-2" [
+export def "beta-groups update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3536,18 +3545,18 @@ export def "beta-groups instance-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaGroups/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaGroups/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/betaGroups/{id}/app
 #
 # operationId: betaGroups-app-get_to_one_related
-export def "beta-groups-app related" [
+export def "beta-groups-app get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3557,12 +3566,12 @@ export def "beta-groups-app related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
 ]: nothing -> record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[apps]" $fields_apps "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaGroups/{id}/app") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaGroups/{id}/app") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3571,7 +3580,7 @@ export def "beta-groups-app related" [
 # GET /v1/betaGroups/{id}/betaTesters
 #
 # operationId: betaGroups-betaTesters-get_to_many_related
-export def "beta-groups-beta-testers related" [
+export def "beta-groups-beta-testers get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3581,13 +3590,13 @@ export def "beta-groups-beta-testers related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-beta-testers: list # the fields to include for returned resources of type betaTesters
+  --fields-beta-testers: list<string> # the fields to include for returned resources of type betaTesters
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[betaTesters]" $fields_beta_testers "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaGroups/{id}/betaTesters") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaGroups/{id}/betaTesters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3596,7 +3605,7 @@ export def "beta-groups-beta-testers related" [
 # GET /v1/betaGroups/{id}/builds
 #
 # operationId: betaGroups-builds-get_to_many_related
-export def "beta-groups-builds related" [
+export def "beta-groups-builds get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3606,13 +3615,13 @@ export def "beta-groups-builds related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-builds: list # the fields to include for returned resources of type builds
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaGroups/{id}/builds") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaGroups/{id}/builds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3622,7 +3631,7 @@ export def "beta-groups-builds related" [
 #
 # operationId: betaGroups-betaTesters-delete_to_many_relationship
 # --data item shape: {id: string, type: "betaTesters"}
-export def "beta-groups-relationships-beta-testers relationship-by-id" [
+export def "beta-groups-relationships-beta-testers delete-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3637,18 +3646,18 @@ export def "beta-groups-relationships-beta-testers relationship-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaGroups/{id}/relationships/betaTesters"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaGroups/{id}/relationships/betaTesters"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/betaGroups/{id}/relationships/betaTesters
 #
 # operationId: betaGroups-betaTesters-get_to_many_relationship
-export def "beta-groups-relationships-beta-testers relationship-by-id-1" [
+export def "beta-groups-relationships-beta-testers get-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3663,7 +3672,7 @@ export def "beta-groups-relationships-beta-testers relationship-by-id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaGroups/{id}/relationships/betaTesters") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaGroups/{id}/relationships/betaTesters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3673,7 +3682,7 @@ export def "beta-groups-relationships-beta-testers relationship-by-id-1" [
 #
 # operationId: betaGroups-betaTesters-create_to_many_relationship
 # --data item shape: {id: string, type: "betaTesters"}
-export def "beta-groups-relationships-beta-testers relationship-by-id-2" [
+export def "beta-groups-relationships-beta-testers create-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3688,19 +3697,19 @@ export def "beta-groups-relationships-beta-testers relationship-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaGroups/{id}/relationships/betaTesters"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaGroups/{id}/relationships/betaTesters"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/betaGroups/{id}/relationships/builds
 #
 # operationId: betaGroups-builds-delete_to_many_relationship
 # --data item shape: {id: string, type: "builds"}
-export def "beta-groups-relationships-builds relationship-by-id" [
+export def "beta-groups-relationships-builds delete-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3715,18 +3724,18 @@ export def "beta-groups-relationships-builds relationship-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaGroups/{id}/relationships/builds"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaGroups/{id}/relationships/builds"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/betaGroups/{id}/relationships/builds
 #
 # operationId: betaGroups-builds-get_to_many_relationship
-export def "beta-groups-relationships-builds relationship-by-id-1" [
+export def "beta-groups-relationships-builds get-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3741,7 +3750,7 @@ export def "beta-groups-relationships-builds relationship-by-id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaGroups/{id}/relationships/builds") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaGroups/{id}/relationships/builds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3751,7 +3760,7 @@ export def "beta-groups-relationships-builds relationship-by-id-1" [
 #
 # operationId: betaGroups-builds-create_to_many_relationship
 # --data item shape: {id: string, type: "builds"}
-export def "beta-groups-relationships-builds relationship-by-id-2" [
+export def "beta-groups-relationships-builds create-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3766,18 +3775,18 @@ export def "beta-groups-relationships-builds relationship-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaGroups/{id}/relationships/builds"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaGroups/{id}/relationships/builds"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/betaLicenseAgreements
 #
 # operationId: betaLicenseAgreements-get_collection
-export def "beta-license-agreements collection" [
+export def "beta-license-agreements get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3786,11 +3795,11 @@ export def "beta-license-agreements collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-app: list # filter by id(s) of related 'app'
-  --fields-beta-license-agreements: list # the fields to include for returned resources of type betaLicenseAgreements
+  --filter-app: list<string> # filter by id(s) of related 'app'
+  --fields-beta-license-agreements: list<string> # the fields to include for returned resources of type betaLicenseAgreements
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3804,7 +3813,7 @@ export def "beta-license-agreements collection" [
 # GET /v1/betaLicenseAgreements/{id}
 #
 # operationId: betaLicenseAgreements-get_instance
-export def "beta-license-agreements instance-by-id" [
+export def "beta-license-agreements get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3814,14 +3823,14 @@ export def "beta-license-agreements instance-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-beta-license-agreements: list # the fields to include for returned resources of type betaLicenseAgreements
-  --include: list # comma-separated list of relationships to include
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-beta-license-agreements: list<string> # the fields to include for returned resources of type betaLicenseAgreements
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
 ]: nothing -> record<data: record<attributes: record<agreementText: string>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[betaLicenseAgreements]" $fields_beta_license_agreements "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[apps]" $fields_apps "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaLicenseAgreements/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaLicenseAgreements/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3831,7 +3840,7 @@ export def "beta-license-agreements instance-by-id" [
 #
 # operationId: betaLicenseAgreements-update_instance
 # --data shape: {attributes?: record, id: string, type: "betaLicenseAgreements"}
-export def "beta-license-agreements instance-by-id-1" [
+export def "beta-license-agreements update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3846,18 +3855,18 @@ export def "beta-license-agreements instance-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaLicenseAgreements/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaLicenseAgreements/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/betaLicenseAgreements/{id}/app
 #
 # operationId: betaLicenseAgreements-app-get_to_one_related
-export def "beta-license-agreements-app related" [
+export def "beta-license-agreements-app get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3867,12 +3876,12 @@ export def "beta-license-agreements-app related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
 ]: nothing -> record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[apps]" $fields_apps "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaLicenseAgreements/{id}/app") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaLicenseAgreements/{id}/app") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3882,7 +3891,7 @@ export def "beta-license-agreements-app related" [
 #
 # operationId: betaTesterInvitations-create_instance
 # --data shape: {relationships: record, type: "betaTesterInvitations"}
-export def "beta-tester-invitations instance" [
+export def "beta-tester-invitations create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3897,17 +3906,17 @@ export def "beta-tester-invitations instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/betaTesterInvitations")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/betaTesters
 #
 # operationId: betaTesters-get_collection
-export def "beta-testers collection" [
+export def "beta-testers get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3916,20 +3925,20 @@ export def "beta-testers collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-email: list # filter by attribute 'email'
-  --filter-first-name: list # filter by attribute 'firstName'
-  --filter-invite-type: list # filter by attribute 'inviteType'
-  --filter-last-name: list # filter by attribute 'lastName'
-  --filter-apps: list # filter by id(s) of related 'apps'
-  --filter-beta-groups: list # filter by id(s) of related 'betaGroups'
-  --filter-builds: list # filter by id(s) of related 'builds'
-  --qp-sort: list # comma-separated list of sort expressions; resources will be sorted as specified
-  --fields-beta-testers: list # the fields to include for returned resources of type betaTesters
+  --filter-email: list<string> # filter by attribute 'email'
+  --filter-first-name: list<string> # filter by attribute 'firstName'
+  --filter-invite-type: list<string> # filter by attribute 'inviteType'
+  --filter-last-name: list<string> # filter by attribute 'lastName'
+  --filter-apps: list<string> # filter by id(s) of related 'apps'
+  --filter-beta-groups: list<string> # filter by id(s) of related 'betaGroups'
+  --filter-builds: list<string> # filter by id(s) of related 'builds'
+  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --fields-beta-testers: list<string> # the fields to include for returned resources of type betaTesters
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
-  --fields-beta-groups: list # the fields to include for returned resources of type betaGroups
-  --fields-builds: list # the fields to include for returned resources of type builds
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-beta-groups: list<string> # the fields to include for returned resources of type betaGroups
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-apps: int # maximum number of related apps returned (when they are included)
   --limit-beta-groups: int # maximum number of related betaGroups returned (when they are included)
   --limit-builds: int # maximum number of related builds returned (when they are included)
@@ -3947,7 +3956,7 @@ export def "beta-testers collection" [
 #
 # operationId: betaTesters-create_instance
 # --data shape: {attributes: record, relationships?: record, type: "betaTesters"}
-export def "beta-testers instance" [
+export def "beta-testers create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3962,17 +3971,17 @@ export def "beta-testers instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/betaTesters")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/betaTesters/{id}
 #
 # operationId: betaTesters-delete_instance
-export def "beta-testers instance-by-id" [
+export def "beta-testers delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3985,7 +3994,7 @@ export def "beta-testers instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaTesters/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaTesters/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3994,7 +4003,7 @@ export def "beta-testers instance-by-id" [
 # GET /v1/betaTesters/{id}
 #
 # operationId: betaTesters-get_instance
-export def "beta-testers instance-by-id-1" [
+export def "beta-testers get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4004,11 +4013,11 @@ export def "beta-testers instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-beta-testers: list # the fields to include for returned resources of type betaTesters
-  --include: list # comma-separated list of relationships to include
-  --fields-beta-groups: list # the fields to include for returned resources of type betaGroups
-  --fields-builds: list # the fields to include for returned resources of type builds
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-beta-testers: list<string> # the fields to include for returned resources of type betaTesters
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-beta-groups: list<string> # the fields to include for returned resources of type betaGroups
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-apps: int # maximum number of related apps returned (when they are included)
   --limit-beta-groups: int # maximum number of related betaGroups returned (when they are included)
   --limit-builds: int # maximum number of related builds returned (when they are included)
@@ -4016,7 +4025,7 @@ export def "beta-testers instance-by-id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[betaTesters]" $fields_beta_testers "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[betaGroups]" $fields_beta_groups "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[apps]" $limit_apps "scalar") (serialize-qp "limit[betaGroups]" $limit_beta_groups "scalar") (serialize-qp "limit[builds]" $limit_builds "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaTesters/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaTesters/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4025,7 +4034,7 @@ export def "beta-testers instance-by-id-1" [
 # GET /v1/betaTesters/{id}/apps
 #
 # operationId: betaTesters-apps-get_to_many_related
-export def "beta-testers-apps related" [
+export def "beta-testers-apps get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4035,13 +4044,13 @@ export def "beta-testers-apps related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaTesters/{id}/apps") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaTesters/{id}/apps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4050,7 +4059,7 @@ export def "beta-testers-apps related" [
 # GET /v1/betaTesters/{id}/betaGroups
 #
 # operationId: betaTesters-betaGroups-get_to_many_related
-export def "beta-testers-beta-groups related" [
+export def "beta-testers-beta-groups get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4060,13 +4069,13 @@ export def "beta-testers-beta-groups related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-beta-groups: list # the fields to include for returned resources of type betaGroups
+  --fields-beta-groups: list<string> # the fields to include for returned resources of type betaGroups
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[betaGroups]" $fields_beta_groups "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaTesters/{id}/betaGroups") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaTesters/{id}/betaGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4075,7 +4084,7 @@ export def "beta-testers-beta-groups related" [
 # GET /v1/betaTesters/{id}/builds
 #
 # operationId: betaTesters-builds-get_to_many_related
-export def "beta-testers-builds related" [
+export def "beta-testers-builds get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4085,13 +4094,13 @@ export def "beta-testers-builds related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-builds: list # the fields to include for returned resources of type builds
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaTesters/{id}/builds") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaTesters/{id}/builds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4101,7 +4110,7 @@ export def "beta-testers-builds related" [
 #
 # operationId: betaTesters-apps-delete_to_many_relationship
 # --data item shape: {id: string, type: "apps"}
-export def "beta-testers-relationships-apps relationship-by-id" [
+export def "beta-testers-relationships-apps delete-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4116,18 +4125,18 @@ export def "beta-testers-relationships-apps relationship-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaTesters/{id}/relationships/apps"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaTesters/{id}/relationships/apps"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/betaTesters/{id}/relationships/apps
 #
 # operationId: betaTesters-apps-get_to_many_relationship
-export def "beta-testers-relationships-apps relationship-by-id-1" [
+export def "beta-testers-relationships-apps get-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4142,7 +4151,7 @@ export def "beta-testers-relationships-apps relationship-by-id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaTesters/{id}/relationships/apps") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaTesters/{id}/relationships/apps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4152,7 +4161,7 @@ export def "beta-testers-relationships-apps relationship-by-id-1" [
 #
 # operationId: betaTesters-betaGroups-delete_to_many_relationship
 # --data item shape: {id: string, type: "betaGroups"}
-export def "beta-testers-relationships-beta-groups relationship-by-id" [
+export def "beta-testers-relationships-beta-groups delete-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4167,18 +4176,18 @@ export def "beta-testers-relationships-beta-groups relationship-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaTesters/{id}/relationships/betaGroups"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaTesters/{id}/relationships/betaGroups"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/betaTesters/{id}/relationships/betaGroups
 #
 # operationId: betaTesters-betaGroups-get_to_many_relationship
-export def "beta-testers-relationships-beta-groups relationship-by-id-1" [
+export def "beta-testers-relationships-beta-groups get-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4193,7 +4202,7 @@ export def "beta-testers-relationships-beta-groups relationship-by-id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaTesters/{id}/relationships/betaGroups") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaTesters/{id}/relationships/betaGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4203,7 +4212,7 @@ export def "beta-testers-relationships-beta-groups relationship-by-id-1" [
 #
 # operationId: betaTesters-betaGroups-create_to_many_relationship
 # --data item shape: {id: string, type: "betaGroups"}
-export def "beta-testers-relationships-beta-groups relationship-by-id-2" [
+export def "beta-testers-relationships-beta-groups create-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4218,19 +4227,19 @@ export def "beta-testers-relationships-beta-groups relationship-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaTesters/{id}/relationships/betaGroups"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaTesters/{id}/relationships/betaGroups"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/betaTesters/{id}/relationships/builds
 #
 # operationId: betaTesters-builds-delete_to_many_relationship
 # --data item shape: {id: string, type: "builds"}
-export def "beta-testers-relationships-builds relationship-by-id" [
+export def "beta-testers-relationships-builds delete-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4245,18 +4254,18 @@ export def "beta-testers-relationships-builds relationship-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaTesters/{id}/relationships/builds"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaTesters/{id}/relationships/builds"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/betaTesters/{id}/relationships/builds
 #
 # operationId: betaTesters-builds-get_to_many_relationship
-export def "beta-testers-relationships-builds relationship-by-id-1" [
+export def "beta-testers-relationships-builds get-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4271,7 +4280,7 @@ export def "beta-testers-relationships-builds relationship-by-id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaTesters/{id}/relationships/builds") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaTesters/{id}/relationships/builds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4281,7 +4290,7 @@ export def "beta-testers-relationships-builds relationship-by-id-1" [
 #
 # operationId: betaTesters-builds-create_to_many_relationship
 # --data item shape: {id: string, type: "builds"}
-export def "beta-testers-relationships-builds relationship-by-id-2" [
+export def "beta-testers-relationships-builds create-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4296,18 +4305,18 @@ export def "beta-testers-relationships-builds relationship-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/betaTesters/{id}/relationships/builds"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/betaTesters/{id}/relationships/builds"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/buildBetaDetails
 #
 # operationId: buildBetaDetails-get_collection
-export def "build-beta-details collection" [
+export def "build-beta-details get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4316,12 +4325,12 @@ export def "build-beta-details collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-build: list # filter by id(s) of related 'build'
-  --filter-id: list # filter by id(s)
-  --fields-build-beta-details: list # the fields to include for returned resources of type buildBetaDetails
+  --filter-build: list<string> # filter by id(s) of related 'build'
+  --filter-id: list<string> # filter by id(s)
+  --fields-build-beta-details: list<string> # the fields to include for returned resources of type buildBetaDetails
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
-  --fields-builds: list # the fields to include for returned resources of type builds
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4335,7 +4344,7 @@ export def "build-beta-details collection" [
 # GET /v1/buildBetaDetails/{id}
 #
 # operationId: buildBetaDetails-get_instance
-export def "build-beta-details instance-by-id" [
+export def "build-beta-details get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4345,14 +4354,14 @@ export def "build-beta-details instance-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-build-beta-details: list # the fields to include for returned resources of type buildBetaDetails
-  --include: list # comma-separated list of relationships to include
-  --fields-builds: list # the fields to include for returned resources of type builds
+  --fields-build-beta-details: list<string> # the fields to include for returned resources of type buildBetaDetails
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
 ]: nothing -> record<data: record<attributes: record<autoNotifyEnabled: bool, externalBuildState: string, internalBuildState: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[buildBetaDetails]" $fields_build_beta_details "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[builds]" $fields_builds "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/buildBetaDetails/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/buildBetaDetails/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4362,7 +4371,7 @@ export def "build-beta-details instance-by-id" [
 #
 # operationId: buildBetaDetails-update_instance
 # --data shape: {attributes?: record, id: string, type: "buildBetaDetails"}
-export def "build-beta-details instance-by-id-1" [
+export def "build-beta-details update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4377,18 +4386,18 @@ export def "build-beta-details instance-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/buildBetaDetails/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/buildBetaDetails/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/buildBetaDetails/{id}/build
 #
 # operationId: buildBetaDetails-build-get_to_one_related
-export def "build-beta-details-build related" [
+export def "build-beta-details-build get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4398,12 +4407,12 @@ export def "build-beta-details-build related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-builds: list # the fields to include for returned resources of type builds
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
 ]: nothing -> record<data: record<attributes: record<expirationDate: string, expired: bool, iconAssetToken: record, minOsVersion: string, processingState: string, uploadedDate: string, usesNonExemptEncryption: bool, version: string>, id: string, links: record<self: string>, relationships: record<app: record, appEncryptionDeclaration: record, appStoreVersion: record, betaAppReviewSubmission: record, betaBuildLocalizations: record, buildBetaDetail: record, icons: record, individualTesters: record, preReleaseVersion: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[builds]" $fields_builds "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/buildBetaDetails/{id}/build") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/buildBetaDetails/{id}/build") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4413,7 +4422,7 @@ export def "build-beta-details-build related" [
 #
 # operationId: buildBetaNotifications-create_instance
 # --data shape: {relationships: record, type: "buildBetaNotifications"}
-export def "build-beta-notifications instance" [
+export def "build-beta-notifications create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4428,17 +4437,17 @@ export def "build-beta-notifications instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/buildBetaNotifications")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/builds
 #
 # operationId: builds-get_collection
-export def "builds collection" [
+export def "builds get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4447,33 +4456,33 @@ export def "builds collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-beta-app-review-submission-beta-review-state: list # filter by attribute 'betaAppReviewSubmission.betaReviewState'
-  --filter-expired: list # filter by attribute 'expired'
-  --filter-pre-release-version-platform: list # filter by attribute 'preReleaseVersion.platform'
-  --filter-pre-release-version-version: list # filter by attribute 'preReleaseVersion.version'
-  --filter-processing-state: list # filter by attribute 'processingState'
-  --filter-uses-non-exempt-encryption: list # filter by attribute 'usesNonExemptEncryption'
-  --filter-version: list # filter by attribute 'version'
-  --filter-app: list # filter by id(s) of related 'app'
-  --filter-app-store-version: list # filter by id(s) of related 'appStoreVersion'
-  --filter-beta-groups: list # filter by id(s) of related 'betaGroups'
-  --filter-pre-release-version: list # filter by id(s) of related 'preReleaseVersion'
-  --filter-id: list # filter by id(s)
-  --qp-sort: list # comma-separated list of sort expressions; resources will be sorted as specified
-  --fields-builds: list # the fields to include for returned resources of type builds
+  --filter-beta-app-review-submission-beta-review-state: list<string> # filter by attribute 'betaAppReviewSubmission.betaReviewState'
+  --filter-expired: list<string> # filter by attribute 'expired'
+  --filter-pre-release-version-platform: list<string> # filter by attribute 'preReleaseVersion.platform'
+  --filter-pre-release-version-version: list<string> # filter by attribute 'preReleaseVersion.version'
+  --filter-processing-state: list<string> # filter by attribute 'processingState'
+  --filter-uses-non-exempt-encryption: list<string> # filter by attribute 'usesNonExemptEncryption'
+  --filter-version: list<string> # filter by attribute 'version'
+  --filter-app: list<string> # filter by id(s) of related 'app'
+  --filter-app-store-version: list<string> # filter by id(s) of related 'appStoreVersion'
+  --filter-beta-groups: list<string> # filter by id(s) of related 'betaGroups'
+  --filter-pre-release-version: list<string> # filter by id(s) of related 'preReleaseVersion'
+  --filter-id: list<string> # filter by id(s)
+  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
-  --fields-app-encryption-declarations: list # the fields to include for returned resources of type appEncryptionDeclarations
-  --fields-beta-app-review-submissions: list # the fields to include for returned resources of type betaAppReviewSubmissions
-  --fields-build-beta-details: list # the fields to include for returned resources of type buildBetaDetails
-  --fields-build-icons: list # the fields to include for returned resources of type buildIcons
-  --fields-perf-power-metrics: list # the fields to include for returned resources of type perfPowerMetrics
-  --fields-pre-release-versions: list # the fields to include for returned resources of type preReleaseVersions
-  --fields-app-store-versions: list # the fields to include for returned resources of type appStoreVersions
-  --fields-diagnostic-signatures: list # the fields to include for returned resources of type diagnosticSignatures
-  --fields-beta-testers: list # the fields to include for returned resources of type betaTesters
-  --fields-beta-build-localizations: list # the fields to include for returned resources of type betaBuildLocalizations
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-app-encryption-declarations: list<string> # the fields to include for returned resources of type appEncryptionDeclarations
+  --fields-beta-app-review-submissions: list<string> # the fields to include for returned resources of type betaAppReviewSubmissions
+  --fields-build-beta-details: list<string> # the fields to include for returned resources of type buildBetaDetails
+  --fields-build-icons: list<string> # the fields to include for returned resources of type buildIcons
+  --fields-perf-power-metrics: list<string> # the fields to include for returned resources of type perfPowerMetrics
+  --fields-pre-release-versions: list<string> # the fields to include for returned resources of type preReleaseVersions
+  --fields-app-store-versions: list<string> # the fields to include for returned resources of type appStoreVersions
+  --fields-diagnostic-signatures: list<string> # the fields to include for returned resources of type diagnosticSignatures
+  --fields-beta-testers: list<string> # the fields to include for returned resources of type betaTesters
+  --fields-beta-build-localizations: list<string> # the fields to include for returned resources of type betaBuildLocalizations
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-beta-build-localizations: int # maximum number of related betaBuildLocalizations returned (when they are included)
   --limit-icons: int # maximum number of related icons returned (when they are included)
   --limit-individual-testers: int # maximum number of related individualTesters returned (when they are included)
@@ -4490,7 +4499,7 @@ export def "builds collection" [
 # GET /v1/builds/{id}
 #
 # operationId: builds-get_instance
-export def "builds instance-by-id" [
+export def "builds get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4500,19 +4509,19 @@ export def "builds instance-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-builds: list # the fields to include for returned resources of type builds
-  --include: list # comma-separated list of relationships to include
-  --fields-app-encryption-declarations: list # the fields to include for returned resources of type appEncryptionDeclarations
-  --fields-beta-app-review-submissions: list # the fields to include for returned resources of type betaAppReviewSubmissions
-  --fields-build-beta-details: list # the fields to include for returned resources of type buildBetaDetails
-  --fields-build-icons: list # the fields to include for returned resources of type buildIcons
-  --fields-perf-power-metrics: list # the fields to include for returned resources of type perfPowerMetrics
-  --fields-pre-release-versions: list # the fields to include for returned resources of type preReleaseVersions
-  --fields-app-store-versions: list # the fields to include for returned resources of type appStoreVersions
-  --fields-diagnostic-signatures: list # the fields to include for returned resources of type diagnosticSignatures
-  --fields-beta-testers: list # the fields to include for returned resources of type betaTesters
-  --fields-beta-build-localizations: list # the fields to include for returned resources of type betaBuildLocalizations
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-app-encryption-declarations: list<string> # the fields to include for returned resources of type appEncryptionDeclarations
+  --fields-beta-app-review-submissions: list<string> # the fields to include for returned resources of type betaAppReviewSubmissions
+  --fields-build-beta-details: list<string> # the fields to include for returned resources of type buildBetaDetails
+  --fields-build-icons: list<string> # the fields to include for returned resources of type buildIcons
+  --fields-perf-power-metrics: list<string> # the fields to include for returned resources of type perfPowerMetrics
+  --fields-pre-release-versions: list<string> # the fields to include for returned resources of type preReleaseVersions
+  --fields-app-store-versions: list<string> # the fields to include for returned resources of type appStoreVersions
+  --fields-diagnostic-signatures: list<string> # the fields to include for returned resources of type diagnosticSignatures
+  --fields-beta-testers: list<string> # the fields to include for returned resources of type betaTesters
+  --fields-beta-build-localizations: list<string> # the fields to include for returned resources of type betaBuildLocalizations
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-beta-build-localizations: int # maximum number of related betaBuildLocalizations returned (when they are included)
   --limit-icons: int # maximum number of related icons returned (when they are included)
   --limit-individual-testers: int # maximum number of related individualTesters returned (when they are included)
@@ -4520,7 +4529,7 @@ export def "builds instance-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[appEncryptionDeclarations]" $fields_app_encryption_declarations "csv") (serialize-qp "fields[betaAppReviewSubmissions]" $fields_beta_app_review_submissions "csv") (serialize-qp "fields[buildBetaDetails]" $fields_build_beta_details "csv") (serialize-qp "fields[buildIcons]" $fields_build_icons "csv") (serialize-qp "fields[perfPowerMetrics]" $fields_perf_power_metrics "csv") (serialize-qp "fields[preReleaseVersions]" $fields_pre_release_versions "csv") (serialize-qp "fields[appStoreVersions]" $fields_app_store_versions "csv") (serialize-qp "fields[diagnosticSignatures]" $fields_diagnostic_signatures "csv") (serialize-qp "fields[betaTesters]" $fields_beta_testers "csv") (serialize-qp "fields[betaBuildLocalizations]" $fields_beta_build_localizations "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[betaBuildLocalizations]" $limit_beta_build_localizations "scalar") (serialize-qp "limit[icons]" $limit_icons "scalar") (serialize-qp "limit[individualTesters]" $limit_individual_testers "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4530,7 +4539,7 @@ export def "builds instance-by-id" [
 #
 # operationId: builds-update_instance
 # --data shape: {attributes?: record, id: string, relationships?: record, type: "builds"}
-export def "builds instance-by-id-1" [
+export def "builds update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4545,18 +4554,18 @@ export def "builds instance-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/builds/{id}/app
 #
 # operationId: builds-app-get_to_one_related
-export def "builds-app related" [
+export def "builds-app get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4566,12 +4575,12 @@ export def "builds-app related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
 ]: nothing -> record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[apps]" $fields_apps "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}/app") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}/app") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4580,7 +4589,7 @@ export def "builds-app related" [
 # GET /v1/builds/{id}/appEncryptionDeclaration
 #
 # operationId: builds-appEncryptionDeclaration-get_to_one_related
-export def "builds-app-encryption-declaration related" [
+export def "builds-app-encryption-declaration get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4590,12 +4599,12 @@ export def "builds-app-encryption-declaration related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-encryption-declarations: list # the fields to include for returned resources of type appEncryptionDeclarations
+  --fields-app-encryption-declarations: list<string> # the fields to include for returned resources of type appEncryptionDeclarations
 ]: nothing -> record<data: record<attributes: record<appEncryptionDeclarationState: string, availableOnFrenchStore: bool, codeValue: string, containsProprietaryCryptography: bool, containsThirdPartyCryptography: bool, documentName: string, documentType: string, documentUrl: string, exempt: bool, platform: string, uploadedDate: string, usesEncryption: bool>, id: string, links: record<self: string>, relationships: record<app: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appEncryptionDeclarations]" $fields_app_encryption_declarations "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}/appEncryptionDeclaration") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}/appEncryptionDeclaration") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4604,7 +4613,7 @@ export def "builds-app-encryption-declaration related" [
 # GET /v1/builds/{id}/appStoreVersion
 #
 # operationId: builds-appStoreVersion-get_to_one_related
-export def "builds-app-store-version related" [
+export def "builds-app-store-version get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4614,12 +4623,12 @@ export def "builds-app-store-version related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-app-store-versions: list # the fields to include for returned resources of type appStoreVersions
+  --fields-app-store-versions: list<string> # the fields to include for returned resources of type appStoreVersions
 ]: nothing -> record<data: record<attributes: record<appStoreState: string, copyright: string, createdDate: string, downloadable: bool, earliestReleaseDate: string, platform: string, releaseType: string, usesIdfa: bool, versionString: string>, id: string, links: record<self: string>, relationships: record<ageRatingDeclaration: record, app: record, appStoreReviewDetail: record, appStoreVersionLocalizations: record, appStoreVersionPhasedRelease: record, appStoreVersionSubmission: record, build: record, idfaDeclaration: record, routingAppCoverage: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[appStoreVersions]" $fields_app_store_versions "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}/appStoreVersion") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}/appStoreVersion") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4628,7 +4637,7 @@ export def "builds-app-store-version related" [
 # GET /v1/builds/{id}/betaAppReviewSubmission
 #
 # operationId: builds-betaAppReviewSubmission-get_to_one_related
-export def "builds-beta-app-review-submission related" [
+export def "builds-beta-app-review-submission get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4638,12 +4647,12 @@ export def "builds-beta-app-review-submission related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-beta-app-review-submissions: list # the fields to include for returned resources of type betaAppReviewSubmissions
+  --fields-beta-app-review-submissions: list<string> # the fields to include for returned resources of type betaAppReviewSubmissions
 ]: nothing -> record<data: record<attributes: record<betaReviewState: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[betaAppReviewSubmissions]" $fields_beta_app_review_submissions "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}/betaAppReviewSubmission") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}/betaAppReviewSubmission") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4652,7 +4661,7 @@ export def "builds-beta-app-review-submission related" [
 # GET /v1/builds/{id}/betaBuildLocalizations
 #
 # operationId: builds-betaBuildLocalizations-get_to_many_related
-export def "builds-beta-build-localizations related" [
+export def "builds-beta-build-localizations get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4662,13 +4671,13 @@ export def "builds-beta-build-localizations related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-beta-build-localizations: list # the fields to include for returned resources of type betaBuildLocalizations
+  --fields-beta-build-localizations: list<string> # the fields to include for returned resources of type betaBuildLocalizations
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[betaBuildLocalizations]" $fields_beta_build_localizations "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}/betaBuildLocalizations") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}/betaBuildLocalizations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4677,7 +4686,7 @@ export def "builds-beta-build-localizations related" [
 # GET /v1/builds/{id}/buildBetaDetail
 #
 # operationId: builds-buildBetaDetail-get_to_one_related
-export def "builds-build-beta-detail related" [
+export def "builds-build-beta-detail get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4687,12 +4696,12 @@ export def "builds-build-beta-detail related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-build-beta-details: list # the fields to include for returned resources of type buildBetaDetails
+  --fields-build-beta-details: list<string> # the fields to include for returned resources of type buildBetaDetails
 ]: nothing -> record<data: record<attributes: record<autoNotifyEnabled: bool, externalBuildState: string, internalBuildState: string>, id: string, links: record<self: string>, relationships: record<build: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[buildBetaDetails]" $fields_build_beta_details "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}/buildBetaDetail") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}/buildBetaDetail") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4701,7 +4710,7 @@ export def "builds-build-beta-detail related" [
 # GET /v1/builds/{id}/diagnosticSignatures
 #
 # operationId: builds-diagnosticSignatures-get_to_many_related
-export def "builds-diagnostic-signatures related" [
+export def "builds-diagnostic-signatures get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4711,14 +4720,14 @@ export def "builds-diagnostic-signatures related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-diagnostic-type: list # filter by attribute 'diagnosticType'
-  --fields-diagnostic-signatures: list # the fields to include for returned resources of type diagnosticSignatures
+  --filter-diagnostic-type: list<string> # filter by attribute 'diagnosticType'
+  --fields-diagnostic-signatures: list<string> # the fields to include for returned resources of type diagnosticSignatures
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, included: table<id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[diagnosticType]" $filter_diagnostic_type "csv") (serialize-qp "fields[diagnosticSignatures]" $fields_diagnostic_signatures "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}/diagnosticSignatures") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}/diagnosticSignatures") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4727,7 +4736,7 @@ export def "builds-diagnostic-signatures related" [
 # GET /v1/builds/{id}/icons
 #
 # operationId: builds-icons-get_to_many_related
-export def "builds-icons related" [
+export def "builds-icons get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4737,13 +4746,13 @@ export def "builds-icons related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-build-icons: list # the fields to include for returned resources of type buildIcons
+  --fields-build-icons: list<string> # the fields to include for returned resources of type buildIcons
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[buildIcons]" $fields_build_icons "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}/icons") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}/icons") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4752,7 +4761,7 @@ export def "builds-icons related" [
 # GET /v1/builds/{id}/individualTesters
 #
 # operationId: builds-individualTesters-get_to_many_related
-export def "builds-individual-testers related" [
+export def "builds-individual-testers get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4762,13 +4771,13 @@ export def "builds-individual-testers related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-beta-testers: list # the fields to include for returned resources of type betaTesters
+  --fields-beta-testers: list<string> # the fields to include for returned resources of type betaTesters
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[betaTesters]" $fields_beta_testers "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}/individualTesters") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}/individualTesters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4777,7 +4786,7 @@ export def "builds-individual-testers related" [
 # GET /v1/builds/{id}/perfPowerMetrics
 #
 # operationId: builds-perfPowerMetrics-get_to_many_related
-export def "builds-perf-power-metrics related" [
+export def "builds-perf-power-metrics get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4787,14 +4796,14 @@ export def "builds-perf-power-metrics related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-device-type: list # filter by attribute 'deviceType'
-  --filter-metric-type: list # filter by attribute 'metricType'
-  --filter-platform: list # filter by attribute 'platform'
+  --filter-device-type: list<string> # filter by attribute 'deviceType'
+  --filter-metric-type: list<string> # filter by attribute 'metricType'
+  --filter-platform: list<string> # filter by attribute 'platform'
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[deviceType]" $filter_device_type "csv") (serialize-qp "filter[metricType]" $filter_metric_type "csv") (serialize-qp "filter[platform]" $filter_platform "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}/perfPowerMetrics") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}/perfPowerMetrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4803,7 +4812,7 @@ export def "builds-perf-power-metrics related" [
 # GET /v1/builds/{id}/preReleaseVersion
 #
 # operationId: builds-preReleaseVersion-get_to_one_related
-export def "builds-pre-release-version related" [
+export def "builds-pre-release-version get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4813,12 +4822,12 @@ export def "builds-pre-release-version related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-pre-release-versions: list # the fields to include for returned resources of type preReleaseVersions
+  --fields-pre-release-versions: list<string> # the fields to include for returned resources of type preReleaseVersions
 ]: nothing -> record<data: record<attributes: record<platform: string, version: string>, id: string, links: record<self: string>, relationships: record<app: record, builds: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[preReleaseVersions]" $fields_pre_release_versions "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}/preReleaseVersion") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}/preReleaseVersion") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4827,7 +4836,7 @@ export def "builds-pre-release-version related" [
 # GET /v1/builds/{id}/relationships/appEncryptionDeclaration
 #
 # operationId: builds-appEncryptionDeclaration-get_to_one_relationship
-export def "builds-relationships-app-encryption-declaration relationship-by-id" [
+export def "builds-relationships-app-encryption-declaration get-to-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4840,7 +4849,7 @@ export def "builds-relationships-app-encryption-declaration relationship-by-id" 
 ]: nothing -> record<data: record<id: string, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}/relationships/appEncryptionDeclaration"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}/relationships/appEncryptionDeclaration"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4850,7 +4859,7 @@ export def "builds-relationships-app-encryption-declaration relationship-by-id" 
 #
 # operationId: builds-appEncryptionDeclaration-update_to_one_relationship
 # --data shape: {id: string, type: "appEncryptionDeclarations"}
-export def "builds-relationships-app-encryption-declaration relationship-by-id-1" [
+export def "builds-relationships-app-encryption-declaration update-to-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4865,19 +4874,19 @@ export def "builds-relationships-app-encryption-declaration relationship-by-id-1
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}/relationships/appEncryptionDeclaration"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}/relationships/appEncryptionDeclaration"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/builds/{id}/relationships/betaGroups
 #
 # operationId: builds-betaGroups-delete_to_many_relationship
 # --data item shape: {id: string, type: "betaGroups"}
-export def "builds-relationships-beta-groups relationship-by-id" [
+export def "builds-relationships-beta-groups delete-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4892,19 +4901,19 @@ export def "builds-relationships-beta-groups relationship-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}/relationships/betaGroups"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}/relationships/betaGroups"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /v1/builds/{id}/relationships/betaGroups
 #
 # operationId: builds-betaGroups-create_to_many_relationship
 # --data item shape: {id: string, type: "betaGroups"}
-export def "builds-relationships-beta-groups relationship-by-id-1" [
+export def "builds-relationships-beta-groups create-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4919,19 +4928,19 @@ export def "builds-relationships-beta-groups relationship-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}/relationships/betaGroups"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}/relationships/betaGroups"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/builds/{id}/relationships/individualTesters
 #
 # operationId: builds-individualTesters-delete_to_many_relationship
 # --data item shape: {id: string, type: "betaTesters"}
-export def "builds-relationships-individual-testers relationship-by-id" [
+export def "builds-relationships-individual-testers delete-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4946,18 +4955,18 @@ export def "builds-relationships-individual-testers relationship-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}/relationships/individualTesters"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}/relationships/individualTesters"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/builds/{id}/relationships/individualTesters
 #
 # operationId: builds-individualTesters-get_to_many_relationship
-export def "builds-relationships-individual-testers relationship-by-id-1" [
+export def "builds-relationships-individual-testers get-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4972,7 +4981,7 @@ export def "builds-relationships-individual-testers relationship-by-id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}/relationships/individualTesters") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}/relationships/individualTesters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4982,7 +4991,7 @@ export def "builds-relationships-individual-testers relationship-by-id-1" [
 #
 # operationId: builds-individualTesters-create_to_many_relationship
 # --data item shape: {id: string, type: "betaTesters"}
-export def "builds-relationships-individual-testers relationship-by-id-2" [
+export def "builds-relationships-individual-testers create-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4997,19 +5006,19 @@ export def "builds-relationships-individual-testers relationship-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/builds/{id}/relationships/individualTesters"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/builds/{id}/relationships/individualTesters"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /v1/bundleIdCapabilities
 #
 # operationId: bundleIdCapabilities-create_instance
 # --data shape: {attributes: record, relationships: record, type: "bundleIdCapabilities"}
-export def "bundle-id-capabilities instance" [
+export def "bundle-id-capabilities create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5024,17 +5033,17 @@ export def "bundle-id-capabilities instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/bundleIdCapabilities")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/bundleIdCapabilities/{id}
 #
 # operationId: bundleIdCapabilities-delete_instance
-export def "bundle-id-capabilities instance-by-id" [
+export def "bundle-id-capabilities delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5047,7 +5056,7 @@ export def "bundle-id-capabilities instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/bundleIdCapabilities/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/bundleIdCapabilities/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5057,7 +5066,7 @@ export def "bundle-id-capabilities instance-by-id" [
 #
 # operationId: bundleIdCapabilities-update_instance
 # --data shape: {attributes?: record, id: string, type: "bundleIdCapabilities"}
-export def "bundle-id-capabilities instance-by-id-1" [
+export def "bundle-id-capabilities update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5072,18 +5081,18 @@ export def "bundle-id-capabilities instance-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/bundleIdCapabilities/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/bundleIdCapabilities/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/bundleIds
 #
 # operationId: bundleIds-get_collection
-export def "bundle-ids collection" [
+export def "bundle-ids get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5092,18 +5101,18 @@ export def "bundle-ids collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-identifier: list # filter by attribute 'identifier'
-  --filter-name: list # filter by attribute 'name'
-  --filter-platform: list # filter by attribute 'platform'
-  --filter-seed-id: list # filter by attribute 'seedId'
-  --filter-id: list # filter by id(s)
-  --qp-sort: list # comma-separated list of sort expressions; resources will be sorted as specified
-  --fields-bundle-ids: list # the fields to include for returned resources of type bundleIds
+  --filter-identifier: list<string> # filter by attribute 'identifier'
+  --filter-name: list<string> # filter by attribute 'name'
+  --filter-platform: list<string> # filter by attribute 'platform'
+  --filter-seed-id: list<string> # filter by attribute 'seedId'
+  --filter-id: list<string> # filter by id(s)
+  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --fields-bundle-ids: list<string> # the fields to include for returned resources of type bundleIds
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
-  --fields-bundle-id-capabilities: list # the fields to include for returned resources of type bundleIdCapabilities
-  --fields-profiles: list # the fields to include for returned resources of type profiles
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-bundle-id-capabilities: list<string> # the fields to include for returned resources of type bundleIdCapabilities
+  --fields-profiles: list<string> # the fields to include for returned resources of type profiles
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-bundle-id-capabilities: int # maximum number of related bundleIdCapabilities returned (when they are included)
   --limit-profiles: int # maximum number of related profiles returned (when they are included)
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
@@ -5120,7 +5129,7 @@ export def "bundle-ids collection" [
 #
 # operationId: bundleIds-create_instance
 # --data shape: {attributes: record, type: "bundleIds"}
-export def "bundle-ids instance" [
+export def "bundle-ids create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5135,17 +5144,17 @@ export def "bundle-ids instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/bundleIds")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/bundleIds/{id}
 #
 # operationId: bundleIds-delete_instance
-export def "bundle-ids instance-by-id" [
+export def "bundle-ids delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5158,7 +5167,7 @@ export def "bundle-ids instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/bundleIds/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/bundleIds/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5167,7 +5176,7 @@ export def "bundle-ids instance-by-id" [
 # GET /v1/bundleIds/{id}
 #
 # operationId: bundleIds-get_instance
-export def "bundle-ids instance-by-id-1" [
+export def "bundle-ids get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5177,18 +5186,18 @@ export def "bundle-ids instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-bundle-ids: list # the fields to include for returned resources of type bundleIds
-  --include: list # comma-separated list of relationships to include
-  --fields-bundle-id-capabilities: list # the fields to include for returned resources of type bundleIdCapabilities
-  --fields-profiles: list # the fields to include for returned resources of type profiles
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-bundle-ids: list<string> # the fields to include for returned resources of type bundleIds
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-bundle-id-capabilities: list<string> # the fields to include for returned resources of type bundleIdCapabilities
+  --fields-profiles: list<string> # the fields to include for returned resources of type profiles
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-bundle-id-capabilities: int # maximum number of related bundleIdCapabilities returned (when they are included)
   --limit-profiles: int # maximum number of related profiles returned (when they are included)
 ]: nothing -> record<data: record<attributes: record<identifier: string, name: string, platform: string, seedId: string>, id: string, links: record<self: string>, relationships: record<app: record, bundleIdCapabilities: record, profiles: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[bundleIds]" $fields_bundle_ids "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[bundleIdCapabilities]" $fields_bundle_id_capabilities "csv") (serialize-qp "fields[profiles]" $fields_profiles "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[bundleIdCapabilities]" $limit_bundle_id_capabilities "scalar") (serialize-qp "limit[profiles]" $limit_profiles "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/bundleIds/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/bundleIds/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5198,7 +5207,7 @@ export def "bundle-ids instance-by-id-1" [
 #
 # operationId: bundleIds-update_instance
 # --data shape: {attributes?: record, id: string, type: "bundleIds"}
-export def "bundle-ids instance-by-id-2" [
+export def "bundle-ids update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5213,18 +5222,18 @@ export def "bundle-ids instance-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/bundleIds/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/bundleIds/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/bundleIds/{id}/app
 #
 # operationId: bundleIds-app-get_to_one_related
-export def "bundle-ids-app related" [
+export def "bundle-ids-app get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5234,12 +5243,12 @@ export def "bundle-ids-app related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
 ]: nothing -> record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[apps]" $fields_apps "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/bundleIds/{id}/app") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/bundleIds/{id}/app") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5248,7 +5257,7 @@ export def "bundle-ids-app related" [
 # GET /v1/bundleIds/{id}/bundleIdCapabilities
 #
 # operationId: bundleIds-bundleIdCapabilities-get_to_many_related
-export def "bundle-ids-bundle-id-capabilities related" [
+export def "bundle-ids-bundle-id-capabilities get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5258,13 +5267,13 @@ export def "bundle-ids-bundle-id-capabilities related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-bundle-id-capabilities: list # the fields to include for returned resources of type bundleIdCapabilities
+  --fields-bundle-id-capabilities: list<string> # the fields to include for returned resources of type bundleIdCapabilities
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[bundleIdCapabilities]" $fields_bundle_id_capabilities "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/bundleIds/{id}/bundleIdCapabilities") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/bundleIds/{id}/bundleIdCapabilities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5273,7 +5282,7 @@ export def "bundle-ids-bundle-id-capabilities related" [
 # GET /v1/bundleIds/{id}/profiles
 #
 # operationId: bundleIds-profiles-get_to_many_related
-export def "bundle-ids-profiles related" [
+export def "bundle-ids-profiles get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5283,13 +5292,13 @@ export def "bundle-ids-profiles related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-profiles: list # the fields to include for returned resources of type profiles
+  --fields-profiles: list<string> # the fields to include for returned resources of type profiles
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[profiles]" $fields_profiles "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/bundleIds/{id}/profiles") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/bundleIds/{id}/profiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5298,7 +5307,7 @@ export def "bundle-ids-profiles related" [
 # GET /v1/certificates
 #
 # operationId: certificates-get_collection
-export def "certificates collection" [
+export def "certificates get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5307,12 +5316,12 @@ export def "certificates collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-certificate-type: list # filter by attribute 'certificateType'
-  --filter-display-name: list # filter by attribute 'displayName'
-  --filter-serial-number: list # filter by attribute 'serialNumber'
-  --filter-id: list # filter by id(s)
-  --qp-sort: list # comma-separated list of sort expressions; resources will be sorted as specified
-  --fields-certificates: list # the fields to include for returned resources of type certificates
+  --filter-certificate-type: list<string> # filter by attribute 'certificateType'
+  --filter-display-name: list<string> # filter by attribute 'displayName'
+  --filter-serial-number: list<string> # filter by attribute 'serialNumber'
+  --filter-id: list<string> # filter by id(s)
+  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --fields-certificates: list<string> # the fields to include for returned resources of type certificates
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5328,7 +5337,7 @@ export def "certificates collection" [
 #
 # operationId: certificates-create_instance
 # --data shape: {attributes: record, type: "certificates"}
-export def "certificates instance" [
+export def "certificates create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5343,17 +5352,17 @@ export def "certificates instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/certificates")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/certificates/{id}
 #
 # operationId: certificates-delete_instance
-export def "certificates instance-by-id" [
+export def "certificates delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5366,7 +5375,7 @@ export def "certificates instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/certificates/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/certificates/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5375,7 +5384,7 @@ export def "certificates instance-by-id" [
 # GET /v1/certificates/{id}
 #
 # operationId: certificates-get_instance
-export def "certificates instance-by-id-1" [
+export def "certificates get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5385,12 +5394,12 @@ export def "certificates instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-certificates: list # the fields to include for returned resources of type certificates
+  --fields-certificates: list<string> # the fields to include for returned resources of type certificates
 ]: nothing -> record<data: record<attributes: record<certificateContent: string, certificateType: string, displayName: string, expirationDate: string, name: string, platform: string, serialNumber: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[certificates]" $fields_certificates "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/certificates/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/certificates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5399,7 +5408,7 @@ export def "certificates instance-by-id-1" [
 # GET /v1/devices
 #
 # operationId: devices-get_collection
-export def "devices collection" [
+export def "devices get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5408,13 +5417,13 @@ export def "devices collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-name: list # filter by attribute 'name'
-  --filter-platform: list # filter by attribute 'platform'
-  --filter-status: list # filter by attribute 'status'
-  --filter-udid: list # filter by attribute 'udid'
-  --filter-id: list # filter by id(s)
-  --qp-sort: list # comma-separated list of sort expressions; resources will be sorted as specified
-  --fields-devices: list # the fields to include for returned resources of type devices
+  --filter-name: list<string> # filter by attribute 'name'
+  --filter-platform: list<string> # filter by attribute 'platform'
+  --filter-status: list<string> # filter by attribute 'status'
+  --filter-udid: list<string> # filter by attribute 'udid'
+  --filter-id: list<string> # filter by id(s)
+  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --fields-devices: list<string> # the fields to include for returned resources of type devices
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5430,7 +5439,7 @@ export def "devices collection" [
 #
 # operationId: devices-create_instance
 # --data shape: {attributes: record, type: "devices"}
-export def "devices instance" [
+export def "devices create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5445,17 +5454,17 @@ export def "devices instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/devices")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/devices/{id}
 #
 # operationId: devices-get_instance
-export def "devices instance-by-id" [
+export def "devices get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5465,12 +5474,12 @@ export def "devices instance-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-devices: list # the fields to include for returned resources of type devices
+  --fields-devices: list<string> # the fields to include for returned resources of type devices
 ]: nothing -> record<data: record<attributes: record<addedDate: string, deviceClass: string, model: string, name: string, platform: string, status: string, udid: string>, id: string, links: record<self: string>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[devices]" $fields_devices "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/devices/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/devices/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5480,7 +5489,7 @@ export def "devices instance-by-id" [
 #
 # operationId: devices-update_instance
 # --data shape: {attributes?: record, id: string, type: "devices"}
-export def "devices instance-by-id-1" [
+export def "devices update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5495,18 +5504,18 @@ export def "devices instance-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/devices/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/devices/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/diagnosticSignatures/{id}/logs
 #
 # operationId: diagnosticSignatures-logs-get_to_many_related
-export def "diagnostic-signatures-logs related" [
+export def "diagnostic-signatures-logs get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5521,7 +5530,7 @@ export def "diagnostic-signatures-logs related" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/diagnosticSignatures/{id}/logs") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/diagnosticSignatures/{id}/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5531,7 +5540,7 @@ export def "diagnostic-signatures-logs related" [
 #
 # operationId: endUserLicenseAgreements-create_instance
 # --data shape: {attributes: record, relationships: record, type: "endUserLicenseAgreements"}
-export def "end-user-license-agreements instance" [
+export def "end-user-license-agreements create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5546,17 +5555,17 @@ export def "end-user-license-agreements instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/endUserLicenseAgreements")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/endUserLicenseAgreements/{id}
 #
 # operationId: endUserLicenseAgreements-delete_instance
-export def "end-user-license-agreements instance-by-id" [
+export def "end-user-license-agreements delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5569,7 +5578,7 @@ export def "end-user-license-agreements instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/endUserLicenseAgreements/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/endUserLicenseAgreements/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5578,7 +5587,7 @@ export def "end-user-license-agreements instance-by-id" [
 # GET /v1/endUserLicenseAgreements/{id}
 #
 # operationId: endUserLicenseAgreements-get_instance
-export def "end-user-license-agreements instance-by-id-1" [
+export def "end-user-license-agreements get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5588,15 +5597,15 @@ export def "end-user-license-agreements instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-end-user-license-agreements: list # the fields to include for returned resources of type endUserLicenseAgreements
-  --include: list # comma-separated list of relationships to include
-  --fields-territories: list # the fields to include for returned resources of type territories
+  --fields-end-user-license-agreements: list<string> # the fields to include for returned resources of type endUserLicenseAgreements
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-territories: list<string> # the fields to include for returned resources of type territories
   --limit-territories: int # maximum number of related territories returned (when they are included)
 ]: nothing -> record<data: record<attributes: record<agreementText: string>, id: string, links: record<self: string>, relationships: record<app: record, territories: record>, type: string>, included: table<attributes: record, id: string, links: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[endUserLicenseAgreements]" $fields_end_user_license_agreements "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[territories]" $fields_territories "csv") (serialize-qp "limit[territories]" $limit_territories "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/endUserLicenseAgreements/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/endUserLicenseAgreements/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5606,7 +5615,7 @@ export def "end-user-license-agreements instance-by-id-1" [
 #
 # operationId: endUserLicenseAgreements-update_instance
 # --data shape: {attributes?: record, id: string, relationships?: record, type: "endUserLicenseAgreements"}
-export def "end-user-license-agreements instance-by-id-2" [
+export def "end-user-license-agreements update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5621,18 +5630,18 @@ export def "end-user-license-agreements instance-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/endUserLicenseAgreements/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/endUserLicenseAgreements/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/endUserLicenseAgreements/{id}/territories
 #
 # operationId: endUserLicenseAgreements-territories-get_to_many_related
-export def "end-user-license-agreements-territories related" [
+export def "end-user-license-agreements-territories get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5642,13 +5651,13 @@ export def "end-user-license-agreements-territories related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-territories: list # the fields to include for returned resources of type territories
+  --fields-territories: list<string> # the fields to include for returned resources of type territories
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[territories]" $fields_territories "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/endUserLicenseAgreements/{id}/territories") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/endUserLicenseAgreements/{id}/territories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5657,7 +5666,7 @@ export def "end-user-license-agreements-territories related" [
 # GET /v1/financeReports
 #
 # operationId: financeReports-get_collection
-export def "finance-reports collection" [
+export def "finance-reports get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5666,10 +5675,10 @@ export def "finance-reports collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-region-code: list # filter by attribute 'regionCode'
-  --filter-report-date: list # filter by attribute 'reportDate'
-  --filter-report-type: list # filter by attribute 'reportType'
-  --filter-vendor-number: list # filter by attribute 'vendorNumber'
+  --filter-region-code: list<string> # filter by attribute 'regionCode'
+  --filter-report-date: list<string> # filter by attribute 'reportDate'
+  --filter-report-type: list<string> # filter by attribute 'reportType'
+  --filter-vendor-number: list<string> # filter by attribute 'vendorNumber'
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5683,7 +5692,7 @@ export def "finance-reports collection" [
 # GET /v1/gameCenterEnabledVersions/{id}/compatibleVersions
 #
 # operationId: gameCenterEnabledVersions-compatibleVersions-get_to_many_related
-export def "game-center-enabled-versions-compatible-versions related" [
+export def "game-center-enabled-versions-compatible-versions get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5693,20 +5702,20 @@ export def "game-center-enabled-versions-compatible-versions related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-platform: list # filter by attribute 'platform'
-  --filter-version-string: list # filter by attribute 'versionString'
-  --filter-app: list # filter by id(s) of related 'app'
-  --filter-id: list # filter by id(s)
-  --qp-sort: list # comma-separated list of sort expressions; resources will be sorted as specified
-  --fields-game-center-enabled-versions: list # the fields to include for returned resources of type gameCenterEnabledVersions
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --filter-platform: list<string> # filter by attribute 'platform'
+  --filter-version-string: list<string> # filter by attribute 'versionString'
+  --filter-app: list<string> # filter by id(s) of related 'app'
+  --filter-id: list<string> # filter by id(s)
+  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --fields-game-center-enabled-versions: list<string> # the fields to include for returned resources of type gameCenterEnabledVersions
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[platform]" $filter_platform "csv") (serialize-qp "filter[versionString]" $filter_version_string "csv") (serialize-qp "filter[app]" $filter_app "csv") (serialize-qp "filter[id]" $filter_id "csv") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "fields[gameCenterEnabledVersions]" $fields_game_center_enabled_versions "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/gameCenterEnabledVersions/{id}/compatibleVersions") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/gameCenterEnabledVersions/{id}/compatibleVersions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5716,7 +5725,7 @@ export def "game-center-enabled-versions-compatible-versions related" [
 #
 # operationId: gameCenterEnabledVersions-compatibleVersions-delete_to_many_relationship
 # --data item shape: {id: string, type: "gameCenterEnabledVersions"}
-export def "game-center-enabled-versions-relationships-compatible-versions relationship-by-id" [
+export def "game-center-enabled-versions-relationships-compatible-versions delete-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5731,18 +5740,18 @@ export def "game-center-enabled-versions-relationships-compatible-versions relat
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/gameCenterEnabledVersions/{id}/relationships/compatibleVersions"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/gameCenterEnabledVersions/{id}/relationships/compatibleVersions"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/gameCenterEnabledVersions/{id}/relationships/compatibleVersions
 #
 # operationId: gameCenterEnabledVersions-compatibleVersions-get_to_many_relationship
-export def "game-center-enabled-versions-relationships-compatible-versions relationship-by-id-1" [
+export def "game-center-enabled-versions-relationships-compatible-versions get-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5757,7 +5766,7 @@ export def "game-center-enabled-versions-relationships-compatible-versions relat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/gameCenterEnabledVersions/{id}/relationships/compatibleVersions") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/gameCenterEnabledVersions/{id}/relationships/compatibleVersions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5767,7 +5776,7 @@ export def "game-center-enabled-versions-relationships-compatible-versions relat
 #
 # operationId: gameCenterEnabledVersions-compatibleVersions-replace_to_many_relationship
 # --data item shape: {id: string, type: "gameCenterEnabledVersions"}
-export def "game-center-enabled-versions-relationships-compatible-versions relationship-by-id-2" [
+export def "game-center-enabled-versions-relationships-compatible-versions update-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5782,19 +5791,19 @@ export def "game-center-enabled-versions-relationships-compatible-versions relat
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/gameCenterEnabledVersions/{id}/relationships/compatibleVersions"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/gameCenterEnabledVersions/{id}/relationships/compatibleVersions"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /v1/gameCenterEnabledVersions/{id}/relationships/compatibleVersions
 #
 # operationId: gameCenterEnabledVersions-compatibleVersions-create_to_many_relationship
 # --data item shape: {id: string, type: "gameCenterEnabledVersions"}
-export def "game-center-enabled-versions-relationships-compatible-versions relationship-by-id-3" [
+export def "game-center-enabled-versions-relationships-compatible-versions create-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5809,19 +5818,19 @@ export def "game-center-enabled-versions-relationships-compatible-versions relat
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/gameCenterEnabledVersions/{id}/relationships/compatibleVersions"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/gameCenterEnabledVersions/{id}/relationships/compatibleVersions"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /v1/idfaDeclarations
 #
 # operationId: idfaDeclarations-create_instance
 # --data shape: {attributes: record, relationships: record, type: "idfaDeclarations"}
-export def "idfa-declarations instance" [
+export def "idfa-declarations create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5836,17 +5845,17 @@ export def "idfa-declarations instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/idfaDeclarations")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/idfaDeclarations/{id}
 #
 # operationId: idfaDeclarations-delete_instance
-export def "idfa-declarations instance-by-id" [
+export def "idfa-declarations delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5859,7 +5868,7 @@ export def "idfa-declarations instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/idfaDeclarations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/idfaDeclarations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5869,7 +5878,7 @@ export def "idfa-declarations instance-by-id" [
 #
 # operationId: idfaDeclarations-update_instance
 # --data shape: {attributes?: record, id: string, type: "idfaDeclarations"}
-export def "idfa-declarations instance-by-id-1" [
+export def "idfa-declarations update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5884,18 +5893,18 @@ export def "idfa-declarations instance-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/idfaDeclarations/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/idfaDeclarations/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/inAppPurchases/{id}
 #
 # operationId: inAppPurchases-get_instance
-export def "in-app-purchases instance" [
+export def "in-app-purchases get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5905,14 +5914,14 @@ export def "in-app-purchases instance" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-in-app-purchases: list # the fields to include for returned resources of type inAppPurchases
-  --include: list # comma-separated list of relationships to include
+  --fields-in-app-purchases: list<string> # the fields to include for returned resources of type inAppPurchases
+  --include: list<string> # comma-separated list of relationships to include
   --limit-apps: int # maximum number of related apps returned (when they are included)
 ]: nothing -> record<data: record<attributes: record<inAppPurchaseType: string, productId: string, referenceName: string, state: string>, id: string, links: record<self: string>, relationships: record<apps: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[inAppPurchases]" $fields_in_app_purchases "csv") (serialize-qp "include" $include "csv") (serialize-qp "limit[apps]" $limit_apps "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/inAppPurchases/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/inAppPurchases/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5921,7 +5930,7 @@ export def "in-app-purchases instance" [
 # GET /v1/preReleaseVersions
 #
 # operationId: preReleaseVersions-get_collection
-export def "pre-release-versions collection" [
+export def "pre-release-versions get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5930,18 +5939,18 @@ export def "pre-release-versions collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-builds-expired: list # filter by attribute 'builds.expired'
-  --filter-builds-processing-state: list # filter by attribute 'builds.processingState'
-  --filter-platform: list # filter by attribute 'platform'
-  --filter-version: list # filter by attribute 'version'
-  --filter-app: list # filter by id(s) of related 'app'
-  --filter-builds: list # filter by id(s) of related 'builds'
-  --qp-sort: list # comma-separated list of sort expressions; resources will be sorted as specified
-  --fields-pre-release-versions: list # the fields to include for returned resources of type preReleaseVersions
+  --filter-builds-expired: list<string> # filter by attribute 'builds.expired'
+  --filter-builds-processing-state: list<string> # filter by attribute 'builds.processingState'
+  --filter-platform: list<string> # filter by attribute 'platform'
+  --filter-version: list<string> # filter by attribute 'version'
+  --filter-app: list<string> # filter by id(s) of related 'app'
+  --filter-builds: list<string> # filter by id(s) of related 'builds'
+  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --fields-pre-release-versions: list<string> # the fields to include for returned resources of type preReleaseVersions
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
-  --fields-builds: list # the fields to include for returned resources of type builds
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-builds: int # maximum number of related builds returned (when they are included)
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5956,7 +5965,7 @@ export def "pre-release-versions collection" [
 # GET /v1/preReleaseVersions/{id}
 #
 # operationId: preReleaseVersions-get_instance
-export def "pre-release-versions instance" [
+export def "pre-release-versions get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5966,16 +5975,16 @@ export def "pre-release-versions instance" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-pre-release-versions: list # the fields to include for returned resources of type preReleaseVersions
-  --include: list # comma-separated list of relationships to include
-  --fields-builds: list # the fields to include for returned resources of type builds
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-pre-release-versions: list<string> # the fields to include for returned resources of type preReleaseVersions
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-builds: int # maximum number of related builds returned (when they are included)
 ]: nothing -> record<data: record<attributes: record<platform: string, version: string>, id: string, links: record<self: string>, relationships: record<app: record, builds: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[preReleaseVersions]" $fields_pre_release_versions "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[builds]" $limit_builds "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/preReleaseVersions/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/preReleaseVersions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5984,7 +5993,7 @@ export def "pre-release-versions instance" [
 # GET /v1/preReleaseVersions/{id}/app
 #
 # operationId: preReleaseVersions-app-get_to_one_related
-export def "pre-release-versions-app related" [
+export def "pre-release-versions-app get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5994,12 +6003,12 @@ export def "pre-release-versions-app related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
 ]: nothing -> record<data: record<attributes: record<availableInNewTerritories: bool, bundleId: string, contentRightsDeclaration: string, isOrEverWasMadeForKids: bool, name: string, primaryLocale: string, sku: string>, id: string, links: record<self: string>, relationships: record<appInfos: record, appStoreVersions: record, availableTerritories: record, betaAppLocalizations: record, betaAppReviewDetail: record, betaGroups: record, betaLicenseAgreement: record, builds: record, endUserLicenseAgreement: record, gameCenterEnabledVersions: record, inAppPurchases: record, preOrder: record, preReleaseVersions: record, prices: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[apps]" $fields_apps "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/preReleaseVersions/{id}/app") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/preReleaseVersions/{id}/app") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6008,7 +6017,7 @@ export def "pre-release-versions-app related" [
 # GET /v1/preReleaseVersions/{id}/builds
 #
 # operationId: preReleaseVersions-builds-get_to_many_related
-export def "pre-release-versions-builds related" [
+export def "pre-release-versions-builds get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6018,13 +6027,13 @@ export def "pre-release-versions-builds related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-builds: list # the fields to include for returned resources of type builds
+  --fields-builds: list<string> # the fields to include for returned resources of type builds
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[builds]" $fields_builds "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/preReleaseVersions/{id}/builds") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/preReleaseVersions/{id}/builds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6033,7 +6042,7 @@ export def "pre-release-versions-builds related" [
 # GET /v1/profiles
 #
 # operationId: profiles-get_collection
-export def "profiles collection" [
+export def "profiles get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6042,17 +6051,17 @@ export def "profiles collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-name: list # filter by attribute 'name'
-  --filter-profile-state: list # filter by attribute 'profileState'
-  --filter-profile-type: list # filter by attribute 'profileType'
-  --filter-id: list # filter by id(s)
-  --qp-sort: list # comma-separated list of sort expressions; resources will be sorted as specified
-  --fields-profiles: list # the fields to include for returned resources of type profiles
+  --filter-name: list<string> # filter by attribute 'name'
+  --filter-profile-state: list<string> # filter by attribute 'profileState'
+  --filter-profile-type: list<string> # filter by attribute 'profileType'
+  --filter-id: list<string> # filter by id(s)
+  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --fields-profiles: list<string> # the fields to include for returned resources of type profiles
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
-  --fields-certificates: list # the fields to include for returned resources of type certificates
-  --fields-devices: list # the fields to include for returned resources of type devices
-  --fields-bundle-ids: list # the fields to include for returned resources of type bundleIds
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-certificates: list<string> # the fields to include for returned resources of type certificates
+  --fields-devices: list<string> # the fields to include for returned resources of type devices
+  --fields-bundle-ids: list<string> # the fields to include for returned resources of type bundleIds
   --limit-certificates: int # maximum number of related certificates returned (when they are included)
   --limit-devices: int # maximum number of related devices returned (when they are included)
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
@@ -6069,7 +6078,7 @@ export def "profiles collection" [
 #
 # operationId: profiles-create_instance
 # --data shape: {attributes: record, relationships: record, type: "profiles"}
-export def "profiles instance" [
+export def "profiles create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6084,17 +6093,17 @@ export def "profiles instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/profiles")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/profiles/{id}
 #
 # operationId: profiles-delete_instance
-export def "profiles instance-by-id" [
+export def "profiles delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6107,7 +6116,7 @@ export def "profiles instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/profiles/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/profiles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6116,7 +6125,7 @@ export def "profiles instance-by-id" [
 # GET /v1/profiles/{id}
 #
 # operationId: profiles-get_instance
-export def "profiles instance-by-id-1" [
+export def "profiles get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6126,18 +6135,18 @@ export def "profiles instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-profiles: list # the fields to include for returned resources of type profiles
-  --include: list # comma-separated list of relationships to include
-  --fields-certificates: list # the fields to include for returned resources of type certificates
-  --fields-devices: list # the fields to include for returned resources of type devices
-  --fields-bundle-ids: list # the fields to include for returned resources of type bundleIds
+  --fields-profiles: list<string> # the fields to include for returned resources of type profiles
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-certificates: list<string> # the fields to include for returned resources of type certificates
+  --fields-devices: list<string> # the fields to include for returned resources of type devices
+  --fields-bundle-ids: list<string> # the fields to include for returned resources of type bundleIds
   --limit-certificates: int # maximum number of related certificates returned (when they are included)
   --limit-devices: int # maximum number of related devices returned (when they are included)
 ]: nothing -> record<data: record<attributes: record<createdDate: string, expirationDate: string, name: string, platform: string, profileContent: string, profileState: string, profileType: string, uuid: string>, id: string, links: record<self: string>, relationships: record<bundleId: record, certificates: record, devices: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[profiles]" $fields_profiles "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[certificates]" $fields_certificates "csv") (serialize-qp "fields[devices]" $fields_devices "csv") (serialize-qp "fields[bundleIds]" $fields_bundle_ids "csv") (serialize-qp "limit[certificates]" $limit_certificates "scalar") (serialize-qp "limit[devices]" $limit_devices "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/profiles/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6146,7 +6155,7 @@ export def "profiles instance-by-id-1" [
 # GET /v1/profiles/{id}/bundleId
 #
 # operationId: profiles-bundleId-get_to_one_related
-export def "profiles-bundle-id related" [
+export def "profiles-bundle-id get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6156,12 +6165,12 @@ export def "profiles-bundle-id related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-bundle-ids: list # the fields to include for returned resources of type bundleIds
+  --fields-bundle-ids: list<string> # the fields to include for returned resources of type bundleIds
 ]: nothing -> record<data: record<attributes: record<identifier: string, name: string, platform: string, seedId: string>, id: string, links: record<self: string>, relationships: record<app: record, bundleIdCapabilities: record, profiles: record>, type: string>, included: list<any>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[bundleIds]" $fields_bundle_ids "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/profiles/{id}/bundleId") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/profiles/{id}/bundleId") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6170,7 +6179,7 @@ export def "profiles-bundle-id related" [
 # GET /v1/profiles/{id}/certificates
 #
 # operationId: profiles-certificates-get_to_many_related
-export def "profiles-certificates related" [
+export def "profiles-certificates get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6180,13 +6189,13 @@ export def "profiles-certificates related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-certificates: list # the fields to include for returned resources of type certificates
+  --fields-certificates: list<string> # the fields to include for returned resources of type certificates
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[certificates]" $fields_certificates "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/profiles/{id}/certificates") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/profiles/{id}/certificates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6195,7 +6204,7 @@ export def "profiles-certificates related" [
 # GET /v1/profiles/{id}/devices
 #
 # operationId: profiles-devices-get_to_many_related
-export def "profiles-devices related" [
+export def "profiles-devices get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6205,13 +6214,13 @@ export def "profiles-devices related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-devices: list # the fields to include for returned resources of type devices
+  --fields-devices: list<string> # the fields to include for returned resources of type devices
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[devices]" $fields_devices "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/profiles/{id}/devices") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/profiles/{id}/devices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6221,7 +6230,7 @@ export def "profiles-devices related" [
 #
 # operationId: routingAppCoverages-create_instance
 # --data shape: {attributes: record, relationships: record, type: "routingAppCoverages"}
-export def "routing-app-coverages instance" [
+export def "routing-app-coverages create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6236,17 +6245,17 @@ export def "routing-app-coverages instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/routingAppCoverages")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/routingAppCoverages/{id}
 #
 # operationId: routingAppCoverages-delete_instance
-export def "routing-app-coverages instance-by-id" [
+export def "routing-app-coverages delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6259,7 +6268,7 @@ export def "routing-app-coverages instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/routingAppCoverages/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/routingAppCoverages/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6268,7 +6277,7 @@ export def "routing-app-coverages instance-by-id" [
 # GET /v1/routingAppCoverages/{id}
 #
 # operationId: routingAppCoverages-get_instance
-export def "routing-app-coverages instance-by-id-1" [
+export def "routing-app-coverages get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6278,13 +6287,13 @@ export def "routing-app-coverages instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-routing-app-coverages: list # the fields to include for returned resources of type routingAppCoverages
-  --include: list # comma-separated list of relationships to include
+  --fields-routing-app-coverages: list<string> # the fields to include for returned resources of type routingAppCoverages
+  --include: list<string> # comma-separated list of relationships to include
 ]: nothing -> record<data: record<attributes: record<assetDeliveryState: record, fileName: string, fileSize: int, sourceFileChecksum: string, uploadOperations: list>, id: string, links: record<self: string>, relationships: record<appStoreVersion: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[routingAppCoverages]" $fields_routing_app_coverages "csv") (serialize-qp "include" $include "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/routingAppCoverages/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/routingAppCoverages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6294,7 +6303,7 @@ export def "routing-app-coverages instance-by-id-1" [
 #
 # operationId: routingAppCoverages-update_instance
 # --data shape: {attributes?: record, id: string, type: "routingAppCoverages"}
-export def "routing-app-coverages instance-by-id-2" [
+export def "routing-app-coverages update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6309,18 +6318,18 @@ export def "routing-app-coverages instance-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/routingAppCoverages/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/routingAppCoverages/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/salesReports
 #
 # operationId: salesReports-get_collection
-export def "sales-reports collection" [
+export def "sales-reports get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6329,12 +6338,12 @@ export def "sales-reports collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-frequency: list # filter by attribute 'frequency'
-  --filter-report-date: list # filter by attribute 'reportDate'
-  --filter-report-sub-type: list # filter by attribute 'reportSubType'
-  --filter-report-type: list # filter by attribute 'reportType'
-  --filter-vendor-number: list # filter by attribute 'vendorNumber'
-  --filter-version: list # filter by attribute 'version'
+  --filter-frequency: list<string> # filter by attribute 'frequency'
+  --filter-report-date: list<string> # filter by attribute 'reportDate'
+  --filter-report-sub-type: list<string> # filter by attribute 'reportSubType'
+  --filter-report-type: list<string> # filter by attribute 'reportType'
+  --filter-vendor-number: list<string> # filter by attribute 'vendorNumber'
+  --filter-version: list<string> # filter by attribute 'version'
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6348,7 +6357,7 @@ export def "sales-reports collection" [
 # GET /v1/territories
 #
 # operationId: territories-get_collection
-export def "territories collection" [
+export def "territories get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6357,7 +6366,7 @@ export def "territories collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-territories: list # the fields to include for returned resources of type territories
+  --fields-territories: list<string> # the fields to include for returned resources of type territories
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6372,7 +6381,7 @@ export def "territories collection" [
 # GET /v1/userInvitations
 #
 # operationId: userInvitations-get_collection
-export def "user-invitations collection" [
+export def "user-invitations get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6381,14 +6390,14 @@ export def "user-invitations collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-email: list # filter by attribute 'email'
-  --filter-roles: list # filter by attribute 'roles'
-  --filter-visible-apps: list # filter by id(s) of related 'visibleApps'
-  --qp-sort: list # comma-separated list of sort expressions; resources will be sorted as specified
-  --fields-user-invitations: list # the fields to include for returned resources of type userInvitations
+  --filter-email: list<string> # filter by attribute 'email'
+  --filter-roles: list<string> # filter by attribute 'roles'
+  --filter-visible-apps: list<string> # filter by id(s) of related 'visibleApps'
+  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --fields-user-invitations: list<string> # the fields to include for returned resources of type userInvitations
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-visible-apps: int # maximum number of related visibleApps returned (when they are included)
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6404,7 +6413,7 @@ export def "user-invitations collection" [
 #
 # operationId: userInvitations-create_instance
 # --data shape: {attributes: record, relationships?: record, type: "userInvitations"}
-export def "user-invitations instance" [
+export def "user-invitations create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6419,17 +6428,17 @@ export def "user-invitations instance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/userInvitations")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/userInvitations/{id}
 #
 # operationId: userInvitations-delete_instance
-export def "user-invitations instance-by-id" [
+export def "user-invitations delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6442,7 +6451,7 @@ export def "user-invitations instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/userInvitations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/userInvitations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6451,7 +6460,7 @@ export def "user-invitations instance-by-id" [
 # GET /v1/userInvitations/{id}
 #
 # operationId: userInvitations-get_instance
-export def "user-invitations instance-by-id-1" [
+export def "user-invitations get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6461,15 +6470,15 @@ export def "user-invitations instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-user-invitations: list # the fields to include for returned resources of type userInvitations
-  --include: list # comma-separated list of relationships to include
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-user-invitations: list<string> # the fields to include for returned resources of type userInvitations
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-visible-apps: int # maximum number of related visibleApps returned (when they are included)
 ]: nothing -> record<data: record<attributes: record<allAppsVisible: bool, email: string, expirationDate: string, firstName: string, lastName: string, provisioningAllowed: bool, roles: list>, id: string, links: record<self: string>, relationships: record<visibleApps: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[userInvitations]" $fields_user_invitations "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[visibleApps]" $limit_visible_apps "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/userInvitations/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/userInvitations/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6478,7 +6487,7 @@ export def "user-invitations instance-by-id-1" [
 # GET /v1/userInvitations/{id}/visibleApps
 #
 # operationId: userInvitations-visibleApps-get_to_many_related
-export def "user-invitations-visible-apps related" [
+export def "user-invitations-visible-apps get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6488,13 +6497,13 @@ export def "user-invitations-visible-apps related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/userInvitations/{id}/visibleApps") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/userInvitations/{id}/visibleApps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6503,7 +6512,7 @@ export def "user-invitations-visible-apps related" [
 # GET /v1/users
 #
 # operationId: users-get_collection
-export def "users collection" [
+export def "users get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6512,14 +6521,14 @@ export def "users collection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter-roles: list # filter by attribute 'roles'
-  --filter-username: list # filter by attribute 'username'
-  --filter-visible-apps: list # filter by id(s) of related 'visibleApps'
-  --qp-sort: list # comma-separated list of sort expressions; resources will be sorted as specified
-  --fields-users: list # the fields to include for returned resources of type users
+  --filter-roles: list<string> # filter by attribute 'roles'
+  --filter-username: list<string> # filter by attribute 'username'
+  --filter-visible-apps: list<string> # filter by id(s) of related 'visibleApps'
+  --qp-sort: list<string> # comma-separated list of sort expressions; resources will be sorted as specified
+  --fields-users: list<string> # the fields to include for returned resources of type users
   --limit: int # maximum resources per page
-  --include: list # comma-separated list of relationships to include
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-visible-apps: int # maximum number of related visibleApps returned (when they are included)
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6534,7 +6543,7 @@ export def "users collection" [
 # DELETE /v1/users/{id}
 #
 # operationId: users-delete_instance
-export def "users instance-by-id" [
+export def "users delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6547,7 +6556,7 @@ export def "users instance-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/users/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6556,7 +6565,7 @@ export def "users instance-by-id" [
 # GET /v1/users/{id}
 #
 # operationId: users-get_instance
-export def "users instance-by-id-1" [
+export def "users get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6566,15 +6575,15 @@ export def "users instance-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-users: list # the fields to include for returned resources of type users
-  --include: list # comma-separated list of relationships to include
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-users: list<string> # the fields to include for returned resources of type users
+  --include: list<string> # comma-separated list of relationships to include
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit-visible-apps: int # maximum number of related visibleApps returned (when they are included)
 ]: nothing -> record<data: record<attributes: record<allAppsVisible: bool, firstName: string, lastName: string, provisioningAllowed: bool, roles: list, username: string>, id: string, links: record<self: string>, relationships: record<visibleApps: record>, type: string>, included: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[users]" $fields_users "csv") (serialize-qp "include" $include "csv") (serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit[visibleApps]" $limit_visible_apps "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/users/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/users/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6584,7 +6593,7 @@ export def "users instance-by-id-1" [
 #
 # operationId: users-update_instance
 # --data shape: {attributes?: record, id: string, relationships?: record, type: "users"}
-export def "users instance-by-id-2" [
+export def "users update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6599,19 +6608,19 @@ export def "users instance-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/users/{id}"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/users/{id}"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # DELETE /v1/users/{id}/relationships/visibleApps
 #
 # operationId: users-visibleApps-delete_to_many_relationship
 # --data item shape: {id: string, type: "apps"}
-export def "users-relationships-visible-apps relationship-by-id" [
+export def "users-relationships-visible-apps delete-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6626,18 +6635,18 @@ export def "users-relationships-visible-apps relationship-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/users/{id}/relationships/visibleApps"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/users/{id}/relationships/visibleApps"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/users/{id}/relationships/visibleApps
 #
 # operationId: users-visibleApps-get_to_many_relationship
-export def "users-relationships-visible-apps relationship-by-id-1" [
+export def "users-relationships-visible-apps get-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6652,7 +6661,7 @@ export def "users-relationships-visible-apps relationship-by-id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/users/{id}/relationships/visibleApps") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/users/{id}/relationships/visibleApps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6662,7 +6671,7 @@ export def "users-relationships-visible-apps relationship-by-id-1" [
 #
 # operationId: users-visibleApps-replace_to_many_relationship
 # --data item shape: {id: string, type: "apps"}
-export def "users-relationships-visible-apps relationship-by-id-2" [
+export def "users-relationships-visible-apps update-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6677,19 +6686,19 @@ export def "users-relationships-visible-apps relationship-by-id-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/users/{id}/relationships/visibleApps"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/users/{id}/relationships/visibleApps"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /v1/users/{id}/relationships/visibleApps
 #
 # operationId: users-visibleApps-create_to_many_relationship
 # --data item shape: {id: string, type: "apps"}
-export def "users-relationships-visible-apps relationship-by-id-3" [
+export def "users-relationships-visible-apps create-to-many" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6704,18 +6713,18 @@ export def "users-relationships-visible-apps relationship-by-id-3" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/users/{id}/relationships/visibleApps"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/users/{id}/relationships/visibleApps"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /v1/users/{id}/visibleApps
 #
 # operationId: users-visibleApps-get_to_many_related
-export def "users-visible-apps related" [
+export def "users-visible-apps get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6725,13 +6734,13 @@ export def "users-visible-apps related" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields-apps: list # the fields to include for returned resources of type apps
+  --fields-apps: list<string> # the fields to include for returned resources of type apps
   --limit: int # maximum resources per page
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: list<any>, links: record<first: string, next: string, self: string>, meta: record<paging: record<limit: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields[apps]" $fields_apps "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v1/users/{id}/visibleApps") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/users/{id}/visibleApps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

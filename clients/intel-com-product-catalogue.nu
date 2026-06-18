@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
     "client_id" => { {headers: {client_id: $token_val}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,7 +74,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://productapi.intel.com"] }
-def auth-scheme-completer [] { ["basic" "client_id"] }
+def auth-scheme-completer [] { ["basic" "client_id" "basic-credentials"] }
 
 # Completers for enum parameters
 def locale-geo-id-completer [] { ["bn-BD" "de-DE" "en-AR" "en-AU" "en-CA" "en-CO" "en-EG" "en-HK" "en-IE" "en-IN" "en-MY" "en-NE" "en-NZ" "en-PE" "en-PH" "en-SG" "en-UK" "en-US" "en-VE" "en-XA" "en-XR" "en-ZA" "es-CL" "es-ES" "es-MX" "es-XL" "fr-CA" "fr-FR" "id-ID" "it-IT" "ja-JP" "ko-KR" "nl-NL" "pl-PL" "pt-BR" "pt-PT" "ru-RU" "si-LK" "sv-SE" "th-TH" "tr-TR" "uk-UA" "ur-PK" "vi-VN" "zh-CN" "zh-TW"] }
@@ -72,7 +82,7 @@ def locale-geo-id-completer [] { ["bn-BD" "de-DE" "en-AR" "en-AU" "en-CA" "en-CO
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "products-get-codename get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "products-get-codename get-code-name" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/products/get-codename
 # operationId: getCodeName
-export def "products-get-codename get" [
+export def "products-get-codename get-code-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,7 +115,7 @@ export def "products-get-codename get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locale-geo-id: string@locale-geo-id-completer # Locale and Geo code used to get localised data.<br/><br/>
+  --locale-geo-id: string@locale-geo-id-completer # Locale and Geo code used to get localised data.
 ]: nothing -> record<result: table<CodeNameId: string, CodeNameText: string, CodeNameType: string, UrlText: string>, status: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -120,7 +130,7 @@ export def "products-get-codename get" [
 #
 # GET /api/products/get-ordering-info
 # operationId: getorderinginfo
-export def "products-get-ordering-info get-orderinginfo" [
+export def "products-get-ordering-info get-getorderinginfo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,8 +139,8 @@ export def "products-get-ordering-info get-orderinginfo" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product-id: string # Filter ordering info details based on one or multiple product id's. Values must be enclosed in [ square brackets ] and each value must be in "double quotes". Use comma to add multiple values. <br/><br/>Example: ["123003"]
-  --locale-geo-id: string@locale-geo-id-completer # Locale and Geo code used to get localised data.<br/><br/>
+  --product-id: string # Filter ordering info details based on one or multiple product id's. Values must be enclosed in [ square brackets ] and each value must be in "double quotes". Use comma to add multiple values. Example: ["123003"]
+  --locale-geo-id: string@locale-geo-id-completer # Locale and Geo code used to get localised data.
 ]: nothing -> record<result: table<attributes: list, product_id: string>, status: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -145,7 +155,7 @@ export def "products-get-ordering-info get-orderinginfo" [
 #
 # GET /api/products/get-products
 # operationId: getProductList
-export def "products-get-products get-product-list" [
+export def "products-get-products list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -154,12 +164,12 @@ export def "products-get-products get-product-list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locale-geo-id: string@locale-geo-id-completer # Locale and Geo code used to get localised data.<br/><br/>
-  --category-id: string # Filter products based on one or multiple category id. Either category id or product id is mandatory for any request. Values must be enclosed in [ square brackets ] and each value must be in "double quotes". Use comma to add multiple values. <br/><br/>Example: ["873"]<br/><br/>Categories Available:<br/> Processors = 873, Server Products = 1201, Mini PC's = 98414, Wireless Networking = 59485, Ethernet Products = 36773, Fabric products = 70021, Memory and Storage = 35125, Chipsets = 53, Graphics Drivers = 80939 <br/><br/>
-  --product-id: string # Filter products based on one or multiple product id. Either category id or product id is mandatory for any request. Values must be enclosed in [ square brackets ] and each value must be in "double quotes". Use comma to add multiple values. <br/><br/>Example: ["123003"]<br/><br/>
-  --highlights: string # Specification values which needs to be pulled from product data. Values must be enclosed in [ square brackets ] and each value must be in "double quotes". Use comma to add multiple values. <br/><br/>Example: ["CoreCount", "StatusCodeText"]<br/><br/>
-  --qp-sort: string # Indicates sorting fields. Accepts array of objects in format like: [{"field":"name","order":"ASC"}].<br/><br/>Any specification that we get from get-product-info can be used to sort result. Other generic sort field is "name".<br/><br/>
-  --filters: string # Allows to filter data.<br/><br/>Format of filter: [{"type":"specvalue","name":"ThreadCount","gteq":"4"}]<br/><br/><b>Available operators are:</b> "eq": equal to, "neq": not equal to, "lteq": less than or equal to, "gteq": greater than or equal to, "swc": starts with characters, "nswc": not starting with characters, "cts": contains, "ncts": not contains<br/><br/><b>Conditions:</b> By default all objects works on an AND condition. But inside an object we have the capability to put an "OR" or "AND" condition.<br/>Example conditions: [{"type":"specvalue","name":"ThreadCount","ncts":"4,5","cond":"AND"}]<br/><br/><br/>
+  --locale-geo-id: string@locale-geo-id-completer # Locale and Geo code used to get localised data.
+  --category-id: string # Filter products based on one or multiple category id. Either category id or product id is mandatory for any request. Values must be enclosed in [ square brackets ] and each value must be in "double quotes". Use comma to add multiple values. Example: ["873"]Categories Available: Processors = 873, Server Products = 1201, Mini PC's = 98414, Wireless Networking = 59485, Ethernet Products = 36773, Fabric products = 70021, Memory and Storage = 35125, Chipsets = 53, Graphics Drivers = 80939
+  --product-id: string # Filter products based on one or multiple product id. Either category id or product id is mandatory for any request. Values must be enclosed in [ square brackets ] and each value must be in "double quotes". Use comma to add multiple values. Example: ["123003"]
+  --highlights: string # Specification values which needs to be pulled from product data. Values must be enclosed in [ square brackets ] and each value must be in "double quotes". Use comma to add multiple values. Example: ["CoreCount", "StatusCodeText"]
+  --qp-sort: string # Indicates sorting fields. Accepts array of objects in format like: [{"field":"name","order":"ASC"}].Any specification that we get from get-product-info can be used to sort result. Other generic sort field is "name".
+  --filters: string # Allows to filter data.Format of filter: [{"type":"specvalue","name":"ThreadCount","gteq":"4"}]Available operators are: "eq": equal to, "neq": not equal to, "lteq": less than or equal to, "gteq": greater than or equal to, "swc": starts with characters, "nswc": not starting with characters, "cts": contains, "ncts": not containsConditions: By default all objects works on an AND condition. But inside an object we have the capability to put an "OR" or "AND" condition.Example conditions: [{"type":"specvalue","name":"ThreadCount","ncts":"4,5","cond":"AND"}]
   --per-page: int # Filter number of products in response to desired size.
   --page-no: int # Indicates page number for pagination of results.
 ]: nothing -> record<page_no: string, per_page: int, result: table<created_date: string, highlights_info: list, mktg_prd_type: string, product_category: list, product_description: string, product_id: string, product_manufacturer: string, product_name: string, product_name_raw: string, product_on_market_date: string, updated_date: string>, status: string, total_count: int> {
@@ -185,8 +195,8 @@ export def "products-get-products-info get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --locale-geo-id: string@locale-geo-id-completer # Locale and Geo code used to get localised data.<br/><br/>
-  --product-id: string # Product id's that needs to be filtered. Only max of 40 products are supported now. Values must be enclosed in [ square brackets ] and each value must be in "double quotes". Use comma to add multiple values.<br/><br/>Example: ["223","224"]
+  --locale-geo-id: string@locale-geo-id-completer # Locale and Geo code used to get localised data.
+  --product-id: string # Product id's that needs to be filtered. Only max of 40 products are supported now. Values must be enclosed in [ square brackets ] and each value must be in "double quotes". Use comma to add multiple values.Example: ["223","224"]
   --include-reference: string # If send "true", this will fetch variant/compatible info into result set. Default is false.
 ]: nothing -> record<result: table<created_date: string, media_asset: record, mktg_prd_type: string, product_category: list, product_description: string, product_id: string, product_manufacturer: string, product_name: string, product_name_raw: string, product_on_market_date: string, product_picture: string, reference: list, tech_spec: list, updated_date: string>, status: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))

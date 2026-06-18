@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def reconciliation-mode-completer [] { ["FULL" "INCREMENTAL" "RECONCILIATION_MOD
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta discoveryengineprojectslocationsdataStoresbranchesdocumentsdelete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta/{name}
 # operationId: discoveryengine.projects.locations.dataStores.branches.documents.delete
-export def "v1beta discoveryengineprojectslocationsdataStoresbranchesdocumentsdelete" [
+export def "v1beta delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -122,7 +131,7 @@ export def "v1beta discoveryengineprojectslocationsdataStoresbranchesdocumentsde
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -132,7 +141,7 @@ export def "v1beta discoveryengineprojectslocationsdataStoresbranchesdocumentsde
 #
 # GET /v1beta/{name}
 # operationId: discoveryengine.projects.operations.get
-export def "v1beta discoveryengineprojectsoperationsget" [
+export def "v1beta get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,7 +166,7 @@ export def "v1beta discoveryengineprojectsoperationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -167,7 +176,7 @@ export def "v1beta discoveryengineprojectsoperationsget" [
 #
 # PATCH /v1beta/{name}
 # operationId: discoveryengine.projects.locations.dataStores.branches.documents.patch
-export def "v1beta discoveryengineprojectslocationsdataStoresbranchesdocumentspatch" [
+export def "v1beta update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -200,19 +209,19 @@ export def "v1beta discoveryengineprojectslocationsdataStoresbranchesdocumentspa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "allowMissing" $allow_missing "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}") $qp)
-  let body = {"id": $id, "jsonData": $json_data, "name": $body_name, "parentDocumentId": $parent_document_id, "schemaId": $schema_id, "structData": $struct_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta/{name}") $qp)
+  let req_body = {"id": $id, "jsonData": $json_data, "name": $body_name, "parentDocumentId": $parent_document_id, "schemaId": $schema_id, "structData": $struct_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists operations that match the specified filter in the request. If the server doesn't support this method, it returns `UNIMPLEMENTED`.
 #
 # GET /v1beta/{name}/operations
 # operationId: discoveryengine.projects.operations.list
-export def "v1beta-operations discoveryengineprojectsoperationslist" [
+export def "v1beta-operations list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +249,7 @@ export def "v1beta-operations discoveryengineprojectsoperationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}/operations") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta/{name}/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -250,7 +259,7 @@ export def "v1beta-operations discoveryengineprojectsoperationslist" [
 #
 # GET /v1beta/{parent}/documents
 # operationId: discoveryengine.projects.locations.dataStores.branches.documents.list
-export def "v1beta-documents discoveryengineprojectslocationsdataStoresbranchesdocumentslist" [
+export def "v1beta-documents list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -277,7 +286,7 @@ export def "v1beta-documents discoveryengineprojectslocationsdataStoresbranchesd
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/documents") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta/{parent}/documents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -287,7 +296,7 @@ export def "v1beta-documents discoveryengineprojectslocationsdataStoresbranchesd
 #
 # POST /v1beta/{parent}/documents
 # operationId: discoveryengine.projects.locations.dataStores.branches.documents.create
-export def "v1beta-documents discoveryengineprojectslocationsdataStoresbranchesdocumentscreate" [
+export def "v1beta-documents create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -320,12 +329,12 @@ export def "v1beta-documents discoveryengineprojectslocationsdataStoresbranchesd
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "documentId" $document_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/documents") $qp)
-  let body = {"id": $id, "jsonData": $json_data, "name": $name, "parentDocumentId": $parent_document_id, "schemaId": $schema_id, "structData": $struct_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta/{parent}/documents") $qp)
+  let req_body = {"id": $id, "jsonData": $json_data, "name": $name, "parentDocumentId": $parent_document_id, "schemaId": $schema_id, "structData": $struct_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Bulk import of multiple Documents. Request processing may be synchronous. Non-existing items will be created. Note: It is possible for a subset of the Documents to be successfully updated.
@@ -334,9 +343,9 @@ export def "v1beta-documents discoveryengineprojectslocationsdataStoresbranchesd
 # operationId: discoveryengine.projects.locations.dataStores.branches.documents.import
 # --bigquerySource shape: {dataSchema?: string, datasetId?: string, gcsStagingDir?: string, partitionDate?: record, projectId?: string, tableId?: string}
 # --errorConfig shape: {gcsPrefix?: string}
-# --gcsSource shape: {dataSchema?: string, inputUris?: list}
+# --gcsSource shape: {dataSchema?: string, inputUris?: list<string>}
 # --inlineSource shape: {documents?: list}
-export def "v1beta-documents-import discoveryengineprojectslocationsdataStoresbranchesdocumentsimport" [
+export def "v1beta-documents-import import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -359,7 +368,7 @@ export def "v1beta-documents-import discoveryengineprojectslocationsdataStoresbr
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --bigquery-source: record # BigQuery source import data from. — shape: {dataSchema?: string, datasetId?: string, gcsStagingDir?: string, partitionDate?: record, projectId?: string, tableId?: string}
   --error-config: record # Configuration of destination for Import related errors. — shape: {gcsPrefix?: string}
-  --gcs-source: record # Cloud Storage location for input content. — shape: {dataSchema?: string, inputUris?: list}
+  --gcs-source: record # Cloud Storage location for input content. — shape: {dataSchema?: string, inputUris?: list<string>}
   --inline-source: record # The inline source for the input config for ImportDocuments method. — shape: {documents?: list}
   --reconciliation-mode: string@reconciliation-mode-completer # The mode of reconciliation between existing documents and the documents to be imported. Defaults to ReconciliationMode.INCREMENTAL.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
@@ -367,19 +376,19 @@ export def "v1beta-documents-import discoveryengineprojectslocationsdataStoresbr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/documents:import") $qp)
-  let body = {"bigquerySource": $bigquery_source, "errorConfig": $error_config, "gcsSource": $gcs_source, "inlineSource": $inline_source, "reconciliationMode": $reconciliation_mode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta/{parent}/documents:import") $qp)
+  let req_body = {"bigquerySource": $bigquery_source, "errorConfig": $error_config, "gcsSource": $gcs_source, "inlineSource": $inline_source, "reconciliationMode": $reconciliation_mode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Writes a single user event from the browser. This uses a GET request to due to browser restriction of POST-ing to a 3rd party domain. This method is used only by the Discovery Engine API JavaScript pixel and Google Tag Manager. Users should not call this method directly.
 #
 # GET /v1beta/{parent}/userEvents:collect
 # operationId: discoveryengine.projects.locations.dataStores.userEvents.collect
-export def "v1beta-user-events-collect discoveryengineprojectslocationsdataStoresuserEventscollect" [
+export def "v1beta-user-events-collect get" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -407,7 +416,7 @@ export def "v1beta-user-events-collect discoveryengineprojectslocationsdataStore
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ets" $ets "scalar") (serialize-qp "uri" $uri "scalar") (serialize-qp "userEvent" $user_event "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/userEvents:collect") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta/{parent}/userEvents:collect") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -419,9 +428,9 @@ export def "v1beta-user-events-collect discoveryengineprojectslocationsdataStore
 # operationId: discoveryengine.projects.locations.dataStores.userEvents.import
 # --bigquerySource shape: {dataSchema?: string, datasetId?: string, gcsStagingDir?: string, partitionDate?: record, projectId?: string, tableId?: string}
 # --errorConfig shape: {gcsPrefix?: string}
-# --gcsSource shape: {dataSchema?: string, inputUris?: list}
+# --gcsSource shape: {dataSchema?: string, inputUris?: list<string>}
 # --inlineSource shape: {userEvents?: list}
-export def "v1beta-user-events-import discoveryengineprojectslocationsdataStoresuserEventsimport" [
+export def "v1beta-user-events-import import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -444,19 +453,19 @@ export def "v1beta-user-events-import discoveryengineprojectslocationsdataStores
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --bigquery-source: record # BigQuery source import data from. — shape: {dataSchema?: string, datasetId?: string, gcsStagingDir?: string, partitionDate?: record, projectId?: string, tableId?: string}
   --error-config: record # Configuration of destination for Import related errors. — shape: {gcsPrefix?: string}
-  --gcs-source: record # Cloud Storage location for input content. — shape: {dataSchema?: string, inputUris?: list}
+  --gcs-source: record # Cloud Storage location for input content. — shape: {dataSchema?: string, inputUris?: list<string>}
   --inline-source: record # The inline source for the input config for ImportUserEvents method. — shape: {userEvents?: list}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/userEvents:import") $qp)
-  let body = {"bigquerySource": $bigquery_source, "errorConfig": $error_config, "gcsSource": $gcs_source, "inlineSource": $inline_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta/{parent}/userEvents:import") $qp)
+  let req_body = {"bigquerySource": $bigquery_source, "errorConfig": $error_config, "gcsSource": $gcs_source, "inlineSource": $inline_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Writes a single user event.
@@ -464,14 +473,14 @@ export def "v1beta-user-events-import discoveryengineprojectslocationsdataStores
 # POST /v1beta/{parent}/userEvents:write
 # operationId: discoveryengine.projects.locations.dataStores.userEvents.write
 # --completionInfo shape: {selectedPosition?: int, selectedSuggestion?: string}
-# --documents item shape: {id?: string, name?: string, promotionIds?: list, quantity?: int}
+# --documents item shape: {id?: string, name?: string, promotionIds?: list<string>, quantity?: int}
 # --mediaInfo shape: {mediaProgressDuration?: string, mediaProgressPercentage?: float}
 # --pageInfo shape: {pageCategory?: string, pageviewId?: string, referrerUri?: string, uri?: string}
 # --panel shape: {displayName?: string, panelId?: string, panelPosition?: int, totalPanels?: int}
 # --searchInfo shape: {offset?: int, orderBy?: string, searchQuery?: string}
 # --transactionInfo shape: {cost?: float, currency?: string, discountValue?: float, tax?: float, transactionId?: string, value?: float}
 # --userInfo shape: {userAgent?: string, userId?: string}
-export def "v1beta-user-events-write discoveryengineprojectslocationsdataStoresuserEventswrite" [
+export def "v1beta-user-events-write create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -496,17 +505,17 @@ export def "v1beta-user-events-write discoveryengineprojectslocationsdataStoresu
   --attribution-token: string # Token to attribute an API response to user action(s) to trigger the event. Highly recommended for user events that are the result of PredictionService.Predict. This field enables accurate attribution of recommendation model performance. The value must be one of: * PredictResponse.attribution_token for events that are the result of PredictionService.Predict. * SearchResponse.attribution_token for events that are the result of SearchService.Search. * CompleteQueryResponse.attribution_token for events that are the result of SearchService.CompleteQuery. This token enables us to accurately attribute page view or conversion completion back to the event and the particular predict response containing this clicked/purchased product. If user clicks on product K in the recommendation results, pass PredictResponse.attribution_token as a URL parameter to product K's page. When recording events on product K's page, log the PredictResponse.attribution_token to this field.
   --completion-info: record # Detailed completion information including completion attribution token and clicked completion info. — shape: {selectedPosition?: int, selectedSuggestion?: string}
   --direct-user-request: oneof<nothing, bool> # Should set to true if the request is made directly from the end user, in which case the UserEvent.user_info.user_agent can be populated from the HTTP request. This flag should be set only if the API request is made directly from the end user such as a mobile app (and not if a gateway or a server is processing and pushing the user events). This should not be set when using the JavaScript tag in UserEventService.CollectUserEvent.
-  --documents: list # List of Documents associated with this user event. This field is optional except for the following event types: * `view-item` * `add-to-cart` * `purchase` * `media-play` * `media-complete` In a `search` event, this field represents the documents returned to the end user on the current page (the end user may have not finished browsing the whole page yet). When a new page is returned to the end user, after pagination/filtering/ordering even for the same query, a new `search` event with different UserEvent.documents is desired. — item shape: {id?: string, name?: string, promotionIds?: list, quantity?: int}
+  --documents: list # List of Documents associated with this user event. This field is optional except for the following event types: * `view-item` * `add-to-cart` * `purchase` * `media-play` * `media-complete` In a `search` event, this field represents the documents returned to the end user on the current page (the end user may have not finished browsing the whole page yet). When a new page is returned to the end user, after pagination/filtering/ordering even for the same query, a new `search` event with different UserEvent.documents is desired. — item shape: {id?: string, name?: string, promotionIds?: list<string>, quantity?: int}
   --event-time: string # Only required for UserEventService.ImportUserEvents method. Timestamp of when the user event happened. (format: google-datetime)
   --event-type: string # Required. User event type. Allowed values are: Generic values: * `search`: Search for Documents. * `view-item`: Detailed page view of a Document. * `view-item-list`: View of a panel or ordered list of Documents. * `view-home-page`: View of the home page. * `view-category-page`: View of a category page, e.g. Home > Men > Jeans Retail-related values: * `add-to-cart`: Add an item(s) to cart, e.g. in Retail online shopping * `purchase`: Purchase an item(s) Media-related values: * `media-play`: Start/resume watching a video, playing a song, etc. * `media-complete`: Finished or stopped midway through a video, song, etc.
   --filter: string # The filter syntax consists of an expression language for constructing a predicate from one or more fields of the documents being filtered. One example is for `search` events, the associated SearchService.SearchRequest may contain a filter expression in SearchService.SearchRequest.filter conforming to https://google.aip.dev/160#filtering. Similarly, for `view-item-list` events that are generated from a PredictionService.PredictRequest, this field may be populated directly from PredictionService.PredictRequest.filter conforming to https://google.aip.dev/160#filtering. The value must be a UTF-8 encoded string with a length limit of 1,000 characters. Otherwise, an INVALID_ARGUMENT error is returned.
   --media-info: record # Media-specific user event information. — shape: {mediaProgressDuration?: string, mediaProgressPercentage?: float}
   --page-info: record # Detailed page information. — shape: {pageCategory?: string, pageviewId?: string, referrerUri?: string, uri?: string}
   --panel: record # Detailed panel information associated with a user event. — shape: {displayName?: string, panelId?: string, panelPosition?: int, totalPanels?: int}
-  --promotion-ids: list # The promotion IDs if this is an event associated with promotions. Currently, this field is restricted to at most one ID.
+  --promotion-ids: list<string> # The promotion IDs if this is an event associated with promotions. Currently, this field is restricted to at most one ID.
   --search-info: record # Detailed search information. — shape: {offset?: int, orderBy?: string, searchQuery?: string}
   --session-id: string # A unique identifier for tracking a visitor session with a length limit of 128 bytes. A session is an aggregation of an end user behavior in a time span. A general guideline to populate the session_id: 1. If user has no activity for 30 min, a new session_id should be assigned. 2. The session_id should be unique across users, suggest use uuid or add UserEvent.user_pseudo_id as prefix.
-  --tag-ids: list # A list of identifiers for the independent experiment groups this user event belongs to. This is used to distinguish between user events associated with different experiment setups on the customer end.
+  --tag-ids: list<string> # A list of identifiers for the independent experiment groups this user event belongs to. This is used to distinguish between user events associated with different experiment setups on the customer end.
   --transaction-info: record # A transaction represents the entire purchase transaction. — shape: {cost?: float, currency?: string, discountValue?: float, tax?: float, transactionId?: string, value?: float}
   --user-info: record # Information of an end user. — shape: {userAgent?: string, userId?: string}
   --user-pseudo-id: string # Required. A unique identifier for tracking visitors. For example, this could be implemented with an HTTP cookie, which should be able to uniquely identify a visitor on a single device. This unique identifier should not change if the visitor log in/out of the website. Do not set the field to the same fixed ID for different users. This mixes the event history of those users together, which results in degraded model quality. The field must be a UTF-8 encoded string with a length limit of 128 characters. Otherwise, an INVALID_ARGUMENT error is returned. The field should not contain PII or user-data. We recommend to use Google Analytics [Client ID](https://developers.google.com/analytics/devguides/collection/analyticsjs/field-reference#clientId) for this field.
@@ -515,20 +524,20 @@ export def "v1beta-user-events-write discoveryengineprojectslocationsdataStoresu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/userEvents:write") $qp)
-  let body = {"attributes": $attributes, "attributionToken": $attribution_token, "completionInfo": $completion_info, "directUserRequest": $direct_user_request, "documents": $documents, "eventTime": $event_time, "eventType": $event_type, "filter": $filter, "mediaInfo": $media_info, "pageInfo": $page_info, "panel": $panel, "promotionIds": $promotion_ids, "searchInfo": $search_info, "sessionId": $session_id, "tagIds": $tag_ids, "transactionInfo": $transaction_info, "userInfo": $user_info, "userPseudoId": $user_pseudo_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta/{parent}/userEvents:write") $qp)
+  let req_body = {"attributes": $attributes, "attributionToken": $attribution_token, "completionInfo": $completion_info, "directUserRequest": $direct_user_request, "documents": $documents, "eventTime": $event_time, "eventType": $event_type, "filter": $filter, "mediaInfo": $media_info, "pageInfo": $page_info, "panel": $panel, "promotionIds": $promotion_ids, "searchInfo": $search_info, "sessionId": $session_id, "tagIds": $tag_ids, "transactionInfo": $transaction_info, "userInfo": $user_info, "userPseudoId": $user_pseudo_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Makes a recommendation, which requires a contextual user event.
 #
 # POST /v1beta/{servingConfig}:recommend
 # operationId: discoveryengine.projects.locations.dataStores.servingConfigs.recommend
-# --userEvent shape: {attributes?: record, attributionToken?: string, completionInfo?: record, directUserRequest?: bool, documents?: list, eventTime?: string, eventType?: string, filter?: string, mediaInfo?: record, pageInfo?: record, panel?: record, promotionIds?: list, searchInfo?: record, sessionId?: string, tagIds?: list, transactionInfo?: record, userInfo?: record, userPseudoId?: string}
-export def "v1beta discoveryengineprojectslocationsdataStoresservingConfigsrecommend" [
+# --userEvent shape: {attributes?: record, attributionToken?: string, completionInfo?: record, directUserRequest?: bool, documents?: list, eventTime?: string, eventType?: string, filter?: string, mediaInfo?: record, pageInfo?: record, panel?: record, promotionIds?: list<string>, searchInfo?: record, sessionId?: string, tagIds?: list<string>, transactionInfo?: record, userInfo?: record, userPseudoId?: string}
+export def "v1beta create-recommend" [
   serving_config: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -552,7 +561,7 @@ export def "v1beta discoveryengineprojectslocationsdataStoresservingConfigsrecom
   --filter: string # Filter for restricting recommendation results with a length limit of 5,000 characters. Currently, only filter expressions on the `filter_tags` attribute is supported. Examples: * (filter_tags: ANY("Red", "Blue") OR filter_tags: ANY("Hot", "Cold")) * (filter_tags: ANY("Red", "Blue")) AND NOT (filter_tags: ANY("Green")) If your filter blocks all results, the API will return generic (unfiltered) popular Documents. If you only want results strictly matching the filters, set `strictFiltering` to True in RecommendRequest.params to receive empty results instead. Note that the API will never return Documents with storageStatus of "EXPIRED" or "DELETED" regardless of filter choices.
   --page-size: int # Maximum number of results to return. Set this property to the number of recommendation results needed. If zero, the service will choose a reasonable default. The maximum allowed value is 100. Values above 100 will be coerced to 100. (format: int32)
   --params: record # Additional domain specific parameters for the recommendations. Allowed values: * `returnDocument`: Boolean. If set to true, the associated Document object will be returned in RecommendResponse.results.document. * `returnScore`: Boolean. If set to true, the recommendation 'score' corresponding to each returned Document will be set in RecommendResponse.results.metadata. The given 'score' indicates the probability of a Document conversion given the user's context and history. * `strictFiltering`: Boolean. True by default. If set to false, the service will return generic (unfiltered) popular Documents instead of empty if your filter blocks all recommendation results. * `diversityLevel`: String. Default empty. If set to be non-empty, then it needs to be one of: * 'no-diversity' * 'low-diversity' * 'medium-diversity' * 'high-diversity' * 'auto-diversity' This gives request-level control and adjusts recommendation results based on Document category.
-  --user-event: record # UserEvent captures all metadata information Discovery Engine API needs to know about how end users interact with customers' website. — shape: {attributes?: record, attributionToken?: string, completionInfo?: record, directUserRequest?: bool, documents?: list, eventTime?: string, eventType?: string, filter?: string, mediaInfo?: record, pageInfo?: record, panel?: record, promotionIds?: list, searchInfo?: record, sessionId?: string, tagIds?: list, transactionInfo?: record, userInfo?: record, userPseudoId?: string}
+  --user-event: record # UserEvent captures all metadata information Discovery Engine API needs to know about how end users interact with customers' website. — shape: {attributes?: record, attributionToken?: string, completionInfo?: record, directUserRequest?: bool, documents?: list, eventTime?: string, eventType?: string, filter?: string, mediaInfo?: record, pageInfo?: record, panel?: record, promotionIds?: list<string>, searchInfo?: record, sessionId?: string, tagIds?: list<string>, transactionInfo?: record, userInfo?: record, userPseudoId?: string}
   --user-labels: record # The user labels applied to a resource must meet the following requirements: * Each resource can have multiple labels, up to a maximum of 64. * Each label must be a key-value pair. * Keys have a minimum length of 1 character and a maximum length of 63 characters and cannot be empty. Values can be empty and have a maximum length of 63 characters. * Keys and values can contain only lowercase letters, numeric characters, underscores, and dashes. All characters must use UTF-8 encoding, and international characters are allowed. * The key portion of a label must be unique. However, you can use the same key with multiple resources. * Keys must start with a lowercase letter or international character. See [Requirements for labels](https://cloud.google.com/resource-manager/docs/creating-managing-labels#requirements) for more details.
   --validate-only: oneof<nothing, bool> # Use validate only mode for this recommendation query. If set to true, a fake model will be used that returns arbitrary Document IDs. Note that the validate only mode should only be used for testing the API, or if the model is not ready.
 ]: any -> record<attributionToken: string, missingIds: list<string>, results: table<document: record, id: string, metadata: record>, validateOnly: bool> {
@@ -560,10 +569,10 @@ export def "v1beta discoveryengineprojectslocationsdataStoresservingConfigsrecom
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({serving_config: $serving_config} | format pattern "/v1beta/{serving_config}:recommend") $qp)
-  let body = {"filter": $filter, "pageSize": $page_size, "params": $params, "userEvent": $user_event, "userLabels": $user_labels, "validateOnly": $validate_only} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({serving_config: (encode-path-segment $serving_config)} | format pattern "/v1beta/{serving_config}:recommend") $qp)
+  let req_body = {"filter": $filter, "pageSize": $page_size, "params": $params, "userEvent": $user_event, "userLabels": $user_labels, "validateOnly": $validate_only} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

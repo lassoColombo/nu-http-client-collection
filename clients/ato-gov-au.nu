@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -114,10 +123,10 @@ export def "business-names get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/business-names")
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -138,10 +147,10 @@ export def "classifications-address-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/address-types")
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -162,10 +171,10 @@ export def "classifications-business-name-lifecycle-states get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/business-name-lifecycle-states")
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -186,10 +195,10 @@ export def "classifications-electronic-address-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/electronic-address-types")
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -210,10 +219,10 @@ export def "classifications-genders get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/genders")
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -234,10 +243,10 @@ export def "classifications-legal-entity-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/legal-entity-types")
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -258,10 +267,10 @@ export def "classifications-license-lifecycle-states get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/license-lifecycle-states")
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -282,10 +291,10 @@ export def "classifications-license-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/license-types")
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -306,10 +315,10 @@ export def "classifications-name-directions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/name-directions")
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -330,10 +339,10 @@ export def "classifications-name-prefixes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/name-prefixes")
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -354,10 +363,10 @@ export def "classifications-name-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/name-types")
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -378,10 +387,10 @@ export def "classifications-registered-identifier-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/registered-identifier-types")
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -402,10 +411,10 @@ export def "classifications-roles get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications/roles")
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -429,10 +438,10 @@ export def "individuals list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dateOfBirth" $date_of_birth "scalar") (serialize-qp "placeOfBirth" $place_of_birth "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/individuals" $qp)
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -442,7 +451,7 @@ export def "individuals list" [
 # --addresses item shape: {city?: string, country?: string, line1?: string, line2?: string, line3?: string, name?: string, postalCode?: string, suburb?: string, addressType?: "Mailing"|"Principal Place of Business"|"Principal Place of Residence"}
 # --electronicAddresses item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
 # --names item shape: {direction?: "left-to-right"|"right-to-left", familyName?: string, formalSalutation?: string, givenName?: string, informalSalutation?: string, middleName?: string, namePrefix?: "Mr"|"Ms", nameSuffix?: string, nameType?: "Alias"|"Principal Name"}
-export def "individuals post" [
+export def "individuals create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,13 +472,13 @@ export def "individuals post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/individuals")
-  let body = {"addresses": $addresses, "dateOfBirth": $date_of_birth, "electronicAddresses": $electronic_addresses, "gender": $gender, "names": $names, "placeOfBirth": $place_of_birth} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"addresses": $addresses, "dateOfBirth": $date_of_birth, "electronicAddresses": $electronic_addresses, "gender": $gender, "names": $names, "placeOfBirth": $place_of_birth} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an individual
@@ -489,11 +498,11 @@ export def "individuals delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -514,11 +523,11 @@ export def "individuals get" [
 ]: nothing -> record<addresses: table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, dateOfBirth: string, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string>, fromDate: string, gender: string, id: record, names: table<direction: string, familyName: string, formalSalutation: string, fromDate: string, givenName: string, id: record, informalSalutation: string, middleName: string, namePrefix: string, nameSuffix: string, nameType: string, toDate: string>, placeOfBirth: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -528,7 +537,7 @@ export def "individuals get" [
 # --addresses item shape: {city?: string, country?: string, line1?: string, line2?: string, line3?: string, name?: string, postalCode?: string, suburb?: string, addressType?: "Mailing"|"Principal Place of Business"|"Principal Place of Residence"}
 # --electronicAddresses item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
 # --names item shape: {direction?: "left-to-right"|"right-to-left", familyName?: string, formalSalutation?: string, givenName?: string, informalSalutation?: string, middleName?: string, namePrefix?: "Mr"|"Ms", nameSuffix?: string, nameType?: "Alias"|"Principal Name"}
-export def "individuals put" [
+export def "individuals update" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -549,14 +558,14 @@ export def "individuals put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}"))
-  let body = {"addresses": $addresses, "dateOfBirth": $date_of_birth, "electronicAddresses": $electronic_addresses, "gender": $gender, "names": $names, "placeOfBirth": $place_of_birth} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}"))
+  let req_body = {"addresses": $addresses, "dateOfBirth": $date_of_birth, "electronicAddresses": $electronic_addresses, "gender": $gender, "names": $names, "placeOfBirth": $place_of_birth} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a list of addresses
@@ -576,18 +585,18 @@ export def "individuals-addresses list" [
 ]: nothing -> table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/addresses"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/addresses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an address
 #
 # POST /individuals/{partyId}/addresses
-export def "individuals-addresses post" [
+export def "individuals-addresses create" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -610,14 +619,14 @@ export def "individuals-addresses post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/addresses"))
-  let body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/addresses"))
+  let req_body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an address
@@ -638,11 +647,11 @@ export def "individuals-addresses delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/individuals/{party_id}/addresses/{address_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/individuals/{party_id}/addresses/{address_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -664,18 +673,18 @@ export def "individuals-addresses get" [
 ]: nothing -> record<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/individuals/{party_id}/addresses/{address_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/individuals/{party_id}/addresses/{address_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an address
 #
 # PUT /individuals/{partyId}/addresses/{addressId}
-export def "individuals-addresses put" [
+export def "individuals-addresses update" [
   party_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -699,14 +708,14 @@ export def "individuals-addresses put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/individuals/{party_id}/addresses/{address_id}"))
-  let body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/individuals/{party_id}/addresses/{address_id}"))
+  let req_body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a list of business names
@@ -726,18 +735,18 @@ export def "individuals-business-names list" [
 ]: nothing -> table<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/business-names"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/business-names"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a business name
 #
 # POST /individuals/{partyId}/business-names
-export def "individuals-business-names post" [
+export def "individuals-business-names create" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -754,14 +763,14 @@ export def "individuals-business-names post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/business-names"))
-  let body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/business-names"))
+  let req_body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a business name
@@ -782,11 +791,11 @@ export def "individuals-business-names delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/individuals/{party_id}/business-names/{product_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/individuals/{party_id}/business-names/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -808,18 +817,18 @@ export def "individuals-business-names get" [
 ]: nothing -> record<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/individuals/{party_id}/business-names/{product_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/individuals/{party_id}/business-names/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a business name
 #
 # PUT /individuals/{partyId}/business-names/{productId}
-export def "individuals-business-names put" [
+export def "individuals-business-names update" [
   party_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -837,14 +846,14 @@ export def "individuals-business-names put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/individuals/{party_id}/business-names/{product_id}"))
-  let body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/individuals/{party_id}/business-names/{product_id}"))
+  let req_body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a list of electronic addresses
@@ -864,18 +873,18 @@ export def "individuals-electronic-addresses list" [
 ]: nothing -> table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/electronic-addresses"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/electronic-addresses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an electronic address
 #
 # POST /individuals/{partyId}/electronic-addresses
-export def "individuals-electronic-addresses post" [
+export def "individuals-electronic-addresses create" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -892,19 +901,19 @@ export def "individuals-electronic-addresses post" [
   --email: string # The email address, for example, "robert.ferguson@ato.gov.au". (e.g. )
   --extension: string # The extension number, for example, "4453". (e.g. )
   --number: string # The number, for example, "62164453". (e.g. 62164453)
-  --body-url: string # The website address, for example, "https://ato.gov.au". (e.g. )
+  --url: string # The website address, for example, "https://ato.gov.au". (e.g. )
 ]: any -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/electronic-addresses"))
-  let body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/electronic-addresses"))
+  let req_body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an electronic address
@@ -925,11 +934,11 @@ export def "individuals-electronic-addresses delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/individuals/{party_id}/electronic-addresses/{address_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/individuals/{party_id}/electronic-addresses/{address_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -951,18 +960,18 @@ export def "individuals-electronic-addresses get" [
 ]: nothing -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/individuals/{party_id}/electronic-addresses/{address_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/individuals/{party_id}/electronic-addresses/{address_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an electronic address
 #
 # PUT /individuals/{partyId}/electronic-addresses/{addressId}
-export def "individuals-electronic-addresses put" [
+export def "individuals-electronic-addresses update" [
   party_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -980,19 +989,19 @@ export def "individuals-electronic-addresses put" [
   --email: string # The email address, for example, "robert.ferguson@ato.gov.au". (e.g. )
   --extension: string # The extension number, for example, "4453". (e.g. )
   --number: string # The number, for example, "62164453". (e.g. 62164453)
-  --body-url: string # The website address, for example, "https://ato.gov.au". (e.g. )
+  --url: string # The website address, for example, "https://ato.gov.au". (e.g. )
 ]: any -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/individuals/{party_id}/electronic-addresses/{address_id}"))
-  let body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/individuals/{party_id}/electronic-addresses/{address_id}"))
+  let req_body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a list of licenses
@@ -1012,18 +1021,18 @@ export def "individuals-licenses list" [
 ]: nothing -> table<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/licenses"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/licenses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a license
 #
 # POST /individuals/{partyId}/licenses
-export def "individuals-licenses post" [
+export def "individuals-licenses create" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1040,14 +1049,14 @@ export def "individuals-licenses post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/licenses"))
-  let body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/licenses"))
+  let req_body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a license
@@ -1068,11 +1077,11 @@ export def "individuals-licenses delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/individuals/{party_id}/licenses/{product_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/individuals/{party_id}/licenses/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1094,18 +1103,18 @@ export def "individuals-licenses get" [
 ]: nothing -> record<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/individuals/{party_id}/licenses/{product_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/individuals/{party_id}/licenses/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a license
 #
 # PUT /individuals/{partyId}/licenses/{productId}
-export def "individuals-licenses put" [
+export def "individuals-licenses update" [
   party_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1123,14 +1132,14 @@ export def "individuals-licenses put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/individuals/{party_id}/licenses/{product_id}"))
-  let body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/individuals/{party_id}/licenses/{product_id}"))
+  let req_body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a list of roles
@@ -1150,18 +1159,18 @@ export def "individuals-roles list" [
 ]: nothing -> table<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/roles"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/roles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a role
 #
 # POST /individuals/{partyId}/roles
-export def "individuals-roles post" [
+export def "individuals-roles create" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1180,14 +1189,14 @@ export def "individuals-roles post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/individuals/{party_id}/roles"))
-  let body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/roles"))
+  let req_body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a role
@@ -1208,11 +1217,11 @@ export def "individuals-roles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, role_id: $role_id} | format pattern "/individuals/{party_id}/roles/{role_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), role_id: (encode-path-segment $role_id)} | format pattern "/individuals/{party_id}/roles/{role_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1234,18 +1243,18 @@ export def "individuals-roles get" [
 ]: nothing -> record<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, role_id: $role_id} | format pattern "/individuals/{party_id}/roles/{role_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), role_id: (encode-path-segment $role_id)} | format pattern "/individuals/{party_id}/roles/{role_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a role
 #
 # PUT /individuals/{partyId}/roles/{roleId}
-export def "individuals-roles put" [
+export def "individuals-roles update" [
   party_id: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1265,14 +1274,14 @@ export def "individuals-roles put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, role_id: $role_id} | format pattern "/individuals/{party_id}/roles/{role_id}"))
-  let body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), role_id: (encode-path-segment $role_id)} | format pattern "/individuals/{party_id}/roles/{role_id}"))
+  let req_body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a list of licenses
@@ -1292,10 +1301,10 @@ export def "licenses get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/licenses")
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1319,10 +1328,10 @@ export def "organisations list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "registeredIdentifier" $registered_identifier "scalar") (serialize-qp "identifier" $identifier "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/organisations" $qp)
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1333,7 +1342,7 @@ export def "organisations list" [
 # --electronicAddresses item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
 # --names item shape: {name?: string}
 # --registeredIdentifiers item shape: {identifier?: string, identifierType?: "ACN"|"ABN"}
-export def "organisations post" [
+export def "organisations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1354,13 +1363,13 @@ export def "organisations post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/organisations")
-  let body = {"addresses": $addresses, "electronicAddresses": $electronic_addresses, "establishmentDate": $establishment_date, "legalEntityType": $legal_entity_type, "names": $names, "registeredIdentifiers": $registered_identifiers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"addresses": $addresses, "electronicAddresses": $electronic_addresses, "establishmentDate": $establishment_date, "legalEntityType": $legal_entity_type, "names": $names, "registeredIdentifiers": $registered_identifiers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an organisation
@@ -1380,11 +1389,11 @@ export def "organisations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1405,11 +1414,11 @@ export def "organisations get" [
 ]: nothing -> record<addresses: table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string, addressType: string>, electronicAddresses: table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string>, establishmentDate: string, fromDate: string, id: record, legalEntityType: string, names: table<fromDate: string, id: record, name: string, toDate: string>, registeredIdentifiers: table<fromDate: string, id: record, identifier: string, identifierType: string, toDate: string>, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1420,7 +1429,7 @@ export def "organisations get" [
 # --electronicAddresses item shape: {areaCode?: string, countryPrefix?: string, electronicAddressType?: "Email"|"Fax"|"Landline"|"Mobile"|"Website", email?: string, extension?: string, number?: string, url?: string}
 # --names item shape: {name?: string}
 # --registeredIdentifiers item shape: {identifier?: string, identifierType?: "ACN"|"ABN"}
-export def "organisations put" [
+export def "organisations update" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1441,14 +1450,14 @@ export def "organisations put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}"))
-  let body = {"addresses": $addresses, "electronicAddresses": $electronic_addresses, "establishmentDate": $establishment_date, "legalEntityType": $legal_entity_type, "names": $names, "registeredIdentifiers": $registered_identifiers} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}"))
+  let req_body = {"addresses": $addresses, "electronicAddresses": $electronic_addresses, "establishmentDate": $establishment_date, "legalEntityType": $legal_entity_type, "names": $names, "registeredIdentifiers": $registered_identifiers} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a list of addresses
@@ -1468,18 +1477,18 @@ export def "organisations-addresses list" [
 ]: nothing -> table<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/addresses"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/addresses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an address
 #
 # POST /organisations/{partyId}/addresses
-export def "organisations-addresses post" [
+export def "organisations-addresses create" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1502,14 +1511,14 @@ export def "organisations-addresses post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/addresses"))
-  let body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/addresses"))
+  let req_body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an address
@@ -1530,11 +1539,11 @@ export def "organisations-addresses delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/organisations/{party_id}/addresses/{address_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/organisations/{party_id}/addresses/{address_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1556,18 +1565,18 @@ export def "organisations-addresses get" [
 ]: nothing -> record<city: string, country: string, fromDate: string, id: record, line1: string, line2: string, line3: string, name: string, postalCode: string, suburb: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/organisations/{party_id}/addresses/{address_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/organisations/{party_id}/addresses/{address_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an address
 #
 # PUT /organisations/{partyId}/addresses/{addressId}
-export def "organisations-addresses put" [
+export def "organisations-addresses update" [
   party_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1591,14 +1600,14 @@ export def "organisations-addresses put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/organisations/{party_id}/addresses/{address_id}"))
-  let body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/organisations/{party_id}/addresses/{address_id}"))
+  let req_body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a list of business names
@@ -1618,18 +1627,18 @@ export def "organisations-business-names list" [
 ]: nothing -> table<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/business-names"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/business-names"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a business name
 #
 # POST /organisations/{partyId}/business-names
-export def "organisations-business-names post" [
+export def "organisations-business-names create" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1646,14 +1655,14 @@ export def "organisations-business-names post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/business-names"))
-  let body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/business-names"))
+  let req_body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a business name
@@ -1674,11 +1683,11 @@ export def "organisations-business-names delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/organisations/{party_id}/business-names/{product_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/organisations/{party_id}/business-names/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1700,18 +1709,18 @@ export def "organisations-business-names get" [
 ]: nothing -> record<fromDate: string, id: record, lifecycleState: string, name: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/organisations/{party_id}/business-names/{product_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/organisations/{party_id}/business-names/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a business name
 #
 # PUT /organisations/{partyId}/business-names/{productId}
-export def "organisations-business-names put" [
+export def "organisations-business-names update" [
   party_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1729,14 +1738,14 @@ export def "organisations-business-names put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/organisations/{party_id}/business-names/{product_id}"))
-  let body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/organisations/{party_id}/business-names/{product_id}"))
+  let req_body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a list of electronic addresses
@@ -1756,18 +1765,18 @@ export def "organisations-electronic-addresses list" [
 ]: nothing -> table<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/electronic-addresses"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/electronic-addresses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an electronic address
 #
 # POST /organisations/{partyId}/electronic-addresses
-export def "organisations-electronic-addresses post" [
+export def "organisations-electronic-addresses create" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1784,19 +1793,19 @@ export def "organisations-electronic-addresses post" [
   --email: string # The email address, for example, "robert.ferguson@ato.gov.au". (e.g. )
   --extension: string # The extension number, for example, "4453". (e.g. )
   --number: string # The number, for example, "62164453". (e.g. 62164453)
-  --body-url: string # The website address, for example, "https://ato.gov.au". (e.g. )
+  --url: string # The website address, for example, "https://ato.gov.au". (e.g. )
 ]: any -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/electronic-addresses"))
-  let body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/electronic-addresses"))
+  let req_body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an electronic address
@@ -1817,11 +1826,11 @@ export def "organisations-electronic-addresses delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/organisations/{party_id}/electronic-addresses/{address_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/organisations/{party_id}/electronic-addresses/{address_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1843,18 +1852,18 @@ export def "organisations-electronic-addresses get" [
 ]: nothing -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/organisations/{party_id}/electronic-addresses/{address_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/organisations/{party_id}/electronic-addresses/{address_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an electronic address
 #
 # PUT /organisations/{partyId}/electronic-addresses/{addressId}
-export def "organisations-electronic-addresses put" [
+export def "organisations-electronic-addresses update" [
   party_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1872,19 +1881,19 @@ export def "organisations-electronic-addresses put" [
   --email: string # The email address, for example, "robert.ferguson@ato.gov.au". (e.g. )
   --extension: string # The extension number, for example, "4453". (e.g. )
   --number: string # The number, for example, "62164453". (e.g. 62164453)
-  --body-url: string # The website address, for example, "https://ato.gov.au". (e.g. )
+  --url: string # The website address, for example, "https://ato.gov.au". (e.g. )
 ]: any -> record<areaCode: string, countryPrefix: string, electronicAddressType: string, email: string, extension: string, fromDate: string, id: record, number: string, toDate: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, address_id: $address_id} | format pattern "/organisations/{party_id}/electronic-addresses/{address_id}"))
-  let body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/organisations/{party_id}/electronic-addresses/{address_id}"))
+  let req_body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a list of licenses
@@ -1904,18 +1913,18 @@ export def "organisations-licenses list" [
 ]: nothing -> table<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/licenses"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/licenses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a license
 #
 # POST /organisations/{partyId}/licenses
-export def "organisations-licenses post" [
+export def "organisations-licenses create" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1932,14 +1941,14 @@ export def "organisations-licenses post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/licenses"))
-  let body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/licenses"))
+  let req_body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a license
@@ -1960,11 +1969,11 @@ export def "organisations-licenses delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/organisations/{party_id}/licenses/{product_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/organisations/{party_id}/licenses/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1986,18 +1995,18 @@ export def "organisations-licenses get" [
 ]: nothing -> record<fromDate: string, id: record, licenseType: string, lifecycleState: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/organisations/{party_id}/licenses/{product_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/organisations/{party_id}/licenses/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a license
 #
 # PUT /organisations/{partyId}/licenses/{productId}
-export def "organisations-licenses put" [
+export def "organisations-licenses update" [
   party_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2015,14 +2024,14 @@ export def "organisations-licenses put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, product_id: $product_id} | format pattern "/organisations/{party_id}/licenses/{product_id}"))
-  let body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/organisations/{party_id}/licenses/{product_id}"))
+  let req_body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a list of roles
@@ -2042,18 +2051,18 @@ export def "organisations-roles list" [
 ]: nothing -> table<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/roles"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/roles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a role
 #
 # POST /organisations/{partyId}/roles
-export def "organisations-roles post" [
+export def "organisations-roles create" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2072,14 +2081,14 @@ export def "organisations-roles post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id} | format pattern "/organisations/{party_id}/roles"))
-  let body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/roles"))
+  let req_body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a role
@@ -2100,11 +2109,11 @@ export def "organisations-roles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, role_id: $role_id} | format pattern "/organisations/{party_id}/roles/{role_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), role_id: (encode-path-segment $role_id)} | format pattern "/organisations/{party_id}/roles/{role_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2126,18 +2135,18 @@ export def "organisations-roles get" [
 ]: nothing -> record<fromDate: string, id: record, partyRoleType: string, relatedPartyId: record, relatedPartyRoleType: string, relationshipType: string, toDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, role_id: $role_id} | format pattern "/organisations/{party_id}/roles/{role_id}"))
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), role_id: (encode-path-segment $role_id)} | format pattern "/organisations/{party_id}/roles/{role_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a role
 #
 # PUT /organisations/{partyId}/roles/{roleId}
-export def "organisations-roles put" [
+export def "organisations-roles update" [
   party_id: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2157,12 +2166,12 @@ export def "organisations-roles put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({party_id: $party_id, role_id: $role_id} | format pattern "/organisations/{party_id}/roles/{role_id}"))
-  let body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), role_id: (encode-path-segment $role_id)} | format pattern "/organisations/{party_id}/roles/{role_id}"))
+  let req_body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"apiKey": $api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

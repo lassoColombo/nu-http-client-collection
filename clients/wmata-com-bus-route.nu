@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -77,7 +86,7 @@ def radius-completer [] { ["500"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bus-positions 5476362a281d830c946a3d6e" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bus-positions get-5476362a281d830c946a3d6e" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +110,7 @@ export def commands []: nothing -> table {
 #
 # GET /BusPositions
 # operationId: 5476362a281d830c946a3d6e
-export def "bus-positions 5476362a281d830c946a3d6e" [
+export def "bus-positions get-5476362a281d830c946a3d6e" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,7 +137,7 @@ export def "bus-positions 5476362a281d830c946a3d6e" [
 #
 # GET /RouteDetails
 # operationId: 5476362a281d830c946a3d6f
-export def "route-details 5476362a281d830c946a3d6f" [
+export def "route-details get-5476362a281d830c946a3d6f" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,7 +147,7 @@ export def "route-details 5476362a281d830c946a3d6f" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (default: 70)
-  --date: string # Date in YYYY-MM-DD format for which to retrieve route and stop information.  Defaults to today's date unless specified.
+  --date: string # Date in YYYY-MM-DD format for which to retrieve route and stop information. Defaults to today's date unless specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -153,7 +162,7 @@ export def "route-details 5476362a281d830c946a3d6f" [
 #
 # GET /RouteSchedule
 # operationId: 5476362a281d830c946a3d71
-export def "route-schedule 5476362a281d830c946a3d71" [
+export def "route-schedule get-5476362a281d830c946a3d71" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,8 +172,8 @@ export def "route-schedule 5476362a281d830c946a3d71" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (default: 70)
-  --date: string # Date in YYYY-MM-DD format for which to retrieve schedule.  Defaults to today's date unless specified.
-  --including-variations: oneof<nothing, bool> # Whether or not to include variations.  For example, if B30 is specified, include all variations such as B30v1, B30v2, etc. (default: false)
+  --date: string # Date in YYYY-MM-DD format for which to retrieve schedule. Defaults to today's date unless specified.
+  --including-variations: oneof<nothing, bool> # Whether or not to include variations. For example, if B30 is specified, include all variations such as B30v1, B30v2, etc. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -179,7 +188,7 @@ export def "route-schedule 5476362a281d830c946a3d71" [
 #
 # GET /Routes
 # operationId: 5476362a281d830c946a3d70
-export def "routes 5476362a281d830c946a3d70" [
+export def "routes get-5476362a281d830c946a3d70" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +210,7 @@ export def "routes 5476362a281d830c946a3d70" [
 #
 # GET /StopSchedule
 # operationId: 5476362a281d830c946a3d72
-export def "stop-schedule 5476362a281d830c946a3d72" [
+export def "stop-schedule get-5476362a281d830c946a3d72" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +220,7 @@ export def "stop-schedule 5476362a281d830c946a3d72" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --stop-id: string@stop-id-completer # 7-digit regional stop ID. (default: 1001195)
-  --date: string # Date in YYYY-MM-DD format for which to retrieve schedule.  Defaults to today's date unless specified.
+  --date: string # Date in YYYY-MM-DD format for which to retrieve schedule. Defaults to today's date unless specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -226,7 +235,7 @@ export def "stop-schedule 5476362a281d830c946a3d72" [
 #
 # GET /Stops
 # operationId: 5476362a281d830c946a3d73
-export def "stops 5476362a281d830c946a3d73" [
+export def "stops get-5476362a281d830c946a3d73" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +261,7 @@ export def "stops 5476362a281d830c946a3d73" [
 #
 # GET /json/jBusPositions
 # operationId: 5476362a281d830c946a3d68
-export def "json-j-bus-positions 5476362a281d830c946a3d68" [
+export def "json-j-bus-positions get-5476362a281d830c946a3d68" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,7 +288,7 @@ export def "json-j-bus-positions 5476362a281d830c946a3d68" [
 #
 # GET /json/jRouteDetails
 # operationId: 5476362a281d830c946a3d69
-export def "json-j-route-details 5476362a281d830c946a3d69" [
+export def "json-j-route-details get-5476362a281d830c946a3d69" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +298,7 @@ export def "json-j-route-details 5476362a281d830c946a3d69" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1. (default: 70)
-  --date: string # Date in YYYY-MM-DD format for which to retrieve route and stop information.  Defaults to today's date unless specified.
+  --date: string # Date in YYYY-MM-DD format for which to retrieve route and stop information. Defaults to today's date unless specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -304,7 +313,7 @@ export def "json-j-route-details 5476362a281d830c946a3d69" [
 #
 # GET /json/jRouteSchedule
 # operationId: 5476362a281d830c946a3d6b
-export def "json-j-route-schedule 5476362a281d830c946a3d6b" [
+export def "json-j-route-schedule get-5476362a281d830c946a3d6b" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,8 +323,8 @@ export def "json-j-route-schedule 5476362a281d830c946a3d6b" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --route-id: string@route-id-completer # Bus route variant, e.g.: 70, 10A, 10Av1, etc. (default: 70)
-  --date: string # Date in YYYY-MM-DD format for which to retrieve schedule.  Defaults to today's date unless specified.
-  --including-variations: oneof<nothing, bool> # Whether or not to include variations if a base route is specified in RouteID.  For example, if B30 is specified and IncludingVariations is set to true, data for all variations of B30 such as B30v1, B30v2, etc. will be returned. (default: false)
+  --date: string # Date in YYYY-MM-DD format for which to retrieve schedule. Defaults to today's date unless specified.
+  --including-variations: oneof<nothing, bool> # Whether or not to include variations if a base route is specified in RouteID. For example, if B30 is specified and IncludingVariations is set to true, data for all variations of B30 such as B30v1, B30v2, etc. will be returned. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -330,7 +339,7 @@ export def "json-j-route-schedule 5476362a281d830c946a3d6b" [
 #
 # GET /json/jRoutes
 # operationId: 5476362a281d830c946a3d6a
-export def "json-j-routes 5476362a281d830c946a3d6a" [
+export def "json-j-routes get-5476362a281d830c946a3d6a" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,7 +361,7 @@ export def "json-j-routes 5476362a281d830c946a3d6a" [
 #
 # GET /json/jStopSchedule
 # operationId: 5476362a281d830c946a3d6c
-export def "json-j-stop-schedule 5476362a281d830c946a3d6c" [
+export def "json-j-stop-schedule get-5476362a281d830c946a3d6c" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,7 +371,7 @@ export def "json-j-stop-schedule 5476362a281d830c946a3d6c" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --stop-id: string@stop-id-completer # 7-digit regional stop ID. (default: 1001195)
-  --date: string # Date in YYYY-MM-DD format for which to retrieve schedule.  Defaults to today's date unless specified.
+  --date: string # Date in YYYY-MM-DD format for which to retrieve schedule. Defaults to today's date unless specified.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -377,7 +386,7 @@ export def "json-j-stop-schedule 5476362a281d830c946a3d6c" [
 #
 # GET /json/jStops
 # operationId: 5476362a281d830c946a3d6d
-export def "json-j-stops 5476362a281d830c946a3d6d" [
+export def "json-j-stops get-5476362a281d830c946a3d6d" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

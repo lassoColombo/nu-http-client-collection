@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def status-completer [] { ["active" "closed" "suspended"] }
@@ -112,7 +122,7 @@ def callback-method-completer [] { ["DELETE" "GET" "HEAD" "PATCH" "POST" "PUT"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2010-04-01-accountsjson list-account" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2010-04-01-accounts-json list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /2010-04-01/Accounts.json
 # operationId: ListAccount
-export def "2010-04-01-accountsjson list-account" [
+export def "2010-04-01-accounts-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +174,7 @@ export def "2010-04-01-accountsjson list-account" [
 #
 # POST /2010-04-01/Accounts.json
 # operationId: CreateAccount
-export def "2010-04-01-accountsjson create-account" [
+export def "2010-04-01-accounts-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,17 +189,18 @@ export def "2010-04-01-accountsjson create-account" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base "/2010-04-01/Accounts.json")
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Addresses.json
 #
 # operationId: ListAddress
-export def "2010-04-01-accounts-addressesjson list-address" [
+export def "2010-04-01-accounts-addresses-json list-address" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -209,7 +220,7 @@ export def "2010-04-01-accounts-addressesjson list-address" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "CustomerName" $customer_name "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "IsoCountry" $iso_country "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -218,7 +229,7 @@ export def "2010-04-01-accounts-addressesjson list-address" [
 # POST /2010-04-01/Accounts/{AccountSid}/Addresses.json
 #
 # operationId: CreateAddress
-export def "2010-04-01-accounts-addressesjson create-address" [
+export def "2010-04-01-accounts-addresses-json create-address" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -242,18 +253,19 @@ export def "2010-04-01-accounts-addressesjson create-address" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses.json"))
-  let body = {"AutoCorrectAddress": $auto_correct_address, "City": $city, "CustomerName": $customer_name, "EmergencyEnabled": $emergency_enabled, "FriendlyName": $friendly_name, "IsoCountry": $iso_country, "PostalCode": $postal_code, "Region": $region, "Street": $street, "StreetSecondary": $street_secondary} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses.json"))
+  let req_body = {"AutoCorrectAddress": $auto_correct_address, "City": $city, "CustomerName": $customer_name, "EmergencyEnabled": $emergency_enabled, "FriendlyName": $friendly_name, "IsoCountry": $iso_country, "PostalCode": $postal_code, "Region": $region, "Street": $street, "StreetSecondary": $street_secondary} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Addresses/{AddressSid}/DependentPhoneNumbers.json
 #
 # operationId: ListDependentPhoneNumber
-export def "2010-04-01-accounts-addresses-dependent-phone-numbersjson list-dependent-phone-number" [
+export def "2010-04-01-accounts-addresses-dependent-phone-numbers-json list" [
   account_sid: string
   address_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -271,7 +283,7 @@ export def "2010-04-01-accounts-addresses-dependent-phone-numbersjson list-depen
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, address_sid: $address_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses/{address_sid}/DependentPhoneNumbers.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), address_sid: (encode-path-segment $address_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses/{address_sid}/DependentPhoneNumbers.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -294,7 +306,7 @@ export def "2010-04-01-accounts-addresses delete-address" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -317,7 +329,7 @@ export def "2010-04-01-accounts-addresses get-address" [
 ]: nothing -> record<account_sid: string, city: string, customer_name: string, date_created: string, date_updated: string, emergency_enabled: bool, friendly_name: string, iso_country: string, postal_code: string, region: string, sid: string, street: string, street_secondary: string, uri: string, validated: bool, verified: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -350,19 +362,20 @@ export def "2010-04-01-accounts-addresses update-address" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses/{sid}.json"))
-  let body = {"AutoCorrectAddress": $auto_correct_address, "City": $city, "CustomerName": $customer_name, "EmergencyEnabled": $emergency_enabled, "FriendlyName": $friendly_name, "PostalCode": $postal_code, "Region": $region, "Street": $street, "StreetSecondary": $street_secondary} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses/{sid}.json"))
+  let req_body = {"AutoCorrectAddress": $auto_correct_address, "City": $city, "CustomerName": $customer_name, "EmergencyEnabled": $emergency_enabled, "FriendlyName": $friendly_name, "PostalCode": $postal_code, "Region": $region, "Street": $street, "StreetSecondary": $street_secondary} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of applications representing an application within the requesting account
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Applications.json
 # operationId: ListApplication
-export def "2010-04-01-accounts-applicationsjson list-application" [
+export def "2010-04-01-accounts-applications-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -380,7 +393,7 @@ export def "2010-04-01-accounts-applicationsjson list-application" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -390,7 +403,7 @@ export def "2010-04-01-accounts-applicationsjson list-application" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Applications.json
 # operationId: CreateApplication
-export def "2010-04-01-accounts-applicationsjson create-application" [
+export def "2010-04-01-accounts-applications-json create" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -420,12 +433,13 @@ export def "2010-04-01-accounts-applicationsjson create-application" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications.json"))
-  let body = {"ApiVersion": $api_version, "FriendlyName": $friendly_name, "MessageStatusCallback": $message_status_callback, "PublicApplicationConnectEnabled": $public_application_connect_enabled, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsStatusCallback": $sms_status_callback, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceUrl": $voice_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications.json"))
+  let req_body = {"ApiVersion": $api_version, "FriendlyName": $friendly_name, "MessageStatusCallback": $message_status_callback, "PublicApplicationConnectEnabled": $public_application_connect_enabled, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsStatusCallback": $sms_status_callback, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceUrl": $voice_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete the application by the specified application sid
@@ -446,7 +460,7 @@ export def "2010-04-01-accounts-applications delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -470,7 +484,7 @@ export def "2010-04-01-accounts-applications get" [
 ]: nothing -> record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, message_status_callback: string, public_application_connect_enabled: bool, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_status_callback: string, sms_url: string, status_callback: string, status_callback_method: string, uri: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -511,19 +525,20 @@ export def "2010-04-01-accounts-applications update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications/{sid}.json"))
-  let body = {"ApiVersion": $api_version, "FriendlyName": $friendly_name, "MessageStatusCallback": $message_status_callback, "PublicApplicationConnectEnabled": $public_application_connect_enabled, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsStatusCallback": $sms_status_callback, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceUrl": $voice_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications/{sid}.json"))
+  let req_body = {"ApiVersion": $api_version, "FriendlyName": $friendly_name, "MessageStatusCallback": $message_status_callback, "PublicApplicationConnectEnabled": $public_application_connect_enabled, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsStatusCallback": $sms_status_callback, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceUrl": $voice_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of authorized-connect-apps belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/AuthorizedConnectApps.json
 # operationId: ListAuthorizedConnectApp
-export def "2010-04-01-accounts-authorized-connect-appsjson list-authorized-connect-app" [
+export def "2010-04-01-accounts-authorized-connect-apps-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -540,7 +555,7 @@ export def "2010-04-01-accounts-authorized-connect-appsjson list-authorized-conn
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/AuthorizedConnectApps.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/AuthorizedConnectApps.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -564,7 +579,7 @@ export def "2010-04-01-accounts-authorized-connect-apps get" [
 ]: nothing -> record<account_sid: string, connect_app_company_name: string, connect_app_description: string, connect_app_friendly_name: string, connect_app_homepage_url: string, connect_app_sid: string, date_created: string, date_updated: string, permissions: list<string>, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, connect_app_sid: $connect_app_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/AuthorizedConnectApps/{connect_app_sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), connect_app_sid: (encode-path-segment $connect_app_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/AuthorizedConnectApps/{connect_app_sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -573,7 +588,7 @@ export def "2010-04-01-accounts-authorized-connect-apps get" [
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers.json
 #
 # operationId: ListAvailablePhoneNumberCountry
-export def "2010-04-01-accounts-available-phone-numbersjson list-available-phone-number-country" [
+export def "2010-04-01-accounts-available-phone-numbers-json list-country" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -590,7 +605,7 @@ export def "2010-04-01-accounts-available-phone-numbersjson list-available-phone
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -599,7 +614,7 @@ export def "2010-04-01-accounts-available-phone-numbersjson list-available-phone
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}.json
 #
 # operationId: FetchAvailablePhoneNumberCountry
-export def "2010-04-01-accounts-available-phone-numbers get-available-phone-number-country" [
+export def "2010-04-01-accounts-available-phone-numbers get-country" [
   account_sid: string
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -613,7 +628,7 @@ export def "2010-04-01-accounts-available-phone-numbers get-available-phone-numb
 ]: nothing -> record<beta: bool, country: string, country_code: string, subresource_uris: record, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, country_code: $country_code} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -622,7 +637,7 @@ export def "2010-04-01-accounts-available-phone-numbers get-available-phone-numb
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/Local.json
 #
 # operationId: ListAvailablePhoneNumberLocal
-export def "2010-04-01-accounts-available-phone-numbers-localjson list-available-phone-number-local" [
+export def "2010-04-01-accounts-available-phone-numbers-local-json list" [
   account_sid: string
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -644,7 +659,7 @@ export def "2010-04-01-accounts-available-phone-numbers-localjson list-available
   --beta: oneof<nothing, bool> # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --near-number: string # Given a phone number, find a geographically close number within `distance` miles. Distance defaults to 25 miles. Applies to only phone numbers in the US and Canada. (format: phone-number)
   --near-lat-long: string # Given a latitude/longitude pair `lat,long` find geographically close numbers within `distance` miles. Applies to only phone numbers in the US and Canada.
-  --distance: int # The search radius, in miles, for a `near_` query.  Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
+  --distance: int # The search radius, in miles, for a `near_` query. Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
   --in-postal-code: string # Limit results to a particular postal code. Given a phone number, search within the same postal code as that number. Applies to only phone numbers in the US and Canada.
   --in-region: string # Limit results to a particular region, state, or province. Given a phone number, search within the same region as that number. Applies to only phone numbers in the US and Canada.
   --in-rate-center: string # Limit results to a specific rate center, or given a phone number search within the same rate center as that number. Requires `in_lata` to be set as well. Applies to only phone numbers in the US and Canada.
@@ -658,7 +673,7 @@ export def "2010-04-01-accounts-available-phone-numbers-localjson list-available
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, country_code: $country_code} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/Local.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/Local.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -667,7 +682,7 @@ export def "2010-04-01-accounts-available-phone-numbers-localjson list-available
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/MachineToMachine.json
 #
 # operationId: ListAvailablePhoneNumberMachineToMachine
-export def "2010-04-01-accounts-available-phone-numbers-machine-to-machinejson list" [
+export def "2010-04-01-accounts-available-phone-numbers-machine-to-machine-json list" [
   account_sid: string
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -689,7 +704,7 @@ export def "2010-04-01-accounts-available-phone-numbers-machine-to-machinejson l
   --beta: oneof<nothing, bool> # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --near-number: string # Given a phone number, find a geographically close number within `distance` miles. Distance defaults to 25 miles. Applies to only phone numbers in the US and Canada. (format: phone-number)
   --near-lat-long: string # Given a latitude/longitude pair `lat,long` find geographically close numbers within `distance` miles. Applies to only phone numbers in the US and Canada.
-  --distance: int # The search radius, in miles, for a `near_` query.  Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
+  --distance: int # The search radius, in miles, for a `near_` query. Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
   --in-postal-code: string # Limit results to a particular postal code. Given a phone number, search within the same postal code as that number. Applies to only phone numbers in the US and Canada.
   --in-region: string # Limit results to a particular region, state, or province. Given a phone number, search within the same region as that number. Applies to only phone numbers in the US and Canada.
   --in-rate-center: string # Limit results to a specific rate center, or given a phone number search within the same rate center as that number. Requires `in_lata` to be set as well. Applies to only phone numbers in the US and Canada.
@@ -703,7 +718,7 @@ export def "2010-04-01-accounts-available-phone-numbers-machine-to-machinejson l
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, country_code: $country_code} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/MachineToMachine.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/MachineToMachine.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -712,7 +727,7 @@ export def "2010-04-01-accounts-available-phone-numbers-machine-to-machinejson l
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/Mobile.json
 #
 # operationId: ListAvailablePhoneNumberMobile
-export def "2010-04-01-accounts-available-phone-numbers-mobilejson list-available-phone-number-mobile" [
+export def "2010-04-01-accounts-available-phone-numbers-mobile-json list" [
   account_sid: string
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -734,7 +749,7 @@ export def "2010-04-01-accounts-available-phone-numbers-mobilejson list-availabl
   --beta: oneof<nothing, bool> # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --near-number: string # Given a phone number, find a geographically close number within `distance` miles. Distance defaults to 25 miles. Applies to only phone numbers in the US and Canada. (format: phone-number)
   --near-lat-long: string # Given a latitude/longitude pair `lat,long` find geographically close numbers within `distance` miles. Applies to only phone numbers in the US and Canada.
-  --distance: int # The search radius, in miles, for a `near_` query.  Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
+  --distance: int # The search radius, in miles, for a `near_` query. Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
   --in-postal-code: string # Limit results to a particular postal code. Given a phone number, search within the same postal code as that number. Applies to only phone numbers in the US and Canada.
   --in-region: string # Limit results to a particular region, state, or province. Given a phone number, search within the same region as that number. Applies to only phone numbers in the US and Canada.
   --in-rate-center: string # Limit results to a specific rate center, or given a phone number search within the same rate center as that number. Requires `in_lata` to be set as well. Applies to only phone numbers in the US and Canada.
@@ -748,7 +763,7 @@ export def "2010-04-01-accounts-available-phone-numbers-mobilejson list-availabl
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, country_code: $country_code} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/Mobile.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/Mobile.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -757,7 +772,7 @@ export def "2010-04-01-accounts-available-phone-numbers-mobilejson list-availabl
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/National.json
 #
 # operationId: ListAvailablePhoneNumberNational
-export def "2010-04-01-accounts-available-phone-numbers-nationaljson list-available-phone-number-national" [
+export def "2010-04-01-accounts-available-phone-numbers-national-json list" [
   account_sid: string
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -779,7 +794,7 @@ export def "2010-04-01-accounts-available-phone-numbers-nationaljson list-availa
   --beta: oneof<nothing, bool> # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --near-number: string # Given a phone number, find a geographically close number within `distance` miles. Distance defaults to 25 miles. Applies to only phone numbers in the US and Canada. (format: phone-number)
   --near-lat-long: string # Given a latitude/longitude pair `lat,long` find geographically close numbers within `distance` miles. Applies to only phone numbers in the US and Canada.
-  --distance: int # The search radius, in miles, for a `near_` query.  Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
+  --distance: int # The search radius, in miles, for a `near_` query. Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
   --in-postal-code: string # Limit results to a particular postal code. Given a phone number, search within the same postal code as that number. Applies to only phone numbers in the US and Canada.
   --in-region: string # Limit results to a particular region, state, or province. Given a phone number, search within the same region as that number. Applies to only phone numbers in the US and Canada.
   --in-rate-center: string # Limit results to a specific rate center, or given a phone number search within the same rate center as that number. Requires `in_lata` to be set as well. Applies to only phone numbers in the US and Canada.
@@ -793,7 +808,7 @@ export def "2010-04-01-accounts-available-phone-numbers-nationaljson list-availa
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, country_code: $country_code} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/National.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/National.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -802,7 +817,7 @@ export def "2010-04-01-accounts-available-phone-numbers-nationaljson list-availa
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/SharedCost.json
 #
 # operationId: ListAvailablePhoneNumberSharedCost
-export def "2010-04-01-accounts-available-phone-numbers-shared-costjson list-available-phone-number-shared-cost" [
+export def "2010-04-01-accounts-available-phone-numbers-shared-cost-json list" [
   account_sid: string
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -824,7 +839,7 @@ export def "2010-04-01-accounts-available-phone-numbers-shared-costjson list-ava
   --beta: oneof<nothing, bool> # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --near-number: string # Given a phone number, find a geographically close number within `distance` miles. Distance defaults to 25 miles. Applies to only phone numbers in the US and Canada. (format: phone-number)
   --near-lat-long: string # Given a latitude/longitude pair `lat,long` find geographically close numbers within `distance` miles. Applies to only phone numbers in the US and Canada.
-  --distance: int # The search radius, in miles, for a `near_` query.  Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
+  --distance: int # The search radius, in miles, for a `near_` query. Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
   --in-postal-code: string # Limit results to a particular postal code. Given a phone number, search within the same postal code as that number. Applies to only phone numbers in the US and Canada.
   --in-region: string # Limit results to a particular region, state, or province. Given a phone number, search within the same region as that number. Applies to only phone numbers in the US and Canada.
   --in-rate-center: string # Limit results to a specific rate center, or given a phone number search within the same rate center as that number. Requires `in_lata` to be set as well. Applies to only phone numbers in the US and Canada.
@@ -838,7 +853,7 @@ export def "2010-04-01-accounts-available-phone-numbers-shared-costjson list-ava
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, country_code: $country_code} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/SharedCost.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/SharedCost.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -847,7 +862,7 @@ export def "2010-04-01-accounts-available-phone-numbers-shared-costjson list-ava
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/TollFree.json
 #
 # operationId: ListAvailablePhoneNumberTollFree
-export def "2010-04-01-accounts-available-phone-numbers-toll-freejson list-available-phone-number-toll-free" [
+export def "2010-04-01-accounts-available-phone-numbers-toll-free-json list" [
   account_sid: string
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -869,7 +884,7 @@ export def "2010-04-01-accounts-available-phone-numbers-toll-freejson list-avail
   --beta: oneof<nothing, bool> # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --near-number: string # Given a phone number, find a geographically close number within `distance` miles. Distance defaults to 25 miles. Applies to only phone numbers in the US and Canada. (format: phone-number)
   --near-lat-long: string # Given a latitude/longitude pair `lat,long` find geographically close numbers within `distance` miles. Applies to only phone numbers in the US and Canada.
-  --distance: int # The search radius, in miles, for a `near_` query.  Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
+  --distance: int # The search radius, in miles, for a `near_` query. Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
   --in-postal-code: string # Limit results to a particular postal code. Given a phone number, search within the same postal code as that number. Applies to only phone numbers in the US and Canada.
   --in-region: string # Limit results to a particular region, state, or province. Given a phone number, search within the same region as that number. Applies to only phone numbers in the US and Canada.
   --in-rate-center: string # Limit results to a specific rate center, or given a phone number search within the same rate center as that number. Requires `in_lata` to be set as well. Applies to only phone numbers in the US and Canada.
@@ -883,7 +898,7 @@ export def "2010-04-01-accounts-available-phone-numbers-toll-freejson list-avail
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, country_code: $country_code} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/TollFree.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/TollFree.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -892,7 +907,7 @@ export def "2010-04-01-accounts-available-phone-numbers-toll-freejson list-avail
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/Voip.json
 #
 # operationId: ListAvailablePhoneNumberVoip
-export def "2010-04-01-accounts-available-phone-numbers-voipjson list-available-phone-number-voip" [
+export def "2010-04-01-accounts-available-phone-numbers-voip-json list" [
   account_sid: string
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -914,7 +929,7 @@ export def "2010-04-01-accounts-available-phone-numbers-voipjson list-available-
   --beta: oneof<nothing, bool> # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --near-number: string # Given a phone number, find a geographically close number within `distance` miles. Distance defaults to 25 miles. Applies to only phone numbers in the US and Canada. (format: phone-number)
   --near-lat-long: string # Given a latitude/longitude pair `lat,long` find geographically close numbers within `distance` miles. Applies to only phone numbers in the US and Canada.
-  --distance: int # The search radius, in miles, for a `near_` query.  Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
+  --distance: int # The search radius, in miles, for a `near_` query. Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
   --in-postal-code: string # Limit results to a particular postal code. Given a phone number, search within the same postal code as that number. Applies to only phone numbers in the US and Canada.
   --in-region: string # Limit results to a particular region, state, or province. Given a phone number, search within the same region as that number. Applies to only phone numbers in the US and Canada.
   --in-rate-center: string # Limit results to a specific rate center, or given a phone number search within the same rate center as that number. Requires `in_lata` to be set as well. Applies to only phone numbers in the US and Canada.
@@ -928,7 +943,7 @@ export def "2010-04-01-accounts-available-phone-numbers-voipjson list-available-
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, country_code: $country_code} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/Voip.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/Voip.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -938,7 +953,7 @@ export def "2010-04-01-accounts-available-phone-numbers-voipjson list-available-
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Balance.json
 # operationId: FetchBalance
-export def "2010-04-01-accounts-balancejson get-balance" [
+export def "2010-04-01-accounts-balance-json get" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -951,7 +966,7 @@ export def "2010-04-01-accounts-balancejson get-balance" [
 ]: nothing -> record<account_sid: string, balance: string, currency: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Balance.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Balance.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -961,7 +976,7 @@ export def "2010-04-01-accounts-balancejson get-balance" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Calls.json
 # operationId: ListCall
-export def "2010-04-01-accounts-callsjson list-call" [
+export def "2010-04-01-accounts-calls-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -988,7 +1003,7 @@ export def "2010-04-01-accounts-callsjson list-call" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "To" $qp_to "scalar") (serialize-qp "From" $qp_from "scalar") (serialize-qp "ParentCallSid" $parent_call_sid "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "StartTime<" $start_time "scalar") (serialize-qp "StartTime>" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "EndTime<" $end_time "scalar") (serialize-qp "EndTime>" $end_time "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -998,7 +1013,7 @@ export def "2010-04-01-accounts-callsjson list-call" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls.json
 # operationId: CreateCall
-export def "2010-04-01-accounts-callsjson create-call" [
+export def "2010-04-01-accounts-calls-json create" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1028,38 +1043,39 @@ export def "2010-04-01-accounts-callsjson create-call" [
   --record: oneof<nothing, bool> # Whether to record the call. Can be `true` to record the phone call, or `false` to not. The default is `false`. The `recording_url` is sent to the `status_callback` URL.
   --recording-channels: string # The number of channels in the final recording. Can be: `mono` or `dual`. The default is `mono`. `mono` records both legs of the call in a single channel of the recording file. `dual` records each leg to a separate channel of the recording file. The first channel of a dual-channel recording contains the parent call and the second channel contains the child call.
   --recording-status-callback: string # The URL that we call when the recording is available to be accessed.
-  --recording-status-callback-event: list # The recording status events that will trigger calls to the URL specified in `recording_status_callback`. Can be: `in-progress`, `completed` and `absent`. Defaults to `completed`. Separate  multiple values with a space.
+  --recording-status-callback-event: list<string> # The recording status events that will trigger calls to the URL specified in `recording_status_callback`. Can be: `in-progress`, `completed` and `absent`. Defaults to `completed`. Separate multiple values with a space.
   --recording-status-callback-method: string@recording-status-callback-method-completer # The HTTP method we should use when calling the `recording_status_callback` URL. Can be: `GET` or `POST` and the default is `POST`. (format: http-method)
   --recording-track: string # The audio track to record for the call. Can be: `inbound`, `outbound` or `both`. The default is `both`. `inbound` records the audio that is received by Twilio. `outbound` records the audio that is generated from Twilio. `both` records the audio that is received and generated by Twilio.
   --send-digits: string # A string of keys to dial after connecting to the number, maximum of 32 digits. Valid digits in the string include: any digit (`0`-`9`), '`#`', '`*`' and '`w`', to insert a half second pause. For example, if you connected to a company phone number and wanted to pause for one second, and then dial extension 1234 followed by the pound key, the value of this parameter would be `ww1234#`. Remember to URL-encode this string, since the '`#`' character has special meaning in a URL. If both `SendDigits` and `MachineDetection` parameters are provided, then `MachineDetection` will be ignored.
   --sip-auth-password: string # The password required to authenticate the user account specified in `sip_auth_username`.
   --sip-auth-username: string # The username used to authenticate the caller making a SIP call.
   --status-callback: string # The URL we should call using the `status_callback_method` to send status information to your application. If no `status_callback_event` is specified, we will send the `completed` status. If an `application_sid` parameter is present, this parameter is ignored. URLs must contain a valid hostname (underscores are not permitted). (format: uri)
-  --status-callback-event: list # The call progress events that we will send to the `status_callback` URL. Can be: `initiated`, `ringing`, `answered`, and `completed`. If no event is specified, we send the `completed` status. If you want to receive multiple events, specify each one in a separate `status_callback_event` parameter. See the code sample for [monitoring call progress](https://www.twilio.com/docs/voice/api/call-resource?code-sample=code-create-a-call-resource-and-specify-a-statuscallbackevent&code-sdk-version=json). If an `application_sid` is present, this parameter is ignored.
+  --status-callback-event: list<string> # The call progress events that we will send to the `status_callback` URL. Can be: `initiated`, `ringing`, `answered`, and `completed`. If no event is specified, we send the `completed` status. If you want to receive multiple events, specify each one in a separate `status_callback_event` parameter. See the code sample for [monitoring call progress](https://www.twilio.com/docs/voice/api/call-resource?code-sample=code-create-a-call-resource-and-specify-a-statuscallbackevent&code-sdk-version=json). If an `application_sid` is present, this parameter is ignored.
   --status-callback-method: string@status-callback-method-completer # The HTTP method we should use when calling the `status_callback` URL. Can be: `GET` or `POST` and the default is `POST`. If an `application_sid` parameter is present, this parameter is ignored. (format: http-method)
   --time-limit: int # The maximum duration of the call in seconds. Constraints depend on account and configuration.
   --timeout: int # The integer number of seconds that we should allow the phone to ring before assuming there is no answer. The default is `60` seconds and the maximum is `600` seconds. For some call flows, we will add a 5-second buffer to the timeout value you provide. For this reason, a timeout value of 10 seconds could result in an actual timeout closer to 15 seconds. You can set this to a short time, such as `15` seconds, to hang up before reaching an answering machine or voicemail.
   --body-to: string # The phone number, SIP address, or client identifier to call. (format: endpoint)
   --trim: string # Whether to trim any leading and trailing silence from the recording. Can be: `trim-silence` or `do-not-trim` and the default is `trim-silence`.
   --twiml: string # TwiML instructions for the call Twilio will use without fetching Twiml from url parameter. If both `twiml` and `url` are provided then `twiml` parameter will be ignored. Max 4000 characters. (format: twiml)
-  --body-url: string # The absolute URL that returns the TwiML instructions for the call. We will call this URL using the `method` when the call connects. For more information, see the [Url Parameter](https://www.twilio.com/docs/voice/make-calls#specify-a-url-parameter) section in [Making Calls](https://www.twilio.com/docs/voice/make-calls). (format: uri)
+  --url: string # The absolute URL that returns the TwiML instructions for the call. We will call this URL using the `method` when the call connects. For more information, see the [Url Parameter](https://www.twilio.com/docs/voice/make-calls#specify-a-url-parameter) section in [Making Calls](https://www.twilio.com/docs/voice/make-calls). (format: uri)
 ]: any -> record<account_sid: string, answered_by: string, api_version: string, caller_name: string, date_created: string, date_updated: string, direction: string, duration: string, end_time: string, forwarded_from: string, from: string, from_formatted: string, group_sid: string, parent_call_sid: string, phone_number_sid: string, price: string, price_unit: string, queue_time: string, sid: string, start_time: string, status: string, subresource_uris: record, to: string, to_formatted: string, trunk_sid: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls.json"))
-  let body = {"ApplicationSid": $application_sid, "AsyncAmd": $async_amd, "AsyncAmdStatusCallback": $async_amd_status_callback, "AsyncAmdStatusCallbackMethod": $async_amd_status_callback_method, "Byoc": $byoc, "CallReason": $call_reason, "CallToken": $call_token, "CallerId": $caller_id, "FallbackMethod": $fallback_method, "FallbackUrl": $fallback_url, "From": $body_from, "MachineDetection": $machine_detection, "MachineDetectionSilenceTimeout": $machine_detection_silence_timeout, "MachineDetectionSpeechEndThreshold": $machine_detection_speech_end_threshold, "MachineDetectionSpeechThreshold": $machine_detection_speech_threshold, "MachineDetectionTimeout": $machine_detection_timeout, "Method": $method, "Record": $record, "RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackEvent": $recording_status_callback_event, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RecordingTrack": $recording_track, "SendDigits": $send_digits, "SipAuthPassword": $sip_auth_password, "SipAuthUsername": $sip_auth_username, "StatusCallback": $status_callback, "StatusCallbackEvent": $status_callback_event, "StatusCallbackMethod": $status_callback_method, "TimeLimit": $time_limit, "Timeout": $timeout, "To": $body_to, "Trim": $trim, "Twiml": $twiml, "Url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls.json"))
+  let req_body = {"ApplicationSid": $application_sid, "AsyncAmd": $async_amd, "AsyncAmdStatusCallback": $async_amd_status_callback, "AsyncAmdStatusCallbackMethod": $async_amd_status_callback_method, "Byoc": $byoc, "CallReason": $call_reason, "CallToken": $call_token, "CallerId": $caller_id, "FallbackMethod": $fallback_method, "FallbackUrl": $fallback_url, "From": $body_from, "MachineDetection": $machine_detection, "MachineDetectionSilenceTimeout": $machine_detection_silence_timeout, "MachineDetectionSpeechEndThreshold": $machine_detection_speech_end_threshold, "MachineDetectionSpeechThreshold": $machine_detection_speech_threshold, "MachineDetectionTimeout": $machine_detection_timeout, "Method": $method, "Record": $record, "RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackEvent": $recording_status_callback_event, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RecordingTrack": $recording_track, "SendDigits": $send_digits, "SipAuthPassword": $sip_auth_password, "SipAuthUsername": $sip_auth_username, "StatusCallback": $status_callback, "StatusCallbackEvent": $status_callback_event, "StatusCallbackMethod": $status_callback_method, "TimeLimit": $time_limit, "Timeout": $timeout, "To": $body_to, "Trim": $trim, "Twiml": $twiml, "Url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Create a FeedbackSummary resource for a call
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/FeedbackSummary.json
 # operationId: CreateCallFeedbackSummary
-export def "2010-04-01-accounts-calls-feedback-summaryjson create-call-feedback-summary" [
+export def "2010-04-01-accounts-calls-feedback-summary-json create" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1078,12 +1094,13 @@ export def "2010-04-01-accounts-calls-feedback-summaryjson create-call-feedback-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/FeedbackSummary.json"))
-  let body = {"EndDate": $end_date, "IncludeSubaccounts": $include_subaccounts, "StartDate": $start_date, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/FeedbackSummary.json"))
+  let req_body = {"EndDate": $end_date, "IncludeSubaccounts": $include_subaccounts, "StartDate": $start_date, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a FeedbackSummary resource from a call
@@ -1104,7 +1121,7 @@ export def "2010-04-01-accounts-calls-feedback-summary delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/FeedbackSummary/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/FeedbackSummary/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1128,7 +1145,7 @@ export def "2010-04-01-accounts-calls-feedback-summary get" [
 ]: nothing -> record<account_sid: string, call_count: int, call_feedback_count: int, date_created: string, date_updated: string, end_date: string, include_subaccounts: bool, issues: list<any>, quality_score_average: float, quality_score_median: float, quality_score_standard_deviation: float, sid: string, start_date: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/FeedbackSummary/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/FeedbackSummary/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1138,7 +1155,7 @@ export def "2010-04-01-accounts-calls-feedback-summary get" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Events.json
 # operationId: ListCallEvent
-export def "2010-04-01-accounts-calls-eventsjson list-call-event" [
+export def "2010-04-01-accounts-calls-events-json list" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1156,7 +1173,7 @@ export def "2010-04-01-accounts-calls-eventsjson list-call-event" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, call_sid: $call_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Events.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Events.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1166,7 +1183,7 @@ export def "2010-04-01-accounts-calls-eventsjson list-call-event" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Feedback.json
 # operationId: FetchCallFeedback
-export def "2010-04-01-accounts-calls-feedbackjson get-call-feedback" [
+export def "2010-04-01-accounts-calls-feedback-json get" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1180,7 +1197,7 @@ export def "2010-04-01-accounts-calls-feedbackjson get-call-feedback" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, issues: list<string>, quality_score: int, sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, call_sid: $call_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Feedback.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Feedback.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1190,7 +1207,7 @@ export def "2010-04-01-accounts-calls-feedbackjson get-call-feedback" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Feedback.json
 # operationId: UpdateCallFeedback
-export def "2010-04-01-accounts-calls-feedbackjson update-call-feedback" [
+export def "2010-04-01-accounts-calls-feedback-json update" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1201,24 +1218,25 @@ export def "2010-04-01-accounts-calls-feedbackjson update-call-feedback" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --issue: list # One or more issues experienced during the call. The issues can be: `imperfect-audio`, `dropped-call`, `incorrect-caller-id`, `post-dial-delay`, `digits-not-captured`, `audio-latency`, `unsolicited-call`, or `one-way-audio`.
+  --issue: list<string> # One or more issues experienced during the call. The issues can be: `imperfect-audio`, `dropped-call`, `incorrect-caller-id`, `post-dial-delay`, `digits-not-captured`, `audio-latency`, `unsolicited-call`, or `one-way-audio`.
   --quality-score: int # The call quality expressed as an integer from `1` to `5` where `1` represents very poor call quality and `5` represents a perfect call.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, issues: list<string>, quality_score: int, sid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, call_sid: $call_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Feedback.json"))
-  let body = {"Issue": $issue, "QualityScore": $quality_score} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Feedback.json"))
+  let req_body = {"Issue": $issue, "QualityScore": $quality_score} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Notifications.json
 #
 # operationId: ListCallNotification
-export def "2010-04-01-accounts-calls-notificationsjson list-call-notification" [
+export def "2010-04-01-accounts-calls-notifications-json list" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1229,7 +1247,7 @@ export def "2010-04-01-accounts-calls-notificationsjson list-call-notification" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --log: int # Only read notifications of the specified log level. Can be:  `0` to read only ERROR notifications or `1` to read only WARNING notifications. By default, all notifications are read.
+  --log: int # Only read notifications of the specified log level. Can be: `0` to read only ERROR notifications or `1` to read only WARNING notifications. By default, all notifications are read.
   --message-date: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date)
   --message-date: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date)
   --message-date: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date)
@@ -1240,7 +1258,7 @@ export def "2010-04-01-accounts-calls-notificationsjson list-call-notification" 
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "Log" $log "scalar") (serialize-qp "MessageDate" $message_date "scalar") (serialize-qp "MessageDate<" $message_date "scalar") (serialize-qp "MessageDate>" $message_date "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, call_sid: $call_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Notifications.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Notifications.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1264,7 +1282,7 @@ export def "2010-04-01-accounts-calls-notifications get" [
 ]: nothing -> record<account_sid: string, api_version: string, call_sid: string, date_created: string, date_updated: string, error_code: string, log: string, message_date: string, message_text: string, more_info: string, request_method: string, request_url: string, request_variables: string, response_body: string, response_headers: string, sid: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, call_sid: $call_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Notifications/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Notifications/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1274,7 +1292,7 @@ export def "2010-04-01-accounts-calls-notifications get" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Payments.json
 # operationId: CreatePayments
-export def "2010-04-01-accounts-calls-paymentsjson create-payments" [
+export def "2010-04-01-accounts-calls-payments-json create" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1292,25 +1310,26 @@ export def "2010-04-01-accounts-calls-paymentsjson create-payments" [
   idempotency_key: string # A unique token that will be used to ensure that multiple API calls with the same information do not result in multiple transactions. This should be a unique string value per API call and can be a randomly generated.
   --input: string # A list of inputs that should be accepted. Currently only `dtmf` is supported. All digits captured during a pay session are redacted from the logs.
   --min-postal-code-length: int # A positive integer that is used to validate the length of the `PostalCode` inputted by the user. User must enter this many digits.
-  --parameter: any # A single-level JSON object used to pass custom parameters to payment processors. (Required for ACH payments). The information that has to be included here depends on the <Pay> Connector. [Read more](https://www.twilio.com/console/voice/pay-connectors).
-  --payment-connector: string # This is the unique name corresponding to the Pay Connector installed in the Twilio Add-ons. Learn more about [<Pay> Connectors](https://www.twilio.com/console/voice/pay-connectors). The default value is `Default`.
+  --parameter: any # A single-level JSON object used to pass custom parameters to payment processors. (Required for ACH payments). The information that has to be included here depends on the Connector. [Read more](https://www.twilio.com/console/voice/pay-connectors).
+  --payment-connector: string # This is the unique name corresponding to the Pay Connector installed in the Twilio Add-ons. Learn more about [ Connectors](https://www.twilio.com/console/voice/pay-connectors). The default value is `Default`.
   --payment-method: string@payment-method-completer
   --postal-code: oneof<nothing, bool> # Indicates whether the credit card postal code (zip code) is a required piece of payment information that must be provided by the caller. The default is `true`.
   --security-code: oneof<nothing, bool> # Indicates whether the credit card security code is a required piece of payment information that must be provided by the caller. The default is `true`.
   status_callback: string # Provide an absolute or relative URL to receive status updates regarding your Pay session. Read more about the [expected StatusCallback values](https://www.twilio.com/docs/voice/api/payment-resource#statuscallback) (format: uri)
-  --timeout: int # The number of seconds that <Pay> should wait for the caller to press a digit between each subsequent digit, after the first one, before moving on to validate the digits captured. The default is `5`, maximum is `600`.
+  --timeout: int # The number of seconds that should wait for the caller to press a digit between each subsequent digit, after the first one, before moving on to validate the digits captured. The default is `5`, maximum is `600`.
   --token-type: string@token-type-completer
   --valid-card-types: string # Credit card types separated by space that Pay should accept. The default value is `visa mastercard amex`
 ]: any -> record<account_sid: string, call_sid: string, date_created: string, date_updated: string, sid: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, call_sid: $call_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Payments.json"))
-  let body = {"BankAccountType": $bank_account_type, "ChargeAmount": $charge_amount, "Currency": $currency, "Description": $description, "IdempotencyKey": $idempotency_key, "Input": $input, "MinPostalCodeLength": $min_postal_code_length, "Parameter": $parameter, "PaymentConnector": $payment_connector, "PaymentMethod": $payment_method, "PostalCode": $postal_code, "SecurityCode": $security_code, "StatusCallback": $status_callback, "Timeout": $timeout, "TokenType": $token_type, "ValidCardTypes": $valid_card_types} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Payments.json"))
+  let req_body = {"BankAccountType": $bank_account_type, "ChargeAmount": $charge_amount, "Currency": $currency, "Description": $description, "IdempotencyKey": $idempotency_key, "Input": $input, "MinPostalCodeLength": $min_postal_code_length, "Parameter": $parameter, "PaymentConnector": $payment_connector, "PaymentMethod": $payment_method, "PostalCode": $postal_code, "SecurityCode": $security_code, "StatusCallback": $status_callback, "Timeout": $timeout, "TokenType": $token_type, "ValidCardTypes": $valid_card_types} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # update an instance of payments with different phases of payment flows.
@@ -1337,19 +1356,20 @@ export def "2010-04-01-accounts-calls-payments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, call_sid: $call_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Payments/{sid}.json"))
-  let body = {"Capture": $capture, "IdempotencyKey": $idempotency_key, "Status": $status, "StatusCallback": $status_callback} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Payments/{sid}.json"))
+  let req_body = {"Capture": $capture, "IdempotencyKey": $idempotency_key, "Status": $status, "StatusCallback": $status_callback} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of recordings belonging to the call used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Recordings.json
 # operationId: ListCallRecording
-export def "2010-04-01-accounts-calls-recordingsjson list-call-recording" [
+export def "2010-04-01-accounts-calls-recordings-json list" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1370,7 +1390,7 @@ export def "2010-04-01-accounts-calls-recordingsjson list-call-recording" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $date_created "scalar") (serialize-qp "DateCreated>" $date_created "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, call_sid: $call_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1380,7 +1400,7 @@ export def "2010-04-01-accounts-calls-recordingsjson list-call-recording" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Recordings.json
 # operationId: CreateCallRecording
-export def "2010-04-01-accounts-calls-recordingsjson create-call-recording" [
+export def "2010-04-01-accounts-calls-recordings-json create" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1392,8 +1412,8 @@ export def "2010-04-01-accounts-calls-recordingsjson create-call-recording" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --recording-channels: string # The number of channels used in the recording. Can be: `mono` or `dual` and the default is `mono`. `mono` records all parties of the call into one channel. `dual` records each party of a 2-party call into separate channels.
-  --recording-status-callback: string # The URL we should call using the `recording_status_callback_method` on each recording event specified in  `recording_status_callback_event`. For more information, see [RecordingStatusCallback parameters](https://www.twilio.com/docs/voice/api/recording#recordingstatuscallback). (format: uri)
-  --recording-status-callback-event: list # The recording status events on which we should call the `recording_status_callback` URL. Can be: `in-progress`, `completed` and `absent` and the default is `completed`. Separate multiple event values with a space.
+  --recording-status-callback: string # The URL we should call using the `recording_status_callback_method` on each recording event specified in `recording_status_callback_event`. For more information, see [RecordingStatusCallback parameters](https://www.twilio.com/docs/voice/api/recording#recordingstatuscallback). (format: uri)
+  --recording-status-callback-event: list<string> # The recording status events on which we should call the `recording_status_callback` URL. Can be: `in-progress`, `completed` and `absent` and the default is `completed`. Separate multiple event values with a space.
   --recording-status-callback-method: string@recording-status-callback-method-completer # The HTTP method we should use to call `recording_status_callback`. Can be: `GET` or `POST` and the default is `POST`. (format: http-method)
   --recording-track: string # The audio track to record for the call. Can be: `inbound`, `outbound` or `both`. The default is `both`. `inbound` records the audio that is received by Twilio. `outbound` records the audio that is generated from Twilio. `both` records the audio that is received and generated by Twilio.
   --trim: string # Whether to trim any leading and trailing silence in the recording. Can be: `trim-silence` or `do-not-trim` and the default is `do-not-trim`. `trim-silence` trims the silence from the beginning and end of the recording and `do-not-trim` does not.
@@ -1401,12 +1421,13 @@ export def "2010-04-01-accounts-calls-recordingsjson create-call-recording" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, call_sid: $call_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings.json"))
-  let body = {"RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackEvent": $recording_status_callback_event, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RecordingTrack": $recording_track, "Trim": $trim} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings.json"))
+  let req_body = {"RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackEvent": $recording_status_callback_event, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RecordingTrack": $recording_track, "Trim": $trim} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a recording from your account
@@ -1428,7 +1449,7 @@ export def "2010-04-01-accounts-calls-recordings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, call_sid: $call_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1453,7 +1474,7 @@ export def "2010-04-01-accounts-calls-recordings get" [
 ]: nothing -> record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: float, price_unit: string, sid: string, source: string, start_time: string, status: string, track: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, call_sid: $call_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1481,19 +1502,20 @@ export def "2010-04-01-accounts-calls-recordings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, call_sid: $call_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings/{sid}.json"))
-  let body = {"PauseBehavior": $pause_behavior, "Status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings/{sid}.json"))
+  let req_body = {"PauseBehavior": $pause_behavior, "Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Create a Siprec
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Siprec.json
 # operationId: CreateSiprec
-export def "2010-04-01-accounts-calls-siprecjson create-siprec" [
+export def "2010-04-01-accounts-calls-siprec-json create" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1711,12 +1733,13 @@ export def "2010-04-01-accounts-calls-siprecjson create-siprec" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, call_sid: $call_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Siprec.json"))
-  let body = {"ConnectorName": $connector_name, "Name": $name, "Parameter1.Name": $parameter1_name, "Parameter1.Value": $parameter1_value, "Parameter10.Name": $parameter10_name, "Parameter10.Value": $parameter10_value, "Parameter11.Name": $parameter11_name, "Parameter11.Value": $parameter11_value, "Parameter12.Name": $parameter12_name, "Parameter12.Value": $parameter12_value, "Parameter13.Name": $parameter13_name, "Parameter13.Value": $parameter13_value, "Parameter14.Name": $parameter14_name, "Parameter14.Value": $parameter14_value, "Parameter15.Name": $parameter15_name, "Parameter15.Value": $parameter15_value, "Parameter16.Name": $parameter16_name, "Parameter16.Value": $parameter16_value, "Parameter17.Name": $parameter17_name, "Parameter17.Value": $parameter17_value, "Parameter18.Name": $parameter18_name, "Parameter18.Value": $parameter18_value, "Parameter19.Name": $parameter19_name, "Parameter19.Value": $parameter19_value, "Parameter2.Name": $parameter2_name, "Parameter2.Value": $parameter2_value, "Parameter20.Name": $parameter20_name, "Parameter20.Value": $parameter20_value, "Parameter21.Name": $parameter21_name, "Parameter21.Value": $parameter21_value, "Parameter22.Name": $parameter22_name, "Parameter22.Value": $parameter22_value, "Parameter23.Name": $parameter23_name, "Parameter23.Value": $parameter23_value, "Parameter24.Name": $parameter24_name, "Parameter24.Value": $parameter24_value, "Parameter25.Name": $parameter25_name, "Parameter25.Value": $parameter25_value, "Parameter26.Name": $parameter26_name, "Parameter26.Value": $parameter26_value, "Parameter27.Name": $parameter27_name, "Parameter27.Value": $parameter27_value, "Parameter28.Name": $parameter28_name, "Parameter28.Value": $parameter28_value, "Parameter29.Name": $parameter29_name, "Parameter29.Value": $parameter29_value, "Parameter3.Name": $parameter3_name, "Parameter3.Value": $parameter3_value, "Parameter30.Name": $parameter30_name, "Parameter30.Value": $parameter30_value, "Parameter31.Name": $parameter31_name, "Parameter31.Value": $parameter31_value, "Parameter32.Name": $parameter32_name, "Parameter32.Value": $parameter32_value, "Parameter33.Name": $parameter33_name, "Parameter33.Value": $parameter33_value, "Parameter34.Name": $parameter34_name, "Parameter34.Value": $parameter34_value, "Parameter35.Name": $parameter35_name, "Parameter35.Value": $parameter35_value, "Parameter36.Name": $parameter36_name, "Parameter36.Value": $parameter36_value, "Parameter37.Name": $parameter37_name, "Parameter37.Value": $parameter37_value, "Parameter38.Name": $parameter38_name, "Parameter38.Value": $parameter38_value, "Parameter39.Name": $parameter39_name, "Parameter39.Value": $parameter39_value, "Parameter4.Name": $parameter4_name, "Parameter4.Value": $parameter4_value, "Parameter40.Name": $parameter40_name, "Parameter40.Value": $parameter40_value, "Parameter41.Name": $parameter41_name, "Parameter41.Value": $parameter41_value, "Parameter42.Name": $parameter42_name, "Parameter42.Value": $parameter42_value, "Parameter43.Name": $parameter43_name, "Parameter43.Value": $parameter43_value, "Parameter44.Name": $parameter44_name, "Parameter44.Value": $parameter44_value, "Parameter45.Name": $parameter45_name, "Parameter45.Value": $parameter45_value, "Parameter46.Name": $parameter46_name, "Parameter46.Value": $parameter46_value, "Parameter47.Name": $parameter47_name, "Parameter47.Value": $parameter47_value, "Parameter48.Name": $parameter48_name, "Parameter48.Value": $parameter48_value, "Parameter49.Name": $parameter49_name, "Parameter49.Value": $parameter49_value, "Parameter5.Name": $parameter5_name, "Parameter5.Value": $parameter5_value, "Parameter50.Name": $parameter50_name, "Parameter50.Value": $parameter50_value, "Parameter51.Name": $parameter51_name, "Parameter51.Value": $parameter51_value, "Parameter52.Name": $parameter52_name, "Parameter52.Value": $parameter52_value, "Parameter53.Name": $parameter53_name, "Parameter53.Value": $parameter53_value, "Parameter54.Name": $parameter54_name, "Parameter54.Value": $parameter54_value, "Parameter55.Name": $parameter55_name, "Parameter55.Value": $parameter55_value, "Parameter56.Name": $parameter56_name, "Parameter56.Value": $parameter56_value, "Parameter57.Name": $parameter57_name, "Parameter57.Value": $parameter57_value, "Parameter58.Name": $parameter58_name, "Parameter58.Value": $parameter58_value, "Parameter59.Name": $parameter59_name, "Parameter59.Value": $parameter59_value, "Parameter6.Name": $parameter6_name, "Parameter6.Value": $parameter6_value, "Parameter60.Name": $parameter60_name, "Parameter60.Value": $parameter60_value, "Parameter61.Name": $parameter61_name, "Parameter61.Value": $parameter61_value, "Parameter62.Name": $parameter62_name, "Parameter62.Value": $parameter62_value, "Parameter63.Name": $parameter63_name, "Parameter63.Value": $parameter63_value, "Parameter64.Name": $parameter64_name, "Parameter64.Value": $parameter64_value, "Parameter65.Name": $parameter65_name, "Parameter65.Value": $parameter65_value, "Parameter66.Name": $parameter66_name, "Parameter66.Value": $parameter66_value, "Parameter67.Name": $parameter67_name, "Parameter67.Value": $parameter67_value, "Parameter68.Name": $parameter68_name, "Parameter68.Value": $parameter68_value, "Parameter69.Name": $parameter69_name, "Parameter69.Value": $parameter69_value, "Parameter7.Name": $parameter7_name, "Parameter7.Value": $parameter7_value, "Parameter70.Name": $parameter70_name, "Parameter70.Value": $parameter70_value, "Parameter71.Name": $parameter71_name, "Parameter71.Value": $parameter71_value, "Parameter72.Name": $parameter72_name, "Parameter72.Value": $parameter72_value, "Parameter73.Name": $parameter73_name, "Parameter73.Value": $parameter73_value, "Parameter74.Name": $parameter74_name, "Parameter74.Value": $parameter74_value, "Parameter75.Name": $parameter75_name, "Parameter75.Value": $parameter75_value, "Parameter76.Name": $parameter76_name, "Parameter76.Value": $parameter76_value, "Parameter77.Name": $parameter77_name, "Parameter77.Value": $parameter77_value, "Parameter78.Name": $parameter78_name, "Parameter78.Value": $parameter78_value, "Parameter79.Name": $parameter79_name, "Parameter79.Value": $parameter79_value, "Parameter8.Name": $parameter8_name, "Parameter8.Value": $parameter8_value, "Parameter80.Name": $parameter80_name, "Parameter80.Value": $parameter80_value, "Parameter81.Name": $parameter81_name, "Parameter81.Value": $parameter81_value, "Parameter82.Name": $parameter82_name, "Parameter82.Value": $parameter82_value, "Parameter83.Name": $parameter83_name, "Parameter83.Value": $parameter83_value, "Parameter84.Name": $parameter84_name, "Parameter84.Value": $parameter84_value, "Parameter85.Name": $parameter85_name, "Parameter85.Value": $parameter85_value, "Parameter86.Name": $parameter86_name, "Parameter86.Value": $parameter86_value, "Parameter87.Name": $parameter87_name, "Parameter87.Value": $parameter87_value, "Parameter88.Name": $parameter88_name, "Parameter88.Value": $parameter88_value, "Parameter89.Name": $parameter89_name, "Parameter89.Value": $parameter89_value, "Parameter9.Name": $parameter9_name, "Parameter9.Value": $parameter9_value, "Parameter90.Name": $parameter90_name, "Parameter90.Value": $parameter90_value, "Parameter91.Name": $parameter91_name, "Parameter91.Value": $parameter91_value, "Parameter92.Name": $parameter92_name, "Parameter92.Value": $parameter92_value, "Parameter93.Name": $parameter93_name, "Parameter93.Value": $parameter93_value, "Parameter94.Name": $parameter94_name, "Parameter94.Value": $parameter94_value, "Parameter95.Name": $parameter95_name, "Parameter95.Value": $parameter95_value, "Parameter96.Name": $parameter96_name, "Parameter96.Value": $parameter96_value, "Parameter97.Name": $parameter97_name, "Parameter97.Value": $parameter97_value, "Parameter98.Name": $parameter98_name, "Parameter98.Value": $parameter98_value, "Parameter99.Name": $parameter99_name, "Parameter99.Value": $parameter99_value, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Track": $track} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Siprec.json"))
+  let req_body = {"ConnectorName": $connector_name, "Name": $name, "Parameter1.Name": $parameter1_name, "Parameter1.Value": $parameter1_value, "Parameter10.Name": $parameter10_name, "Parameter10.Value": $parameter10_value, "Parameter11.Name": $parameter11_name, "Parameter11.Value": $parameter11_value, "Parameter12.Name": $parameter12_name, "Parameter12.Value": $parameter12_value, "Parameter13.Name": $parameter13_name, "Parameter13.Value": $parameter13_value, "Parameter14.Name": $parameter14_name, "Parameter14.Value": $parameter14_value, "Parameter15.Name": $parameter15_name, "Parameter15.Value": $parameter15_value, "Parameter16.Name": $parameter16_name, "Parameter16.Value": $parameter16_value, "Parameter17.Name": $parameter17_name, "Parameter17.Value": $parameter17_value, "Parameter18.Name": $parameter18_name, "Parameter18.Value": $parameter18_value, "Parameter19.Name": $parameter19_name, "Parameter19.Value": $parameter19_value, "Parameter2.Name": $parameter2_name, "Parameter2.Value": $parameter2_value, "Parameter20.Name": $parameter20_name, "Parameter20.Value": $parameter20_value, "Parameter21.Name": $parameter21_name, "Parameter21.Value": $parameter21_value, "Parameter22.Name": $parameter22_name, "Parameter22.Value": $parameter22_value, "Parameter23.Name": $parameter23_name, "Parameter23.Value": $parameter23_value, "Parameter24.Name": $parameter24_name, "Parameter24.Value": $parameter24_value, "Parameter25.Name": $parameter25_name, "Parameter25.Value": $parameter25_value, "Parameter26.Name": $parameter26_name, "Parameter26.Value": $parameter26_value, "Parameter27.Name": $parameter27_name, "Parameter27.Value": $parameter27_value, "Parameter28.Name": $parameter28_name, "Parameter28.Value": $parameter28_value, "Parameter29.Name": $parameter29_name, "Parameter29.Value": $parameter29_value, "Parameter3.Name": $parameter3_name, "Parameter3.Value": $parameter3_value, "Parameter30.Name": $parameter30_name, "Parameter30.Value": $parameter30_value, "Parameter31.Name": $parameter31_name, "Parameter31.Value": $parameter31_value, "Parameter32.Name": $parameter32_name, "Parameter32.Value": $parameter32_value, "Parameter33.Name": $parameter33_name, "Parameter33.Value": $parameter33_value, "Parameter34.Name": $parameter34_name, "Parameter34.Value": $parameter34_value, "Parameter35.Name": $parameter35_name, "Parameter35.Value": $parameter35_value, "Parameter36.Name": $parameter36_name, "Parameter36.Value": $parameter36_value, "Parameter37.Name": $parameter37_name, "Parameter37.Value": $parameter37_value, "Parameter38.Name": $parameter38_name, "Parameter38.Value": $parameter38_value, "Parameter39.Name": $parameter39_name, "Parameter39.Value": $parameter39_value, "Parameter4.Name": $parameter4_name, "Parameter4.Value": $parameter4_value, "Parameter40.Name": $parameter40_name, "Parameter40.Value": $parameter40_value, "Parameter41.Name": $parameter41_name, "Parameter41.Value": $parameter41_value, "Parameter42.Name": $parameter42_name, "Parameter42.Value": $parameter42_value, "Parameter43.Name": $parameter43_name, "Parameter43.Value": $parameter43_value, "Parameter44.Name": $parameter44_name, "Parameter44.Value": $parameter44_value, "Parameter45.Name": $parameter45_name, "Parameter45.Value": $parameter45_value, "Parameter46.Name": $parameter46_name, "Parameter46.Value": $parameter46_value, "Parameter47.Name": $parameter47_name, "Parameter47.Value": $parameter47_value, "Parameter48.Name": $parameter48_name, "Parameter48.Value": $parameter48_value, "Parameter49.Name": $parameter49_name, "Parameter49.Value": $parameter49_value, "Parameter5.Name": $parameter5_name, "Parameter5.Value": $parameter5_value, "Parameter50.Name": $parameter50_name, "Parameter50.Value": $parameter50_value, "Parameter51.Name": $parameter51_name, "Parameter51.Value": $parameter51_value, "Parameter52.Name": $parameter52_name, "Parameter52.Value": $parameter52_value, "Parameter53.Name": $parameter53_name, "Parameter53.Value": $parameter53_value, "Parameter54.Name": $parameter54_name, "Parameter54.Value": $parameter54_value, "Parameter55.Name": $parameter55_name, "Parameter55.Value": $parameter55_value, "Parameter56.Name": $parameter56_name, "Parameter56.Value": $parameter56_value, "Parameter57.Name": $parameter57_name, "Parameter57.Value": $parameter57_value, "Parameter58.Name": $parameter58_name, "Parameter58.Value": $parameter58_value, "Parameter59.Name": $parameter59_name, "Parameter59.Value": $parameter59_value, "Parameter6.Name": $parameter6_name, "Parameter6.Value": $parameter6_value, "Parameter60.Name": $parameter60_name, "Parameter60.Value": $parameter60_value, "Parameter61.Name": $parameter61_name, "Parameter61.Value": $parameter61_value, "Parameter62.Name": $parameter62_name, "Parameter62.Value": $parameter62_value, "Parameter63.Name": $parameter63_name, "Parameter63.Value": $parameter63_value, "Parameter64.Name": $parameter64_name, "Parameter64.Value": $parameter64_value, "Parameter65.Name": $parameter65_name, "Parameter65.Value": $parameter65_value, "Parameter66.Name": $parameter66_name, "Parameter66.Value": $parameter66_value, "Parameter67.Name": $parameter67_name, "Parameter67.Value": $parameter67_value, "Parameter68.Name": $parameter68_name, "Parameter68.Value": $parameter68_value, "Parameter69.Name": $parameter69_name, "Parameter69.Value": $parameter69_value, "Parameter7.Name": $parameter7_name, "Parameter7.Value": $parameter7_value, "Parameter70.Name": $parameter70_name, "Parameter70.Value": $parameter70_value, "Parameter71.Name": $parameter71_name, "Parameter71.Value": $parameter71_value, "Parameter72.Name": $parameter72_name, "Parameter72.Value": $parameter72_value, "Parameter73.Name": $parameter73_name, "Parameter73.Value": $parameter73_value, "Parameter74.Name": $parameter74_name, "Parameter74.Value": $parameter74_value, "Parameter75.Name": $parameter75_name, "Parameter75.Value": $parameter75_value, "Parameter76.Name": $parameter76_name, "Parameter76.Value": $parameter76_value, "Parameter77.Name": $parameter77_name, "Parameter77.Value": $parameter77_value, "Parameter78.Name": $parameter78_name, "Parameter78.Value": $parameter78_value, "Parameter79.Name": $parameter79_name, "Parameter79.Value": $parameter79_value, "Parameter8.Name": $parameter8_name, "Parameter8.Value": $parameter8_value, "Parameter80.Name": $parameter80_name, "Parameter80.Value": $parameter80_value, "Parameter81.Name": $parameter81_name, "Parameter81.Value": $parameter81_value, "Parameter82.Name": $parameter82_name, "Parameter82.Value": $parameter82_value, "Parameter83.Name": $parameter83_name, "Parameter83.Value": $parameter83_value, "Parameter84.Name": $parameter84_name, "Parameter84.Value": $parameter84_value, "Parameter85.Name": $parameter85_name, "Parameter85.Value": $parameter85_value, "Parameter86.Name": $parameter86_name, "Parameter86.Value": $parameter86_value, "Parameter87.Name": $parameter87_name, "Parameter87.Value": $parameter87_value, "Parameter88.Name": $parameter88_name, "Parameter88.Value": $parameter88_value, "Parameter89.Name": $parameter89_name, "Parameter89.Value": $parameter89_value, "Parameter9.Name": $parameter9_name, "Parameter9.Value": $parameter9_value, "Parameter90.Name": $parameter90_name, "Parameter90.Value": $parameter90_value, "Parameter91.Name": $parameter91_name, "Parameter91.Value": $parameter91_value, "Parameter92.Name": $parameter92_name, "Parameter92.Value": $parameter92_value, "Parameter93.Name": $parameter93_name, "Parameter93.Value": $parameter93_value, "Parameter94.Name": $parameter94_name, "Parameter94.Value": $parameter94_value, "Parameter95.Name": $parameter95_name, "Parameter95.Value": $parameter95_value, "Parameter96.Name": $parameter96_name, "Parameter96.Value": $parameter96_value, "Parameter97.Name": $parameter97_name, "Parameter97.Value": $parameter97_value, "Parameter98.Name": $parameter98_name, "Parameter98.Value": $parameter98_value, "Parameter99.Name": $parameter99_name, "Parameter99.Value": $parameter99_value, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Track": $track} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Stop a Siprec using either the SID of the Siprec resource or the `name` used when creating the resource
@@ -1740,19 +1763,20 @@ export def "2010-04-01-accounts-calls-siprec update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, call_sid: $call_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Siprec/{sid}.json"))
-  let body = {"Status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Siprec/{sid}.json"))
+  let req_body = {"Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Create a Stream
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Streams.json
 # operationId: CreateStream
-export def "2010-04-01-accounts-calls-streamsjson create-stream" [
+export def "2010-04-01-accounts-calls-streams-json create" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1965,17 +1989,18 @@ export def "2010-04-01-accounts-calls-streamsjson create-stream" [
   --status-callback: string # Absolute URL of the status callback. (format: uri)
   --status-callback-method: string@status-callback-method-completer # The http method for the status_callback (one of GET, POST). (format: http-method)
   --track: string@track-completer
-  --body-url: string # Relative or absolute url where WebSocket connection will be established. (format: uri)
+  url: string # Relative or absolute url where WebSocket connection will be established. (format: uri)
 ]: any -> record<account_sid: string, call_sid: string, date_updated: string, name: string, sid: string, status: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, call_sid: $call_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Streams.json"))
-  let body = {"Name": $name, "Parameter1.Name": $parameter1_name, "Parameter1.Value": $parameter1_value, "Parameter10.Name": $parameter10_name, "Parameter10.Value": $parameter10_value, "Parameter11.Name": $parameter11_name, "Parameter11.Value": $parameter11_value, "Parameter12.Name": $parameter12_name, "Parameter12.Value": $parameter12_value, "Parameter13.Name": $parameter13_name, "Parameter13.Value": $parameter13_value, "Parameter14.Name": $parameter14_name, "Parameter14.Value": $parameter14_value, "Parameter15.Name": $parameter15_name, "Parameter15.Value": $parameter15_value, "Parameter16.Name": $parameter16_name, "Parameter16.Value": $parameter16_value, "Parameter17.Name": $parameter17_name, "Parameter17.Value": $parameter17_value, "Parameter18.Name": $parameter18_name, "Parameter18.Value": $parameter18_value, "Parameter19.Name": $parameter19_name, "Parameter19.Value": $parameter19_value, "Parameter2.Name": $parameter2_name, "Parameter2.Value": $parameter2_value, "Parameter20.Name": $parameter20_name, "Parameter20.Value": $parameter20_value, "Parameter21.Name": $parameter21_name, "Parameter21.Value": $parameter21_value, "Parameter22.Name": $parameter22_name, "Parameter22.Value": $parameter22_value, "Parameter23.Name": $parameter23_name, "Parameter23.Value": $parameter23_value, "Parameter24.Name": $parameter24_name, "Parameter24.Value": $parameter24_value, "Parameter25.Name": $parameter25_name, "Parameter25.Value": $parameter25_value, "Parameter26.Name": $parameter26_name, "Parameter26.Value": $parameter26_value, "Parameter27.Name": $parameter27_name, "Parameter27.Value": $parameter27_value, "Parameter28.Name": $parameter28_name, "Parameter28.Value": $parameter28_value, "Parameter29.Name": $parameter29_name, "Parameter29.Value": $parameter29_value, "Parameter3.Name": $parameter3_name, "Parameter3.Value": $parameter3_value, "Parameter30.Name": $parameter30_name, "Parameter30.Value": $parameter30_value, "Parameter31.Name": $parameter31_name, "Parameter31.Value": $parameter31_value, "Parameter32.Name": $parameter32_name, "Parameter32.Value": $parameter32_value, "Parameter33.Name": $parameter33_name, "Parameter33.Value": $parameter33_value, "Parameter34.Name": $parameter34_name, "Parameter34.Value": $parameter34_value, "Parameter35.Name": $parameter35_name, "Parameter35.Value": $parameter35_value, "Parameter36.Name": $parameter36_name, "Parameter36.Value": $parameter36_value, "Parameter37.Name": $parameter37_name, "Parameter37.Value": $parameter37_value, "Parameter38.Name": $parameter38_name, "Parameter38.Value": $parameter38_value, "Parameter39.Name": $parameter39_name, "Parameter39.Value": $parameter39_value, "Parameter4.Name": $parameter4_name, "Parameter4.Value": $parameter4_value, "Parameter40.Name": $parameter40_name, "Parameter40.Value": $parameter40_value, "Parameter41.Name": $parameter41_name, "Parameter41.Value": $parameter41_value, "Parameter42.Name": $parameter42_name, "Parameter42.Value": $parameter42_value, "Parameter43.Name": $parameter43_name, "Parameter43.Value": $parameter43_value, "Parameter44.Name": $parameter44_name, "Parameter44.Value": $parameter44_value, "Parameter45.Name": $parameter45_name, "Parameter45.Value": $parameter45_value, "Parameter46.Name": $parameter46_name, "Parameter46.Value": $parameter46_value, "Parameter47.Name": $parameter47_name, "Parameter47.Value": $parameter47_value, "Parameter48.Name": $parameter48_name, "Parameter48.Value": $parameter48_value, "Parameter49.Name": $parameter49_name, "Parameter49.Value": $parameter49_value, "Parameter5.Name": $parameter5_name, "Parameter5.Value": $parameter5_value, "Parameter50.Name": $parameter50_name, "Parameter50.Value": $parameter50_value, "Parameter51.Name": $parameter51_name, "Parameter51.Value": $parameter51_value, "Parameter52.Name": $parameter52_name, "Parameter52.Value": $parameter52_value, "Parameter53.Name": $parameter53_name, "Parameter53.Value": $parameter53_value, "Parameter54.Name": $parameter54_name, "Parameter54.Value": $parameter54_value, "Parameter55.Name": $parameter55_name, "Parameter55.Value": $parameter55_value, "Parameter56.Name": $parameter56_name, "Parameter56.Value": $parameter56_value, "Parameter57.Name": $parameter57_name, "Parameter57.Value": $parameter57_value, "Parameter58.Name": $parameter58_name, "Parameter58.Value": $parameter58_value, "Parameter59.Name": $parameter59_name, "Parameter59.Value": $parameter59_value, "Parameter6.Name": $parameter6_name, "Parameter6.Value": $parameter6_value, "Parameter60.Name": $parameter60_name, "Parameter60.Value": $parameter60_value, "Parameter61.Name": $parameter61_name, "Parameter61.Value": $parameter61_value, "Parameter62.Name": $parameter62_name, "Parameter62.Value": $parameter62_value, "Parameter63.Name": $parameter63_name, "Parameter63.Value": $parameter63_value, "Parameter64.Name": $parameter64_name, "Parameter64.Value": $parameter64_value, "Parameter65.Name": $parameter65_name, "Parameter65.Value": $parameter65_value, "Parameter66.Name": $parameter66_name, "Parameter66.Value": $parameter66_value, "Parameter67.Name": $parameter67_name, "Parameter67.Value": $parameter67_value, "Parameter68.Name": $parameter68_name, "Parameter68.Value": $parameter68_value, "Parameter69.Name": $parameter69_name, "Parameter69.Value": $parameter69_value, "Parameter7.Name": $parameter7_name, "Parameter7.Value": $parameter7_value, "Parameter70.Name": $parameter70_name, "Parameter70.Value": $parameter70_value, "Parameter71.Name": $parameter71_name, "Parameter71.Value": $parameter71_value, "Parameter72.Name": $parameter72_name, "Parameter72.Value": $parameter72_value, "Parameter73.Name": $parameter73_name, "Parameter73.Value": $parameter73_value, "Parameter74.Name": $parameter74_name, "Parameter74.Value": $parameter74_value, "Parameter75.Name": $parameter75_name, "Parameter75.Value": $parameter75_value, "Parameter76.Name": $parameter76_name, "Parameter76.Value": $parameter76_value, "Parameter77.Name": $parameter77_name, "Parameter77.Value": $parameter77_value, "Parameter78.Name": $parameter78_name, "Parameter78.Value": $parameter78_value, "Parameter79.Name": $parameter79_name, "Parameter79.Value": $parameter79_value, "Parameter8.Name": $parameter8_name, "Parameter8.Value": $parameter8_value, "Parameter80.Name": $parameter80_name, "Parameter80.Value": $parameter80_value, "Parameter81.Name": $parameter81_name, "Parameter81.Value": $parameter81_value, "Parameter82.Name": $parameter82_name, "Parameter82.Value": $parameter82_value, "Parameter83.Name": $parameter83_name, "Parameter83.Value": $parameter83_value, "Parameter84.Name": $parameter84_name, "Parameter84.Value": $parameter84_value, "Parameter85.Name": $parameter85_name, "Parameter85.Value": $parameter85_value, "Parameter86.Name": $parameter86_name, "Parameter86.Value": $parameter86_value, "Parameter87.Name": $parameter87_name, "Parameter87.Value": $parameter87_value, "Parameter88.Name": $parameter88_name, "Parameter88.Value": $parameter88_value, "Parameter89.Name": $parameter89_name, "Parameter89.Value": $parameter89_value, "Parameter9.Name": $parameter9_name, "Parameter9.Value": $parameter9_value, "Parameter90.Name": $parameter90_name, "Parameter90.Value": $parameter90_value, "Parameter91.Name": $parameter91_name, "Parameter91.Value": $parameter91_value, "Parameter92.Name": $parameter92_name, "Parameter92.Value": $parameter92_value, "Parameter93.Name": $parameter93_name, "Parameter93.Value": $parameter93_value, "Parameter94.Name": $parameter94_name, "Parameter94.Value": $parameter94_value, "Parameter95.Name": $parameter95_name, "Parameter95.Value": $parameter95_value, "Parameter96.Name": $parameter96_name, "Parameter96.Value": $parameter96_value, "Parameter97.Name": $parameter97_name, "Parameter97.Value": $parameter97_value, "Parameter98.Name": $parameter98_name, "Parameter98.Value": $parameter98_value, "Parameter99.Name": $parameter99_name, "Parameter99.Value": $parameter99_value, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Track": $track, "Url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Streams.json"))
+  let req_body = {"Name": $name, "Parameter1.Name": $parameter1_name, "Parameter1.Value": $parameter1_value, "Parameter10.Name": $parameter10_name, "Parameter10.Value": $parameter10_value, "Parameter11.Name": $parameter11_name, "Parameter11.Value": $parameter11_value, "Parameter12.Name": $parameter12_name, "Parameter12.Value": $parameter12_value, "Parameter13.Name": $parameter13_name, "Parameter13.Value": $parameter13_value, "Parameter14.Name": $parameter14_name, "Parameter14.Value": $parameter14_value, "Parameter15.Name": $parameter15_name, "Parameter15.Value": $parameter15_value, "Parameter16.Name": $parameter16_name, "Parameter16.Value": $parameter16_value, "Parameter17.Name": $parameter17_name, "Parameter17.Value": $parameter17_value, "Parameter18.Name": $parameter18_name, "Parameter18.Value": $parameter18_value, "Parameter19.Name": $parameter19_name, "Parameter19.Value": $parameter19_value, "Parameter2.Name": $parameter2_name, "Parameter2.Value": $parameter2_value, "Parameter20.Name": $parameter20_name, "Parameter20.Value": $parameter20_value, "Parameter21.Name": $parameter21_name, "Parameter21.Value": $parameter21_value, "Parameter22.Name": $parameter22_name, "Parameter22.Value": $parameter22_value, "Parameter23.Name": $parameter23_name, "Parameter23.Value": $parameter23_value, "Parameter24.Name": $parameter24_name, "Parameter24.Value": $parameter24_value, "Parameter25.Name": $parameter25_name, "Parameter25.Value": $parameter25_value, "Parameter26.Name": $parameter26_name, "Parameter26.Value": $parameter26_value, "Parameter27.Name": $parameter27_name, "Parameter27.Value": $parameter27_value, "Parameter28.Name": $parameter28_name, "Parameter28.Value": $parameter28_value, "Parameter29.Name": $parameter29_name, "Parameter29.Value": $parameter29_value, "Parameter3.Name": $parameter3_name, "Parameter3.Value": $parameter3_value, "Parameter30.Name": $parameter30_name, "Parameter30.Value": $parameter30_value, "Parameter31.Name": $parameter31_name, "Parameter31.Value": $parameter31_value, "Parameter32.Name": $parameter32_name, "Parameter32.Value": $parameter32_value, "Parameter33.Name": $parameter33_name, "Parameter33.Value": $parameter33_value, "Parameter34.Name": $parameter34_name, "Parameter34.Value": $parameter34_value, "Parameter35.Name": $parameter35_name, "Parameter35.Value": $parameter35_value, "Parameter36.Name": $parameter36_name, "Parameter36.Value": $parameter36_value, "Parameter37.Name": $parameter37_name, "Parameter37.Value": $parameter37_value, "Parameter38.Name": $parameter38_name, "Parameter38.Value": $parameter38_value, "Parameter39.Name": $parameter39_name, "Parameter39.Value": $parameter39_value, "Parameter4.Name": $parameter4_name, "Parameter4.Value": $parameter4_value, "Parameter40.Name": $parameter40_name, "Parameter40.Value": $parameter40_value, "Parameter41.Name": $parameter41_name, "Parameter41.Value": $parameter41_value, "Parameter42.Name": $parameter42_name, "Parameter42.Value": $parameter42_value, "Parameter43.Name": $parameter43_name, "Parameter43.Value": $parameter43_value, "Parameter44.Name": $parameter44_name, "Parameter44.Value": $parameter44_value, "Parameter45.Name": $parameter45_name, "Parameter45.Value": $parameter45_value, "Parameter46.Name": $parameter46_name, "Parameter46.Value": $parameter46_value, "Parameter47.Name": $parameter47_name, "Parameter47.Value": $parameter47_value, "Parameter48.Name": $parameter48_name, "Parameter48.Value": $parameter48_value, "Parameter49.Name": $parameter49_name, "Parameter49.Value": $parameter49_value, "Parameter5.Name": $parameter5_name, "Parameter5.Value": $parameter5_value, "Parameter50.Name": $parameter50_name, "Parameter50.Value": $parameter50_value, "Parameter51.Name": $parameter51_name, "Parameter51.Value": $parameter51_value, "Parameter52.Name": $parameter52_name, "Parameter52.Value": $parameter52_value, "Parameter53.Name": $parameter53_name, "Parameter53.Value": $parameter53_value, "Parameter54.Name": $parameter54_name, "Parameter54.Value": $parameter54_value, "Parameter55.Name": $parameter55_name, "Parameter55.Value": $parameter55_value, "Parameter56.Name": $parameter56_name, "Parameter56.Value": $parameter56_value, "Parameter57.Name": $parameter57_name, "Parameter57.Value": $parameter57_value, "Parameter58.Name": $parameter58_name, "Parameter58.Value": $parameter58_value, "Parameter59.Name": $parameter59_name, "Parameter59.Value": $parameter59_value, "Parameter6.Name": $parameter6_name, "Parameter6.Value": $parameter6_value, "Parameter60.Name": $parameter60_name, "Parameter60.Value": $parameter60_value, "Parameter61.Name": $parameter61_name, "Parameter61.Value": $parameter61_value, "Parameter62.Name": $parameter62_name, "Parameter62.Value": $parameter62_value, "Parameter63.Name": $parameter63_name, "Parameter63.Value": $parameter63_value, "Parameter64.Name": $parameter64_name, "Parameter64.Value": $parameter64_value, "Parameter65.Name": $parameter65_name, "Parameter65.Value": $parameter65_value, "Parameter66.Name": $parameter66_name, "Parameter66.Value": $parameter66_value, "Parameter67.Name": $parameter67_name, "Parameter67.Value": $parameter67_value, "Parameter68.Name": $parameter68_name, "Parameter68.Value": $parameter68_value, "Parameter69.Name": $parameter69_name, "Parameter69.Value": $parameter69_value, "Parameter7.Name": $parameter7_name, "Parameter7.Value": $parameter7_value, "Parameter70.Name": $parameter70_name, "Parameter70.Value": $parameter70_value, "Parameter71.Name": $parameter71_name, "Parameter71.Value": $parameter71_value, "Parameter72.Name": $parameter72_name, "Parameter72.Value": $parameter72_value, "Parameter73.Name": $parameter73_name, "Parameter73.Value": $parameter73_value, "Parameter74.Name": $parameter74_name, "Parameter74.Value": $parameter74_value, "Parameter75.Name": $parameter75_name, "Parameter75.Value": $parameter75_value, "Parameter76.Name": $parameter76_name, "Parameter76.Value": $parameter76_value, "Parameter77.Name": $parameter77_name, "Parameter77.Value": $parameter77_value, "Parameter78.Name": $parameter78_name, "Parameter78.Value": $parameter78_value, "Parameter79.Name": $parameter79_name, "Parameter79.Value": $parameter79_value, "Parameter8.Name": $parameter8_name, "Parameter8.Value": $parameter8_value, "Parameter80.Name": $parameter80_name, "Parameter80.Value": $parameter80_value, "Parameter81.Name": $parameter81_name, "Parameter81.Value": $parameter81_value, "Parameter82.Name": $parameter82_name, "Parameter82.Value": $parameter82_value, "Parameter83.Name": $parameter83_name, "Parameter83.Value": $parameter83_value, "Parameter84.Name": $parameter84_name, "Parameter84.Value": $parameter84_value, "Parameter85.Name": $parameter85_name, "Parameter85.Value": $parameter85_value, "Parameter86.Name": $parameter86_name, "Parameter86.Value": $parameter86_value, "Parameter87.Name": $parameter87_name, "Parameter87.Value": $parameter87_value, "Parameter88.Name": $parameter88_name, "Parameter88.Value": $parameter88_value, "Parameter89.Name": $parameter89_name, "Parameter89.Value": $parameter89_value, "Parameter9.Name": $parameter9_name, "Parameter9.Value": $parameter9_value, "Parameter90.Name": $parameter90_name, "Parameter90.Value": $parameter90_value, "Parameter91.Name": $parameter91_name, "Parameter91.Value": $parameter91_value, "Parameter92.Name": $parameter92_name, "Parameter92.Value": $parameter92_value, "Parameter93.Name": $parameter93_name, "Parameter93.Value": $parameter93_value, "Parameter94.Name": $parameter94_name, "Parameter94.Value": $parameter94_value, "Parameter95.Name": $parameter95_name, "Parameter95.Value": $parameter95_value, "Parameter96.Name": $parameter96_name, "Parameter96.Value": $parameter96_value, "Parameter97.Name": $parameter97_name, "Parameter97.Value": $parameter97_value, "Parameter98.Name": $parameter98_name, "Parameter98.Value": $parameter98_value, "Parameter99.Name": $parameter99_name, "Parameter99.Value": $parameter99_value, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Track": $track, "Url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Stop a Stream using either the SID of the Stream resource or the `name` used when creating the resource
@@ -1999,19 +2024,20 @@ export def "2010-04-01-accounts-calls-streams update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, call_sid: $call_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Streams/{sid}.json"))
-  let body = {"Status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Streams/{sid}.json"))
+  let req_body = {"Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Subscribe to User Defined Messages for a given Call SID.
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/UserDefinedMessageSubscriptions.json
 # operationId: CreateUserDefinedMessageSubscription
-export def "2010-04-01-accounts-calls-user-defined-message-subscriptionsjson create-user-defined-message-subscription" [
+export def "2010-04-01-accounts-calls-user-defined-message-subscriptions-json create" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2029,12 +2055,13 @@ export def "2010-04-01-accounts-calls-user-defined-message-subscriptionsjson cre
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, call_sid: $call_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/UserDefinedMessageSubscriptions.json"))
-  let body = {"Callback": $callback, "IdempotencyKey": $idempotency_key, "Method": $method} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/UserDefinedMessageSubscriptions.json"))
+  let req_body = {"Callback": $callback, "IdempotencyKey": $idempotency_key, "Method": $method} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific User Defined Message Subscription.
@@ -2056,7 +2083,7 @@ export def "2010-04-01-accounts-calls-user-defined-message-subscriptions delete"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, call_sid: $call_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/UserDefinedMessageSubscriptions/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/UserDefinedMessageSubscriptions/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2066,7 +2093,7 @@ export def "2010-04-01-accounts-calls-user-defined-message-subscriptions delete"
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/UserDefinedMessages.json
 # operationId: CreateUserDefinedMessage
-export def "2010-04-01-accounts-calls-user-defined-messagesjson create-user-defined-message" [
+export def "2010-04-01-accounts-calls-user-defined-messages-json create" [
   account_sid: string
   call_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2083,12 +2110,13 @@ export def "2010-04-01-accounts-calls-user-defined-messagesjson create-user-defi
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, call_sid: $call_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/UserDefinedMessages.json"))
-  let body = {"Content": $content, "IdempotencyKey": $idempotency_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/UserDefinedMessages.json"))
+  let req_body = {"Content": $content, "IdempotencyKey": $idempotency_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a Call record from your account. Once the record is deleted, it will no longer appear in the API and Account Portal logs.
@@ -2109,7 +2137,7 @@ export def "2010-04-01-accounts-calls delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2133,7 +2161,7 @@ export def "2010-04-01-accounts-calls get" [
 ]: nothing -> record<account_sid: string, answered_by: string, api_version: string, caller_name: string, date_created: string, date_updated: string, direction: string, duration: string, end_time: string, forwarded_from: string, from: string, from_formatted: string, group_sid: string, parent_call_sid: string, phone_number_sid: string, price: string, price_unit: string, queue_time: string, sid: string, start_time: string, status: string, subresource_uris: record, to: string, to_formatted: string, trunk_sid: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2162,24 +2190,25 @@ export def "2010-04-01-accounts-calls update" [
   --status-callback-method: string@status-callback-method-completer # The HTTP method we should use when requesting the `status_callback` URL. Can be: `GET` or `POST` and the default is `POST`. If an `application_sid` parameter is present, this parameter is ignored. (format: http-method)
   --time-limit: int # The maximum duration of the call in seconds. Constraints depend on account and configuration.
   --twiml: string # TwiML instructions for the call Twilio will use without fetching Twiml from url. Twiml and url parameters are mutually exclusive (format: twiml)
-  --body-url: string # The absolute URL that returns the TwiML instructions for the call. We will call this URL using the `method` when the call connects. For more information, see the [Url Parameter](https://www.twilio.com/docs/voice/make-calls#specify-a-url-parameter) section in [Making Calls](https://www.twilio.com/docs/voice/make-calls). (format: uri)
+  --url: string # The absolute URL that returns the TwiML instructions for the call. We will call this URL using the `method` when the call connects. For more information, see the [Url Parameter](https://www.twilio.com/docs/voice/make-calls#specify-a-url-parameter) section in [Making Calls](https://www.twilio.com/docs/voice/make-calls). (format: uri)
 ]: any -> record<account_sid: string, answered_by: string, api_version: string, caller_name: string, date_created: string, date_updated: string, direction: string, duration: string, end_time: string, forwarded_from: string, from: string, from_formatted: string, group_sid: string, parent_call_sid: string, phone_number_sid: string, price: string, price_unit: string, queue_time: string, sid: string, start_time: string, status: string, subresource_uris: record, to: string, to_formatted: string, trunk_sid: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{sid}.json"))
-  let body = {"FallbackMethod": $fallback_method, "FallbackUrl": $fallback_url, "Method": $method, "Status": $status, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TimeLimit": $time_limit, "Twiml": $twiml, "Url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{sid}.json"))
+  let req_body = {"FallbackMethod": $fallback_method, "FallbackUrl": $fallback_url, "Method": $method, "Status": $status, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TimeLimit": $time_limit, "Twiml": $twiml, "Url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of conferences belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Conferences.json
 # operationId: ListConference
-export def "2010-04-01-accounts-conferencesjson list-conference" [
+export def "2010-04-01-accounts-conferences-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2189,12 +2218,12 @@ export def "2010-04-01-accounts-conferencesjson list-conference" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --date-created: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that started on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify  conferences that started on or after midnight on a date, use `>=YYYY-MM-DD`. (format: date)
-  --date-created: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that started on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify  conferences that started on or after midnight on a date, use `>=YYYY-MM-DD`. (format: date)
-  --date-created: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that started on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify  conferences that started on or after midnight on a date, use `>=YYYY-MM-DD`. (format: date)
-  --date-updated: string # The `date_updated` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that were last updated on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify conferences that were last updated on or after midnight on a given date, use  `>=YYYY-MM-DD`. (format: date)
-  --date-updated: string # The `date_updated` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that were last updated on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify conferences that were last updated on or after midnight on a given date, use  `>=YYYY-MM-DD`. (format: date)
-  --date-updated: string # The `date_updated` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that were last updated on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify conferences that were last updated on or after midnight on a given date, use  `>=YYYY-MM-DD`. (format: date)
+  --date-created: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that started on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify conferences that started on or after midnight on a date, use `>=YYYY-MM-DD`. (format: date)
+  --date-created: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that started on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify conferences that started on or after midnight on a date, use `>=YYYY-MM-DD`. (format: date)
+  --date-created: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that started on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify conferences that started on or after midnight on a date, use `>=YYYY-MM-DD`. (format: date)
+  --date-updated: string # The `date_updated` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that were last updated on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify conferences that were last updated on or after midnight on a given date, use `>=YYYY-MM-DD`. (format: date)
+  --date-updated: string # The `date_updated` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that were last updated on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify conferences that were last updated on or after midnight on a given date, use `>=YYYY-MM-DD`. (format: date)
+  --date-updated: string # The `date_updated` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that were last updated on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify conferences that were last updated on or after midnight on a given date, use `>=YYYY-MM-DD`. (format: date)
   --friendly-name: string # The string that identifies the Conference resources to read.
   --status: string@status-completer-6 # The status of the resources to read. Can be: `init`, `in-progress`, or `completed`.
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
@@ -2204,7 +2233,7 @@ export def "2010-04-01-accounts-conferencesjson list-conference" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $date_created "scalar") (serialize-qp "DateCreated>" $date_created "scalar") (serialize-qp "DateUpdated" $date_updated "scalar") (serialize-qp "DateUpdated<" $date_updated "scalar") (serialize-qp "DateUpdated>" $date_updated "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2214,7 +2243,7 @@ export def "2010-04-01-accounts-conferencesjson list-conference" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Participants.json
 # operationId: ListParticipant
-export def "2010-04-01-accounts-conferences-participantsjson list-participant" [
+export def "2010-04-01-accounts-conferences-participants-json list" [
   account_sid: string
   conference_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2235,7 +2264,7 @@ export def "2010-04-01-accounts-conferences-participantsjson list-participant" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "Muted" $muted "scalar") (serialize-qp "Hold" $hold "scalar") (serialize-qp "Coaching" $coaching "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, conference_sid: $conference_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2244,7 +2273,7 @@ export def "2010-04-01-accounts-conferences-participantsjson list-participant" [
 # POST /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Participants.json
 #
 # operationId: CreateParticipant
-export def "2010-04-01-accounts-conferences-participantsjson create-participant" [
+export def "2010-04-01-accounts-conferences-participants-json create" [
   account_sid: string
   conference_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2265,10 +2294,10 @@ export def "2010-04-01-accounts-conferences-participantsjson create-participant"
   --coaching: oneof<nothing, bool> # Whether the participant is coaching another call. Can be: `true` or `false`. If not present, defaults to `false` unless `call_sid_to_coach` is defined. If `true`, `call_sid_to_coach` must be defined.
   --conference-record: string # Whether to record the conference the participant is joining. Can be: `true`, `false`, `record-from-start`, and `do-not-record`. The default value is `false`.
   --conference-recording-status-callback: string # The URL we should call using the `conference_recording_status_callback_method` when the conference recording is available. (format: uri)
-  --conference-recording-status-callback-event: list # The conference recording state changes that generate a call to `conference_recording_status_callback`. Can be: `in-progress`, `completed`, `failed`, and `absent`. Separate multiple values with a space, ex: `'in-progress completed failed'`
+  --conference-recording-status-callback-event: list<string> # The conference recording state changes that generate a call to `conference_recording_status_callback`. Can be: `in-progress`, `completed`, `failed`, and `absent`. Separate multiple values with a space, ex: `'in-progress completed failed'`
   --conference-recording-status-callback-method: string@conference-recording-status-callback-method-completer # The HTTP method we should use to call `conference_recording_status_callback`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --conference-status-callback: string # The URL we should call using the `conference_status_callback_method` when the conference events in `conference_status_callback_event` occur. Only the value set by the first participant to join the conference is used. Subsequent `conference_status_callback` values are ignored. (format: uri)
-  --conference-status-callback-event: list # The conference state changes that should generate a call to `conference_status_callback`. Can be: `start`, `end`, `join`, `leave`, `mute`, `hold`, `modify`, `speaker`, and `announcement`. Separate multiple values with a space. Defaults to `start end`.
+  --conference-status-callback-event: list<string> # The conference state changes that should generate a call to `conference_status_callback`. Can be: `start`, `end`, `join`, `leave`, `mute`, `hold`, `modify`, `speaker`, and `announcement`. Separate multiple values with a space. Defaults to `start end`.
   --conference-status-callback-method: string@conference-status-callback-method-completer # The HTTP method we should use to call `conference_status_callback`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --conference-trim: string # Whether to trim leading and trailing silence from your recorded conference audio files. Can be: `trim-silence` or `do-not-trim` and defaults to `trim-silence`.
   --early-media: oneof<nothing, bool> # Whether to allow an agent to hear the state of the outbound call, including ringing or disconnect messages. Can be: `true` or `false` and defaults to `true`.
@@ -2286,7 +2315,7 @@ export def "2010-04-01-accounts-conferences-participantsjson create-participant"
   --record: oneof<nothing, bool> # Whether to record the participant and their conferences, including the time between conferences. Can be `true` or `false` and the default is `false`.
   --recording-channels: string # The recording channels for the final recording. Can be: `mono` or `dual` and the default is `mono`.
   --recording-status-callback: string # The URL that we should call using the `recording_status_callback_method` when the recording status changes. (format: uri)
-  --recording-status-callback-event: list # The recording state changes that should generate a call to `recording_status_callback`. Can be: `started`, `in-progress`, `paused`, `resumed`, `stopped`, `completed`, `failed`, and `absent`. Separate multiple values with a space, ex: `'in-progress completed failed'`.
+  --recording-status-callback-event: list<string> # The recording state changes that should generate a call to `recording_status_callback`. Can be: `started`, `in-progress`, `paused`, `resumed`, `stopped`, `completed`, `failed`, and `absent`. Separate multiple values with a space, ex: `'in-progress completed failed'`.
   --recording-status-callback-method: string@recording-status-callback-method-completer # The HTTP method we should use when we call `recording_status_callback`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --recording-track: string # The audio track to record for the call. Can be: `inbound`, `outbound` or `both`. The default is `both`. `inbound` records the audio that is received by Twilio. `outbound` records the audio that is sent from Twilio. `both` records the audio that is received and sent by Twilio.
   --region: string # The [region](https://support.twilio.com/hc/en-us/articles/223132167-How-global-low-latency-routing-and-region-selection-work-for-conferences-and-Client-calls) where we should mix the recorded audio. Can be:`us1`, `ie1`, `de1`, `sg1`, `br1`, `au1`, or `jp1`.
@@ -2294,10 +2323,10 @@ export def "2010-04-01-accounts-conferences-participantsjson create-participant"
   --sip-auth-username: string # The SIP username used for authentication.
   --start-conference-on-enter: oneof<nothing, bool> # Whether to start the conference when the participant joins, if it has not already started. Can be: `true` or `false` and the default is `true`. If `false` and the conference has not started, the participant is muted and hears background music until another participant starts the conference.
   --status-callback: string # The URL we should call using the `status_callback_method` to send status information to your application. (format: uri)
-  --status-callback-event: list # The conference state changes that should generate a call to `status_callback`. Can be: `initiated`, `ringing`, `answered`, and `completed`. Separate multiple values with a space. The default value is `completed`.
+  --status-callback-event: list<string> # The conference state changes that should generate a call to `status_callback`. Can be: `initiated`, `ringing`, `answered`, and `completed`. Separate multiple values with a space. The default value is `completed`.
   --status-callback-method: string@status-callback-method-completer # The HTTP method we should use to call `status_callback`. Can be: `GET` and `POST` and defaults to `POST`. (format: http-method)
   --time-limit: int # The maximum duration of the call in seconds. Constraints depend on account and configuration.
-  --timeout: int # The number of seconds that we should allow the phone to ring before assuming there is no answer. Can be an integer between `5` and `600`, inclusive. The default value is `60`. We always add a 5-second timeout buffer to outgoing calls, so  value of 10 would result in an actual timeout that was closer to 15 seconds.
+  --timeout: int # The number of seconds that we should allow the phone to ring before assuming there is no answer. Can be an integer between `5` and `600`, inclusive. The default value is `60`. We always add a 5-second timeout buffer to outgoing calls, so value of 10 would result in an actual timeout that was closer to 15 seconds.
   --body-to: string # The phone number, SIP address, or Client identifier that received this call. Phone numbers are in [E.164](https://www.twilio.com/docs/glossary/what-e164) format (e.g., +16175551212). SIP addresses are formatted as `sip:name@company.com`. Client identifiers are formatted `client:name`. [Custom parameters](https://www.twilio.com/docs/voice/api/conference-participant-resource#custom-parameters) may also be specified. (format: endpoint)
   --wait-method: string@wait-method-completer # The HTTP method we should use to call `wait_url`. Can be `GET` or `POST` and the default is `POST`. When using a static audio file, this should be `GET` so that we can cache the file. (format: http-method)
   --wait-url: string # The URL we should call using the `wait_method` for the music to play while participants are waiting for the conference to start. The default value is the URL of our standard hold music. [Learn more about hold music](https://www.twilio.com/labs/twimlets/holdmusic). (format: uri)
@@ -2305,12 +2334,13 @@ export def "2010-04-01-accounts-conferences-participantsjson create-participant"
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, conference_sid: $conference_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants.json"))
-  let body = {"AmdStatusCallback": $amd_status_callback, "AmdStatusCallbackMethod": $amd_status_callback_method, "Beep": $beep, "Byoc": $byoc, "CallReason": $call_reason, "CallSidToCoach": $call_sid_to_coach, "CallerId": $caller_id, "Coaching": $coaching, "ConferenceRecord": $conference_record, "ConferenceRecordingStatusCallback": $conference_recording_status_callback, "ConferenceRecordingStatusCallbackEvent": $conference_recording_status_callback_event, "ConferenceRecordingStatusCallbackMethod": $conference_recording_status_callback_method, "ConferenceStatusCallback": $conference_status_callback, "ConferenceStatusCallbackEvent": $conference_status_callback_event, "ConferenceStatusCallbackMethod": $conference_status_callback_method, "ConferenceTrim": $conference_trim, "EarlyMedia": $early_media, "EndConferenceOnExit": $end_conference_on_exit, "From": $body_from, "JitterBufferSize": $jitter_buffer_size, "Label": $label, "MachineDetection": $machine_detection, "MachineDetectionSilenceTimeout": $machine_detection_silence_timeout, "MachineDetectionSpeechEndThreshold": $machine_detection_speech_end_threshold, "MachineDetectionSpeechThreshold": $machine_detection_speech_threshold, "MachineDetectionTimeout": $machine_detection_timeout, "MaxParticipants": $max_participants, "Muted": $muted, "Record": $record, "RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackEvent": $recording_status_callback_event, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RecordingTrack": $recording_track, "Region": $region, "SipAuthPassword": $sip_auth_password, "SipAuthUsername": $sip_auth_username, "StartConferenceOnEnter": $start_conference_on_enter, "StatusCallback": $status_callback, "StatusCallbackEvent": $status_callback_event, "StatusCallbackMethod": $status_callback_method, "TimeLimit": $time_limit, "Timeout": $timeout, "To": $body_to, "WaitMethod": $wait_method, "WaitUrl": $wait_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants.json"))
+  let req_body = {"AmdStatusCallback": $amd_status_callback, "AmdStatusCallbackMethod": $amd_status_callback_method, "Beep": $beep, "Byoc": $byoc, "CallReason": $call_reason, "CallSidToCoach": $call_sid_to_coach, "CallerId": $caller_id, "Coaching": $coaching, "ConferenceRecord": $conference_record, "ConferenceRecordingStatusCallback": $conference_recording_status_callback, "ConferenceRecordingStatusCallbackEvent": $conference_recording_status_callback_event, "ConferenceRecordingStatusCallbackMethod": $conference_recording_status_callback_method, "ConferenceStatusCallback": $conference_status_callback, "ConferenceStatusCallbackEvent": $conference_status_callback_event, "ConferenceStatusCallbackMethod": $conference_status_callback_method, "ConferenceTrim": $conference_trim, "EarlyMedia": $early_media, "EndConferenceOnExit": $end_conference_on_exit, "From": $body_from, "JitterBufferSize": $jitter_buffer_size, "Label": $label, "MachineDetection": $machine_detection, "MachineDetectionSilenceTimeout": $machine_detection_silence_timeout, "MachineDetectionSpeechEndThreshold": $machine_detection_speech_end_threshold, "MachineDetectionSpeechThreshold": $machine_detection_speech_threshold, "MachineDetectionTimeout": $machine_detection_timeout, "MaxParticipants": $max_participants, "Muted": $muted, "Record": $record, "RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackEvent": $recording_status_callback_event, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RecordingTrack": $recording_track, "Region": $region, "SipAuthPassword": $sip_auth_password, "SipAuthUsername": $sip_auth_username, "StartConferenceOnEnter": $start_conference_on_enter, "StatusCallback": $status_callback, "StatusCallbackEvent": $status_callback_event, "StatusCallbackMethod": $status_callback_method, "TimeLimit": $time_limit, "Timeout": $timeout, "To": $body_to, "WaitMethod": $wait_method, "WaitUrl": $wait_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Kick a participant from a given conference
@@ -2332,7 +2362,7 @@ export def "2010-04-01-accounts-conferences-participants delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, conference_sid: $conference_sid, call_sid: $call_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants/{call_sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants/{call_sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2357,7 +2387,7 @@ export def "2010-04-01-accounts-conferences-participants get" [
 ]: nothing -> record<account_sid: string, call_sid: string, call_sid_to_coach: string, coaching: bool, conference_sid: string, date_created: string, date_updated: string, end_conference_on_exit: bool, hold: bool, label: string, muted: bool, start_conference_on_enter: bool, status: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, conference_sid: $conference_sid, call_sid: $call_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants/{call_sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants/{call_sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2380,34 +2410,35 @@ export def "2010-04-01-accounts-conferences-participants update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --announce-method: string@announce-method-completer # The HTTP method we should use to call `announce_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
-  --announce-url: string # The URL we call using the `announce_method` for an announcement to the participant. The URL may return an MP3 file, a WAV file, or a TwiML document that contains `<Play>`, `<Say>`, `<Pause>`, or `<Redirect>` verbs. (format: uri)
+  --announce-url: string # The URL we call using the `announce_method` for an announcement to the participant. The URL may return an MP3 file, a WAV file, or a TwiML document that contains ``, ``, ``, or `` verbs. (format: uri)
   --beep-on-exit: oneof<nothing, bool> # Whether to play a notification beep to the conference when the participant exits. Can be: `true` or `false`.
   --call-sid-to-coach: string # The SID of the participant who is being `coached`. The participant being coached is the only participant who can hear the participant who is `coaching`.
   --coaching: oneof<nothing, bool> # Whether the participant is coaching another call. Can be: `true` or `false`. If not present, defaults to `false` unless `call_sid_to_coach` is defined. If `true`, `call_sid_to_coach` must be defined.
   --end-conference-on-exit: oneof<nothing, bool> # Whether to end the conference when the participant leaves. Can be: `true` or `false` and defaults to `false`.
   --hold: oneof<nothing, bool> # Whether the participant should be on hold. Can be: `true` or `false`. `true` puts the participant on hold, and `false` lets them rejoin the conference.
   --hold-method: string@hold-method-completer # The HTTP method we should use to call `hold_url`. Can be: `GET` or `POST` and the default is `GET`. (format: http-method)
-  --hold-url: string # The URL we call using the `hold_method` for music that plays when the participant is on hold. The URL may return an MP3 file, a WAV file, or a TwiML document that contains `<Play>`, `<Say>`, `<Pause>`, or `<Redirect>` verbs. (format: uri)
+  --hold-url: string # The URL we call using the `hold_method` for music that plays when the participant is on hold. The URL may return an MP3 file, a WAV file, or a TwiML document that contains ``, ``, ``, or `` verbs. (format: uri)
   --muted: oneof<nothing, bool> # Whether the participant should be muted. Can be `true` or `false`. `true` will mute the participant, and `false` will un-mute them. Anything value other than `true` or `false` is interpreted as `false`.
   --wait-method: string@wait-method-completer # The HTTP method we should use to call `wait_url`. Can be `GET` or `POST` and the default is `POST`. When using a static audio file, this should be `GET` so that we can cache the file. (format: http-method)
-  --wait-url: string # The URL we call using the `wait_method` for the music to play while participants are waiting for the conference to start. The URL may return an MP3 file, a WAV file, or a TwiML document that contains `<Play>`, `<Say>`, `<Pause>`, or `<Redirect>` verbs. The default value is the URL of our standard hold music. [Learn more about hold music](https://www.twilio.com/labs/twimlets/holdmusic). (format: uri)
+  --wait-url: string # The URL we call using the `wait_method` for the music to play while participants are waiting for the conference to start. The URL may return an MP3 file, a WAV file, or a TwiML document that contains ``, ``, ``, or `` verbs. The default value is the URL of our standard hold music. [Learn more about hold music](https://www.twilio.com/labs/twimlets/holdmusic). (format: uri)
 ]: any -> record<account_sid: string, call_sid: string, call_sid_to_coach: string, coaching: bool, conference_sid: string, date_created: string, date_updated: string, end_conference_on_exit: bool, hold: bool, label: string, muted: bool, start_conference_on_enter: bool, status: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, conference_sid: $conference_sid, call_sid: $call_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants/{call_sid}.json"))
-  let body = {"AnnounceMethod": $announce_method, "AnnounceUrl": $announce_url, "BeepOnExit": $beep_on_exit, "CallSidToCoach": $call_sid_to_coach, "Coaching": $coaching, "EndConferenceOnExit": $end_conference_on_exit, "Hold": $hold, "HoldMethod": $hold_method, "HoldUrl": $hold_url, "Muted": $muted, "WaitMethod": $wait_method, "WaitUrl": $wait_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants/{call_sid}.json"))
+  let req_body = {"AnnounceMethod": $announce_method, "AnnounceUrl": $announce_url, "BeepOnExit": $beep_on_exit, "CallSidToCoach": $call_sid_to_coach, "Coaching": $coaching, "EndConferenceOnExit": $end_conference_on_exit, "Hold": $hold, "HoldMethod": $hold_method, "HoldUrl": $hold_url, "Muted": $muted, "WaitMethod": $wait_method, "WaitUrl": $wait_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of recordings belonging to the call used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Recordings.json
 # operationId: ListConferenceRecording
-export def "2010-04-01-accounts-conferences-recordingsjson list-conference-recording" [
+export def "2010-04-01-accounts-conferences-recordings-json list" [
   account_sid: string
   conference_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2428,7 +2459,7 @@ export def "2010-04-01-accounts-conferences-recordingsjson list-conference-recor
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $date_created "scalar") (serialize-qp "DateCreated>" $date_created "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, conference_sid: $conference_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Recordings.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Recordings.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2453,7 +2484,7 @@ export def "2010-04-01-accounts-conferences-recordings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, conference_sid: $conference_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Recordings/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Recordings/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2478,7 +2509,7 @@ export def "2010-04-01-accounts-conferences-recordings get" [
 ]: nothing -> record<account_sid: string, api_version: string, call_sid: string, channels: int, conference_sid: string, date_created: string, date_updated: string, duration: string, encryption_details: any, error_code: int, price: string, price_unit: string, sid: string, source: string, start_time: string, status: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, conference_sid: $conference_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Recordings/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Recordings/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2506,12 +2537,13 @@ export def "2010-04-01-accounts-conferences-recordings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, conference_sid: $conference_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Recordings/{sid}.json"))
-  let body = {"PauseBehavior": $pause_behavior, "Status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Recordings/{sid}.json"))
+  let req_body = {"PauseBehavior": $pause_behavior, "Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetch an instance of a conference
@@ -2532,7 +2564,7 @@ export def "2010-04-01-accounts-conferences get" [
 ]: nothing -> record<account_sid: string, api_version: string, call_sid_ending_conference: string, date_created: string, date_updated: string, friendly_name: string, reason_conference_ended: string, region: string, sid: string, status: string, subresource_uris: record, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2553,25 +2585,26 @@ export def "2010-04-01-accounts-conferences update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --announce-method: string@announce-method-completer # The HTTP method used to call `announce_url`. Can be: `GET` or `POST` and the default is `POST` (format: http-method)
-  --announce-url: string # The URL we should call to announce something into the conference. The URL may return an MP3 file, a WAV file, or a TwiML document that contains `<Play>`, `<Say>`, `<Pause>`, or `<Redirect>` verbs. (format: uri)
+  --announce-url: string # The URL we should call to announce something into the conference. The URL may return an MP3 file, a WAV file, or a TwiML document that contains ``, ``, ``, or `` verbs. (format: uri)
   --status: string@status-completer-7
 ]: any -> record<account_sid: string, api_version: string, call_sid_ending_conference: string, date_created: string, date_updated: string, friendly_name: string, reason_conference_ended: string, region: string, sid: string, status: string, subresource_uris: record, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{sid}.json"))
-  let body = {"AnnounceMethod": $announce_method, "AnnounceUrl": $announce_url, "Status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{sid}.json"))
+  let req_body = {"AnnounceMethod": $announce_method, "AnnounceUrl": $announce_url, "Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of connect-apps belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/ConnectApps.json
 # operationId: ListConnectApp
-export def "2010-04-01-accounts-connect-appsjson list-connect-app" [
+export def "2010-04-01-accounts-connect-apps-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2588,7 +2621,7 @@ export def "2010-04-01-accounts-connect-appsjson list-connect-app" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/ConnectApps.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/ConnectApps.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2612,7 +2645,7 @@ export def "2010-04-01-accounts-connect-apps delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/ConnectApps/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/ConnectApps/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2636,7 +2669,7 @@ export def "2010-04-01-accounts-connect-apps get" [
 ]: nothing -> record<account_sid: string, authorize_redirect_url: string, company_name: string, deauthorize_callback_method: string, deauthorize_callback_url: string, description: string, friendly_name: string, homepage_url: string, permissions: list<string>, sid: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/ConnectApps/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/ConnectApps/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2664,24 +2697,25 @@ export def "2010-04-01-accounts-connect-apps update" [
   --description: string # A description of the Connect App.
   --friendly-name: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
   --homepage-url: string # A public URL where users can obtain more information about this Connect App. (format: uri)
-  --permissions: list # A comma-separated list of the permissions you will request from the users of this ConnectApp.  Can include: `get-all` and `post-all`.
+  --permissions: list<string> # A comma-separated list of the permissions you will request from the users of this ConnectApp. Can include: `get-all` and `post-all`.
 ]: any -> record<account_sid: string, authorize_redirect_url: string, company_name: string, deauthorize_callback_method: string, deauthorize_callback_url: string, description: string, friendly_name: string, homepage_url: string, permissions: list<string>, sid: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/ConnectApps/{sid}.json"))
-  let body = {"AuthorizeRedirectUrl": $authorize_redirect_url, "CompanyName": $company_name, "DeauthorizeCallbackMethod": $deauthorize_callback_method, "DeauthorizeCallbackUrl": $deauthorize_callback_url, "Description": $description, "FriendlyName": $friendly_name, "HomepageUrl": $homepage_url, "Permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/ConnectApps/{sid}.json"))
+  let req_body = {"AuthorizeRedirectUrl": $authorize_redirect_url, "CompanyName": $company_name, "DeauthorizeCallbackMethod": $deauthorize_callback_method, "DeauthorizeCallbackUrl": $deauthorize_callback_url, "Description": $description, "FriendlyName": $friendly_name, "HomepageUrl": $homepage_url, "Permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of incoming-phone-numbers belonging to the account used to make the request.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers.json
 # operationId: ListIncomingPhoneNumber
-export def "2010-04-01-accounts-incoming-phone-numbersjson list-incoming-phone-number" [
+export def "2010-04-01-accounts-incoming-phone-numbers-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2702,7 +2736,7 @@ export def "2010-04-01-accounts-incoming-phone-numbersjson list-incoming-phone-n
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "Beta" $beta "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "Origin" $origin "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2712,7 +2746,7 @@ export def "2010-04-01-accounts-incoming-phone-numbersjson list-incoming-phone-n
 #
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers.json
 # operationId: CreateIncomingPhoneNumber
-export def "2010-04-01-accounts-incoming-phone-numbersjson create-incoming-phone-number" [
+export def "2010-04-01-accounts-incoming-phone-numbers-json create" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2730,7 +2764,7 @@ export def "2010-04-01-accounts-incoming-phone-numbersjson create-incoming-phone
   --emergency-status: string@emergency-status-completer
   --friendly-name: string # A descriptive string that you created to describe the new phone number. It can be up to 64 characters long. By default, this is a formatted version of the new phone number.
   --identity-sid: string # The SID of the Identity resource that we should associate with the new phone number. Some regions require an identity to meet local regulations.
-  --phone-number: string # The phone number to purchase specified in [E.164](https://www.twilio.com/docs/glossary/what-e164) format.  E.164 phone numbers consist of a + followed by the country code and subscriber number without punctuation characters. For example, +14155551234. (format: phone-number)
+  --phone-number: string # The phone number to purchase specified in [E.164](https://www.twilio.com/docs/glossary/what-e164) format. E.164 phone numbers consist of a + followed by the country code and subscriber number without punctuation characters. For example, +14155551234. (format: phone-number)
   --sms-application-sid: string # The SID of the application that should handle SMS messages sent to the new phone number. If an `sms_application_sid` is present, we ignore all of the `sms_*_url` urls and use those set on the application.
   --sms-fallback-method: string@sms-fallback-method-completer # The HTTP method that we should use to call `sms_fallback_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --sms-fallback-url: string # The URL that we should call when an error occurs while requesting or executing the TwiML defined by `sms_url`. (format: uri)
@@ -2750,18 +2784,19 @@ export def "2010-04-01-accounts-incoming-phone-numbersjson create-incoming-phone
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers.json"))
-  let body = {"AddressSid": $address_sid, "ApiVersion": $api_version, "AreaCode": $area_code, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "PhoneNumber": $phone_number, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers.json"))
+  let req_body = {"AddressSid": $address_sid, "ApiVersion": $api_version, "AreaCode": $area_code, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "PhoneNumber": $phone_number, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Local.json
 #
 # operationId: ListIncomingPhoneNumberLocal
-export def "2010-04-01-accounts-incoming-phone-numbers-localjson list-incoming-phone-number-local" [
+export def "2010-04-01-accounts-incoming-phone-numbers-local-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2782,7 +2817,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-localjson list-incoming-p
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "Beta" $beta "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "Origin" $origin "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/Local.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/Local.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2791,7 +2826,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-localjson list-incoming-p
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Local.json
 #
 # operationId: CreateIncomingPhoneNumberLocal
-export def "2010-04-01-accounts-incoming-phone-numbers-localjson create-incoming-phone-number-local" [
+export def "2010-04-01-accounts-incoming-phone-numbers-local-json create" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2808,7 +2843,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-localjson create-incoming
   --emergency-status: string@emergency-status-completer
   --friendly-name: string # A descriptive string that you created to describe the new phone number. It can be up to 64 characters long. By default, this is a formatted version of the phone number.
   --identity-sid: string # The SID of the Identity resource that we should associate with the new phone number. Some regions require an identity to meet local regulations.
-  phone_number: string # The phone number to purchase specified in [E.164](https://www.twilio.com/docs/glossary/what-e164) format.  E.164 phone numbers consist of a + followed by the country code and subscriber number without punctuation characters. For example, +14155551234. (format: phone-number)
+  phone_number: string # The phone number to purchase specified in [E.164](https://www.twilio.com/docs/glossary/what-e164) format. E.164 phone numbers consist of a + followed by the country code and subscriber number without punctuation characters. For example, +14155551234. (format: phone-number)
   --sms-application-sid: string # The SID of the application that should handle SMS messages sent to the new phone number. If an `sms_application_sid` is present, we ignore all of the `sms_*_url` urls and use those set on the application.
   --sms-fallback-method: string@sms-fallback-method-completer # The HTTP method that we should use to call `sms_fallback_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --sms-fallback-url: string # The URL that we should call when an error occurs while requesting or executing the TwiML defined by `sms_url`. (format: uri)
@@ -2828,18 +2863,19 @@ export def "2010-04-01-accounts-incoming-phone-numbers-localjson create-incoming
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/Local.json"))
-  let body = {"AddressSid": $address_sid, "ApiVersion": $api_version, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "PhoneNumber": $phone_number, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/Local.json"))
+  let req_body = {"AddressSid": $address_sid, "ApiVersion": $api_version, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "PhoneNumber": $phone_number, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Mobile.json
 #
 # operationId: ListIncomingPhoneNumberMobile
-export def "2010-04-01-accounts-incoming-phone-numbers-mobilejson list-incoming-phone-number-mobile" [
+export def "2010-04-01-accounts-incoming-phone-numbers-mobile-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2860,7 +2896,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-mobilejson list-incoming-
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "Beta" $beta "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "Origin" $origin "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/Mobile.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/Mobile.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2869,7 +2905,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-mobilejson list-incoming-
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Mobile.json
 #
 # operationId: CreateIncomingPhoneNumberMobile
-export def "2010-04-01-accounts-incoming-phone-numbers-mobilejson create-incoming-phone-number-mobile" [
+export def "2010-04-01-accounts-incoming-phone-numbers-mobile-json create" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2886,7 +2922,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-mobilejson create-incomin
   --emergency-status: string@emergency-status-completer
   --friendly-name: string # A descriptive string that you created to describe the new phone number. It can be up to 64 characters long. By default, the is a formatted version of the phone number.
   --identity-sid: string # The SID of the Identity resource that we should associate with the new phone number. Some regions require an identity to meet local regulations.
-  phone_number: string # The phone number to purchase specified in [E.164](https://www.twilio.com/docs/glossary/what-e164) format.  E.164 phone numbers consist of a + followed by the country code and subscriber number without punctuation characters. For example, +14155551234. (format: phone-number)
+  phone_number: string # The phone number to purchase specified in [E.164](https://www.twilio.com/docs/glossary/what-e164) format. E.164 phone numbers consist of a + followed by the country code and subscriber number without punctuation characters. For example, +14155551234. (format: phone-number)
   --sms-application-sid: string # The SID of the application that should handle SMS messages sent to the new phone number. If an `sms_application_sid` is present, we ignore all of the `sms_*_url` urls and use those of the application.
   --sms-fallback-method: string@sms-fallback-method-completer # The HTTP method that we should use to call `sms_fallback_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --sms-fallback-url: string # The URL that we should call when an error occurs while requesting or executing the TwiML defined by `sms_url`. (format: uri)
@@ -2906,18 +2942,19 @@ export def "2010-04-01-accounts-incoming-phone-numbers-mobilejson create-incomin
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/Mobile.json"))
-  let body = {"AddressSid": $address_sid, "ApiVersion": $api_version, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "PhoneNumber": $phone_number, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/Mobile.json"))
+  let req_body = {"AddressSid": $address_sid, "ApiVersion": $api_version, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "PhoneNumber": $phone_number, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/TollFree.json
 #
 # operationId: ListIncomingPhoneNumberTollFree
-export def "2010-04-01-accounts-incoming-phone-numbers-toll-freejson list-incoming-phone-number-toll-free" [
+export def "2010-04-01-accounts-incoming-phone-numbers-toll-free-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2938,7 +2975,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-toll-freejson list-incomi
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "Beta" $beta "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "Origin" $origin "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/TollFree.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/TollFree.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2947,7 +2984,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-toll-freejson list-incomi
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/TollFree.json
 #
 # operationId: CreateIncomingPhoneNumberTollFree
-export def "2010-04-01-accounts-incoming-phone-numbers-toll-freejson create-incoming-phone-number-toll-free" [
+export def "2010-04-01-accounts-incoming-phone-numbers-toll-free-json create" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2964,7 +3001,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-toll-freejson create-inco
   --emergency-status: string@emergency-status-completer
   --friendly-name: string # A descriptive string that you created to describe the new phone number. It can be up to 64 characters long. By default, this is a formatted version of the phone number.
   --identity-sid: string # The SID of the Identity resource that we should associate with the new phone number. Some regions require an Identity to meet local regulations.
-  phone_number: string # The phone number to purchase specified in [E.164](https://www.twilio.com/docs/glossary/what-e164) format.  E.164 phone numbers consist of a + followed by the country code and subscriber number without punctuation characters. For example, +14155551234. (format: phone-number)
+  phone_number: string # The phone number to purchase specified in [E.164](https://www.twilio.com/docs/glossary/what-e164) format. E.164 phone numbers consist of a + followed by the country code and subscriber number without punctuation characters. For example, +14155551234. (format: phone-number)
   --sms-application-sid: string # The SID of the application that should handle SMS messages sent to the new phone number. If an `sms_application_sid` is present, we ignore all `sms_*_url` values and use those of the application.
   --sms-fallback-method: string@sms-fallback-method-completer # The HTTP method that we should use to call `sms_fallback_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --sms-fallback-url: string # The URL that we should call when an error occurs while requesting or executing the TwiML defined by `sms_url`. (format: uri)
@@ -2984,19 +3021,20 @@ export def "2010-04-01-accounts-incoming-phone-numbers-toll-freejson create-inco
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/TollFree.json"))
-  let body = {"AddressSid": $address_sid, "ApiVersion": $api_version, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "PhoneNumber": $phone_number, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/TollFree.json"))
+  let req_body = {"AddressSid": $address_sid, "ApiVersion": $api_version, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "PhoneNumber": $phone_number, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of Add-on installations currently assigned to this Number.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns.json
 # operationId: ListIncomingPhoneNumberAssignedAddOn
-export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-onsjson list-incoming-phone-number-assigned-add-on" [
+export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons-json list" [
   account_sid: string
   resource_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3014,7 +3052,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-onsjson list
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, resource_sid: $resource_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), resource_sid: (encode-path-segment $resource_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3024,7 +3062,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-onsjson list
 #
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns.json
 # operationId: CreateIncomingPhoneNumberAssignedAddOn
-export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-onsjson create-incoming-phone-number-assigned-add-on" [
+export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons-json create" [
   account_sid: string
   resource_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3040,19 +3078,20 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-onsjson crea
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, resource_sid: $resource_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns.json"))
-  let body = {"InstalledAddOnSid": $installed_add_on_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), resource_sid: (encode-path-segment $resource_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns.json"))
+  let req_body = {"InstalledAddOnSid": $installed_add_on_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of Extensions for the Assigned Add-on.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{ResourceSid}/AssignedAddOns/{AssignedAddOnSid}/Extensions.json
 # operationId: ListIncomingPhoneNumberAssignedAddOnExtension
-export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons-extensionsjson list-incoming-phone-number-assigned-add-on-extension" [
+export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons-extensions-json list" [
   account_sid: string
   resource_sid: string
   assigned_add_on_sid: string
@@ -3071,7 +3110,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons-extensio
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, resource_sid: $resource_sid, assigned_add_on_sid: $assigned_add_on_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns/{assigned_add_on_sid}/Extensions.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), resource_sid: (encode-path-segment $resource_sid), assigned_add_on_sid: (encode-path-segment $assigned_add_on_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns/{assigned_add_on_sid}/Extensions.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3097,7 +3136,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons-extensio
 ]: nothing -> record<account_sid: string, assigned_add_on_sid: string, enabled: bool, friendly_name: string, product_name: string, resource_sid: string, sid: string, unique_name: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, resource_sid: $resource_sid, assigned_add_on_sid: $assigned_add_on_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns/{assigned_add_on_sid}/Extensions/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), resource_sid: (encode-path-segment $resource_sid), assigned_add_on_sid: (encode-path-segment $assigned_add_on_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns/{assigned_add_on_sid}/Extensions/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3122,7 +3161,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons delete" 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, resource_sid: $resource_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), resource_sid: (encode-path-segment $resource_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3147,7 +3186,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons get" [
 ]: nothing -> record<account_sid: string, configuration: any, date_created: string, date_updated: string, description: string, friendly_name: string, resource_sid: string, sid: string, subresource_uris: record, unique_name: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, resource_sid: $resource_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), resource_sid: (encode-path-segment $resource_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3171,7 +3210,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3195,7 +3234,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers get" [
 ]: nothing -> record<account_sid: string, address_requirements: string, address_sid: string, api_version: string, beta: bool, bundle_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, emergency_address_sid: string, emergency_address_status: string, emergency_status: string, friendly_name: string, identity_sid: string, origin: string, phone_number: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_receive_mode: string, voice_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3216,7 +3255,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-account-sid: string # The SID of the [Account](https://www.twilio.com/docs/iam/api/account) that created the IncomingPhoneNumber resource to update.  For more information, see [Exchanging Numbers Between Subaccounts](https://www.twilio.com/docs/iam/api/subaccounts#exchanging-numbers).
+  --body-account-sid: string # The SID of the [Account](https://www.twilio.com/docs/iam/api/account) that created the IncomingPhoneNumber resource to update. For more information, see [Exchanging Numbers Between Subaccounts](https://www.twilio.com/docs/iam/api/subaccounts#exchanging-numbers).
   --address-sid: string # The SID of the Address resource we should associate with the phone number. Some regions require addresses to meet local regulations.
   --api-version: string # The API version to use for incoming calls made to the phone number. The default is `2010-04-01`.
   --bundle-sid: string # The SID of the Bundle resource that you associate with the phone number. Some regions require a Bundle to meet local Regulations.
@@ -3243,18 +3282,19 @@ export def "2010-04-01-accounts-incoming-phone-numbers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{sid}.json"))
-  let body = {"AccountSid": $body_account_sid, "AddressSid": $address_sid, "ApiVersion": $api_version, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{sid}.json"))
+  let req_body = {"AccountSid": $body_account_sid, "AddressSid": $address_sid, "ApiVersion": $api_version, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Keys.json
 #
 # operationId: ListKey
-export def "2010-04-01-accounts-keysjson list-key" [
+export def "2010-04-01-accounts-keys-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3271,7 +3311,7 @@ export def "2010-04-01-accounts-keysjson list-key" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3280,7 +3320,7 @@ export def "2010-04-01-accounts-keysjson list-key" [
 # POST /2010-04-01/Accounts/{AccountSid}/Keys.json
 #
 # operationId: CreateNewKey
-export def "2010-04-01-accounts-keysjson create-new-key" [
+export def "2010-04-01-accounts-keys-json create-new" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3295,12 +3335,13 @@ export def "2010-04-01-accounts-keysjson create-new-key" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys.json"))
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys.json"))
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /2010-04-01/Accounts/{AccountSid}/Keys/{Sid}.json
@@ -3320,7 +3361,7 @@ export def "2010-04-01-accounts-keys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3343,7 +3384,7 @@ export def "2010-04-01-accounts-keys get" [
 ]: nothing -> record<date_created: string, date_updated: string, friendly_name: string, sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3368,19 +3409,20 @@ export def "2010-04-01-accounts-keys update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys/{sid}.json"))
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys/{sid}.json"))
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of messages belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Messages.json
 # operationId: ListMessage
-export def "2010-04-01-accounts-messagesjson list-message" [
+export def "2010-04-01-accounts-messages-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3402,7 +3444,7 @@ export def "2010-04-01-accounts-messagesjson list-message" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "To" $qp_to "scalar") (serialize-qp "From" $qp_from "scalar") (serialize-qp "DateSent" $date_sent "scalar") (serialize-qp "DateSent<" $date_sent "scalar") (serialize-qp "DateSent>" $date_sent "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3412,7 +3454,7 @@ export def "2010-04-01-accounts-messagesjson list-message" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Messages.json
 # operationId: CreateMessage
-export def "2010-04-01-accounts-messagesjson create-message" [
+export def "2010-04-01-accounts-messages-json create" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3425,16 +3467,16 @@ export def "2010-04-01-accounts-messagesjson create-message" [
   --address-retention: string@address-retention-completer
   --application-sid: string # The SID of the application that should receive message status. We POST a `message_sid` parameter and a `message_status` parameter with a value of `sent` or `failed` to the [application](https://www.twilio.com/docs/usage/api/applications)'s `message_status_callback`. If a `status_callback` parameter is also passed, it will be ignored and the application's `message_status_callback` parameter will be used.
   --attempt: int # Total number of attempts made ( including this ) to send out the message regardless of the provider used
-  --body-body: string # The text of the message you want to send. Can be up to 1,600 characters in length.
+  --body: string # The text of the message you want to send. Can be up to 1,600 characters in length.
   --content-retention: string@content-retention-completer
   --content-sid: string # The SID of the Content object returned at Content API content create time (https://www.twilio.com/docs/content-api/create-and-send-your-first-content-api-template#create-a-template). If this parameter is not specified, then the Content API will not be utilized.
   --content-variables: string # Key-value pairs of variable names to substitution values, used alongside a content_sid. If not specified, Content API will default to the default variables defined at create time.
   --force-delivery: oneof<nothing, bool> # Reserved
   --body-from: string # A Twilio phone number in [E.164](https://www.twilio.com/docs/glossary/what-e164) format, an [alphanumeric sender ID](https://www.twilio.com/docs/sms/send-messages#use-an-alphanumeric-sender-id), or a [Channel Endpoint address](https://www.twilio.com/docs/sms/channels#channel-addresses) that is enabled for the type of message you want to send. Phone numbers or [short codes](https://www.twilio.com/docs/sms/api/short-code) purchased from Twilio also work here. You cannot, for example, spoof messages from a private cell phone number. If you are using `messaging_service_sid`, this parameter must be empty. (format: phone-number)
   --max-price: float # The maximum total price in US dollars that you will pay for the message to be delivered. Can be a decimal value that has up to 4 decimal places. All messages are queued for delivery and the message cost is checked before the message is sent. If the cost exceeds `max_price`, the message will fail and a status of `Failed` is sent to the status callback. If `MaxPrice` is not set, the message cost is not checked.
-  --media-url: list # The URL of the media to send with the message. The media can be of type `gif`, `png`, and `jpeg` and will be formatted correctly on the recipient's device. The media size limit is 5MB for supported file types (JPEG, PNG, GIF) and 500KB for [other types](https://www.twilio.com/docs/sms/accepted-mime-types) of accepted media. To send more than one image in the message body, provide multiple `media_url` parameters in the POST request. You can include up to 10 `media_url` parameters per message. You can send images in an SMS message in only the US and Canada.
+  --media-url: list<string> # The URL of the media to send with the message. The media can be of type `gif`, `png`, and `jpeg` and will be formatted correctly on the recipient's device. The media size limit is 5MB for supported file types (JPEG, PNG, GIF) and 500KB for [other types](https://www.twilio.com/docs/sms/accepted-mime-types) of accepted media. To send more than one image in the message body, provide multiple `media_url` parameters in the POST request. You can include up to 10 `media_url` parameters per message. You can send images in an SMS message in only the US and Canada.
   --messaging-service-sid: string # The SID of the [Messaging Service](https://www.twilio.com/docs/sms/services#send-a-message-with-copilot) you want to associate with the Message. Set this parameter to use the [Messaging Service Settings and Copilot Features](https://www.twilio.com/console/sms/services) you have configured and leave the `from` parameter empty. When only this parameter is set, Twilio will use your enabled Copilot Features to select the `from` phone number for delivery.
-  --persistent-action: list # Rich actions for Channels Messages.
+  --persistent-action: list<string> # Rich actions for Channels Messages.
   --provide-feedback: oneof<nothing, bool> # Whether to confirm delivery of the message. Set this value to `true` if you are sending messages that have a trackable user action and you intend to confirm delivery of the message using the [Message Feedback API](https://www.twilio.com/docs/sms/api/message-feedback-resource). This parameter is `false` by default.
   --schedule-type: string@schedule-type-completer
   --send-as-mms: oneof<nothing, bool> # If set to True, Twilio will deliver the message as a single MMS message, regardless of the presence of media.
@@ -3448,18 +3490,19 @@ export def "2010-04-01-accounts-messagesjson create-message" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages.json"))
-  let body = {"AddressRetention": $address_retention, "ApplicationSid": $application_sid, "Attempt": $attempt, "Body": $body_body, "ContentRetention": $content_retention, "ContentSid": $content_sid, "ContentVariables": $content_variables, "ForceDelivery": $force_delivery, "From": $body_from, "MaxPrice": $max_price, "MediaUrl": $media_url, "MessagingServiceSid": $messaging_service_sid, "PersistentAction": $persistent_action, "ProvideFeedback": $provide_feedback, "ScheduleType": $schedule_type, "SendAsMms": $send_as_mms, "SendAt": $send_at, "ShortenUrls": $shorten_urls, "SmartEncoded": $smart_encoded, "StatusCallback": $status_callback, "To": $body_to, "ValidityPeriod": $validity_period} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages.json"))
+  let req_body = {"AddressRetention": $address_retention, "ApplicationSid": $application_sid, "Attempt": $attempt, "Body": $body, "ContentRetention": $content_retention, "ContentSid": $content_sid, "ContentVariables": $content_variables, "ForceDelivery": $force_delivery, "From": $body_from, "MaxPrice": $max_price, "MediaUrl": $media_url, "MessagingServiceSid": $messaging_service_sid, "PersistentAction": $persistent_action, "ProvideFeedback": $provide_feedback, "ScheduleType": $schedule_type, "SendAsMms": $send_as_mms, "SendAt": $send_at, "ShortenUrls": $shorten_urls, "SmartEncoded": $smart_encoded, "StatusCallback": $status_callback, "To": $body_to, "ValidityPeriod": $validity_period} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/Messages/{MessageSid}/Feedback.json
 #
 # operationId: CreateMessageFeedback
-export def "2010-04-01-accounts-messages-feedbackjson create-message-feedback" [
+export def "2010-04-01-accounts-messages-feedback-json create" [
   account_sid: string
   message_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3475,19 +3518,20 @@ export def "2010-04-01-accounts-messages-feedbackjson create-message-feedback" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, message_sid: $message_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{message_sid}/Feedback.json"))
-  let body = {"Outcome": $outcome} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), message_sid: (encode-path-segment $message_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{message_sid}/Feedback.json"))
+  let req_body = {"Outcome": $outcome} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of Media resources belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Messages/{MessageSid}/Media.json
 # operationId: ListMedia
-export def "2010-04-01-accounts-messages-mediajson list-media" [
+export def "2010-04-01-accounts-messages-media-json list" [
   account_sid: string
   message_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3508,7 +3552,7 @@ export def "2010-04-01-accounts-messages-mediajson list-media" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $date_created "scalar") (serialize-qp "DateCreated>" $date_created "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, message_sid: $message_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{message_sid}/Media.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), message_sid: (encode-path-segment $message_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{message_sid}/Media.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3533,7 +3577,7 @@ export def "2010-04-01-accounts-messages-media delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, message_sid: $message_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{message_sid}/Media/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), message_sid: (encode-path-segment $message_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{message_sid}/Media/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3558,7 +3602,7 @@ export def "2010-04-01-accounts-messages-media get" [
 ]: nothing -> record<account_sid: string, content_type: string, date_created: string, date_updated: string, parent_sid: string, sid: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, message_sid: $message_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{message_sid}/Media/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), message_sid: (encode-path-segment $message_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{message_sid}/Media/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3582,7 +3626,7 @@ export def "2010-04-01-accounts-messages delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3606,7 +3650,7 @@ export def "2010-04-01-accounts-messages get" [
 ]: nothing -> record<account_sid: string, api_version: string, body: string, date_created: string, date_sent: string, date_updated: string, direction: string, error_code: int, error_message: string, from: string, messaging_service_sid: string, num_media: string, num_segments: string, price: string, price_unit: string, sid: string, status: string, subresource_uris: record, to: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3627,25 +3671,26 @@ export def "2010-04-01-accounts-messages update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # The text of the message you want to send. Can be up to 1,600 characters long.
+  --body: string # The text of the message you want to send. Can be up to 1,600 characters long.
   --status: string@status-completer-8
 ]: any -> record<account_sid: string, api_version: string, body: string, date_created: string, date_sent: string, date_updated: string, direction: string, error_code: int, error_message: string, from: string, messaging_service_sid: string, num_media: string, num_segments: string, price: string, price_unit: string, sid: string, status: string, subresource_uris: record, to: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{sid}.json"))
-  let body = {"Body": $body_body, "Status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{sid}.json"))
+  let req_body = {"Body": $body, "Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of notifications belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Notifications.json
 # operationId: ListNotification
-export def "2010-04-01-accounts-notificationsjson list-notification" [
+export def "2010-04-01-accounts-notifications-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3655,7 +3700,7 @@ export def "2010-04-01-accounts-notificationsjson list-notification" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --log: int # Only read notifications of the specified log level. Can be:  `0` to read only ERROR notifications or `1` to read only WARNING notifications. By default, all notifications are read.
+  --log: int # Only read notifications of the specified log level. Can be: `0` to read only ERROR notifications or `1` to read only WARNING notifications. By default, all notifications are read.
   --message-date: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date)
   --message-date: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date)
   --message-date: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date)
@@ -3666,7 +3711,7 @@ export def "2010-04-01-accounts-notificationsjson list-notification" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "Log" $log "scalar") (serialize-qp "MessageDate" $message_date "scalar") (serialize-qp "MessageDate<" $message_date "scalar") (serialize-qp "MessageDate>" $message_date "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Notifications.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Notifications.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3690,7 +3735,7 @@ export def "2010-04-01-accounts-notifications get" [
 ]: nothing -> record<account_sid: string, api_version: string, call_sid: string, date_created: string, date_updated: string, error_code: string, log: string, message_date: string, message_text: string, more_info: string, request_method: string, request_url: string, request_variables: string, response_body: string, response_headers: string, sid: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Notifications/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Notifications/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3700,7 +3745,7 @@ export def "2010-04-01-accounts-notifications get" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/OutgoingCallerIds.json
 # operationId: ListOutgoingCallerId
-export def "2010-04-01-accounts-outgoing-caller-idsjson list" [
+export def "2010-04-01-accounts-outgoing-caller-ids-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3719,7 +3764,7 @@ export def "2010-04-01-accounts-outgoing-caller-idsjson list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3728,7 +3773,7 @@ export def "2010-04-01-accounts-outgoing-caller-idsjson list" [
 # POST /2010-04-01/Accounts/{AccountSid}/OutgoingCallerIds.json
 #
 # operationId: CreateValidationRequest
-export def "2010-04-01-accounts-outgoing-caller-idsjson create-validation-request" [
+export def "2010-04-01-accounts-outgoing-caller-ids-json create-validation-request" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3748,12 +3793,13 @@ export def "2010-04-01-accounts-outgoing-caller-idsjson create-validation-reques
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds.json"))
-  let body = {"CallDelay": $call_delay, "Extension": $extension, "FriendlyName": $friendly_name, "PhoneNumber": $phone_number, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds.json"))
+  let req_body = {"CallDelay": $call_delay, "Extension": $extension, "FriendlyName": $friendly_name, "PhoneNumber": $phone_number, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete the caller-id specified from the account
@@ -3774,7 +3820,7 @@ export def "2010-04-01-accounts-outgoing-caller-ids delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3798,7 +3844,7 @@ export def "2010-04-01-accounts-outgoing-caller-ids get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, phone_number: string, sid: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3824,19 +3870,20 @@ export def "2010-04-01-accounts-outgoing-caller-ids update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds/{sid}.json"))
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds/{sid}.json"))
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of queues belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Queues.json
 # operationId: ListQueue
-export def "2010-04-01-accounts-queuesjson list-queue" [
+export def "2010-04-01-accounts-queues-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3853,7 +3900,7 @@ export def "2010-04-01-accounts-queuesjson list-queue" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3863,7 +3910,7 @@ export def "2010-04-01-accounts-queuesjson list-queue" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Queues.json
 # operationId: CreateQueue
-export def "2010-04-01-accounts-queuesjson create-queue" [
+export def "2010-04-01-accounts-queues-json create" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3879,19 +3926,20 @@ export def "2010-04-01-accounts-queuesjson create-queue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues.json"))
-  let body = {"FriendlyName": $friendly_name, "MaxSize": $max_size} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues.json"))
+  let req_body = {"FriendlyName": $friendly_name, "MaxSize": $max_size} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve the members of the queue
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Queues/{QueueSid}/Members.json
 # operationId: ListMember
-export def "2010-04-01-accounts-queues-membersjson list-member" [
+export def "2010-04-01-accounts-queues-members-json list" [
   account_sid: string
   queue_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3909,7 +3957,7 @@ export def "2010-04-01-accounts-queues-membersjson list-member" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, queue_sid: $queue_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{queue_sid}/Members.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), queue_sid: (encode-path-segment $queue_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{queue_sid}/Members.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3934,7 +3982,7 @@ export def "2010-04-01-accounts-queues-members get" [
 ]: nothing -> record<call_sid: string, date_enqueued: string, position: int, queue_sid: string, uri: string, wait_time: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, queue_sid: $queue_sid, call_sid: $call_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{queue_sid}/Members/{call_sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), queue_sid: (encode-path-segment $queue_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{queue_sid}/Members/{call_sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3957,17 +4005,18 @@ export def "2010-04-01-accounts-queues-members update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --method: string@method-completer # How to pass the update request data. Can be `GET` or `POST` and the default is `POST`. `POST` sends the data as encoded form data and `GET` sends the data as query parameters. (format: http-method)
-  --body-url: string # The absolute URL of the Queue resource. (format: uri)
+  url: string # The absolute URL of the Queue resource. (format: uri)
 ]: any -> record<call_sid: string, date_enqueued: string, position: int, queue_sid: string, uri: string, wait_time: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, queue_sid: $queue_sid, call_sid: $call_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{queue_sid}/Members/{call_sid}.json"))
-  let body = {"Method": $method, "Url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), queue_sid: (encode-path-segment $queue_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{queue_sid}/Members/{call_sid}.json"))
+  let req_body = {"Method": $method, "Url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Remove an empty queue
@@ -3988,7 +4037,7 @@ export def "2010-04-01-accounts-queues delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4012,7 +4061,7 @@ export def "2010-04-01-accounts-queues get" [
 ]: nothing -> record<account_sid: string, average_wait_time: int, current_size: int, date_created: string, date_updated: string, friendly_name: string, max_size: int, sid: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4039,19 +4088,20 @@ export def "2010-04-01-accounts-queues update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{sid}.json"))
-  let body = {"FriendlyName": $friendly_name, "MaxSize": $max_size} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{sid}.json"))
+  let req_body = {"FriendlyName": $friendly_name, "MaxSize": $max_size} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of recordings belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings.json
 # operationId: ListRecording
-export def "2010-04-01-accounts-recordingsjson list-recording" [
+export def "2010-04-01-accounts-recordings-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4074,7 +4124,7 @@ export def "2010-04-01-accounts-recordingsjson list-recording" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $date_created "scalar") (serialize-qp "DateCreated>" $date_created "scalar") (serialize-qp "CallSid" $call_sid "scalar") (serialize-qp "ConferenceSid" $conference_sid "scalar") (serialize-qp "IncludeSoftDeleted" $include_soft_deleted "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4083,7 +4133,7 @@ export def "2010-04-01-accounts-recordingsjson list-recording" [
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings/{RecordingSid}/Transcriptions.json
 #
 # operationId: ListRecordingTranscription
-export def "2010-04-01-accounts-recordings-transcriptionsjson list-recording-transcription" [
+export def "2010-04-01-accounts-recordings-transcriptions-json list" [
   account_sid: string
   recording_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4101,7 +4151,7 @@ export def "2010-04-01-accounts-recordings-transcriptionsjson list-recording-tra
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, recording_sid: $recording_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{recording_sid}/Transcriptions.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), recording_sid: (encode-path-segment $recording_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{recording_sid}/Transcriptions.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4125,7 +4175,7 @@ export def "2010-04-01-accounts-recordings-transcriptions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, recording_sid: $recording_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{recording_sid}/Transcriptions/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), recording_sid: (encode-path-segment $recording_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{recording_sid}/Transcriptions/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4149,7 +4199,7 @@ export def "2010-04-01-accounts-recordings-transcriptions get" [
 ]: nothing -> record<account_sid: string, api_version: string, date_created: string, date_updated: string, duration: string, price: float, price_unit: string, recording_sid: string, sid: string, status: string, transcription_text: string, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, recording_sid: $recording_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{recording_sid}/Transcriptions/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), recording_sid: (encode-path-segment $recording_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{recording_sid}/Transcriptions/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4159,7 +4209,7 @@ export def "2010-04-01-accounts-recordings-transcriptions get" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings/{ReferenceSid}/AddOnResults.json
 # operationId: ListRecordingAddOnResult
-export def "2010-04-01-accounts-recordings-add-on-resultsjson list-recording-add-on-result" [
+export def "2010-04-01-accounts-recordings-add-on-results-json list" [
   account_sid: string
   reference_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4177,7 +4227,7 @@ export def "2010-04-01-accounts-recordings-add-on-resultsjson list-recording-add
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, reference_sid: $reference_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), reference_sid: (encode-path-segment $reference_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4187,7 +4237,7 @@ export def "2010-04-01-accounts-recordings-add-on-resultsjson list-recording-add
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings/{ReferenceSid}/AddOnResults/{AddOnResultSid}/Payloads.json
 # operationId: ListRecordingAddOnResultPayload
-export def "2010-04-01-accounts-recordings-add-on-results-payloadsjson list-recording-add-on-result-payload" [
+export def "2010-04-01-accounts-recordings-add-on-results-payloads-json list" [
   account_sid: string
   reference_sid: string
   add_on_result_sid: string
@@ -4206,7 +4256,7 @@ export def "2010-04-01-accounts-recordings-add-on-results-payloadsjson list-reco
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, reference_sid: $reference_sid, add_on_result_sid: $add_on_result_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{add_on_result_sid}/Payloads.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), reference_sid: (encode-path-segment $reference_sid), add_on_result_sid: (encode-path-segment $add_on_result_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{add_on_result_sid}/Payloads.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4232,7 +4282,7 @@ export def "2010-04-01-accounts-recordings-add-on-results-payloads delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, reference_sid: $reference_sid, add_on_result_sid: $add_on_result_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{add_on_result_sid}/Payloads/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), reference_sid: (encode-path-segment $reference_sid), add_on_result_sid: (encode-path-segment $add_on_result_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{add_on_result_sid}/Payloads/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4258,7 +4308,7 @@ export def "2010-04-01-accounts-recordings-add-on-results-payloads get" [
 ]: nothing -> record<account_sid: string, add_on_configuration_sid: string, add_on_result_sid: string, add_on_sid: string, content_type: string, date_created: string, date_updated: string, label: string, reference_sid: string, sid: string, subresource_uris: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, reference_sid: $reference_sid, add_on_result_sid: $add_on_result_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{add_on_result_sid}/Payloads/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), reference_sid: (encode-path-segment $reference_sid), add_on_result_sid: (encode-path-segment $add_on_result_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{add_on_result_sid}/Payloads/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4283,7 +4333,7 @@ export def "2010-04-01-accounts-recordings-add-on-results delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, reference_sid: $reference_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), reference_sid: (encode-path-segment $reference_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4308,7 +4358,7 @@ export def "2010-04-01-accounts-recordings-add-on-results get" [
 ]: nothing -> record<account_sid: string, add_on_configuration_sid: string, add_on_sid: string, date_completed: string, date_created: string, date_updated: string, reference_sid: string, sid: string, status: string, subresource_uris: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, reference_sid: $reference_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), reference_sid: (encode-path-segment $reference_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4332,7 +4382,7 @@ export def "2010-04-01-accounts-recordings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4358,7 +4408,7 @@ export def "2010-04-01-accounts-recordings get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "IncludeSoftDeleted" $include_soft_deleted "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{sid}.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{sid}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4368,7 +4418,7 @@ export def "2010-04-01-accounts-recordings get" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists.json
 # operationId: ListSipCredentialList
-export def "2010-04-01-accounts-sip-credential-listsjson list-sip-credential-list" [
+export def "2010-04-01-accounts-sip-credential-lists-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4385,7 +4435,7 @@ export def "2010-04-01-accounts-sip-credential-listsjson list-sip-credential-lis
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4395,7 +4445,7 @@ export def "2010-04-01-accounts-sip-credential-listsjson list-sip-credential-lis
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists.json
 # operationId: CreateSipCredentialList
-export def "2010-04-01-accounts-sip-credential-listsjson create-sip-credential-list" [
+export def "2010-04-01-accounts-sip-credential-lists-json create" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4410,19 +4460,20 @@ export def "2010-04-01-accounts-sip-credential-listsjson create-sip-credential-l
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists.json"))
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists.json"))
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of credentials.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{CredentialListSid}/Credentials.json
 # operationId: ListSipCredential
-export def "2010-04-01-accounts-sip-credential-lists-credentialsjson list" [
+export def "2010-04-01-accounts-sip-credential-lists-credentials-json list" [
   account_sid: string
   credential_list_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4440,7 +4491,7 @@ export def "2010-04-01-accounts-sip-credential-lists-credentialsjson list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, credential_list_sid: $credential_list_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), credential_list_sid: (encode-path-segment $credential_list_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4450,7 +4501,7 @@ export def "2010-04-01-accounts-sip-credential-lists-credentialsjson list" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/CredentialLists/{CredentialListSid}/Credentials.json
 # operationId: CreateSipCredential
-export def "2010-04-01-accounts-sip-credential-lists-credentialsjson create" [
+export def "2010-04-01-accounts-sip-credential-lists-credentials-json create" [
   account_sid: string
   credential_list_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4467,12 +4518,13 @@ export def "2010-04-01-accounts-sip-credential-lists-credentialsjson create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, credential_list_sid: $credential_list_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials.json"))
-  let body = {"Password": $password, "Username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), credential_list_sid: (encode-path-segment $credential_list_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials.json"))
+  let req_body = {"Password": $password, "Username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a credential resource.
@@ -4494,7 +4546,7 @@ export def "2010-04-01-accounts-sip-credential-lists-credentials delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, credential_list_sid: $credential_list_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), credential_list_sid: (encode-path-segment $credential_list_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4519,7 +4571,7 @@ export def "2010-04-01-accounts-sip-credential-lists-credentials get" [
 ]: nothing -> record<account_sid: string, credential_list_sid: string, date_created: string, date_updated: string, sid: string, uri: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, credential_list_sid: $credential_list_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), credential_list_sid: (encode-path-segment $credential_list_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4546,12 +4598,13 @@ export def "2010-04-01-accounts-sip-credential-lists-credentials update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, credential_list_sid: $credential_list_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials/{sid}.json"))
-  let body = {"Password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), credential_list_sid: (encode-path-segment $credential_list_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials/{sid}.json"))
+  let req_body = {"Password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a Credential List
@@ -4572,7 +4625,7 @@ export def "2010-04-01-accounts-sip-credential-lists delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4596,7 +4649,7 @@ export def "2010-04-01-accounts-sip-credential-lists get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4622,19 +4675,20 @@ export def "2010-04-01-accounts-sip-credential-lists update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{sid}.json"))
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{sid}.json"))
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of domains belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains.json
 # operationId: ListSipDomain
-export def "2010-04-01-accounts-sip-domainsjson list-sip-domain" [
+export def "2010-04-01-accounts-sip-domains-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4651,7 +4705,7 @@ export def "2010-04-01-accounts-sip-domainsjson list-sip-domain" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4661,7 +4715,7 @@ export def "2010-04-01-accounts-sip-domainsjson list-sip-domain" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains.json
 # operationId: CreateSipDomain
-export def "2010-04-01-accounts-sip-domainsjson create-sip-domain" [
+export def "2010-04-01-accounts-sip-domains-json create" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4688,19 +4742,20 @@ export def "2010-04-01-accounts-sip-domainsjson create-sip-domain" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains.json"))
-  let body = {"ByocTrunkSid": $byoc_trunk_sid, "DomainName": $domain_name, "EmergencyCallerSid": $emergency_caller_sid, "EmergencyCallingEnabled": $emergency_calling_enabled, "FriendlyName": $friendly_name, "Secure": $secure, "SipRegistration": $sip_registration, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceStatusCallbackMethod": $voice_status_callback_method, "VoiceStatusCallbackUrl": $voice_status_callback_url, "VoiceUrl": $voice_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains.json"))
+  let req_body = {"ByocTrunkSid": $byoc_trunk_sid, "DomainName": $domain_name, "EmergencyCallerSid": $emergency_caller_sid, "EmergencyCallingEnabled": $emergency_calling_enabled, "FriendlyName": $friendly_name, "Secure": $secure, "SipRegistration": $sip_registration, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceStatusCallbackMethod": $voice_status_callback_method, "VoiceStatusCallbackUrl": $voice_status_callback_url, "VoiceUrl": $voice_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of credential list mappings belonging to the domain used in the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/CredentialListMappings.json
 # operationId: ListSipAuthCallsCredentialListMapping
-export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappingsjson list-sip-auth-calls-credential-list-mapping" [
+export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappings-json list" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4718,7 +4773,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappingsj
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/CredentialListMappings.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/CredentialListMappings.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4728,7 +4783,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappingsj
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/CredentialListMappings.json
 # operationId: CreateSipAuthCallsCredentialListMapping
-export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappingsjson create-sip-auth-calls-credential-list-mapping" [
+export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappings-json create" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4744,12 +4799,13 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappingsj
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/CredentialListMappings.json"))
-  let body = {"CredentialListSid": $credential_list_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/CredentialListMappings.json"))
+  let req_body = {"CredentialListSid": $credential_list_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a credential list mapping from the requested domain
@@ -4771,7 +4827,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappings 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/CredentialListMappings/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/CredentialListMappings/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4796,7 +4852,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappings 
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/CredentialListMappings/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/CredentialListMappings/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4806,7 +4862,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappings 
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/IpAccessControlListMappings.json
 # operationId: ListSipAuthCallsIpAccessControlListMapping
-export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-mappingsjson list-sip-auth-calls-ip-access-control-list-mapping" [
+export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-mappings-json list" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4824,7 +4880,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-ma
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/IpAccessControlListMappings.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/IpAccessControlListMappings.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4834,7 +4890,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-ma
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Calls/IpAccessControlListMappings.json
 # operationId: CreateSipAuthCallsIpAccessControlListMapping
-export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-mappingsjson create-sip-auth-calls-ip-access-control-list-mapping" [
+export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-mappings-json create" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4850,12 +4906,13 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-ma
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/IpAccessControlListMappings.json"))
-  let body = {"IpAccessControlListSid": $ip_access_control_list_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/IpAccessControlListMappings.json"))
+  let req_body = {"IpAccessControlListSid": $ip_access_control_list_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete an IP Access Control List mapping from the requested domain
@@ -4877,7 +4934,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-ma
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/IpAccessControlListMappings/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/IpAccessControlListMappings/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4902,7 +4959,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-ma
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/IpAccessControlListMappings/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/IpAccessControlListMappings/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4912,7 +4969,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-ma
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Registrations/CredentialListMappings.json
 # operationId: ListSipAuthRegistrationsCredentialListMapping
-export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-mappingsjson list-sip-auth-registrations-credential-list-mapping" [
+export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-mappings-json list" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4930,7 +4987,7 @@ export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-m
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Registrations/CredentialListMappings.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Registrations/CredentialListMappings.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4940,7 +4997,7 @@ export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-m
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/Auth/Registrations/CredentialListMappings.json
 # operationId: CreateSipAuthRegistrationsCredentialListMapping
-export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-mappingsjson create-sip-auth-registrations-credential-list-mapping" [
+export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-mappings-json create" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4956,12 +5013,13 @@ export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-m
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Registrations/CredentialListMappings.json"))
-  let body = {"CredentialListSid": $credential_list_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Registrations/CredentialListMappings.json"))
+  let req_body = {"CredentialListSid": $credential_list_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a credential list mapping from the requested domain
@@ -4983,7 +5041,7 @@ export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-m
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Registrations/CredentialListMappings/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Registrations/CredentialListMappings/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5008,7 +5066,7 @@ export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-m
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Registrations/CredentialListMappings/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Registrations/CredentialListMappings/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5018,7 +5076,7 @@ export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-m
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/CredentialListMappings.json
 # operationId: ListSipCredentialListMapping
-export def "2010-04-01-accounts-sip-domains-credential-list-mappingsjson list-sip-credential-list-mapping" [
+export def "2010-04-01-accounts-sip-domains-credential-list-mappings-json list" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5036,7 +5094,7 @@ export def "2010-04-01-accounts-sip-domains-credential-list-mappingsjson list-si
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/CredentialListMappings.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/CredentialListMappings.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5046,7 +5104,7 @@ export def "2010-04-01-accounts-sip-domains-credential-list-mappingsjson list-si
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/CredentialListMappings.json
 # operationId: CreateSipCredentialListMapping
-export def "2010-04-01-accounts-sip-domains-credential-list-mappingsjson create-sip-credential-list-mapping" [
+export def "2010-04-01-accounts-sip-domains-credential-list-mappings-json create" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5062,12 +5120,13 @@ export def "2010-04-01-accounts-sip-domains-credential-list-mappingsjson create-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/CredentialListMappings.json"))
-  let body = {"CredentialListSid": $credential_list_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/CredentialListMappings.json"))
+  let req_body = {"CredentialListSid": $credential_list_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a CredentialListMapping resource from an account.
@@ -5089,7 +5148,7 @@ export def "2010-04-01-accounts-sip-domains-credential-list-mappings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/CredentialListMappings/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/CredentialListMappings/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5114,7 +5173,7 @@ export def "2010-04-01-accounts-sip-domains-credential-list-mappings get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/CredentialListMappings/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/CredentialListMappings/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5124,7 +5183,7 @@ export def "2010-04-01-accounts-sip-domains-credential-list-mappings get" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/IpAccessControlListMappings.json
 # operationId: ListSipIpAccessControlListMapping
-export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappingsjson list-sip-ip-access-control-list-mapping" [
+export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappings-json list" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5142,7 +5201,7 @@ export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappingsjson 
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/IpAccessControlListMappings.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/IpAccessControlListMappings.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5152,7 +5211,7 @@ export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappingsjson 
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{DomainSid}/IpAccessControlListMappings.json
 # operationId: CreateSipIpAccessControlListMapping
-export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappingsjson create-sip-ip-access-control-list-mapping" [
+export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappings-json create" [
   account_sid: string
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5168,12 +5227,13 @@ export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappingsjson 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/IpAccessControlListMappings.json"))
-  let body = {"IpAccessControlListSid": $ip_access_control_list_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/IpAccessControlListMappings.json"))
+  let req_body = {"IpAccessControlListSid": $ip_access_control_list_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete an IpAccessControlListMapping resource.
@@ -5195,7 +5255,7 @@ export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappings dele
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/IpAccessControlListMappings/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/IpAccessControlListMappings/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5220,7 +5280,7 @@ export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappings get"
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, domain_sid: $domain_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/IpAccessControlListMappings/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/IpAccessControlListMappings/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5244,7 +5304,7 @@ export def "2010-04-01-accounts-sip-domains delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5268,7 +5328,7 @@ export def "2010-04-01-accounts-sip-domains get" [
 ]: nothing -> record<account_sid: string, api_version: string, auth_type: string, byoc_trunk_sid: string, date_created: string, date_updated: string, domain_name: string, emergency_caller_sid: string, emergency_calling_enabled: bool, friendly_name: string, secure: bool, sid: string, sip_registration: bool, subresource_uris: record, uri: string, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_status_callback_method: string, voice_status_callback_url: string, voice_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5306,19 +5366,20 @@ export def "2010-04-01-accounts-sip-domains update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{sid}.json"))
-  let body = {"ByocTrunkSid": $byoc_trunk_sid, "DomainName": $domain_name, "EmergencyCallerSid": $emergency_caller_sid, "EmergencyCallingEnabled": $emergency_calling_enabled, "FriendlyName": $friendly_name, "Secure": $secure, "SipRegistration": $sip_registration, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceStatusCallbackMethod": $voice_status_callback_method, "VoiceStatusCallbackUrl": $voice_status_callback_url, "VoiceUrl": $voice_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{sid}.json"))
+  let req_body = {"ByocTrunkSid": $byoc_trunk_sid, "DomainName": $domain_name, "EmergencyCallerSid": $emergency_caller_sid, "EmergencyCallingEnabled": $emergency_calling_enabled, "FriendlyName": $friendly_name, "Secure": $secure, "SipRegistration": $sip_registration, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceStatusCallbackMethod": $voice_status_callback_method, "VoiceStatusCallbackUrl": $voice_status_callback_url, "VoiceUrl": $voice_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of IpAccessControlLists that belong to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists.json
 # operationId: ListSipIpAccessControlList
-export def "2010-04-01-accounts-sip-ip-access-control-listsjson list-sip-ip-access-control-list" [
+export def "2010-04-01-accounts-sip-ip-access-control-lists-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5335,7 +5396,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-listsjson list-sip-ip-acce
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5345,7 +5406,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-listsjson list-sip-ip-acce
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists.json
 # operationId: CreateSipIpAccessControlList
-export def "2010-04-01-accounts-sip-ip-access-control-listsjson create-sip-ip-access-control-list" [
+export def "2010-04-01-accounts-sip-ip-access-control-lists-json create" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5360,19 +5421,20 @@ export def "2010-04-01-accounts-sip-ip-access-control-listsjson create-sip-ip-ac
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists.json"))
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists.json"))
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Read multiple IpAddress resources.
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{IpAccessControlListSid}/IpAddresses.json
 # operationId: ListSipIpAddress
-export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addressesjson list-sip-ip-address" [
+export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses-json list-address" [
   account_sid: string
   ip_access_control_list_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5390,7 +5452,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addressesjson lis
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid, ip_access_control_list_sid: $ip_access_control_list_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), ip_access_control_list_sid: (encode-path-segment $ip_access_control_list_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5400,7 +5462,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addressesjson lis
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{IpAccessControlListSid}/IpAddresses.json
 # operationId: CreateSipIpAddress
-export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addressesjson create-sip-ip-address" [
+export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses-json create-address" [
   account_sid: string
   ip_access_control_list_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5418,19 +5480,20 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addressesjson cre
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, ip_access_control_list_sid: $ip_access_control_list_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses.json"))
-  let body = {"CidrPrefixLength": $cidr_prefix_length, "FriendlyName": $friendly_name, "IpAddress": $ip_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), ip_access_control_list_sid: (encode-path-segment $ip_access_control_list_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses.json"))
+  let req_body = {"CidrPrefixLength": $cidr_prefix_length, "FriendlyName": $friendly_name, "IpAddress": $ip_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete an IpAddress resource.
 #
 # DELETE /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{IpAccessControlListSid}/IpAddresses/{Sid}.json
 # operationId: DeleteSipIpAddress
-export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses delete-sip-ip-address" [
+export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses delete-address" [
   account_sid: string
   ip_access_control_list_sid: string
   sid: string
@@ -5445,7 +5508,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses delete-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, ip_access_control_list_sid: $ip_access_control_list_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), ip_access_control_list_sid: (encode-path-segment $ip_access_control_list_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5455,7 +5518,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses delete-
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{IpAccessControlListSid}/IpAddresses/{Sid}.json
 # operationId: FetchSipIpAddress
-export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses get-sip-ip-address" [
+export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses get-address" [
   account_sid: string
   ip_access_control_list_sid: string
   sid: string
@@ -5470,7 +5533,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses get-sip
 ]: nothing -> record<account_sid: string, cidr_prefix_length: int, date_created: string, date_updated: string, friendly_name: string, ip_access_control_list_sid: string, ip_address: string, sid: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, ip_access_control_list_sid: $ip_access_control_list_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), ip_access_control_list_sid: (encode-path-segment $ip_access_control_list_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5480,7 +5543,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses get-sip
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SIP/IpAccessControlLists/{IpAccessControlListSid}/IpAddresses/{Sid}.json
 # operationId: UpdateSipIpAddress
-export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses update-sip-ip-address" [
+export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses update-address" [
   account_sid: string
   ip_access_control_list_sid: string
   sid: string
@@ -5499,12 +5562,13 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses update-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, ip_access_control_list_sid: $ip_access_control_list_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses/{sid}.json"))
-  let body = {"CidrPrefixLength": $cidr_prefix_length, "FriendlyName": $friendly_name, "IpAddress": $ip_address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), ip_access_control_list_sid: (encode-path-segment $ip_access_control_list_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses/{sid}.json"))
+  let req_body = {"CidrPrefixLength": $cidr_prefix_length, "FriendlyName": $friendly_name, "IpAddress": $ip_address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete an IpAccessControlList from the requested account
@@ -5525,7 +5589,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5549,7 +5613,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5575,19 +5639,20 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{sid}.json"))
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{sid}.json"))
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of short-codes belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/SMS/ShortCodes.json
 # operationId: ListShortCode
-export def "2010-04-01-accounts-sms-short-codesjson list-short-code" [
+export def "2010-04-01-accounts-sms-short-codes-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5606,7 +5671,7 @@ export def "2010-04-01-accounts-sms-short-codesjson list-short-code" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "ShortCode" $short_code "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SMS/ShortCodes.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SMS/ShortCodes.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5630,7 +5695,7 @@ export def "2010-04-01-accounts-sms-short-codes get" [
 ]: nothing -> record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, short_code: string, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SMS/ShortCodes/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SMS/ShortCodes/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5661,18 +5726,19 @@ export def "2010-04-01-accounts-sms-short-codes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SMS/ShortCodes/{sid}.json"))
-  let body = {"ApiVersion": $api_version, "FriendlyName": $friendly_name, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SMS/ShortCodes/{sid}.json"))
+  let req_body = {"ApiVersion": $api_version, "FriendlyName": $friendly_name, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/SigningKeys.json
 #
 # operationId: ListSigningKey
-export def "2010-04-01-accounts-signing-keysjson list-signing-key" [
+export def "2010-04-01-accounts-signing-keys-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5689,7 +5755,7 @@ export def "2010-04-01-accounts-signing-keysjson list-signing-key" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5699,7 +5765,7 @@ export def "2010-04-01-accounts-signing-keysjson list-signing-key" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/SigningKeys.json
 # operationId: CreateNewSigningKey
-export def "2010-04-01-accounts-signing-keysjson create-new-signing-key" [
+export def "2010-04-01-accounts-signing-keys-json create-new" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5714,12 +5780,13 @@ export def "2010-04-01-accounts-signing-keysjson create-new-signing-key" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys.json"))
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys.json"))
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /2010-04-01/Accounts/{AccountSid}/SigningKeys/{Sid}.json
@@ -5739,7 +5806,7 @@ export def "2010-04-01-accounts-signing-keys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5762,7 +5829,7 @@ export def "2010-04-01-accounts-signing-keys get" [
 ]: nothing -> record<date_created: string, date_updated: string, friendly_name: string, sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5787,19 +5854,20 @@ export def "2010-04-01-accounts-signing-keys update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys/{sid}.json"))
-  let body = {"FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys/{sid}.json"))
+  let req_body = {"FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Create a new token for ICE servers
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Tokens.json
 # operationId: CreateToken
-export def "2010-04-01-accounts-tokensjson create-token" [
+export def "2010-04-01-accounts-tokens-json create" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5814,19 +5882,20 @@ export def "2010-04-01-accounts-tokensjson create-token" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Tokens.json"))
-  let body = {"Ttl": $ttl} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Tokens.json"))
+  let req_body = {"Ttl": $ttl} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of transcriptions belonging to the account used to make the request
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Transcriptions.json
 # operationId: ListTranscription
-export def "2010-04-01-accounts-transcriptionsjson list-transcription" [
+export def "2010-04-01-accounts-transcriptions-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5843,7 +5912,7 @@ export def "2010-04-01-accounts-transcriptionsjson list-transcription" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Transcriptions.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Transcriptions.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5867,7 +5936,7 @@ export def "2010-04-01-accounts-transcriptions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Transcriptions/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Transcriptions/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5891,7 +5960,7 @@ export def "2010-04-01-accounts-transcriptions get" [
 ]: nothing -> record<account_sid: string, api_version: string, date_created: string, date_updated: string, duration: string, price: float, price_unit: string, recording_sid: string, sid: string, status: string, transcription_text: string, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Transcriptions/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Transcriptions/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5901,7 +5970,7 @@ export def "2010-04-01-accounts-transcriptions get" [
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records.json
 # operationId: ListUsageRecord
-export def "2010-04-01-accounts-usage-recordsjson list-usage-record" [
+export def "2010-04-01-accounts-usage-records-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5913,7 +5982,7 @@ export def "2010-04-01-accounts-usage-recordsjson list-usage-record" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --category: string@category-completer # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --start-date: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
-  --end-date: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
+  --end-date: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
   --include-subaccounts: oneof<nothing, bool> # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
@@ -5922,7 +5991,7 @@ export def "2010-04-01-accounts-usage-recordsjson list-usage-record" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5931,7 +6000,7 @@ export def "2010-04-01-accounts-usage-recordsjson list-usage-record" [
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/AllTime.json
 #
 # operationId: ListUsageRecordAllTime
-export def "2010-04-01-accounts-usage-records-all-timejson list-usage-record-all-time" [
+export def "2010-04-01-accounts-usage-records-all-time-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5943,7 +6012,7 @@ export def "2010-04-01-accounts-usage-records-all-timejson list-usage-record-all
   --dry-run(-n) # Return the request that would be sent without executing it
   --category: string@category-completer # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --start-date: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
-  --end-date: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
+  --end-date: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
   --include-subaccounts: oneof<nothing, bool> # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
@@ -5952,7 +6021,7 @@ export def "2010-04-01-accounts-usage-records-all-timejson list-usage-record-all
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/AllTime.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/AllTime.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5961,7 +6030,7 @@ export def "2010-04-01-accounts-usage-records-all-timejson list-usage-record-all
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Daily.json
 #
 # operationId: ListUsageRecordDaily
-export def "2010-04-01-accounts-usage-records-dailyjson list-usage-record-daily" [
+export def "2010-04-01-accounts-usage-records-daily-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5973,7 +6042,7 @@ export def "2010-04-01-accounts-usage-records-dailyjson list-usage-record-daily"
   --dry-run(-n) # Return the request that would be sent without executing it
   --category: string@category-completer # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --start-date: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
-  --end-date: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
+  --end-date: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
   --include-subaccounts: oneof<nothing, bool> # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
@@ -5982,7 +6051,7 @@ export def "2010-04-01-accounts-usage-records-dailyjson list-usage-record-daily"
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Daily.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Daily.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5991,7 +6060,7 @@ export def "2010-04-01-accounts-usage-records-dailyjson list-usage-record-daily"
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/LastMonth.json
 #
 # operationId: ListUsageRecordLastMonth
-export def "2010-04-01-accounts-usage-records-last-monthjson list-usage-record-last-month" [
+export def "2010-04-01-accounts-usage-records-last-month-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6003,7 +6072,7 @@ export def "2010-04-01-accounts-usage-records-last-monthjson list-usage-record-l
   --dry-run(-n) # Return the request that would be sent without executing it
   --category: string@category-completer # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --start-date: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
-  --end-date: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
+  --end-date: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
   --include-subaccounts: oneof<nothing, bool> # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
@@ -6012,7 +6081,7 @@ export def "2010-04-01-accounts-usage-records-last-monthjson list-usage-record-l
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/LastMonth.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/LastMonth.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6021,7 +6090,7 @@ export def "2010-04-01-accounts-usage-records-last-monthjson list-usage-record-l
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Monthly.json
 #
 # operationId: ListUsageRecordMonthly
-export def "2010-04-01-accounts-usage-records-monthlyjson list-usage-record-monthly" [
+export def "2010-04-01-accounts-usage-records-monthly-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6033,7 +6102,7 @@ export def "2010-04-01-accounts-usage-records-monthlyjson list-usage-record-mont
   --dry-run(-n) # Return the request that would be sent without executing it
   --category: string@category-completer # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --start-date: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
-  --end-date: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
+  --end-date: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
   --include-subaccounts: oneof<nothing, bool> # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
@@ -6042,7 +6111,7 @@ export def "2010-04-01-accounts-usage-records-monthlyjson list-usage-record-mont
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Monthly.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Monthly.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6051,7 +6120,7 @@ export def "2010-04-01-accounts-usage-records-monthlyjson list-usage-record-mont
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/ThisMonth.json
 #
 # operationId: ListUsageRecordThisMonth
-export def "2010-04-01-accounts-usage-records-this-monthjson list-usage-record-this-month" [
+export def "2010-04-01-accounts-usage-records-this-month-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6063,7 +6132,7 @@ export def "2010-04-01-accounts-usage-records-this-monthjson list-usage-record-t
   --dry-run(-n) # Return the request that would be sent without executing it
   --category: string@category-completer # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --start-date: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
-  --end-date: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
+  --end-date: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
   --include-subaccounts: oneof<nothing, bool> # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
@@ -6072,7 +6141,7 @@ export def "2010-04-01-accounts-usage-records-this-monthjson list-usage-record-t
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/ThisMonth.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/ThisMonth.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6081,7 +6150,7 @@ export def "2010-04-01-accounts-usage-records-this-monthjson list-usage-record-t
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Today.json
 #
 # operationId: ListUsageRecordToday
-export def "2010-04-01-accounts-usage-records-todayjson list-usage-record-today" [
+export def "2010-04-01-accounts-usage-records-today-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6093,7 +6162,7 @@ export def "2010-04-01-accounts-usage-records-todayjson list-usage-record-today"
   --dry-run(-n) # Return the request that would be sent without executing it
   --category: string@category-completer # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --start-date: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
-  --end-date: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
+  --end-date: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
   --include-subaccounts: oneof<nothing, bool> # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
@@ -6102,7 +6171,7 @@ export def "2010-04-01-accounts-usage-records-todayjson list-usage-record-today"
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Today.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Today.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6111,7 +6180,7 @@ export def "2010-04-01-accounts-usage-records-todayjson list-usage-record-today"
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Yearly.json
 #
 # operationId: ListUsageRecordYearly
-export def "2010-04-01-accounts-usage-records-yearlyjson list-usage-record-yearly" [
+export def "2010-04-01-accounts-usage-records-yearly-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6123,7 +6192,7 @@ export def "2010-04-01-accounts-usage-records-yearlyjson list-usage-record-yearl
   --dry-run(-n) # Return the request that would be sent without executing it
   --category: string@category-completer # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --start-date: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
-  --end-date: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
+  --end-date: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
   --include-subaccounts: oneof<nothing, bool> # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
@@ -6132,7 +6201,7 @@ export def "2010-04-01-accounts-usage-records-yearlyjson list-usage-record-yearl
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Yearly.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Yearly.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6141,7 +6210,7 @@ export def "2010-04-01-accounts-usage-records-yearlyjson list-usage-record-yearl
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Yesterday.json
 #
 # operationId: ListUsageRecordYesterday
-export def "2010-04-01-accounts-usage-records-yesterdayjson list-usage-record-yesterday" [
+export def "2010-04-01-accounts-usage-records-yesterday-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6153,7 +6222,7 @@ export def "2010-04-01-accounts-usage-records-yesterdayjson list-usage-record-ye
   --dry-run(-n) # Return the request that would be sent without executing it
   --category: string@category-completer # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --start-date: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
-  --end-date: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
+  --end-date: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
   --include-subaccounts: oneof<nothing, bool> # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
@@ -6162,7 +6231,7 @@ export def "2010-04-01-accounts-usage-records-yesterdayjson list-usage-record-ye
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Yesterday.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Yesterday.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6172,7 +6241,7 @@ export def "2010-04-01-accounts-usage-records-yesterdayjson list-usage-record-ye
 #
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Triggers.json
 # operationId: ListUsageTrigger
-export def "2010-04-01-accounts-usage-triggersjson list-usage-trigger" [
+export def "2010-04-01-accounts-usage-triggers-json list" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6183,7 +6252,7 @@ export def "2010-04-01-accounts-usage-triggersjson list-usage-trigger" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --recurring: string@recurring-completer # The frequency of recurring UsageTriggers to read. Can be: `daily`, `monthly`, or `yearly` to read recurring UsageTriggers. An empty value or a value of `alltime` reads non-recurring UsageTriggers.
-  --trigger-by: string@trigger-by-completer # The trigger field of the UsageTriggers to read.  Can be: `count`, `usage`, or `price` as described in the [UsageRecords documentation](https://www.twilio.com/docs/usage/api/usage-record#usage-count-price).
+  --trigger-by: string@trigger-by-completer # The trigger field of the UsageTriggers to read. Can be: `count`, `usage`, or `price` as described in the [UsageRecords documentation](https://www.twilio.com/docs/usage/api/usage-record#usage-count-price).
   --usage-category: string@usage-category-completer # The usage category of the UsageTriggers to read. Must be a supported [usage categories](https://www.twilio.com/docs/usage/api/usage-record#usage-categories).
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
@@ -6192,7 +6261,7 @@ export def "2010-04-01-accounts-usage-triggersjson list-usage-trigger" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let qp = [(serialize-qp "Recurring" $recurring "scalar") (serialize-qp "TriggerBy" $trigger_by "scalar") (serialize-qp "UsageCategory" $usage_category "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers.json") $qp)
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6202,7 +6271,7 @@ export def "2010-04-01-accounts-usage-triggersjson list-usage-trigger" [
 #
 # POST /2010-04-01/Accounts/{AccountSid}/Usage/Triggers.json
 # operationId: CreateUsageTrigger
-export def "2010-04-01-accounts-usage-triggersjson create-usage-trigger" [
+export def "2010-04-01-accounts-usage-triggers-json create" [
   account_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6217,18 +6286,19 @@ export def "2010-04-01-accounts-usage-triggersjson create-usage-trigger" [
   --friendly-name: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
   --recurring: string@recurring-completer
   --trigger-by: string@trigger-by-completer
-  trigger_value: string # The usage value at which the trigger should fire.  For convenience, you can use an offset value such as `+30` to specify a trigger_value that is 30 units more than the current usage value. Be sure to urlencode a `+` as `%2B`.
+  trigger_value: string # The usage value at which the trigger should fire. For convenience, you can use an offset value such as `+30` to specify a trigger_value that is 30 units more than the current usage value. Be sure to urlencode a `+` as `%2B`.
   usage_category: string@usage-category-completer
 ]: any -> record<account_sid: string, api_version: string, callback_method: string, callback_url: string, current_value: string, date_created: string, date_fired: string, date_updated: string, friendly_name: string, recurring: string, sid: string, trigger_by: string, trigger_value: string, uri: string, usage_category: string, usage_record_uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers.json"))
-  let body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "FriendlyName": $friendly_name, "Recurring": $recurring, "TriggerBy": $trigger_by, "TriggerValue": $trigger_value, "UsageCategory": $usage_category} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers.json"))
+  let req_body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "FriendlyName": $friendly_name, "Recurring": $recurring, "TriggerBy": $trigger_by, "TriggerValue": $trigger_value, "UsageCategory": $usage_category} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /2010-04-01/Accounts/{AccountSid}/Usage/Triggers/{Sid}.json
@@ -6248,7 +6318,7 @@ export def "2010-04-01-accounts-usage-triggers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6272,7 +6342,7 @@ export def "2010-04-01-accounts-usage-triggers get" [
 ]: nothing -> record<account_sid: string, api_version: string, callback_method: string, callback_url: string, current_value: string, date_created: string, date_fired: string, date_updated: string, friendly_name: string, recurring: string, sid: string, trigger_by: string, trigger_value: string, uri: string, usage_category: string, usage_record_uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers/{sid}.json"))
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6300,12 +6370,13 @@ export def "2010-04-01-accounts-usage-triggers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({account_sid: $account_sid, sid: $sid} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers/{sid}.json"))
-  let body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "FriendlyName": $friendly_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers/{sid}.json"))
+  let req_body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "FriendlyName": $friendly_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetch the account specified by the provided Account Sid
@@ -6325,7 +6396,7 @@ export def "2010-04-01-accounts get" [
 ]: nothing -> record<auth_token: string, date_created: string, date_updated: string, friendly_name: string, owner_account_sid: string, sid: string, status: string, subresource_uris: record, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/2010-04-01/Accounts/{sid}.json"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{sid}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6351,10 +6422,11 @@ export def "2010-04-01-accounts update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/2010-04-01/Accounts/{sid}.json"))
-  let body = {"FriendlyName": $friendly_name, "Status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{sid}.json"))
+  let req_body = {"FriendlyName": $friendly_name, "Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }

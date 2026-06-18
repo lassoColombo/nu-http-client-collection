@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def sort-order-completer [] { ["FIRST_NAME_ASCENDING" "LAST_MODIFIED_ASCENDING" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "contact-groups peoplecontactGroupslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "contact-groups list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/contactGroups
 # operationId: people.contactGroups.list
-export def "contact-groups peoplecontactGroupslist" [
+export def "contact-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,7 +145,7 @@ export def "contact-groups peoplecontactGroupslist" [
 # POST /v1/contactGroups
 # operationId: people.contactGroups.create
 # --contactGroup shape: {clientData?: list, etag?: string, metadata?: record, name?: string, resourceName?: string}
-export def "contact-groups peoplecontactGroupscreate" [
+export def "contact-groups create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,18 +173,18 @@ export def "contact-groups peoplecontactGroupscreate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/contactGroups" $qp)
-  let body = {"contactGroup": $contact_group, "readGroupFields": $read_group_fields} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contactGroup": $contact_group, "readGroupFields": $read_group_fields} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a list of contact groups owned by the authenticated user by specifying a list of contact group resource names.
 #
 # GET /v1/contactGroups:batchGet
 # operationId: people.contactGroups.batchGet
-export def "contact-groups-batch-get peoplecontactGroupsbatchGet" [
+export def "contact-groups-batch-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +206,7 @@ export def "contact-groups-batch-get peoplecontactGroupsbatchGet" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --group-fields: string # Optional. A field mask to restrict which fields on the group are returned. Defaults to `metadata`, `groupType`, `memberCount`, and `name` if not set or set to empty. Valid fields are: * clientData * groupType * memberCount * metadata * name
   --max-members: int # Optional. Specifies the maximum number of members to return for each group. Defaults to 0 if not set, which will return zero members.
-  --resource-names: list # Required. The resource names of the contact groups to get. There is a maximum of 200 resource names.
+  --resource-names: list<string> # Required. The resource names of the contact groups to get. There is a maximum of 200 resource names.
 ]: nothing -> record<responses: table<contactGroup: record, requestedResourceName: string, status: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -212,7 +221,7 @@ export def "contact-groups-batch-get peoplecontactGroupsbatchGet" [
 #
 # GET /v1/otherContacts
 # operationId: people.otherContacts.list
-export def "other-contacts peopleotherContactslist" [
+export def "other-contacts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,7 +245,7 @@ export def "other-contacts peopleotherContactslist" [
   --page-token: string # Optional. A page token, received from a previous response `next_page_token`. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `otherContacts.list` must match the first call that provided the page token.
   --read-mask: string # Required. A field mask to restrict which fields on each person are returned. Multiple fields can be specified by separating them with commas. What values are valid depend on what ReadSourceType is used. If READ_SOURCE_TYPE_CONTACT is used, valid values are: * emailAddresses * metadata * names * phoneNumbers * photos If READ_SOURCE_TYPE_PROFILE is used, valid values are: * addresses * ageRanges * biographies * birthdays * calendarUrls * clientData * coverPhotos * emailAddresses * events * externalIds * genders * imClients * interests * locales * locations * memberships * metadata * miscKeywords * names * nicknames * occupations * organizations * phoneNumbers * photos * relations * sipAddresses * skills * urls * userDefined
   --request-sync-token: oneof<nothing, bool> # Optional. Whether the response should return `next_sync_token` on the last page of results. It can be used to get incremental changes since the last request by setting it on the request `sync_token`. More details about sync behavior at `otherContacts.list`.
-  --sources: list # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT if not set. Possible values for this field are: * READ_SOURCE_TYPE_CONTACT * READ_SOURCE_TYPE_CONTACT,READ_SOURCE_TYPE_PROFILE Specifying READ_SOURCE_TYPE_PROFILE without specifying READ_SOURCE_TYPE_CONTACT is not permitted.
+  --sources: list<string> # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT if not set. Possible values for this field are: * READ_SOURCE_TYPE_CONTACT * READ_SOURCE_TYPE_CONTACT,READ_SOURCE_TYPE_PROFILE Specifying READ_SOURCE_TYPE_PROFILE without specifying READ_SOURCE_TYPE_CONTACT is not permitted.
   --sync-token: string # Optional. A sync token, received from a previous response `next_sync_token` Provide this to retrieve only the resources changed since the last request. When syncing, all other parameters provided to `otherContacts.list` must match the first call that provided the sync token. More details about sync behavior at `otherContacts.list`.
 ]: nothing -> record<nextPageToken: string, nextSyncToken: string, otherContacts: table<addresses: list, ageRange: string, ageRanges: list, biographies: list, birthdays: list, braggingRights: list, calendarUrls: list, clientData: list, coverPhotos: list, emailAddresses: list, etag: string, events: list, externalIds: list, fileAses: list, genders: list, imClients: list, interests: list, locales: list, locations: list, memberships: list, metadata: record, miscKeywords: list, names: list, nicknames: list, occupations: list, organizations: list, phoneNumbers: list, photos: list, relations: list, relationshipInterests: list, relationshipStatuses: list, residences: list, resourceName: string, sipAddresses: list, skills: list, taglines: list, urls: list, userDefined: list>, totalSize: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -252,7 +261,7 @@ export def "other-contacts peopleotherContactslist" [
 #
 # GET /v1/otherContacts:search
 # operationId: people.otherContacts.search
-export def "other-contacts-search peopleotherContactssearch" [
+export def "other-contacts-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +299,7 @@ export def "other-contacts-search peopleotherContactssearch" [
 # POST /v1/people:batchCreateContacts
 # operationId: people.people.batchCreateContacts
 # --contacts item shape: {contactPerson?: record}
-export def "people-batch-create-contacts peoplepeoplebatchCreateContacts" [
+export def "people-batch-create-contacts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,25 +321,25 @@ export def "people-batch-create-contacts peoplepeoplebatchCreateContacts" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --contacts: list # Required. The contact to create. Allows up to 200 contacts in a single request. — item shape: {contactPerson?: record}
   --read-mask: string # Required. A field mask to restrict which fields on each person are returned in the response. Multiple fields can be specified by separating them with commas. If read mask is left empty, the post-mutate-get is skipped and no data will be returned in the response. Valid values are: * addresses * ageRanges * biographies * birthdays * calendarUrls * clientData * coverPhotos * emailAddresses * events * externalIds * genders * imClients * interests * locales * locations * memberships * metadata * miscKeywords * names * nicknames * occupations * organizations * phoneNumbers * photos * relations * sipAddresses * skills * urls * userDefined (format: google-fieldmask)
-  --sources: list # Optional. A mask of what source types to return in the post mutate read. Defaults to READ_SOURCE_TYPE_CONTACT and READ_SOURCE_TYPE_PROFILE if not set.
+  --sources: list<string> # Optional. A mask of what source types to return in the post mutate read. Defaults to READ_SOURCE_TYPE_CONTACT and READ_SOURCE_TYPE_PROFILE if not set.
 ]: any -> record<createdPeople: table<httpStatusCode: int, person: record, requestedResourceName: string, status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/people:batchCreateContacts" $qp)
-  let body = {"contacts": $contacts, "readMask": $read_mask, "sources": $sources} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contacts": $contacts, "readMask": $read_mask, "sources": $sources} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a batch of contacts. Any non-contact data will not be deleted. Mutate requests for the same user should be sent sequentially to avoid increased latency and failures.
 #
 # POST /v1/people:batchDeleteContacts
 # operationId: people.people.batchDeleteContacts
-export def "people-batch-delete-contacts peoplepeoplebatchDeleteContacts" [
+export def "people-batch-delete-contacts delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,25 +359,25 @@ export def "people-batch-delete-contacts peoplepeoplebatchDeleteContacts" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --resource-names: list # Required. The resource names of the contact to delete. It's repeatable. Allows up to 500 resource names in a single request.
+  --resource-names: list<string> # Required. The resource names of the contact to delete. It's repeatable. Allows up to 500 resource names in a single request.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/people:batchDeleteContacts" $qp)
-  let body = {"resourceNames": $resource_names} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"resourceNames": $resource_names} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Provides information about a list of specific people by specifying a list of requested resource names. Use `people/me` to indicate the authenticated user. The request returns a 400 error if 'personFields' is not specified.
 #
 # GET /v1/people:batchGet
 # operationId: people.people.getBatchGet
-export def "people-batch-get peoplepeoplegetBatchGet" [
+export def "people-batch-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,8 +399,8 @@ export def "people-batch-get peoplepeoplegetBatchGet" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --person-fields: string # Required. A field mask to restrict which fields on each person are returned. Multiple fields can be specified by separating them with commas. Valid values are: * addresses * ageRanges * biographies * birthdays * calendarUrls * clientData * coverPhotos * emailAddresses * events * externalIds * genders * imClients * interests * locales * locations * memberships * metadata * miscKeywords * names * nicknames * occupations * organizations * phoneNumbers * photos * relations * sipAddresses * skills * urls * userDefined
   --request-mask-include-field: string # Required. Comma-separated list of person fields to be included in the response. Each path should start with `person.`: for example, `person.names` or `person.photos`.
-  --resource-names: list # Required. The resource names of the people to provide information about. It's repeatable. The URL query parameter should be resourceNames=<name1>&resourceNames=<name2>&... - To get information about the authenticated user, specify `people/me`. - To get information about a google account, specify `people/{account_id}`. - To get information about a contact, specify the resource name that identifies the contact as returned by `people.connections.list`. There is a maximum of 200 resource names.
-  --sources: list # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT and READ_SOURCE_TYPE_PROFILE if not set.
+  --resource-names: list<string> # Required. The resource names of the people to provide information about. It's repeatable. The URL query parameter should be resourceNames=&resourceNames=&... - To get information about the authenticated user, specify `people/me`. - To get information about a google account, specify `people/{account_id}`. - To get information about a contact, specify the resource name that identifies the contact as returned by `people.connections.list`. There is a maximum of 200 resource names.
+  --sources: list<string> # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT and READ_SOURCE_TYPE_PROFILE if not set.
 ]: nothing -> record<responses: table<httpStatusCode: int, person: record, requestedResourceName: string, status: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -406,7 +415,7 @@ export def "people-batch-get peoplepeoplegetBatchGet" [
 #
 # POST /v1/people:batchUpdateContacts
 # operationId: people.people.batchUpdateContacts
-export def "people-batch-update-contacts peoplepeoplebatchUpdateContacts" [
+export def "people-batch-update-contacts update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -428,7 +437,7 @@ export def "people-batch-update-contacts peoplepeoplebatchUpdateContacts" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --contacts: record # Required. A map of resource names to the person data to be updated. Allows up to 200 contacts in a single request.
   --read-mask: string # Required. A field mask to restrict which fields on each person are returned. Multiple fields can be specified by separating them with commas. If read mask is left empty, the post-mutate-get is skipped and no data will be returned in the response. Valid values are: * addresses * ageRanges * biographies * birthdays * calendarUrls * clientData * coverPhotos * emailAddresses * events * externalIds * genders * imClients * interests * locales * locations * memberships * metadata * miscKeywords * names * nicknames * occupations * organizations * phoneNumbers * photos * relations * sipAddresses * skills * urls * userDefined (format: google-fieldmask)
-  --sources: list # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT and READ_SOURCE_TYPE_PROFILE if not set.
+  --sources: list<string> # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT and READ_SOURCE_TYPE_PROFILE if not set.
   --update-mask: string # Required. A field mask to restrict which fields on the person are updated. Multiple fields can be specified by separating them with commas. All specified fields will be replaced, or cleared if left empty for each person. Valid values are: * addresses * biographies * birthdays * calendarUrls * clientData * emailAddresses * events * externalIds * genders * imClients * interests * locales * locations * memberships * miscKeywords * names * nicknames * occupations * organizations * phoneNumbers * relations * sipAddresses * urls * userDefined (format: google-fieldmask)
 ]: any -> record<updateResult: record> {
   let input = $in
@@ -436,11 +445,11 @@ export def "people-batch-update-contacts peoplepeoplebatchUpdateContacts" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/people:batchUpdateContacts" $qp)
-  let body = {"contacts": $contacts, "readMask": $read_mask, "sources": $sources, "updateMask": $update_mask} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"contacts": $contacts, "readMask": $read_mask, "sources": $sources, "updateMask": $update_mask} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a new contact and return the person resource for that contact. The request returns a 400 error if more than one field is specified on a field that is a singleton for contact sources: * biographies * birthdays * genders * names Mutate requests for the same user should be sent sequentially to avoid increased latency and failures.
@@ -482,7 +491,7 @@ export def "people-batch-update-contacts peoplepeoplebatchUpdateContacts" [
 # --taglines item shape: {metadata?: record, value?: string}
 # --urls item shape: {metadata?: record, type?: string, value?: string}
 # --userDefined item shape: {key?: string, metadata?: record, value?: string}
-export def "people-create-contact peoplepeoplecreateContact" [
+export def "people-create-contact create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -503,7 +512,7 @@ export def "people-create-contact peoplepeoplecreateContact" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --person-fields: string # Required. A field mask to restrict which fields on each person are returned. Multiple fields can be specified by separating them with commas. Defaults to all fields if not set. Valid values are: * addresses * ageRanges * biographies * birthdays * calendarUrls * clientData * coverPhotos * emailAddresses * events * externalIds * genders * imClients * interests * locales * locations * memberships * metadata * miscKeywords * names * nicknames * occupations * organizations * phoneNumbers * photos * relations * sipAddresses * skills * urls * userDefined
-  --sources: list # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT and READ_SOURCE_TYPE_PROFILE if not set.
+  --sources: list<string> # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT and READ_SOURCE_TYPE_PROFILE if not set.
   --addresses: list # The person's street addresses. — item shape: {city?: string, country?: string, countryCode?: string, extendedAddress?: string, formattedValue?: string, metadata?: record, poBox?: string, postalCode?: string, region?: string, streetAddress?: string, type?: string}
   --biographies: list # The person's biographies. This field is a singleton for contact sources. — item shape: {contentType?: "CONTENT_TYPE_UNSPECIFIED"|"TEXT_PLAIN"|"TEXT_HTML", metadata?: record, value?: string}
   --birthdays: list # The person's birthdays. This field is a singleton for contact sources. — item shape: {date?: record, metadata?: record, text?: string}
@@ -541,18 +550,18 @@ export def "people-create-contact peoplepeoplecreateContact" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "personFields" $person_fields "scalar") (serialize-qp "sources" $sources "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/people:createContact" $qp)
-  let body = {"addresses": $addresses, "biographies": $biographies, "birthdays": $birthdays, "braggingRights": $bragging_rights, "calendarUrls": $calendar_urls, "clientData": $client_data, "emailAddresses": $email_addresses, "etag": $etag, "events": $events, "externalIds": $external_ids, "fileAses": $file_ases, "genders": $genders, "imClients": $im_clients, "interests": $interests, "locales": $locales, "locations": $locations, "memberships": $memberships, "metadata": $metadata, "miscKeywords": $misc_keywords, "names": $names, "nicknames": $nicknames, "occupations": $occupations, "organizations": $organizations, "phoneNumbers": $phone_numbers, "relations": $relations, "residences": $residences, "resourceName": $resource_name, "sipAddresses": $sip_addresses, "skills": $skills, "urls": $urls, "userDefined": $user_defined} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"addresses": $addresses, "biographies": $biographies, "birthdays": $birthdays, "braggingRights": $bragging_rights, "calendarUrls": $calendar_urls, "clientData": $client_data, "emailAddresses": $email_addresses, "etag": $etag, "events": $events, "externalIds": $external_ids, "fileAses": $file_ases, "genders": $genders, "imClients": $im_clients, "interests": $interests, "locales": $locales, "locations": $locations, "memberships": $memberships, "metadata": $metadata, "miscKeywords": $misc_keywords, "names": $names, "nicknames": $nicknames, "occupations": $occupations, "organizations": $organizations, "phoneNumbers": $phone_numbers, "relations": $relations, "residences": $residences, "resourceName": $resource_name, "sipAddresses": $sip_addresses, "skills": $skills, "urls": $urls, "userDefined": $user_defined} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Provides a list of domain profiles and domain contacts in the authenticated user's domain directory. When the `sync_token` is specified, resources deleted since the last sync will be returned as a person with `PersonMetadata.deleted` set to true. When the `page_token` or `sync_token` is specified, all other request parameters must match the first call. Writes may have a propagation delay of several minutes for sync requests. Incremental syncs are not intended for read-after-write use cases. See example usage at [List the directory people that have changed](/people/v1/directory#list_the_directory_people_that_have_changed).
 #
 # GET /v1/people:listDirectoryPeople
 # operationId: people.people.listDirectoryPeople
-export def "people-list-directory-people peoplepeoplelistDirectoryPeople" [
+export def "people-list-directory-people list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,12 +581,12 @@ export def "people-list-directory-people peoplepeoplelistDirectoryPeople" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --merge-sources: list # Optional. Additional data to merge into the directory sources if they are connected through verified join keys such as email addresses or phone numbers.
+  --merge-sources: list<string> # Optional. Additional data to merge into the directory sources if they are connected through verified join keys such as email addresses or phone numbers.
   --page-size: int # Optional. The number of people to include in the response. Valid values are between 1 and 1000, inclusive. Defaults to 100 if not set or set to 0.
   --page-token: string # Optional. A page token, received from a previous response `next_page_token`. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `people.listDirectoryPeople` must match the first call that provided the page token.
   --read-mask: string # Required. A field mask to restrict which fields on each person are returned. Multiple fields can be specified by separating them with commas. Valid values are: * addresses * ageRanges * biographies * birthdays * calendarUrls * clientData * coverPhotos * emailAddresses * events * externalIds * genders * imClients * interests * locales * locations * memberships * metadata * miscKeywords * names * nicknames * occupations * organizations * phoneNumbers * photos * relations * sipAddresses * skills * urls * userDefined
   --request-sync-token: oneof<nothing, bool> # Optional. Whether the response should return `next_sync_token`. It can be used to get incremental changes since the last request by setting it on the request `sync_token`. More details about sync behavior at `people.listDirectoryPeople`.
-  --sources: list # Required. Directory sources to return.
+  --sources: list<string> # Required. Directory sources to return.
   --sync-token: string # Optional. A sync token, received from a previous response `next_sync_token` Provide this to retrieve only the resources changed since the last request. When syncing, all other parameters provided to `people.listDirectoryPeople` must match the first call that provided the sync token. More details about sync behavior at `people.listDirectoryPeople`.
 ]: nothing -> record<nextPageToken: string, nextSyncToken: string, people: table<addresses: list, ageRange: string, ageRanges: list, biographies: list, birthdays: list, braggingRights: list, calendarUrls: list, clientData: list, coverPhotos: list, emailAddresses: list, etag: string, events: list, externalIds: list, fileAses: list, genders: list, imClients: list, interests: list, locales: list, locations: list, memberships: list, metadata: record, miscKeywords: list, names: list, nicknames: list, occupations: list, organizations: list, phoneNumbers: list, photos: list, relations: list, relationshipInterests: list, relationshipStatuses: list, residences: list, resourceName: string, sipAddresses: list, skills: list, taglines: list, urls: list, userDefined: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -593,7 +602,7 @@ export def "people-list-directory-people peoplepeoplelistDirectoryPeople" [
 #
 # GET /v1/people:searchContacts
 # operationId: people.people.searchContacts
-export def "people-search-contacts peoplepeoplesearchContacts" [
+export def "people-search-contacts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -616,7 +625,7 @@ export def "people-search-contacts peoplepeoplesearchContacts" [
   --page-size: int # Optional. The number of results to return. Defaults to 10 if field is not set, or set to 0. Values greater than 30 will be capped to 30.
   --query: string # Required. The plain-text query for the request. The query is used to match prefix phrases of the fields on a person. For example, a person with name "foo name" matches queries such as "f", "fo", "foo", "foo n", "nam", etc., but not "oo n".
   --read-mask: string # Required. A field mask to restrict which fields on each person are returned. Multiple fields can be specified by separating them with commas. Valid values are: * addresses * ageRanges * biographies * birthdays * calendarUrls * clientData * coverPhotos * emailAddresses * events * externalIds * genders * imClients * interests * locales * locations * memberships * metadata * miscKeywords * names * nicknames * occupations * organizations * phoneNumbers * photos * relations * sipAddresses * skills * urls * userDefined
-  --sources: list # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT if not set.
+  --sources: list<string> # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT if not set.
 ]: nothing -> record<results: table<person: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -631,7 +640,7 @@ export def "people-search-contacts peoplepeoplesearchContacts" [
 #
 # GET /v1/people:searchDirectoryPeople
 # operationId: people.people.searchDirectoryPeople
-export def "people-search-directory-people peoplepeoplesearchDirectoryPeople" [
+export def "people-search-directory-people list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -651,12 +660,12 @@ export def "people-search-directory-people peoplepeoplesearchDirectoryPeople" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --merge-sources: list # Optional. Additional data to merge into the directory sources if they are connected through verified join keys such as email addresses or phone numbers.
+  --merge-sources: list<string> # Optional. Additional data to merge into the directory sources if they are connected through verified join keys such as email addresses or phone numbers.
   --page-size: int # Optional. The number of people to include in the response. Valid values are between 1 and 500, inclusive. Defaults to 100 if not set or set to 0.
   --page-token: string # Optional. A page token, received from a previous response `next_page_token`. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `SearchDirectoryPeople` must match the first call that provided the page token.
   --query: string # Required. Prefix query that matches fields in the person. Does NOT use the read_mask for determining what fields to match.
   --read-mask: string # Required. A field mask to restrict which fields on each person are returned. Multiple fields can be specified by separating them with commas. Valid values are: * addresses * ageRanges * biographies * birthdays * calendarUrls * clientData * coverPhotos * emailAddresses * events * externalIds * genders * imClients * interests * locales * locations * memberships * metadata * miscKeywords * names * nicknames * occupations * organizations * phoneNumbers * photos * relations * sipAddresses * skills * urls * userDefined
-  --sources: list # Required. Directory sources to return.
+  --sources: list<string> # Required. Directory sources to return.
 ]: nothing -> record<nextPageToken: string, people: table<addresses: list, ageRange: string, ageRanges: list, biographies: list, birthdays: list, braggingRights: list, calendarUrls: list, clientData: list, coverPhotos: list, emailAddresses: list, etag: string, events: list, externalIds: list, fileAses: list, genders: list, imClients: list, interests: list, locales: list, locations: list, memberships: list, metadata: record, miscKeywords: list, names: list, nicknames: list, occupations: list, organizations: list, phoneNumbers: list, photos: list, relations: list, relationshipInterests: list, relationshipStatuses: list, residences: list, resourceName: string, sipAddresses: list, skills: list, taglines: list, urls: list, userDefined: list>, totalSize: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -671,7 +680,7 @@ export def "people-search-directory-people peoplepeoplesearchDirectoryPeople" [
 #
 # DELETE /v1/{resourceName}
 # operationId: people.contactGroups.delete
-export def "contact-groups peoplecontactGroupsdelete" [
+export def "contact-groups delete" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -697,7 +706,7 @@ export def "contact-groups peoplecontactGroupsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "deleteContacts" $delete_contacts "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_name: $resource_name} | format pattern "/v1/{resource_name}") $qp)
+  let full_url = (build-url $base ({resource_name: (encode-path-segment $resource_name)} | format pattern "/v1/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -707,7 +716,7 @@ export def "contact-groups peoplecontactGroupsdelete" [
 #
 # GET /v1/{resourceName}
 # operationId: people.people.get
-export def "people peoplepeopleget" [
+export def "people get" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -730,12 +739,12 @@ export def "people peoplepeopleget" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --person-fields: string # Required. A field mask to restrict which fields on the person are returned. Multiple fields can be specified by separating them with commas. Valid values are: * addresses * ageRanges * biographies * birthdays * calendarUrls * clientData * coverPhotos * emailAddresses * events * externalIds * genders * imClients * interests * locales * locations * memberships * metadata * miscKeywords * names * nicknames * occupations * organizations * phoneNumbers * photos * relations * sipAddresses * skills * urls * userDefined
   --request-mask-include-field: string # Required. Comma-separated list of person fields to be included in the response. Each path should start with `person.`: for example, `person.names` or `person.photos`.
-  --sources: list # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_PROFILE and READ_SOURCE_TYPE_CONTACT if not set.
+  --sources: list<string> # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_PROFILE and READ_SOURCE_TYPE_CONTACT if not set.
 ]: nothing -> record<addresses: table<city: string, country: string, countryCode: string, extendedAddress: string, formattedType: string, formattedValue: string, metadata: record, poBox: string, postalCode: string, region: string, streetAddress: string, type: string>, ageRange: string, ageRanges: table<ageRange: string, metadata: record>, biographies: table<contentType: string, metadata: record, value: string>, birthdays: table<date: record, metadata: record, text: string>, braggingRights: table<metadata: record, value: string>, calendarUrls: table<formattedType: string, metadata: record, type: string, url: string>, clientData: table<key: string, metadata: record, value: string>, coverPhotos: table<metadata: record, url: string>, emailAddresses: table<displayName: string, formattedType: string, metadata: record, type: string, value: string>, etag: string, events: table<date: record, formattedType: string, metadata: record, type: string>, externalIds: table<formattedType: string, metadata: record, type: string, value: string>, fileAses: table<metadata: record, value: string>, genders: table<addressMeAs: string, formattedValue: string, metadata: record, value: string>, imClients: table<formattedProtocol: string, formattedType: string, metadata: record, protocol: string, type: string, username: string>, interests: table<metadata: record, value: string>, locales: table<metadata: record, value: string>, locations: table<buildingId: string, current: bool, deskCode: string, floor: string, floorSection: string, metadata: record, type: string, value: string>, memberships: table<contactGroupMembership: record, domainMembership: record, metadata: record>, metadata: record<deleted: bool, linkedPeopleResourceNames: list<string>, objectType: string, previousResourceNames: list<string>, sources: list<record>>, miscKeywords: table<formattedType: string, metadata: record, type: string, value: string>, names: table<displayName: string, displayNameLastFirst: string, familyName: string, givenName: string, honorificPrefix: string, honorificSuffix: string, metadata: record, middleName: string, phoneticFamilyName: string, phoneticFullName: string, phoneticGivenName: string, phoneticHonorificPrefix: string, phoneticHonorificSuffix: string, phoneticMiddleName: string, unstructuredName: string>, nicknames: table<metadata: record, type: string, value: string>, occupations: table<metadata: record, value: string>, organizations: table<costCenter: string, current: bool, department: string, domain: string, endDate: record, formattedType: string, fullTimeEquivalentMillipercent: int, jobDescription: string, location: string, metadata: record, name: string, phoneticName: string, startDate: record, symbol: string, title: string, type: string>, phoneNumbers: table<canonicalForm: string, formattedType: string, metadata: record, type: string, value: string>, photos: table<metadata: record, url: string>, relations: table<formattedType: string, metadata: record, person: string, type: string>, relationshipInterests: table<formattedValue: string, metadata: record, value: string>, relationshipStatuses: table<formattedValue: string, metadata: record, value: string>, residences: table<current: bool, metadata: record, value: string>, resourceName: string, sipAddresses: table<formattedType: string, metadata: record, type: string, value: string>, skills: table<metadata: record, value: string>, taglines: table<metadata: record, value: string>, urls: table<formattedType: string, metadata: record, type: string, value: string>, userDefined: table<key: string, metadata: record, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "personFields" $person_fields "scalar") (serialize-qp "requestMask.includeField" $request_mask_include_field "scalar") (serialize-qp "sources" $sources "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_name: $resource_name} | format pattern "/v1/{resource_name}") $qp)
+  let full_url = (build-url $base ({resource_name: (encode-path-segment $resource_name)} | format pattern "/v1/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -746,7 +755,7 @@ export def "people peoplepeopleget" [
 # PUT /v1/{resourceName}
 # operationId: people.contactGroups.update
 # --contactGroup shape: {clientData?: list, etag?: string, metadata?: record, name?: string, resourceName?: string}
-export def "contact-groups peoplecontactGroupsupdate" [
+export def "contact-groups update" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -775,19 +784,19 @@ export def "contact-groups peoplecontactGroupsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_name: $resource_name} | format pattern "/v1/{resource_name}") $qp)
-  let body = {"contactGroup": $contact_group, "readGroupFields": $read_group_fields, "updateGroupFields": $update_group_fields} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_name: (encode-path-segment $resource_name)} | format pattern "/v1/{resource_name}") $qp)
+  let req_body = {"contactGroup": $contact_group, "readGroupFields": $read_group_fields, "updateGroupFields": $update_group_fields} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Provides a list of the authenticated user's contacts. Sync tokens expire 7 days after the full sync. A request with an expired sync token will get an error with an [google.rpc.ErrorInfo](https://cloud.google.com/apis/design/errors#error_info) with reason "EXPIRED_SYNC_TOKEN". In the case of such an error clients should make a full sync request without a `sync_token`. The first page of a full sync request has an additional quota. If the quota is exceeded, a 429 error will be returned. This quota is fixed and can not be increased. When the `sync_token` is specified, resources deleted since the last sync will be returned as a person with `PersonMetadata.deleted` set to true. When the `page_token` or `sync_token` is specified, all other request parameters must match the first call. Writes may have a propagation delay of several minutes for sync requests. Incremental syncs are not intended for read-after-write use cases. See example usage at [List the user's contacts that have changed](/people/v1/contacts#list_the_users_contacts_that_have_changed).
 #
 # GET /v1/{resourceName}/connections
 # operationId: people.people.connections.list
-export def "connections peoplepeopleconnectionslist" [
+export def "connections list" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -814,13 +823,13 @@ export def "connections peoplepeopleconnectionslist" [
   --request-mask-include-field: string # Required. Comma-separated list of person fields to be included in the response. Each path should start with `person.`: for example, `person.names` or `person.photos`.
   --request-sync-token: oneof<nothing, bool> # Optional. Whether the response should return `next_sync_token` on the last page of results. It can be used to get incremental changes since the last request by setting it on the request `sync_token`. More details about sync behavior at `people.connections.list`.
   --sort-order: string@sort-order-completer # Optional. The order in which the connections should be sorted. Defaults to `LAST_MODIFIED_ASCENDING`.
-  --sources: list # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT and READ_SOURCE_TYPE_PROFILE if not set.
+  --sources: list<string> # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT and READ_SOURCE_TYPE_PROFILE if not set.
   --sync-token: string # Optional. A sync token, received from a previous response `next_sync_token` Provide this to retrieve only the resources changed since the last request. When syncing, all other parameters provided to `people.connections.list` must match the first call that provided the sync token. More details about sync behavior at `people.connections.list`.
 ]: nothing -> record<connections: table<addresses: list, ageRange: string, ageRanges: list, biographies: list, birthdays: list, braggingRights: list, calendarUrls: list, clientData: list, coverPhotos: list, emailAddresses: list, etag: string, events: list, externalIds: list, fileAses: list, genders: list, imClients: list, interests: list, locales: list, locations: list, memberships: list, metadata: record, miscKeywords: list, names: list, nicknames: list, occupations: list, organizations: list, phoneNumbers: list, photos: list, relations: list, relationshipInterests: list, relationshipStatuses: list, residences: list, resourceName: string, sipAddresses: list, skills: list, taglines: list, urls: list, userDefined: list>, nextPageToken: string, nextSyncToken: string, totalItems: int, totalPeople: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "personFields" $person_fields "scalar") (serialize-qp "requestMask.includeField" $request_mask_include_field "scalar") (serialize-qp "requestSyncToken" $request_sync_token "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "sources" $sources "multi") (serialize-qp "syncToken" $sync_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_name: $resource_name} | format pattern "/v1/{resource_name}/connections") $qp)
+  let full_url = (build-url $base ({resource_name: (encode-path-segment $resource_name)} | format pattern "/v1/{resource_name}/connections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -830,7 +839,7 @@ export def "connections peoplepeopleconnectionslist" [
 #
 # POST /v1/{resourceName}/members:modify
 # operationId: people.contactGroups.members.modify
-export def "members-modify peoplecontactGroupsmembersmodify" [
+export def "members-modify create" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -851,26 +860,26 @@ export def "members-modify peoplecontactGroupsmembersmodify" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --resource-names-to-add: list # Optional. The resource names of the contact people to add in the form of `people/{person_id}`. The total number of resource names in `resource_names_to_add` and `resource_names_to_remove` must be less than or equal to 1000.
-  --resource-names-to-remove: list # Optional. The resource names of the contact people to remove in the form of `people/{person_id}`. The total number of resource names in `resource_names_to_add` and `resource_names_to_remove` must be less than or equal to 1000.
+  --resource-names-to-add: list<string> # Optional. The resource names of the contact people to add in the form of `people/{person_id}`. The total number of resource names in `resource_names_to_add` and `resource_names_to_remove` must be less than or equal to 1000.
+  --resource-names-to-remove: list<string> # Optional. The resource names of the contact people to remove in the form of `people/{person_id}`. The total number of resource names in `resource_names_to_add` and `resource_names_to_remove` must be less than or equal to 1000.
 ]: any -> record<canNotRemoveLastContactGroupResourceNames: list<string>, notFoundResourceNames: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_name: $resource_name} | format pattern "/v1/{resource_name}/members:modify") $qp)
-  let body = {"resourceNamesToAdd": $resource_names_to_add, "resourceNamesToRemove": $resource_names_to_remove} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_name: (encode-path-segment $resource_name)} | format pattern "/v1/{resource_name}/members:modify") $qp)
+  let req_body = {"resourceNamesToAdd": $resource_names_to_add, "resourceNamesToRemove": $resource_names_to_remove} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Copies an "Other contact" to a new contact in the user's "myContacts" group Mutate requests for the same user should be sent sequentially to avoid increased latency and failures.
 #
 # POST /v1/{resourceName}:copyOtherContactToMyContactsGroup
 # operationId: people.otherContacts.copyOtherContactToMyContactsGroup
-export def "other-contacts peopleotherContactscopyOtherContactToMyContactsGroup" [
+export def "other-contacts copy-to-my-group" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -893,25 +902,25 @@ export def "other-contacts peopleotherContactscopyOtherContactToMyContactsGroup"
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --copy-mask: string # Required. A field mask to restrict which fields are copied into the new contact. Valid values are: * emailAddresses * names * phoneNumbers (format: google-fieldmask)
   --read-mask: string # Optional. A field mask to restrict which fields on the person are returned. Multiple fields can be specified by separating them with commas. Defaults to the copy mask with metadata and membership fields if not set. Valid values are: * addresses * ageRanges * biographies * birthdays * calendarUrls * clientData * coverPhotos * emailAddresses * events * externalIds * genders * imClients * interests * locales * locations * memberships * metadata * miscKeywords * names * nicknames * occupations * organizations * phoneNumbers * photos * relations * sipAddresses * skills * urls * userDefined (format: google-fieldmask)
-  --sources: list # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT and READ_SOURCE_TYPE_PROFILE if not set.
+  --sources: list<string> # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT and READ_SOURCE_TYPE_PROFILE if not set.
 ]: any -> record<addresses: table<city: string, country: string, countryCode: string, extendedAddress: string, formattedType: string, formattedValue: string, metadata: record, poBox: string, postalCode: string, region: string, streetAddress: string, type: string>, ageRange: string, ageRanges: table<ageRange: string, metadata: record>, biographies: table<contentType: string, metadata: record, value: string>, birthdays: table<date: record, metadata: record, text: string>, braggingRights: table<metadata: record, value: string>, calendarUrls: table<formattedType: string, metadata: record, type: string, url: string>, clientData: table<key: string, metadata: record, value: string>, coverPhotos: table<metadata: record, url: string>, emailAddresses: table<displayName: string, formattedType: string, metadata: record, type: string, value: string>, etag: string, events: table<date: record, formattedType: string, metadata: record, type: string>, externalIds: table<formattedType: string, metadata: record, type: string, value: string>, fileAses: table<metadata: record, value: string>, genders: table<addressMeAs: string, formattedValue: string, metadata: record, value: string>, imClients: table<formattedProtocol: string, formattedType: string, metadata: record, protocol: string, type: string, username: string>, interests: table<metadata: record, value: string>, locales: table<metadata: record, value: string>, locations: table<buildingId: string, current: bool, deskCode: string, floor: string, floorSection: string, metadata: record, type: string, value: string>, memberships: table<contactGroupMembership: record, domainMembership: record, metadata: record>, metadata: record<deleted: bool, linkedPeopleResourceNames: list<string>, objectType: string, previousResourceNames: list<string>, sources: list<record>>, miscKeywords: table<formattedType: string, metadata: record, type: string, value: string>, names: table<displayName: string, displayNameLastFirst: string, familyName: string, givenName: string, honorificPrefix: string, honorificSuffix: string, metadata: record, middleName: string, phoneticFamilyName: string, phoneticFullName: string, phoneticGivenName: string, phoneticHonorificPrefix: string, phoneticHonorificSuffix: string, phoneticMiddleName: string, unstructuredName: string>, nicknames: table<metadata: record, type: string, value: string>, occupations: table<metadata: record, value: string>, organizations: table<costCenter: string, current: bool, department: string, domain: string, endDate: record, formattedType: string, fullTimeEquivalentMillipercent: int, jobDescription: string, location: string, metadata: record, name: string, phoneticName: string, startDate: record, symbol: string, title: string, type: string>, phoneNumbers: table<canonicalForm: string, formattedType: string, metadata: record, type: string, value: string>, photos: table<metadata: record, url: string>, relations: table<formattedType: string, metadata: record, person: string, type: string>, relationshipInterests: table<formattedValue: string, metadata: record, value: string>, relationshipStatuses: table<formattedValue: string, metadata: record, value: string>, residences: table<current: bool, metadata: record, value: string>, resourceName: string, sipAddresses: table<formattedType: string, metadata: record, type: string, value: string>, skills: table<metadata: record, value: string>, taglines: table<metadata: record, value: string>, urls: table<formattedType: string, metadata: record, type: string, value: string>, userDefined: table<key: string, metadata: record, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_name: $resource_name} | format pattern "/v1/{resource_name}:copyOtherContactToMyContactsGroup") $qp)
-  let body = {"copyMask": $copy_mask, "readMask": $read_mask, "sources": $sources} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_name: (encode-path-segment $resource_name)} | format pattern "/v1/{resource_name}:copyOtherContactToMyContactsGroup") $qp)
+  let req_body = {"copyMask": $copy_mask, "readMask": $read_mask, "sources": $sources} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a contact person. Any non-contact data will not be deleted. Mutate requests for the same user should be sent sequentially to avoid increased latency and failures.
 #
 # DELETE /v1/{resourceName}:deleteContact
 # operationId: people.people.deleteContact
-export def "people peoplepeopledeleteContact" [
+export def "people delete-contact" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -936,7 +945,7 @@ export def "people peoplepeopledeleteContact" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_name: $resource_name} | format pattern "/v1/{resource_name}:deleteContact") $qp)
+  let full_url = (build-url $base ({resource_name: (encode-path-segment $resource_name)} | format pattern "/v1/{resource_name}:deleteContact") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -946,7 +955,7 @@ export def "people peoplepeopledeleteContact" [
 #
 # DELETE /v1/{resourceName}:deleteContactPhoto
 # operationId: people.people.deleteContactPhoto
-export def "people peoplepeopledeleteContactPhoto" [
+export def "people delete-contact-photo" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -968,12 +977,12 @@ export def "people peoplepeopledeleteContactPhoto" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --person-fields: string # Optional. A field mask to restrict which fields on the person are returned. Multiple fields can be specified by separating them with commas. Defaults to empty if not set, which will skip the post mutate get. Valid values are: * addresses * ageRanges * biographies * birthdays * calendarUrls * clientData * coverPhotos * emailAddresses * events * externalIds * genders * imClients * interests * locales * locations * memberships * metadata * miscKeywords * names * nicknames * occupations * organizations * phoneNumbers * photos * relations * sipAddresses * skills * urls * userDefined
-  --sources: list # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT and READ_SOURCE_TYPE_PROFILE if not set.
+  --sources: list<string> # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT and READ_SOURCE_TYPE_PROFILE if not set.
 ]: nothing -> record<person: record<addresses: list<record>, ageRange: string, ageRanges: list<record>, biographies: list<record>, birthdays: list<record>, braggingRights: list<record>, calendarUrls: list<record>, clientData: list<record>, coverPhotos: list<record>, emailAddresses: list<record>, etag: string, events: list<record>, externalIds: list<record>, fileAses: list<record>, genders: list<record>, imClients: list<record>, interests: list<record>, locales: list<record>, locations: list<record>, memberships: list<record>, metadata: record<deleted: bool, linkedPeopleResourceNames: list, objectType: string, previousResourceNames: list, sources: list>, miscKeywords: list<record>, names: list<record>, nicknames: list<record>, occupations: list<record>, organizations: list<record>, phoneNumbers: list<record>, photos: list<record>, relations: list<record>, relationshipInterests: list<record>, relationshipStatuses: list<record>, residences: list<record>, resourceName: string, sipAddresses: list<record>, skills: list<record>, taglines: list<record>, urls: list<record>, userDefined: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "personFields" $person_fields "scalar") (serialize-qp "sources" $sources "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_name: $resource_name} | format pattern "/v1/{resource_name}:deleteContactPhoto") $qp)
+  let full_url = (build-url $base ({resource_name: (encode-path-segment $resource_name)} | format pattern "/v1/{resource_name}:deleteContactPhoto") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1018,7 +1027,7 @@ export def "people peoplepeopledeleteContactPhoto" [
 # --taglines item shape: {metadata?: record, value?: string}
 # --urls item shape: {metadata?: record, type?: string, value?: string}
 # --userDefined item shape: {key?: string, metadata?: record, value?: string}
-export def "people peoplepeopleupdateContact" [
+export def "people update-contact" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1040,7 +1049,7 @@ export def "people peoplepeopleupdateContact" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --person-fields: string # Optional. A field mask to restrict which fields on each person are returned. Multiple fields can be specified by separating them with commas. Defaults to all fields if not set. Valid values are: * addresses * ageRanges * biographies * birthdays * calendarUrls * clientData * coverPhotos * emailAddresses * events * externalIds * genders * imClients * interests * locales * locations * memberships * metadata * miscKeywords * names * nicknames * occupations * organizations * phoneNumbers * photos * relations * sipAddresses * skills * urls * userDefined
-  --sources: list # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT and READ_SOURCE_TYPE_PROFILE if not set.
+  --sources: list<string> # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT and READ_SOURCE_TYPE_PROFILE if not set.
   --update-person-fields: string # Required. A field mask to restrict which fields on the person are updated. Multiple fields can be specified by separating them with commas. All updated fields will be replaced. Valid values are: * addresses * biographies * birthdays * calendarUrls * clientData * emailAddresses * events * externalIds * genders * imClients * interests * locales * locations * memberships * miscKeywords * names * nicknames * occupations * organizations * phoneNumbers * relations * sipAddresses * urls * userDefined
   --addresses: list # The person's street addresses. — item shape: {city?: string, country?: string, countryCode?: string, extendedAddress?: string, formattedValue?: string, metadata?: record, poBox?: string, postalCode?: string, region?: string, streetAddress?: string, type?: string}
   --biographies: list # The person's biographies. This field is a singleton for contact sources. — item shape: {contentType?: "CONTENT_TYPE_UNSPECIFIED"|"TEXT_PLAIN"|"TEXT_HTML", metadata?: record, value?: string}
@@ -1078,19 +1087,19 @@ export def "people peoplepeopleupdateContact" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "personFields" $person_fields "scalar") (serialize-qp "sources" $sources "multi") (serialize-qp "updatePersonFields" $update_person_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_name: $resource_name} | format pattern "/v1/{resource_name}:updateContact") $qp)
-  let body = {"addresses": $addresses, "biographies": $biographies, "birthdays": $birthdays, "braggingRights": $bragging_rights, "calendarUrls": $calendar_urls, "clientData": $client_data, "emailAddresses": $email_addresses, "etag": $etag, "events": $events, "externalIds": $external_ids, "fileAses": $file_ases, "genders": $genders, "imClients": $im_clients, "interests": $interests, "locales": $locales, "locations": $locations, "memberships": $memberships, "metadata": $metadata, "miscKeywords": $misc_keywords, "names": $names, "nicknames": $nicknames, "occupations": $occupations, "organizations": $organizations, "phoneNumbers": $phone_numbers, "relations": $relations, "residences": $residences, "resourceName": $body_resource_name, "sipAddresses": $sip_addresses, "skills": $skills, "urls": $urls, "userDefined": $user_defined} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_name: (encode-path-segment $resource_name)} | format pattern "/v1/{resource_name}:updateContact") $qp)
+  let req_body = {"addresses": $addresses, "biographies": $biographies, "birthdays": $birthdays, "braggingRights": $bragging_rights, "calendarUrls": $calendar_urls, "clientData": $client_data, "emailAddresses": $email_addresses, "etag": $etag, "events": $events, "externalIds": $external_ids, "fileAses": $file_ases, "genders": $genders, "imClients": $im_clients, "interests": $interests, "locales": $locales, "locations": $locations, "memberships": $memberships, "metadata": $metadata, "miscKeywords": $misc_keywords, "names": $names, "nicknames": $nicknames, "occupations": $occupations, "organizations": $organizations, "phoneNumbers": $phone_numbers, "relations": $relations, "residences": $residences, "resourceName": $body_resource_name, "sipAddresses": $sip_addresses, "skills": $skills, "urls": $urls, "userDefined": $user_defined} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a contact's photo. Mutate requests for the same user should be sent sequentially to avoid increased latency and failures.
 #
 # PATCH /v1/{resourceName}:updateContactPhoto
 # operationId: people.people.updateContactPhoto
-export def "people peoplepeopleupdateContactPhoto" [
+export def "people update-contact-photo" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1113,16 +1122,16 @@ export def "people peoplepeopleupdateContactPhoto" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --person-fields: string # Optional. A field mask to restrict which fields on the person are returned. Multiple fields can be specified by separating them with commas. Defaults to empty if not set, which will skip the post mutate get. Valid values are: * addresses * ageRanges * biographies * birthdays * calendarUrls * clientData * coverPhotos * emailAddresses * events * externalIds * genders * imClients * interests * locales * locations * memberships * metadata * miscKeywords * names * nicknames * occupations * organizations * phoneNumbers * photos * relations * sipAddresses * skills * urls * userDefined (format: google-fieldmask)
   --photo-bytes: string # Required. Raw photo bytes (format: byte)
-  --sources: list # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT and READ_SOURCE_TYPE_PROFILE if not set.
+  --sources: list<string> # Optional. A mask of what source types to return. Defaults to READ_SOURCE_TYPE_CONTACT and READ_SOURCE_TYPE_PROFILE if not set.
 ]: any -> record<person: record<addresses: list<record>, ageRange: string, ageRanges: list<record>, biographies: list<record>, birthdays: list<record>, braggingRights: list<record>, calendarUrls: list<record>, clientData: list<record>, coverPhotos: list<record>, emailAddresses: list<record>, etag: string, events: list<record>, externalIds: list<record>, fileAses: list<record>, genders: list<record>, imClients: list<record>, interests: list<record>, locales: list<record>, locations: list<record>, memberships: list<record>, metadata: record<deleted: bool, linkedPeopleResourceNames: list, objectType: string, previousResourceNames: list, sources: list>, miscKeywords: list<record>, names: list<record>, nicknames: list<record>, occupations: list<record>, organizations: list<record>, phoneNumbers: list<record>, photos: list<record>, relations: list<record>, relationshipInterests: list<record>, relationshipStatuses: list<record>, residences: list<record>, resourceName: string, sipAddresses: list<record>, skills: list<record>, taglines: list<record>, urls: list<record>, userDefined: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_name: $resource_name} | format pattern "/v1/{resource_name}:updateContactPhoto") $qp)
-  let body = {"personFields": $person_fields, "photoBytes": $photo_bytes, "sources": $sources} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_name: (encode-path-segment $resource_name)} | format pattern "/v1/{resource_name}:updateContactPhoto") $qp)
+  let req_body = {"personFields": $person_fields, "photoBytes": $photo_bytes, "sources": $sources} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

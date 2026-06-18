@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -156,7 +165,7 @@ export def "historic-agg get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({size: $size, symbol: $symbol, date: $date} | format pattern "/v1/historic/agg/{size}/{symbol}/{date}") $qp)
+  let full_url = (build-url $base ({size: (encode-path-segment $size), symbol: (encode-path-segment $symbol), date: (encode-path-segment $date)} | format pattern "/v1/historic/agg/{size}/{symbol}/{date}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -183,7 +192,7 @@ export def "historic-forex get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({from: $from, to: $to, date: $date} | format pattern "/v1/historic/forex/{from}/{to}/{date}") $qp)
+  let full_url = (build-url $base ({from: (encode-path-segment $from), to: (encode-path-segment $to), date: (encode-path-segment $date)} | format pattern "/v1/historic/forex/{from}/{to}/{date}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -209,7 +218,7 @@ export def "historic-quotes get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({symbol: $symbol, date: $date} | format pattern "/v1/historic/quotes/{symbol}/{date}") $qp)
+  let full_url = (build-url $base ({symbol: (encode-path-segment $symbol), date: (encode-path-segment $date)} | format pattern "/v1/historic/quotes/{symbol}/{date}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -235,7 +244,7 @@ export def "historic-trades get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({symbol: $symbol, date: $date} | format pattern "/v1/historic/trades/{symbol}/{date}") $qp)
+  let full_url = (build-url $base ({symbol: (encode-path-segment $symbol), date: (encode-path-segment $date)} | format pattern "/v1/historic/trades/{symbol}/{date}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -258,7 +267,7 @@ export def "last-currencies get" [
 ]: nothing -> record<last: record<exchange: int, price: float, timestamp: int>, status: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({from: $from, to: $to} | format pattern "/v1/last/currencies/{from}/{to}"))
+  let full_url = (build-url $base ({from: (encode-path-segment $from), to: (encode-path-segment $to)} | format pattern "/v1/last/currencies/{from}/{to}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -280,7 +289,7 @@ export def "last-stocks get" [
 ]: nothing -> record<last: record<cond1: int, cond2: int, cond3: int, cond4: int, exchange: int, price: float, size: int, timestamp: int>, status: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({symbol: $symbol} | format pattern "/v1/last/stocks/{symbol}"))
+  let full_url = (build-url $base ({symbol: (encode-path-segment $symbol)} | format pattern "/v1/last/stocks/{symbol}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -303,7 +312,7 @@ export def "last-quote-currencies get" [
 ]: nothing -> record<last: record<askprice: float, bidprice: float, timestamp: int>, status: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({from: $from, to: $to} | format pattern "/v1/last_quote/currencies/{from}/{to}"))
+  let full_url = (build-url $base ({from: (encode-path-segment $from), to: (encode-path-segment $to)} | format pattern "/v1/last_quote/currencies/{from}/{to}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -325,7 +334,7 @@ export def "last-quote-stocks get" [
 ]: nothing -> record<last: record<askexchange: int, askprice: float, asksize: int, bidexchange: int, bidprice: float, bidsize: int, cond: int, timestamp: int>, status: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({symbol: $symbol} | format pattern "/v1/last_quote/stocks/{symbol}"))
+  let full_url = (build-url $base ({symbol: (encode-path-segment $symbol)} | format pattern "/v1/last_quote/stocks/{symbol}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -13,6 +13,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -34,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,7 +74,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://uk.api.just-eat.io" "https://i18n.api.just-eat.io" "https://aus.api.just-eat.io"] }
-def auth-scheme-completer [] { ["bearer" "basic"] }
+def auth-scheme-completer [] { ["bearer" "basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def tenant-completer [] { ["au" "dk" "es" "ie" "it" "no" "nz" "uk"] }
@@ -89,7 +99,7 @@ def status-completer [] { ["driver_at_address" "repreparing"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "acceptance-requested post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "acceptance-requested create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -119,7 +129,7 @@ export def commands []: nothing -> table {
 # --PriceBreakdown shape: {Discount?: float, Fees?: record, Items?: float, Taxes?: float, Tips?: float}
 # --Restaurant shape: {Address?: record, Id?: string, Name?: string, PhoneNumber?: string, Reference?: string, TimeZone?: string}
 # --Restrictions item shape: {Type?: "Alcohol"}
-export def "acceptance-requested post" [
+export def "acceptance-requested create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,18 +157,18 @@ export def "acceptance-requested post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/acceptance-requested")
-  let body = {"Currency": $currency, "Customer": $customer, "CustomerNotes": $customer_notes, "FriendlyOrderReference": $friendly_order_reference, "Fulfilment": $fulfilment, "IsTest": $is_test, "Items": $items, "OrderId": $order_id, "Payment": $payment, "PlacedDate": $placed_date, "PriceBreakdown": $price_breakdown, "Restaurant": $restaurant, "Restrictions": $restrictions, "TotalPrice": $total_price} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Currency": $currency, "Customer": $customer, "CustomerNotes": $customer_notes, "FriendlyOrderReference": $friendly_order_reference, "Fulfilment": $fulfilment, "IsTest": $is_test, "Items": $items, "OrderId": $order_id, "Payment": $payment, "PlacedDate": $placed_date, "PriceBreakdown": $price_breakdown, "Restaurant": $restaurant, "Restrictions": $restrictions, "TotalPrice": $total_price} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Attempted delivery query resolved
 #
 # PUT /attempted-delivery-query-resolved
 # --Resolution shape: {Cancellation?: record, Redelivery?: record, Type?: "order_cancelled"|"redeliver_order"}
-export def "attempted-delivery-query-resolved put" [
+export def "attempted-delivery-query-resolved update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,11 +185,11 @@ export def "attempted-delivery-query-resolved put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/attempted-delivery-query-resolved")
-  let body = {"OrderId": $order_id, "Resolution": $resolution, "Tenant": $tenant} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"OrderId": $order_id, "Resolution": $resolution, "Tenant": $tenant} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Checkout
@@ -200,18 +210,18 @@ export def "checkout get" [
 ]: nothing -> record<customer: record<firstName: string, lastName: string, phoneNumber: string>, fulfilment: record<location: record<address: record, geolocation: record>, time: record<asap: bool, scheduled: record>>, isFulfillable: bool, issues: table<code: string>, restaurant: record<availabilityId: string, id: string>, serviceType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, checkout_id: $checkout_id} | format pattern "/checkout/{tenant}/{checkout_id}"))
-  let extra_headers = {"User-Agent": $user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), checkout_id: (encode-path-segment $checkout_id)} | format pattern "/checkout/{tenant}/{checkout_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"User-Agent": $user_agent} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Checkout
 #
 # PATCH /checkout/{tenant}/{checkoutId}
-export def "checkout patch" [
+export def "checkout update" [
   tenant: string
   checkout_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -228,13 +238,14 @@ export def "checkout patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, checkout_id: $checkout_id} | format pattern "/checkout/{tenant}/{checkout_id}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"User-Agent": $user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), checkout_id: (encode-path-segment $checkout_id)} | format pattern "/checkout/{tenant}/{checkout_id}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json-patch+json" $body
+  let extra_headers = {"User-Agent": $user_agent} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json-patch+json" $req_body
 }
 
 # Get Available Fulfilment Times
@@ -255,11 +266,11 @@ export def "checkout-fulfilment-availabletimes get" [
 ]: nothing -> record<asapAvailable: bool, times: table<from: string, to: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, checkout_id: $checkout_id} | format pattern "/checkout/{tenant}/{checkout_id}/fulfilment/availabletimes"))
-  let extra_headers = {"User-Agent": $user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), checkout_id: (encode-path-segment $checkout_id)} | format pattern "/checkout/{tenant}/{checkout_id}/fulfilment/availabletimes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"User-Agent": $user_agent} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -283,7 +294,7 @@ export def "consumers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "emailAddress" $email_address "scalar") (serialize-qp "accountType" $account_type "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant: $tenant} | format pattern "/consumers/{tenant}") $qp)
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant)} | format pattern "/consumers/{tenant}") $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -293,7 +304,7 @@ export def "consumers get" [
 #
 # POST /consumers/{tenant}
 # --marketingPreferences item shape: {channelName?: "Email"|"Push"|"Sms", dateUpdated?: string, isSubscribed?: bool}
-export def "consumers post" [
+export def "consumers create" [
   tenant: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -313,12 +324,12 @@ export def "consumers post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant} | format pattern "/consumers/{tenant}"))
-  let body = {"emailAddress": $email_address, "firstName": $first_name, "lastName": $last_name, "marketingPreferences": $marketing_preferences, "password": $password, "registrationSource": $registration_source} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant)} | format pattern "/consumers/{tenant}"))
+  let req_body = {"emailAddress": $email_address, "firstName": $first_name, "lastName": $last_name, "marketingPreferences": $marketing_preferences, "password": $password, "registrationSource": $registration_source} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get communication preferences
@@ -337,7 +348,7 @@ export def "consumers-me-communication-preferences list" [
 ]: nothing -> record<marketing: record<isDefault: bool, subscribedChannels: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant} | format pattern "/consumers/{tenant}/me/communication-preferences"))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant)} | format pattern "/consumers/{tenant}/me/communication-preferences"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -360,7 +371,7 @@ export def "consumers-me-communication-preferences get" [
 ]: nothing -> record<isDefault: bool, subscribedChannels: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, type: $type} | format pattern "/consumers/{tenant}/me/communication-preferences/{type}"))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), type: (encode-path-segment $type)} | format pattern "/consumers/{tenant}/me/communication-preferences/{type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -369,7 +380,7 @@ export def "consumers-me-communication-preferences get" [
 # Set only the channel subscriptions for a given consumer's communication preference type
 #
 # PUT /consumers/{tenant}/me/communication-preferences/{type}
-export def "consumers-me-communication-preferences put" [
+export def "consumers-me-communication-preferences update" [
   tenant: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -380,17 +391,17 @@ export def "consumers-me-communication-preferences put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --subscribed-channels: list # The list of channels that the consumer should only be subscribed to.
+  --subscribed-channels: list<string> # The list of channels that the consumer should only be subscribed to.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, type: $type} | format pattern "/consumers/{tenant}/me/communication-preferences/{type}"))
-  let body = {"subscribedChannels": $subscribed_channels} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), type: (encode-path-segment $type)} | format pattern "/consumers/{tenant}/me/communication-preferences/{type}"))
+  let req_body = {"subscribedChannels": $subscribed_channels} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove subscription of a specific communication preference channel
@@ -413,17 +424,18 @@ export def "consumers-me-communication-preferences-subscribed-channels delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, type: $type, channel: $channel} | format pattern "/consumers/{tenant}/me/communication-preferences/{type}/subscribedChannels/{channel}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), type: (encode-path-segment $type), channel: (encode-path-segment $channel)} | format pattern "/consumers/{tenant}/me/communication-preferences/{type}/subscribedChannels/{channel}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Subscribe to a specific communication preference channel
 #
 # POST /consumers/{tenant}/me/communication-preferences/{type}/subscribedChannels/{channel}
-export def "consumers-me-communication-preferences-subscribed-channels post" [
+export def "consumers-me-communication-preferences-subscribed-channels create" [
   tenant: string
   type: string
   channel: string
@@ -440,17 +452,18 @@ export def "consumers-me-communication-preferences-subscribed-channels post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, type: $type, channel: $channel} | format pattern "/consumers/{tenant}/me/communication-preferences/{type}/subscribedChannels/{channel}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), type: (encode-path-segment $type), channel: (encode-path-segment $channel)} | format pattern "/consumers/{tenant}/me/communication-preferences/{type}/subscribedChannels/{channel}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delivery Attempt Failed
 #
 # PUT /delivery-failed
-export def "delivery-failed put" [
+export def "delivery-failed update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -468,11 +481,11 @@ export def "delivery-failed put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/delivery-failed")
-  let body = {"OrderId": $order_id, "Reason": $reason, "RestaurantId": $restaurant_id, "Tenant": $tenant} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"OrderId": $order_id, "Reason": $reason, "RestaurantId": $restaurant_id, "Tenant": $tenant} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get restaurant delivery fees
@@ -488,15 +501,15 @@ export def "delivery-fees get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --restaurant-ids: list # Restaurant IDs which fees are requested for. e.g. `?restaurantIds=1,2,3,4` (e.g. [1, 2, 3, 4])
+  --restaurant-ids: list<string> # Restaurant IDs which fees are requested for. e.g. `?restaurantIds=1,2,3,4` (e.g. [1, 2, 3, 4])
   --delivery-time: string # Delivery date/time when fees are required (ISO8601 format). (format: date-time, e.g. 2019-09-05T12:43:48.431Z)
   --zone: string # Postcode or other location name identifying the location to which delivery is required. For use when precise location is not available. This will be removed in future in favour of location. (e.g. BS1)
-  --latlong: list # Point to which delivery is required (latitude, longitude). Supply this where possible as support for zone-only based lookups will be removed in future. (e.g. [51.3851513, -2.0841275])
+  --latlong: list<float> # Point to which delivery is required (latitude, longitude). Supply this where possible as support for zone-only based lookups will be removed in future. (e.g. [51.3851513, -2.0841275])
 ]: nothing -> record<restaurants: table<bands: list, minimumOrderValue: float, restaurantId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "restaurantIds" $restaurant_ids "csv") (serialize-qp "deliveryTime" $delivery_time "scalar") (serialize-qp "zone" $zone "scalar") (serialize-qp "latlong" $latlong "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant: $tenant} | format pattern "/delivery-fees/{tenant}") $qp)
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant)} | format pattern "/delivery-fees/{tenant}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -554,7 +567,7 @@ export def "delivery-pools list" [
 # Create a new delivery pool
 #
 # POST /delivery/pools
-export def "delivery-pools post" [
+export def "delivery-pools create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,17 +577,17 @@ export def "delivery-pools post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the pool, used by operations teams, in reports, etc.
-  --restaurants: list # A list of Just Eat restaurant ids served by the delivery pool.
+  --restaurants: list<float> # A list of Just Eat restaurant ids served by the delivery pool.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/delivery/pools")
-  let body = {"name": $name, "restaurants": $restaurants} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "restaurants": $restaurants} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a delivery pool
@@ -593,7 +606,7 @@ export def "delivery-pools delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({delivery_pool_id: $delivery_pool_id} | format pattern "/delivery/pools/{delivery_pool_id}"))
+  let full_url = (build-url $base ({delivery_pool_id: (encode-path-segment $delivery_pool_id)} | format pattern "/delivery/pools/{delivery_pool_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -615,7 +628,7 @@ export def "delivery-pools get" [
 ]: nothing -> record<name: string, restaurants: list<float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({delivery_pool_id: $delivery_pool_id} | format pattern "/delivery/pools/{delivery_pool_id}"))
+  let full_url = (build-url $base ({delivery_pool_id: (encode-path-segment $delivery_pool_id)} | format pattern "/delivery/pools/{delivery_pool_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -624,7 +637,7 @@ export def "delivery-pools get" [
 # Modify a delivery pool
 #
 # PATCH /delivery/pools/{deliveryPoolId}
-export def "delivery-pools patch" [
+export def "delivery-pools update-by-deliveryPoolId" [
   delivery_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -635,23 +648,23 @@ export def "delivery-pools patch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the pool, used by operations teams, in reports, etc.
-  --restaurants: list # A list of Just Eat restaurant ids served by the delivery pool.
+  --restaurants: list<float> # A list of Just Eat restaurant ids served by the delivery pool.
 ]: any -> record<name: string, restaurants: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({delivery_pool_id: $delivery_pool_id} | format pattern "/delivery/pools/{delivery_pool_id}"))
-  let body = {"name": $name, "restaurants": $restaurants} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({delivery_pool_id: (encode-path-segment $delivery_pool_id)} | format pattern "/delivery/pools/{delivery_pool_id}"))
+  let req_body = {"name": $name, "restaurants": $restaurants} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Replace an existing delivery pool
 #
 # PUT /delivery/pools/{deliveryPoolId}
-export def "delivery-pools put" [
+export def "delivery-pools update-by-deliveryPoolId-1" [
   delivery_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -662,17 +675,17 @@ export def "delivery-pools put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the pool, used by operations teams, in reports, etc.
-  --restaurants: list # A list of Just Eat restaurant ids served by the delivery pool.
+  --restaurants: list<float> # A list of Just Eat restaurant ids served by the delivery pool.
 ]: any -> record<name: string, restaurants: list<float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({delivery_pool_id: $delivery_pool_id} | format pattern "/delivery/pools/{delivery_pool_id}"))
-  let body = {"name": $name, "restaurants": $restaurants} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({delivery_pool_id: (encode-path-segment $delivery_pool_id)} | format pattern "/delivery/pools/{delivery_pool_id}"))
+  let req_body = {"name": $name, "restaurants": $restaurants} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get availability for pickup
@@ -691,7 +704,7 @@ export def "delivery-pools-availability-relative get" [
 ]: nothing -> record<bestGuess: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({delivery_pool_id: $delivery_pool_id} | format pattern "/delivery/pools/{delivery_pool_id}/availability/relative"))
+  let full_url = (build-url $base ({delivery_pool_id: (encode-path-segment $delivery_pool_id)} | format pattern "/delivery/pools/{delivery_pool_id}/availability/relative"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -700,7 +713,7 @@ export def "delivery-pools-availability-relative get" [
 # Set availability for pickup
 #
 # PUT /delivery/pools/{deliveryPoolId}/availability/relative
-export def "delivery-pools-availability-relative put" [
+export def "delivery-pools-availability-relative update" [
   delivery_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -715,12 +728,12 @@ export def "delivery-pools-availability-relative put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({delivery_pool_id: $delivery_pool_id} | format pattern "/delivery/pools/{delivery_pool_id}/availability/relative"))
-  let body = {"bestGuess": $best_guess} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({delivery_pool_id: (encode-path-segment $delivery_pool_id)} | format pattern "/delivery/pools/{delivery_pool_id}/availability/relative"))
+  let req_body = {"bestGuess": $best_guess} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Set the delivery pools daily start and end times
@@ -733,7 +746,7 @@ export def "delivery-pools-availability-relative put" [
 # --thursday shape: {closed?: bool, poolTimes: list}
 # --tuesday shape: {closed?: bool, poolTimes: list}
 # --wednesday shape: {closed?: bool, poolTimes: list}
-export def "delivery-pools-hours put" [
+export def "delivery-pools-hours update" [
   delivery_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -754,12 +767,12 @@ export def "delivery-pools-hours put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({delivery_pool_id: $delivery_pool_id} | format pattern "/delivery/pools/{delivery_pool_id}/hours"))
-  let body = {"friday": $friday, "monday": $monday, "saturday": $saturday, "sunday": $sunday, "thursday": $thursday, "tuesday": $tuesday, "wednesday": $wednesday} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({delivery_pool_id: (encode-path-segment $delivery_pool_id)} | format pattern "/delivery/pools/{delivery_pool_id}/hours"))
+  let req_body = {"friday": $friday, "monday": $monday, "saturday": $saturday, "sunday": $sunday, "thursday": $thursday, "tuesday": $tuesday, "wednesday": $wednesday} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove restaurants from a delivery pool
@@ -775,23 +788,23 @@ export def "delivery-pools-restaurants delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --restaurants: list # A list of Just Eat restaurant ids served by the delivery pool.
+  --restaurants: list<float> # A list of Just Eat restaurant ids served by the delivery pool.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({delivery_pool_id: $delivery_pool_id} | format pattern "/delivery/pools/{delivery_pool_id}/restaurants"))
-  let body = {"restaurants": $restaurants} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({delivery_pool_id: (encode-path-segment $delivery_pool_id)} | format pattern "/delivery/pools/{delivery_pool_id}/restaurants"))
+  let req_body = {"restaurants": $restaurants} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add restaurants to an existing delivery pool
 #
 # PUT /delivery/pools/{deliveryPoolId}/restaurants
-export def "delivery-pools-restaurants put" [
+export def "delivery-pools-restaurants update" [
   delivery_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -804,7 +817,7 @@ export def "delivery-pools-restaurants put" [
 ]: nothing -> record<restaurants: list<float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({delivery_pool_id: $delivery_pool_id} | format pattern "/delivery/pools/{delivery_pool_id}/restaurants"))
+  let full_url = (build-url $base ({delivery_pool_id: (encode-path-segment $delivery_pool_id)} | format pattern "/delivery/pools/{delivery_pool_id}/restaurants"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -813,7 +826,7 @@ export def "delivery-pools-restaurants put" [
 # Driver Assigned to Delivery
 #
 # PUT /driver-assigned-to-delivery
-export def "driver-assigned-to-delivery put" [
+export def "driver-assigned-to-delivery update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -834,17 +847,17 @@ export def "driver-assigned-to-delivery put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/driver-assigned-to-delivery")
-  let body = {"DriverContactNumber": $driver_contact_number, "DriverName": $driver_name, "EstimatedDeliveryTime": $estimated_delivery_time, "EstimatedPickupTime": $estimated_pickup_time, "Event": $event, "OrderId": $order_id, "TimeStamp": $time_stamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"DriverContactNumber": $driver_contact_number, "DriverName": $driver_name, "EstimatedDeliveryTime": $estimated_delivery_time, "EstimatedPickupTime": $estimated_pickup_time, "Event": $event, "OrderId": $order_id, "TimeStamp": $time_stamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Driver at delivery address
 #
 # PUT /driver-at-delivery-address
-export def "driver-at-delivery-address put" [
+export def "driver-at-delivery-address update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -865,17 +878,17 @@ export def "driver-at-delivery-address put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/driver-at-delivery-address")
-  let body = {"DriverContactNumber": $driver_contact_number, "DriverName": $driver_name, "EstimatedDeliveryTime": $estimated_delivery_time, "EstimatedPickupTime": $estimated_pickup_time, "Event": $event, "OrderId": $order_id, "TimeStamp": $time_stamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"DriverContactNumber": $driver_contact_number, "DriverName": $driver_name, "EstimatedDeliveryTime": $estimated_delivery_time, "EstimatedPickupTime": $estimated_pickup_time, "Event": $event, "OrderId": $order_id, "TimeStamp": $time_stamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Driver at restaurant
 #
 # PUT /driver-at-restaurant
-export def "driver-at-restaurant put" [
+export def "driver-at-restaurant update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -896,17 +909,17 @@ export def "driver-at-restaurant put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/driver-at-restaurant")
-  let body = {"DriverContactNumber": $driver_contact_number, "DriverName": $driver_name, "EstimatedDeliveryTime": $estimated_delivery_time, "EstimatedPickupTime": $estimated_pickup_time, "Event": $event, "OrderId": $order_id, "TimeStamp": $time_stamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"DriverContactNumber": $driver_contact_number, "DriverName": $driver_name, "EstimatedDeliveryTime": $estimated_delivery_time, "EstimatedPickupTime": $estimated_pickup_time, "Event": $event, "OrderId": $order_id, "TimeStamp": $time_stamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Driver has delivered order
 #
 # PUT /driver-has-delivered-order
-export def "driver-has-delivered-order put" [
+export def "driver-has-delivered-order update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -927,18 +940,18 @@ export def "driver-has-delivered-order put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/driver-has-delivered-order")
-  let body = {"DriverContactNumber": $driver_contact_number, "DriverName": $driver_name, "EstimatedDeliveryTime": $estimated_delivery_time, "EstimatedPickupTime": $estimated_pickup_time, "Event": $event, "OrderId": $order_id, "TimeStamp": $time_stamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"DriverContactNumber": $driver_contact_number, "DriverName": $driver_name, "EstimatedDeliveryTime": $estimated_delivery_time, "EstimatedPickupTime": $estimated_pickup_time, "Event": $event, "OrderId": $order_id, "TimeStamp": $time_stamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Driver Location
 #
 # PUT /driver-location
 # --Location shape: {Latitude: float, Longitude: float}
-export def "driver-location put" [
+export def "driver-location update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -955,17 +968,17 @@ export def "driver-location put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/driver-location")
-  let body = {"Location": $location, "OrderId": $order_id, "TimeStamp": $time_stamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Location": $location, "OrderId": $order_id, "TimeStamp": $time_stamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Driver on their way to delivery address
 #
 # PUT /driver-on-their-way-to-delivery-address
-export def "driver-on-their-way-to-delivery-address put" [
+export def "driver-on-their-way-to-delivery-address update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -986,18 +999,18 @@ export def "driver-on-their-way-to-delivery-address put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/driver-on-their-way-to-delivery-address")
-  let body = {"DriverContactNumber": $driver_contact_number, "DriverName": $driver_name, "EstimatedDeliveryTime": $estimated_delivery_time, "EstimatedPickupTime": $estimated_pickup_time, "Event": $event, "OrderId": $order_id, "TimeStamp": $time_stamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"DriverContactNumber": $driver_contact_number, "DriverName": $driver_name, "EstimatedDeliveryTime": $estimated_delivery_time, "EstimatedPickupTime": $estimated_pickup_time, "Event": $event, "OrderId": $order_id, "TimeStamp": $time_stamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # late order compensation query, restaurant response required
 #
 # POST /late-order-compensation-query
 # --compensationOptions item shape: {amount?: float, isRecommended?: bool}
-export def "late-order-compensation-query post" [
+export def "late-order-compensation-query create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1015,17 +1028,17 @@ export def "late-order-compensation-query post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/late-order-compensation-query")
-  let body = {"compensationOptions": $compensation_options, "orderId": $order_id, "restaurantId": $restaurant_id, "tenant": $tenant} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"compensationOptions": $compensation_options, "orderId": $order_id, "restaurantId": $restaurant_id, "tenant": $tenant} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # late order query, restaurant response required
 #
 # POST /late-order-query
-export def "late-order-query post" [
+export def "late-order-query create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1042,18 +1055,18 @@ export def "late-order-query post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/late-order-query")
-  let body = {"orderId": $order_id, "restaurantId": $restaurant_id, "tenant": $tenant} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"orderId": $order_id, "restaurantId": $restaurant_id, "tenant": $tenant} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Menu ingestion complete
 #
 # POST /menu-ingestion-complete
 # --fault shape: {errors?: list, id?: string}
-export def "menu-ingestion-complete post" [
+export def "menu-ingestion-complete create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1073,17 +1086,17 @@ export def "menu-ingestion-complete post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/menu-ingestion-complete")
-  let body = {"correlationId": $correlation_id, "fault": $fault, "restaurantId": $restaurant_id, "result": $result, "tenant": $tenant, "timestamp": $timestamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"correlationId": $correlation_id, "fault": $fault, "restaurantId": $restaurant_id, "result": $result, "tenant": $tenant, "timestamp": $timestamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Order accepted
 #
 # POST /order-accepted
-export def "order-accepted post" [
+export def "order-accepted create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1100,17 +1113,17 @@ export def "order-accepted post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order-accepted")
-  let body = {"AcceptedFor": $accepted_for, "Event": $event, "OrderId": $order_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AcceptedFor": $accepted_for, "Event": $event, "OrderId": $order_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Order cancelled
 #
 # POST /order-cancelled
-export def "order-cancelled post" [
+export def "order-cancelled create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1127,17 +1140,17 @@ export def "order-cancelled post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order-cancelled")
-  let body = {"Event": $event, "OrderId": $order_id, "Reason": $reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Event": $event, "OrderId": $order_id, "Reason": $reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Order Eligible For Restaurant Compensation
 #
 # POST /order-eligible-for-restaurant-compensation
-export def "order-eligible-for-restaurant-compensation post" [
+export def "order-eligible-for-restaurant-compensation create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1153,17 +1166,17 @@ export def "order-eligible-for-restaurant-compensation post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order-eligible-for-restaurant-compensation")
-  let body = {"IsEligible": $is_eligible, "OrderId": $order_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"IsEligible": $is_eligible, "OrderId": $order_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Order ready for pickup
 #
 # PUT /order-is-ready-for-pickup
-export def "order-is-ready-for-pickup put" [
+export def "order-is-ready-for-pickup update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1179,11 +1192,11 @@ export def "order-is-ready-for-pickup put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order-is-ready-for-pickup")
-  let body = {"Event": $event, "Timestamp": $timestamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Event": $event, "Timestamp": $timestamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Order ready for preparation (async)
@@ -1195,7 +1208,7 @@ export def "order-is-ready-for-pickup put" [
 # --Payment shape: {Lines?: list}
 # --PriceBreakdown shape: {Discount?: float, Fees?: record, Items?: float, Taxes?: float, Tips?: float}
 # --Restaurant shape: {Address?: record, Id?: string, Name?: string, PhoneNumber?: string, Reference?: string}
-export def "order-ready-for-preparation-async post" [
+export def "order-ready-for-preparation-async create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1221,11 +1234,11 @@ export def "order-ready-for-preparation-async post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order-ready-for-preparation-async")
-  let body = {"Currency": $currency, "Customer": $customer, "CustomerNotes": $customer_notes, "Fulfilment": $fulfilment, "IsTest": $is_test, "Items": $items, "OrderId": $order_id, "Payment": $payment, "PlacedDate": $placed_date, "PriceBreakdown": $price_breakdown, "Restaurant": $restaurant, "TotalPrice": $total_price} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Currency": $currency, "Customer": $customer, "CustomerNotes": $customer_notes, "Fulfilment": $fulfilment, "IsTest": $is_test, "Items": $items, "OrderId": $order_id, "Payment": $payment, "PlacedDate": $placed_date, "PriceBreakdown": $price_breakdown, "Restaurant": $restaurant, "TotalPrice": $total_price} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Order ready for preparation (sync)
@@ -1237,7 +1250,7 @@ export def "order-ready-for-preparation-async post" [
 # --Payment shape: {Lines?: list}
 # --PriceBreakdown shape: {Discount?: float, Fees?: record, Items?: float, Taxes?: float, Tips?: float}
 # --Restaurant shape: {Address?: record, Id?: string, Name?: string, PhoneNumber?: string, Reference?: string}
-export def "order-ready-for-preparation-sync post" [
+export def "order-ready-for-preparation-sync create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1263,17 +1276,17 @@ export def "order-ready-for-preparation-sync post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order-ready-for-preparation-sync")
-  let body = {"Currency": $currency, "Customer": $customer, "CustomerNotes": $customer_notes, "Fulfilment": $fulfilment, "IsTest": $is_test, "Items": $items, "OrderId": $order_id, "Payment": $payment, "PlacedDate": $placed_date, "PriceBreakdown": $price_breakdown, "Restaurant": $restaurant, "TotalPrice": $total_price} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Currency": $currency, "Customer": $customer, "CustomerNotes": $customer_notes, "Fulfilment": $fulfilment, "IsTest": $is_test, "Items": $items, "OrderId": $order_id, "Payment": $payment, "PlacedDate": $placed_date, "PriceBreakdown": $price_breakdown, "Restaurant": $restaurant, "TotalPrice": $total_price} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Order rejected
 #
 # POST /order-rejected
-export def "order-rejected post" [
+export def "order-rejected create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1291,17 +1304,17 @@ export def "order-rejected post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order-rejected")
-  let body = {"Event": $event, "RejectedAt": $rejected_at, "RejectedBy": $rejected_by, "RejectedReason": $rejected_reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Event": $event, "RejectedAt": $rejected_at, "RejectedBy": $rejected_by, "RejectedReason": $rejected_reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Order requires delivery acceptance
 #
 # PUT /order-requires-delivery-acceptance
-export def "order-requires-delivery-acceptance put" [
+export def "order-requires-delivery-acceptance update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1316,16 +1329,17 @@ export def "order-requires-delivery-acceptance put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order-requires-delivery-acceptance")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Order time updated
 #
 # POST /order-time-updated
-export def "order-time-updated post" [
+export def "order-time-updated create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1344,11 +1358,11 @@ export def "order-time-updated post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order-time-updated")
-  let body = {"dayOfWeek": $day_of_week, "lowerBoundMinutes": $lower_bound_minutes, "restaurantId": $restaurant_id, "serviceType": $service_type, "upperBoundMinutes": $upper_bound_minutes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"dayOfWeek": $day_of_week, "lowerBoundMinutes": $lower_bound_minutes, "restaurantId": $restaurant_id, "serviceType": $service_type, "upperBoundMinutes": $upper_bound_minutes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create order
@@ -1359,7 +1373,7 @@ export def "order-time-updated post" [
 # --Fulfilment shape: {DueAsap?: bool, DueDate: string, Method: "Delivery"|"Collection"}
 # --Items item shape: {Items?: list, Name: string, Quantity: int, Reference: string, TotalPrice: float, UnitPrice?: int}
 # --Payment shape: {Fees?: list, Lines: list, PaidDate?: string, Taxes?: list, Tips?: list}
-export def "orders post" [
+export def "orders create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1384,19 +1398,19 @@ export def "orders post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orders")
-  let body = {"Customer": $customer, "CustomerNotes": $customer_notes, "FriendlyOrderReference": $friendly_order_reference, "Fulfilment": $fulfilment, "IsTest": $is_test, "Items": $items, "OrderReference": $order_reference, "Payment": $payment, "Restaurant": $restaurant, "TotalPrice": $total_price} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-je-api-version": $x_je_api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Customer": $customer, "CustomerNotes": $customer_notes, "FriendlyOrderReference": $friendly_order_reference, "Fulfilment": $fulfilment, "IsTest": $is_test, "Items": $items, "OrderReference": $order_reference, "Payment": $payment, "Restaurant": $restaurant, "TotalPrice": $total_price} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-je-api-version": $x_je_api_version} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update current driver locations (bulk upload)
 #
 # PUT /orders/deliverystate/driverlocation
-export def "orders-deliverystate-driverlocation put" [
+export def "orders-deliverystate-driverlocation update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1411,16 +1425,17 @@ export def "orders-deliverystate-driverlocation put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orders/deliverystate/driverlocation")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Accept order
 #
 # PUT /orders/{orderId}/accept
-export def "orders-accept put" [
+export def "orders-accept update" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1435,18 +1450,18 @@ export def "orders-accept put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/accept"))
-  let body = {"TimeAcceptedFor": $time_accepted_for} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/accept"))
+  let req_body = {"TimeAcceptedFor": $time_accepted_for} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel order
 #
 # PUT /orders/{orderId}/cancel
-export def "orders-cancel put" [
+export def "orders-cancel update" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1461,18 +1476,18 @@ export def "orders-cancel put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/cancel"))
-  let body = {"Message": $message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/cancel"))
+  let req_body = {"Message": $message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Complete order
 #
 # POST /orders/{orderId}/complete
-export def "orders-complete post" [
+export def "orders-complete create" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1485,7 +1500,7 @@ export def "orders-complete post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/complete"))
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/complete"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1495,7 +1510,7 @@ export def "orders-complete post" [
 #
 # PUT /orders/{orderId}/deliverystate/atdeliveryaddress
 # --Location shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
-export def "orders-deliverystate-atdeliveryaddress put" [
+export def "orders-deliverystate-atdeliveryaddress update" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1511,19 +1526,19 @@ export def "orders-deliverystate-atdeliveryaddress put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/deliverystate/atdeliveryaddress"))
-  let body = {"Location": $location, "TimeStampWithUtcOffset": $time_stamp_with_utc_offset} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/deliverystate/atdeliveryaddress"))
+  let req_body = {"Location": $location, "TimeStampWithUtcOffset": $time_stamp_with_utc_offset} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update order with driver at restaurant details
 #
 # PUT /orders/{orderId}/deliverystate/atrestaurant
 # --Location shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
-export def "orders-deliverystate-atrestaurant put" [
+export def "orders-deliverystate-atrestaurant update" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1540,18 +1555,18 @@ export def "orders-deliverystate-atrestaurant put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/deliverystate/atrestaurant"))
-  let body = {"EtaAtDeliveryAddress": $eta_at_delivery_address, "Location": $location, "TimeStampWithUtcOffset": $time_stamp_with_utc_offset} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/deliverystate/atrestaurant"))
+  let req_body = {"EtaAtDeliveryAddress": $eta_at_delivery_address, "Location": $location, "TimeStampWithUtcOffset": $time_stamp_with_utc_offset} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update the driver's estimated time to arrive at the Restaurant
 #
 # PUT /orders/{orderId}/deliverystate/atrestauranteta
-export def "orders-deliverystate-atrestauranteta put" [
+export def "orders-deliverystate-atrestauranteta update" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1567,19 +1582,19 @@ export def "orders-deliverystate-atrestauranteta put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/deliverystate/atrestauranteta"))
-  let body = {"bestGuess": $best_guess, "estimatedAt": $estimated_at} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/deliverystate/atrestauranteta"))
+  let req_body = {"bestGuess": $best_guess, "estimatedAt": $estimated_at} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update order with delivered details
 #
 # PUT /orders/{orderId}/deliverystate/delivered
 # --Location shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
-export def "orders-deliverystate-delivered put" [
+export def "orders-deliverystate-delivered update" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1595,12 +1610,12 @@ export def "orders-deliverystate-delivered put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/deliverystate/delivered"))
-  let body = {"Location": $location, "TimeStampWithUtcOffset": $time_stamp_with_utc_offset} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/deliverystate/delivered"))
+  let req_body = {"Location": $location, "TimeStampWithUtcOffset": $time_stamp_with_utc_offset} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update order with driver assigned details
@@ -1608,7 +1623,7 @@ export def "orders-deliverystate-delivered put" [
 # PUT /orders/{orderId}/deliverystate/driverassigned
 # --Location shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
 # --VehicleDetails shape: {Vehicle?: string, VehicleRegistration?: string}
-export def "orders-deliverystate-driverassigned put" [
+export def "orders-deliverystate-driverassigned update" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1629,19 +1644,19 @@ export def "orders-deliverystate-driverassigned put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/deliverystate/driverassigned"))
-  let body = {"DriverContactNumber": $driver_contact_number, "DriverName": $driver_name, "EtaAtDeliveryAddress": $eta_at_delivery_address, "EtaAtRestaurant": $eta_at_restaurant, "Location": $location, "TimeStampWithUtcOffset": $time_stamp_with_utc_offset, "VehicleDetails": $vehicle_details} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/deliverystate/driverassigned"))
+  let req_body = {"DriverContactNumber": $driver_contact_number, "DriverName": $driver_name, "EtaAtDeliveryAddress": $eta_at_delivery_address, "EtaAtRestaurant": $eta_at_restaurant, "Location": $location, "TimeStampWithUtcOffset": $time_stamp_with_utc_offset, "VehicleDetails": $vehicle_details} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update the driver's current location
 #
 # PUT /orders/{orderId}/deliverystate/driverlocation
 # --Location shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
-export def "orders-deliverystate-driverlocation put-by-orderId" [
+export def "orders-deliverystate-driverlocation update-by-orderId" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1659,19 +1674,19 @@ export def "orders-deliverystate-driverlocation put-by-orderId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/deliverystate/driverlocation"))
-  let body = {"EtaAtDeliveryAddress": $eta_at_delivery_address, "EtaAtRestaurant": $eta_at_restaurant, "Location": $location, "TimeStampWithUtcOffset": $time_stamp_with_utc_offset} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/deliverystate/driverlocation"))
+  let req_body = {"EtaAtDeliveryAddress": $eta_at_delivery_address, "EtaAtRestaurant": $eta_at_restaurant, "Location": $location, "TimeStampWithUtcOffset": $time_stamp_with_utc_offset} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update order with driver unassigned details
 #
 # PUT /orders/{orderId}/deliverystate/driverunassigned
 # --Location: shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
-export def "orders-deliverystate-driverunassigned put" [
+export def "orders-deliverystate-driverunassigned update" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1694,19 +1709,19 @@ export def "orders-deliverystate-driverunassigned put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/deliverystate/driverunassigned"))
-  let body = {"Comment": $comment, "DriverContactNumber": $driver_contact_number, "DriverName": $driver_name, "EtaAtDeliveryAddress": $eta_at_delivery_address, "EtaAtRestaurant": $eta_at_restaurant, "Location:": $location, "Reason": $reason, "TimeStampWithUtcOffset": $time_stamp_with_utc_offset, "UnassignedBy": $unassigned_by} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/deliverystate/driverunassigned"))
+  let req_body = {"Comment": $comment, "DriverContactNumber": $driver_contact_number, "DriverName": $driver_name, "EtaAtDeliveryAddress": $eta_at_delivery_address, "EtaAtRestaurant": $eta_at_restaurant, "Location:": $location, "Reason": $reason, "TimeStampWithUtcOffset": $time_stamp_with_utc_offset, "UnassignedBy": $unassigned_by} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update order with driver on its way details
 #
 # PUT /orders/{orderId}/deliverystate/onitsway
 # --Location shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
-export def "orders-deliverystate-onitsway put" [
+export def "orders-deliverystate-onitsway update" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1723,18 +1738,18 @@ export def "orders-deliverystate-onitsway put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/deliverystate/onitsway"))
-  let body = {"EstimatedArrivalTime": $estimated_arrival_time, "Location": $location, "TimeStampWithUtcOffset": $time_stamp_with_utc_offset} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/deliverystate/onitsway"))
+  let req_body = {"EstimatedArrivalTime": $estimated_arrival_time, "Location": $location, "TimeStampWithUtcOffset": $time_stamp_with_utc_offset} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update order ETA
 #
 # PUT /orders/{orderId}/duedate
-export def "orders-duedate put" [
+export def "orders-duedate update" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1749,18 +1764,18 @@ export def "orders-duedate put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/duedate"))
-  let body = {"DueDate": $due_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/duedate"))
+  let req_body = {"DueDate": $due_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Ignore order
 #
 # PUT /orders/{orderId}/ignore
-export def "orders-ignore put" [
+export def "orders-ignore update" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1773,7 +1788,7 @@ export def "orders-ignore put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/ignore"))
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/ignore"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1782,7 +1797,7 @@ export def "orders-ignore put" [
 # Mark order as ready for collection
 #
 # POST /orders/{orderId}/readyforcollection
-export def "orders-readyforcollection post" [
+export def "orders-readyforcollection create" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1795,7 +1810,7 @@ export def "orders-readyforcollection post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/readyforcollection"))
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/readyforcollection"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1804,7 +1819,7 @@ export def "orders-readyforcollection post" [
 # Reject order
 #
 # PUT /orders/{orderId}/reject
-export def "orders-reject put" [
+export def "orders-reject update" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1819,18 +1834,18 @@ export def "orders-reject put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}/reject"))
-  let body = {"Message": $message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/reject"))
+  let req_body = {"Message": $message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Response to Late Order Update Request
 #
 # POST /orders/{tenant}/{orderId}/consumerqueries/lateorder/restaurantresponse
-export def "orders-consumerqueries-lateorder-restaurantresponse post" [
+export def "orders-consumerqueries-lateorder-restaurantresponse create" [
   tenant: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1848,20 +1863,20 @@ export def "orders-consumerqueries-lateorder-restaurantresponse post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, order_id: $order_id} | format pattern "/orders/{tenant}/{order_id}/consumerqueries/lateorder/restaurantresponse"))
-  let body = {"additionalDeliveryTimeToAddMinutes": $additional_delivery_time_to_add_minutes, "lateOrderStatus": $late_order_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), order_id: (encode-path-segment $order_id)} | format pattern "/orders/{tenant}/{order_id}/consumerqueries/lateorder/restaurantresponse"))
+  let req_body = {"additionalDeliveryTimeToAddMinutes": $additional_delivery_time_to_add_minutes, "lateOrderStatus": $late_order_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update late order compensation request with Restaurant response
 #
 # POST /orders/{tenant}/{orderId}/consumerqueries/lateordercompensation/restaurantresponse
-export def "orders-consumerqueries-lateordercompensation-restaurantresponse post" [
+export def "orders-consumerqueries-lateordercompensation-restaurantresponse create" [
   tenant: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1876,25 +1891,25 @@ export def "orders-consumerqueries-lateordercompensation-restaurantresponse post
   --accepted-amount: int # The monetary amount of compensation granted, in cents/pence. Required when `isAccepted = true`.
   --is-accepted: oneof<nothing, bool> # Flag to indicate whether a compensation request has been accepted or rejected.
   --body-order-id: string # The ID of the late order compensation request that this response relates to.
-  --rejected-reason-code: string@rejected-reason-code-completer #  - `BadTraffic` : The driver was stuck in heavy traffic, sorry. - `BadWeather` : The bad weather was delaying our deliveries, sorry. - `BusierThanExpected` : Our restaurant was busier than we expected. - `CompensatedWithItem` : We gave you something from the menu free of charge to make up for it. - `NoReason` : We're really sorry your order was late. We hope you enjoyed your food.
+  --rejected-reason-code: string@rejected-reason-code-completer # - `BadTraffic` : The driver was stuck in heavy traffic, sorry. - `BadWeather` : The bad weather was delaying our deliveries, sorry. - `BusierThanExpected` : Our restaurant was busier than we expected. - `CompensatedWithItem` : We gave you something from the menu free of charge to make up for it. - `NoReason` : We're really sorry your order was late. We hope you enjoyed your food.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, order_id: $order_id} | format pattern "/orders/{tenant}/{order_id}/consumerqueries/lateordercompensation/restaurantresponse"))
-  let body = {"acceptedAmount": $accepted_amount, "isAccepted": $is_accepted, "orderId": $body_order_id, "rejectedReasonCode": $rejected_reason_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), order_id: (encode-path-segment $order_id)} | format pattern "/orders/{tenant}/{order_id}/consumerqueries/lateordercompensation/restaurantresponse"))
+  let req_body = {"acceptedAmount": $accepted_amount, "isAccepted": $is_accepted, "orderId": $body_order_id, "rejectedReasonCode": $rejected_reason_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create Compensation requests
 #
 # POST /orders/{tenant}/{orderId}/restaurantqueries/compensation
-export def "orders-restaurantqueries-compensation post" [
+export def "orders-restaurantqueries-compensation create" [
   tenant: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1912,20 +1927,20 @@ export def "orders-restaurantqueries-compensation post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, order_id: $order_id} | format pattern "/orders/{tenant}/{order_id}/restaurantqueries/compensation"))
-  let body = {"Comments": $comments, "ReasonCode": $reason_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), order_id: (encode-path-segment $order_id)} | format pattern "/orders/{tenant}/{order_id}/restaurantqueries/compensation"))
+  let req_body = {"Comments": $comments, "ReasonCode": $reason_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Customer Requested Redelivery
 #
 # PUT /redelivery-requested
-export def "redelivery-requested put" [
+export def "redelivery-requested update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1943,17 +1958,17 @@ export def "redelivery-requested put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/redelivery-requested")
-  let body = {"Notes": $notes, "OrderId": $order_id, "Tenant": $tenant, "Update": $update} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"Notes": $notes, "OrderId": $order_id, "Tenant": $tenant, "Update": $update} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Restaurant Offline Status
 #
 # PUT /restaurant-offline-status
-export def "restaurant-offline-status put" [
+export def "restaurant-offline-status update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1971,17 +1986,17 @@ export def "restaurant-offline-status put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/restaurant-offline-status")
-  let body = {"AllowRestaurantOverride": $allow_restaurant_override, "IsOffline": $is_offline, "RestaurantId": $restaurant_id, "Tenant": $tenant} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AllowRestaurantOverride": $allow_restaurant_override, "IsOffline": $is_offline, "RestaurantId": $restaurant_id, "Tenant": $tenant} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Restaurant Online Status
 #
 # PUT /restaurant-online-status
-export def "restaurant-online-status put" [
+export def "restaurant-online-status update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1999,11 +2014,11 @@ export def "restaurant-online-status put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/restaurant-online-status")
-  let body = {"AllowRestaurantOverride": $allow_restaurant_override, "IsOffline": $is_offline, "RestaurantId": $restaurant_id, "Tenant": $tenant} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AllowRestaurantOverride": $allow_restaurant_override, "IsOffline": $is_offline, "RestaurantId": $restaurant_id, "Tenant": $tenant} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get restaurants by location
@@ -2031,10 +2046,10 @@ export def "restaurants-bylatlong list-by-location" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "restaurantName" $restaurant_name "scalar") (serialize-qp "brandName" $brand_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/restaurants/bylatlong" $qp)
-  let extra_headers = {"Authorization": $authorization, "Accept-Tenant": $accept_tenant} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Accept-Tenant": $accept_tenant} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2042,7 +2057,7 @@ export def "restaurants-bylatlong list-by-location" [
 #
 # GET /restaurants/bypostcode/{postcode}
 # operationId: SearchByPostcode
-export def "restaurants-bypostcode list-by" [
+export def "restaurants-bypostcode list" [
   postcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2061,18 +2076,18 @@ export def "restaurants-bypostcode list-by" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "restaurantName" $restaurant_name "scalar") (serialize-qp "brandName" $brand_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({postcode: $postcode} | format pattern "/restaurants/bypostcode/{postcode}") $qp)
-  let extra_headers = {"Authorization": $authorization, "Accept-Tenant": $accept_tenant} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({postcode: (encode-path-segment $postcode)} | format pattern "/restaurants/bypostcode/{postcode}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization, "Accept-Tenant": $accept_tenant} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set ETA for pickup
 #
 # PUT /restaurants/driver/eta
-export def "restaurants-driver-eta put" [
+export def "restaurants-driver-eta update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2087,10 +2102,11 @@ export def "restaurants-driver-eta put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/restaurants/driver/eta")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get product catalogue
@@ -2110,7 +2126,7 @@ export def "restaurants-catalogue get" [
 ]: nothing -> record<currency: string, description: string, name: string, restaurantId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue"))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2136,7 +2152,7 @@ export def "restaurants-catalogue-availabilities get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/availabilities") $qp)
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/availabilities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2162,7 +2178,7 @@ export def "restaurants-catalogue-categories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/categories") $qp)
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/categories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2189,7 +2205,7 @@ export def "restaurants-catalogue-categories-items get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id, category_id: $category_id} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/categories/{category_id}/items") $qp)
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id), category_id: (encode-path-segment $category_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/categories/{category_id}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2215,7 +2231,7 @@ export def "restaurants-catalogue-items get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/items") $qp)
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2242,7 +2258,7 @@ export def "restaurants-catalogue-items-dealgroups get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id, item_id: $item_id} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/items/{item_id}/dealgroups") $qp)
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id), item_id: (encode-path-segment $item_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/items/{item_id}/dealgroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2270,7 +2286,7 @@ export def "restaurants-catalogue-items-dealgroups-dealitemvariations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id, item_id: $item_id, deal_group_id: $deal_group_id} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/items/{item_id}/dealgroups/{deal_group_id}/dealitemvariations") $qp)
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id), item_id: (encode-path-segment $item_id), deal_group_id: (encode-path-segment $deal_group_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/items/{item_id}/dealgroups/{deal_group_id}/dealitemvariations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2297,7 +2313,7 @@ export def "restaurants-catalogue-items-modifiergroups get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id, item_id: $item_id} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/items/{item_id}/modifiergroups") $qp)
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id), item_id: (encode-path-segment $item_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/items/{item_id}/modifiergroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2324,7 +2340,7 @@ export def "restaurants-catalogue-items-variations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id, item_id: $item_id} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/items/{item_id}/variations") $qp)
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id), item_id: (encode-path-segment $item_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/catalogue/items/{item_id}/variations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2353,11 +2369,11 @@ export def "restaurants-customerclaims list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id} | format pattern "/restaurants/{tenant}/{restaurant_id}/customerclaims") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/customerclaims") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2380,11 +2396,11 @@ export def "restaurants-customerclaims get" [
 ]: nothing -> record<affectedItems: table<additionalContext: string, decision: string, id: string, name: string, quantity: float, totalClaimed: float, unitPrice: float>, currency: string, expirationDate: string, friendlyOrderReference: string, id: string, issueType: string, orderId: string, resolution: record<decision: string, resolvedChannel: string, resolvedDate: string, totalClaimedAccepted: float>, restaurantResponse: record<decision: string, items: list<record>, justification: record<comments: string, reason: string>>, state: string, submittedDate: string, totalClaimed: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id, id: $id} | format pattern "/restaurants/{tenant}/{restaurant_id}/customerclaims/{id}"))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id), id: (encode-path-segment $id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/customerclaims/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2393,7 +2409,7 @@ export def "restaurants-customerclaims get" [
 # POST /restaurants/{tenant}/{restaurantId}/customerclaims/{id}/restaurantresponse
 # --items item shape: {decision?: "Accepted"|"Rejected", id?: string}
 # --justification shape: {comments?: string, reason?: "AlreadyRefunded"|"ItemReplaced"|"PartialRefundRequired"|"WasNotMissing"|"WillRedeliver"|"OrderWasHot"|"OrderWasOnTime"|"OrderWasPacked"|"FoodWasIntact"|"AddExtraItem"|"Other"}
-export def "restaurants-customerclaims-restaurantresponse post" [
+export def "restaurants-customerclaims-restaurantresponse create" [
   tenant: string
   restaurant_id: string
   id: string
@@ -2413,20 +2429,22 @@ export def "restaurants-customerclaims-restaurantresponse post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id, id: $id} | format pattern "/restaurants/{tenant}/{restaurant_id}/customerclaims/{id}/restaurantresponse"))
-  let body = {"decision": $decision, "items": $items, "justification": $justification} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id), id: (encode-path-segment $id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/customerclaims/{id}/restaurantresponse"))
+  let req_body = {"decision": $decision, "items": $items, "justification": $justification} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Add reason and comments to the response
 #
 # PUT /restaurants/{tenant}/{restaurantId}/customerclaims/{id}/restaurantresponse/justification
-export def "restaurants-customerclaims-restaurantresponse-justification put" [
+export def "restaurants-customerclaims-restaurantresponse-justification update" [
   tenant: string
   restaurant_id: string
   id: string
@@ -2445,14 +2463,16 @@ export def "restaurants-customerclaims-restaurantresponse-justification put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id, id: $id} | format pattern "/restaurants/{tenant}/{restaurant_id}/customerclaims/{id}/restaurantresponse/justification"))
-  let body = {"comments": $comments, "reason": $reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id), id: (encode-path-segment $id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/customerclaims/{id}/restaurantresponse/justification"))
+  let req_body = {"comments": $comments, "reason": $reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get Restaurant Fees
@@ -2473,11 +2493,11 @@ export def "restaurants-fees get" [
 ]: nothing -> record<bagFee: record<description: string, serviceTypes: record<collection: record, default: record, delivery: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id} | format pattern "/restaurants/{tenant}/{restaurant_id}/fees"))
-  let extra_headers = {"User-Agent": $user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/fees"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"User-Agent": $user_agent} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2485,7 +2505,7 @@ export def "restaurants-fees get" [
 #
 # PUT /restaurants/{tenant}/{restaurantId}/fees
 # --bagFee shape: {description?: string, serviceTypes?: record}
-export def "restaurants-fees put" [
+export def "restaurants-fees update" [
   tenant: string
   restaurant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2502,14 +2522,14 @@ export def "restaurants-fees put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id} | format pattern "/restaurants/{tenant}/{restaurant_id}/fees"))
-  let body = {"bagFee": $bag_fee} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"User-Agent": $user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/fees"))
+  let req_body = {"bagFee": $bag_fee} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"User-Agent": $user_agent} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the latest version of the restaurant's full menu
@@ -2530,11 +2550,11 @@ export def "restaurants-menu get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id} | format pattern "/restaurants/{tenant}/{restaurant_id}/menu"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/menu"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2542,10 +2562,10 @@ export def "restaurants-menu get" [
 #
 # PUT /restaurants/{tenant}/{restaurantId}/menu
 # operationId: putMenuForIngestion
-# --availabilities item shape: {description?: string, id?: string, name?: string, serviceTypes?: list, times?: list}
-# --categories item shape: {description?: string, id?: string, name?: string, itemIds?: list}
-# --items item shape: {description?: string, id?: string, labels?: list, name?: string, requireOtherProducts?: bool, type?: "menuItem"|"deal", dealGroups?: list, imageUrl?: string, modifierGroups?: list, variations?: list}
-export def "restaurants-menu update-menu-for-ingestion" [
+# --availabilities item shape: {description?: string, id?: string, name?: string, serviceTypes?: list<string>, times?: list}
+# --categories item shape: {description?: string, id?: string, name?: string, itemIds?: list<string>}
+# --items item shape: {description?: string, id?: string, labels?: list<string>, name?: string, requireOtherProducts?: bool, type?: "menuItem"|"deal", dealGroups?: list, imageUrl?: string, modifierGroups?: list, variations?: list}
+export def "restaurants-menu update-for-ingestion" [
   tenant: string
   restaurant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2562,28 +2582,30 @@ export def "restaurants-menu update-menu-for-ingestion" [
   --description: string # A top level description for the menu.
   --name: string # The name of the restaurant.
   --body-restaurant-id: string # A unique identifier at tenant level for a given restaurant.
-  --availabilities: list # A set of availabilities that can later be referenced by individual menu items. — item shape: {description?: string, id?: string, name?: string, serviceTypes?: list, times?: list}
-  --categories: list # A set of categories that appear on the menu. — item shape: {description?: string, id?: string, name?: string, itemIds?: list}
-  --items: list # All of the menu items within the menu. — item shape: {description?: string, id?: string, labels?: list, name?: string, requireOtherProducts?: bool, type?: "menuItem"|"deal", dealGroups?: list, imageUrl?: string, modifierGroups?: list, variations?: list}
+  --availabilities: list # A set of availabilities that can later be referenced by individual menu items. — item shape: {description?: string, id?: string, name?: string, serviceTypes?: list<string>, times?: list}
+  --categories: list # A set of categories that appear on the menu. — item shape: {description?: string, id?: string, name?: string, itemIds?: list<string>}
+  --items: list # All of the menu items within the menu. — item shape: {description?: string, id?: string, labels?: list<string>, name?: string, requireOtherProducts?: bool, type?: "menuItem"|"deal", dealGroups?: list, imageUrl?: string, modifierGroups?: list, variations?: list}
 ]: any -> record<correlationId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id} | format pattern "/restaurants/{tenant}/{restaurant_id}/menu"))
-  let body = {"currency": $currency, "description": $description, "name": $name, "restaurantId": $body_restaurant_id, "availabilities": $availabilities, "categories": $categories, "items": $items} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/menu"))
+  let req_body = {"currency": $currency, "description": $description, "name": $name, "restaurantId": $body_restaurant_id, "availabilities": $availabilities, "categories": $categories, "items": $items} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get the restaurant's delivery and collection lead times
 #
 # GET /restaurants/{tenant}/{restaurantId}/ordertimes
 # operationId: GetOrderTimes
-export def "restaurants-ordertimes get" [
+export def "restaurants-ordertimes get-order-times" [
   tenant: string
   restaurant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2598,11 +2620,11 @@ export def "restaurants-ordertimes get" [
 ]: nothing -> table<dayOfWeek: string, lowerBoundMinutes: int, serviceType: string, upperBoundMinutes: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id} | format pattern "/restaurants/{tenant}/{restaurant_id}/ordertimes"))
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/ordertimes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -2610,7 +2632,7 @@ export def "restaurants-ordertimes get" [
 #
 # PUT /restaurants/{tenant}/{restaurantId}/ordertimes/{dayOfWeek}/{serviceType}
 # operationId: UpdateOrderTime
-export def "restaurants-ordertimes update" [
+export def "restaurants-ordertimes update-order-time" [
   tenant: string
   restaurant_id: string
   day_of_week: string
@@ -2630,21 +2652,21 @@ export def "restaurants-ordertimes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id, day_of_week: $day_of_week, service_type: $service_type} | format pattern "/restaurants/{tenant}/{restaurant_id}/ordertimes/{day_of_week}/{service_type}"))
-  let body = {"lowerBoundMinutes": $lower_bound_minutes, "upperBoundMinutes": $upper_bound_minutes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id), day_of_week: (encode-path-segment $day_of_week), service_type: (encode-path-segment $service_type)} | format pattern "/restaurants/{tenant}/{restaurant_id}/ordertimes/{day_of_week}/{service_type}"))
+  let req_body = {"lowerBoundMinutes": $lower_bound_minutes, "upperBoundMinutes": $upper_bound_minutes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get service times
 #
 # GET /restaurants/{tenant}/{restaurantId}/servicetimes
 # operationId: getRestaurantServiceTimes
-export def "restaurants-servicetimes get" [
+export def "restaurants-servicetimes get-service-times" [
   tenant: string
   restaurant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2658,7 +2680,7 @@ export def "restaurants-servicetimes get" [
 ]: nothing -> record<serviceTimes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id} | format pattern "/restaurants/{tenant}/{restaurant_id}/servicetimes"))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/servicetimes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2669,7 +2691,7 @@ export def "restaurants-servicetimes get" [
 # PUT /restaurants/{tenant}/{restaurantId}/servicetimes
 # operationId: putRestaurantServiceTimes
 # --serviceTimes shape: {friday?: any, monday?: any, saturday?: any, sunday?: any, thursday?: any, tuesday?: any, wednesday?: any}
-export def "restaurants-servicetimes update" [
+export def "restaurants-servicetimes update-service-times" [
   tenant: string
   restaurant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2685,12 +2707,12 @@ export def "restaurants-servicetimes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, restaurant_id: $restaurant_id} | format pattern "/restaurants/{tenant}/{restaurant_id}/servicetimes"))
-  let body = {"serviceTimes": $service_times} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), restaurant_id: (encode-path-segment $restaurant_id)} | format pattern "/restaurants/{tenant}/{restaurant_id}/servicetimes"))
+  let req_body = {"serviceTimes": $service_times} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get auto-completed search terms
@@ -2707,13 +2729,13 @@ export def "search-autocomplete get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --search-term: string # User's search term - at least one character required
-  --latlong: list # The latitude and longitude coordinates of the location in which to search. Specify the coordinates as latitude,longitude. (e.g. [51.501285, -0.1424422])
+  --latlong: list<float> # The latitude and longitude coordinates of the location in which to search. Specify the coordinates as latitude,longitude. (e.g. [51.501285, -0.1424422])
   --limit: float # Limit the number of auto-completed terms returned by the API. Defaults to 7. Valid values 1 - 10 (format: integer)
 ]: nothing -> record<terms: table<classification: string, term: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "searchTerm" $search_term "scalar") (serialize-qp "latlong" $latlong "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant: $tenant} | format pattern "/search/autocomplete/{tenant}") $qp)
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant)} | format pattern "/search/autocomplete/{tenant}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2733,13 +2755,13 @@ export def "search-restaurants get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --search-term: string # User's search term.
-  --latlong: list # The latitude and longitude coordinates of the location in which to search. Specify the coordinates as latitude,longitude. (e.g. [51.501285, -0.1424422])
+  --latlong: list<float> # The latitude and longitude coordinates of the location in which to search. Specify the coordinates as latitude,longitude. (e.g. [51.501285, -0.1424422])
   --limit: float # Limit the number of restaurants returned by the API. Valid values are numbers between 1 and 500. If not provided, the limit defaults to 300. (format: integer)
 ]: nothing -> record<restaurants: table<isSponsored: bool, products: list, restaurantId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "searchTerm" $search_term "scalar") (serialize-qp "latlong" $latlong "csv") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tenant: $tenant} | format pattern "/search/restaurants/{tenant}") $qp)
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant)} | format pattern "/search/restaurants/{tenant}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2748,7 +2770,7 @@ export def "search-restaurants get" [
 # Send to POS failed
 #
 # POST /send-to-pos-failed
-export def "send-to-pos-failed post" [
+export def "send-to-pos-failed create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2763,18 +2785,18 @@ export def "send-to-pos-failed post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/send-to-pos-failed")
-  let body = {"OrderId": $order_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"OrderId": $order_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create Offline Event
 #
 # POST /v1/{tenant}/restaurants/event/offline
 @deprecated --flag category
-export def "restaurants-event-offline post" [
+export def "restaurants-event-offline create" [
   tenant: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2790,7 +2812,7 @@ export def "restaurants-event-offline post" [
   --category: string # A free text category used to group multiple events. This field is not intended to be used by clients. (DEPRECATED)
   --duration: string # Either a timespan in the HH:mm format or `untilTomorrow` (this will be the next day at 4:30 am +/- 10 minutes local time). Note if both duration and `endDate` are specified duration takes precedence.
   --end-date: string # ISO 8601 format of the end datetime of the offline event. (nullable, format: date-time)
-  --legacy-temp-offline-type: string@legacy-temp-offline-type-completer #  - `Unset` : Legacy value meaning online. - `None` : Legacy value meaning online. - `TempOffline` : The restaurant will go temporarily offline, typically for an undetermined amount of time (no end date). - `ClosedToday` : The restaurant will closed for the day and the event will end the next morning. - `ClosedDueToEvent` : The restaurant will go offline for an event (e.g. a holiday), these events will typically have an end time. - `FailedJctConnection` : The restaurant will go offline due to the POS device losing connection. - `NoTrOverride` : The restaurant will go offline for another reason that the restaurant cannot override. - `IgnoredOrders` : The restaurant will go offline due to ignoring orders. (default: ClosedDueToEvent)
+  --legacy-temp-offline-type: string@legacy-temp-offline-type-completer # - `Unset` : Legacy value meaning online. - `None` : Legacy value meaning online. - `TempOffline` : The restaurant will go temporarily offline, typically for an undetermined amount of time (no end date). - `ClosedToday` : The restaurant will closed for the day and the event will end the next morning. - `ClosedDueToEvent` : The restaurant will go offline for an event (e.g. a holiday), these events will typically have an end time. - `FailedJctConnection` : The restaurant will go offline due to the POS device losing connection. - `NoTrOverride` : The restaurant will go offline for another reason that the restaurant cannot override. - `IgnoredOrders` : The restaurant will go offline due to ignoring orders. (default: ClosedDueToEvent)
   name: string # Name of the offline event to be created.
   reason: string # The reason for creating the offline event.
   restaurant_ids: string # A comma separated list of the IDs of the restaurants to include in the offline event. No limit to the number accepted by the endpoint, but unexpected behaviour mat occur at more than 500 IDs.
@@ -2799,14 +2821,14 @@ export def "restaurants-event-offline post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant} | format pattern "/v1/{tenant}/restaurants/event/offline"))
-  let body = {"allowRestaurantOverride": $allow_restaurant_override, "category": $category, "duration": $duration, "endDate": $end_date, "legacyTempOfflineType": $legacy_temp_offline_type, "name": $name, "reason": $reason, "restaurantIds": $restaurant_ids, "startDate": $start_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-JE-Requester": $x_je_requester, "X-JE-User-Role": $x_je_user_role} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant)} | format pattern "/v1/{tenant}/restaurants/event/offline"))
+  let req_body = {"allowRestaurantOverride": $allow_restaurant_override, "category": $category, "duration": $duration, "endDate": $end_date, "legacyTempOfflineType": $legacy_temp_offline_type, "name": $name, "reason": $reason, "restaurantIds": $restaurant_ids, "startDate": $start_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-JE-Requester": $x_je_requester, "X-JE-User-Role": $x_je_user_role} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Offline Event
@@ -2828,18 +2850,18 @@ export def "restaurants-event-offline delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, id: $id} | format pattern "/v1/{tenant}/restaurants/{id}/event/offline"))
-  let extra_headers = {"X-JE-Requester": $x_je_requester, "X-JE-User-Role": $x_je_user_role} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), id: (encode-path-segment $id)} | format pattern "/v1/{tenant}/restaurants/{id}/event/offline"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-JE-Requester": $x_je_requester, "X-JE-User-Role": $x_je_user_role} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delivery Attempt Failed
 #
 # POST /{tenant}/orders/{orderId}/queries/attempteddelivery
-export def "orders-queries-attempteddelivery post" [
+export def "orders-queries-attempteddelivery create" [
   tenant: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2856,20 +2878,20 @@ export def "orders-queries-attempteddelivery post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, order_id: $order_id} | format pattern "/{tenant}/orders/{order_id}/queries/attempteddelivery"))
-  let body = {"ReasonCode": $reason_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), order_id: (encode-path-segment $order_id)} | format pattern "/{tenant}/orders/{order_id}/queries/attempteddelivery"))
+  let req_body = {"ReasonCode": $reason_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request Redelivery of the Order
 #
 # POST /{tenant}/orders/{orderId}/queries/attempteddelivery/resolution/redeliverorder
-export def "orders-queries-attempteddelivery-resolution-redeliverorder post" [
+export def "orders-queries-attempteddelivery-resolution-redeliverorder create" [
   tenant: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2887,12 +2909,12 @@ export def "orders-queries-attempteddelivery-resolution-redeliverorder post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tenant: $tenant, order_id: $order_id} | format pattern "/{tenant}/orders/{order_id}/queries/attempteddelivery/resolution/redeliverorder"))
-  let body = {"NewDueDate": $new_due_date, "Status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({tenant: (encode-path-segment $tenant), order_id: (encode-path-segment $order_id)} | format pattern "/{tenant}/orders/{order_id}/queries/attempteddelivery/resolution/redeliverorder"))
+  let req_body = {"NewDueDate": $new_due_date, "Status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Authorization": $authorization} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

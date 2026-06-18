@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -60,6 +69,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   }
   if ($method in ["head" "options"]) { return $resp }
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://api.visiblethread.com/api/v1"] }
@@ -129,12 +165,12 @@ export def "dictionaries upload-dictionary" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dictionaries")
-  let body = {"file": $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let body = if ($file | is-not-empty) { $body | upsert file (open -r $file) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["file"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get your list of documents
@@ -179,12 +215,12 @@ export def "documents upload-doc" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/documents")
-  let body = {"file": $file, "longSentenceWordCount": $long_sentence_word_count, "veryLongSentenceWordCount": $very_long_sentence_word_count} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"file": $file, "longSentenceWordCount": $long_sentence_word_count, "veryLongSentenceWordCount": $very_long_sentence_word_count} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let body = if ($file | is-not-empty) { $body | upsert file (open -r $file) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["file"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get data from a previously submitted document
@@ -204,7 +240,7 @@ export def "documents get-doc" [
 ]: nothing -> record<completed: string, eta: string, id: int, paragraphs: table<paragraphCounter: int, paragraphIndex: int, stats: record, text: string>, scanSettings: record<longSentenceWordCount: int, veryLongSentenceWordCount: int>, started: string, stats: record<avgSentenceLength: int, fleschKincaidGradeLevel: float, fleschReadingLevel: int, longSentenceCount: int, passiveSentenceCount: int, sentenceCount: int, wordCount: int>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({doc_id: $doc_id} | format pattern "/documents/{doc_id}"))
+  let full_url = (build-url $base ({doc_id: (encode-path-segment $doc_id)} | format pattern "/documents/{doc_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -235,7 +271,7 @@ export def "searches get" [
 #
 # POST /searches
 # operationId: runSearch
-export def "searches runSearch" [
+export def "searches list-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,18 +287,18 @@ export def "searches runSearch" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/searches")
-  let body = {"dictId": $dict_id, "docId": $doc_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"dictId": $dict_id, "docId": $doc_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets search results for a particular document/dictionary
 #
 # GET /searches/{docId}/{dictionaryId}
 # operationId: getSearchResults
-export def "searches get-search-results" [
+export def "searches get-list-results" [
   doc_id: int
   dictionary_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -278,7 +314,7 @@ export def "searches get-search-results" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "matchingOnly" $matching_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({doc_id: $doc_id, dictionary_id: $dictionary_id} | format pattern "/searches/{doc_id}/{dictionary_id}") $qp)
+  let full_url = (build-url $base ({doc_id: (encode-path-segment $doc_id), dictionary_id: (encode-path-segment $dictionary_id)} | format pattern "/searches/{doc_id}/{dictionary_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -311,7 +347,7 @@ export def "webscans get" [
 # operationId: runScan
 # --scanSettings shape: {longSentenceWordCount?: int, veryLongSentenceWordCount?: int}
 # --webUrls item shape: {url: string}
-export def "webscans runScan" [
+export def "webscans create-run-scan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,11 +364,11 @@ export def "webscans runScan" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webscans")
-  let body = {"scanSettings": $scan_settings, "title": $title, "webUrls": $web_urls} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"scanSettings": $scan_settings, "title": $title, "webUrls": $web_urls} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get data from a previously run scan
@@ -352,7 +388,7 @@ export def "webscans get-scan" [
 ]: nothing -> record<completed: string, eta: string, id: int, scan: record<stats: record<avgSentenceLength: int, fleschKincaidGradeLevel: float, fleschReadingLevel: int, longSentenceCount: int, passiveSentenceCount: int, sentenceCount: int, wordCount: int>, title: string, webUrls: list<record>>, started: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({scan_id: $scan_id} | format pattern "/webscans/{scan_id}"))
+  let full_url = (build-url $base ({scan_id: (encode-path-segment $scan_id)} | format pattern "/webscans/{scan_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -376,7 +412,7 @@ export def "webscans-web-urls get-scan" [
 ]: nothing -> record<paragraphs: table<paragraphCounter: int, paragraphIndex: int, stats: record, text: string>, stats: record<avgSentenceLength: int, fleschKincaidGradeLevel: float, fleschReadingLevel: int, longSentenceCount: int, passiveSentenceCount: int, sentenceCount: int, wordCount: int>, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({scan_id: $scan_id, url_id: $url_id} | format pattern "/webscans/{scan_id}/webUrls/{url_id}"))
+  let full_url = (build-url $base ({scan_id: (encode-path-segment $scan_id), url_id: (encode-path-segment $url_id)} | format pattern "/webscans/{scan_id}/webUrls/{url_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

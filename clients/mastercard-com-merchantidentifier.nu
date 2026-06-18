@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "merchant-ids get-merchant-identifiers" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "merchant-ids get-identifiers" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /merchant-ids
 # operationId: GetMerchantIdentifiers
-export def "merchant-ids get-merchant-identifiers" [
+export def "merchant-ids get-identifiers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,8 +110,8 @@ export def "merchant-ids get-merchant-identifiers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --merchant-id: string # Merchant's name as provided by the issuer found on a cardholder statement. __Important: Please remove all spaces before submitting a API request.__   (default: , e.g. DOLIUMPTYLTDWELSHPOOLWA)
-  --type: string # Determines how the search is performed.             ExactMatch returns either the one merchant that best fits the description or no results at all.             FuzzyMatch returns 0-20 merchants that are similar to the transaction descriptor.              If Type is not provided, defaults to ExactMatch.             Example: FuzzyMatch (default: ExactMatch, e.g. ExactMatch)
+  --merchant-id: string # Merchant's name as provided by the issuer found on a cardholder statement. __Important: Please remove all spaces before submitting a API request.__ (default: , e.g. DOLIUMPTYLTDWELSHPOOLWA)
+  --type: string # Determines how the search is performed. ExactMatch returns either the one merchant that best fits the description or no results at all. FuzzyMatch returns 0-20 merchants that are similar to the transaction descriptor. If Type is not provided, defaults to ExactMatch. Example: FuzzyMatch (default: ExactMatch, e.g. ExactMatch)
 ]: nothing -> record<message: string, returnedMerchants: table<address: record, brandName: string, comment: string, descriptorText: string, legalCorporateName: string, locationId: int, matchConfidenceScore: int, merchantCategory: string, merchantDbaName: string, phoneNumber: string, soleProprietorName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

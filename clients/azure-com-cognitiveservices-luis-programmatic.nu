@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -140,11 +149,11 @@ export def "apps create" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/apps/")
-  let body = {"culture": $culture, "description": $description, "domain": $domain, "initialVersionId": $initial_version_id, "name": $name, "usageScenario": $usage_scenario} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"culture": $culture, "description": $description, "domain": $domain, "initialVersionId": $initial_version_id, "name": $name, "usageScenario": $usage_scenario} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the endpoint URLs for the prebuilt Cortana applications.
@@ -195,7 +204,7 @@ export def "apps-cultures list-supported" [
 #
 # GET /apps/customprebuiltdomains
 # operationId: Apps_ListAvailableCustomPrebuiltDomains
-export def "apps-customprebuiltdomains list-available-custom-prebuilt-domains" [
+export def "apps-customprebuiltdomains list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,18 +242,18 @@ export def "apps-customprebuiltdomains create-custom-prebuilt-domain" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/apps/customprebuiltdomains")
-  let body = {"culture": $culture, "domainName": $domain_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"culture": $culture, "domainName": $domain_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets all the available custom prebuilt domains for a specific culture.
 #
 # GET /apps/customprebuiltdomains/{culture}
 # operationId: Apps_ListAvailableCustomPrebuiltDomainsForCulture
-export def "apps-customprebuiltdomains list-available-custom-prebuilt-domains-for" [
+export def "apps-customprebuiltdomains list-available-custom-prebuilt-domains" [
   culture: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -257,7 +266,7 @@ export def "apps-customprebuiltdomains list-available-custom-prebuilt-domains-fo
 ]: nothing -> table<culture: string, description: string, entities: list<record>, examples: string, intents: list<record>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({culture: $culture} | format pattern "/apps/customprebuiltdomains/{culture}"))
+  let full_url = (build-url $base ({culture: (encode-path-segment $culture)} | format pattern "/apps/customprebuiltdomains/{culture}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -290,9 +299,9 @@ export def "apps-domains list" [
 # POST /apps/import
 # operationId: Apps_Import
 # --closedLists item shape: {name?: string, subLists?: list}
-# --composites item shape: {children?: list, name?: string}
-# --entities item shape: {children?: list, name?: string}
-# --intents item shape: {children?: list, name?: string}
+# --composites item shape: {children?: list<string>, name?: string}
+# --entities item shape: {children?: list<string>, name?: string}
+# --intents item shape: {children?: list<string>, name?: string}
 # --model_features item shape: {activated?: bool, mode?: bool, name?: string, words?: string}
 # --regex_features item shape: {activated?: bool, name?: string, pattern?: string}
 # --utterances item shape: {entities?: list, intent?: string, text?: string}
@@ -306,13 +315,13 @@ export def "apps-import import" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-name: string # The application name to create. If not specified, the application name will be read from the imported object.
-  --bing-entities: list # List of prebuilt intents.
+  --bing-entities: list<string> # List of prebuilt intents.
   --closed-lists: list # List of closed lists. — item shape: {name?: string, subLists?: list}
-  --composites: list # List of composite entities. — item shape: {children?: list, name?: string}
+  --composites: list # List of composite entities. — item shape: {children?: list<string>, name?: string}
   --culture: string # The culture of the application. E.g.: en-us.
   --desc: string # The description of the application.
-  --entities: list # List of entities. — item shape: {children?: list, name?: string}
-  --intents: list # List of intents. — item shape: {children?: list, name?: string}
+  --entities: list # List of entities. — item shape: {children?: list<string>, name?: string}
+  --intents: list # List of intents. — item shape: {children?: list<string>, name?: string}
   --model-features: list # List of model features. — item shape: {activated?: bool, mode?: bool, name?: string, words?: string}
   --name: string # The name of the application.
   --regex-features: list # List of pattern features. — item shape: {activated?: bool, name?: string, pattern?: string}
@@ -324,18 +333,18 @@ export def "apps-import import" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "appName" $app_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps/import" $qp)
-  let body = {"bing_entities": $bing_entities, "closedLists": $closed_lists, "composites": $composites, "culture": $culture, "desc": $desc, "entities": $entities, "intents": $intents, "model_features": $model_features, "name": $name, "regex_features": $regex_features, "utterances": $utterances, "versionId": $version_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"bing_entities": $bing_entities, "closedLists": $closed_lists, "composites": $composites, "culture": $culture, "desc": $desc, "entities": $entities, "intents": $intents, "model_features": $model_features, "name": $name, "regex_features": $regex_features, "utterances": $utterances, "versionId": $version_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the application available usage scenarios.
 #
 # GET /apps/usagescenarios
 # operationId: Apps_ListUsageScenarios
-export def "apps-usagescenarios list" [
+export def "apps-usagescenarios list-usage-scenarios" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,7 +379,7 @@ export def "apps delete" [
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -393,7 +402,7 @@ export def "apps get" [
 ]: nothing -> record<activeVersion: string, createdDateTime: string, culture: string, description: string, domain: string, endpointHitsCount: int, endpoints: record, id: string, name: string, usageScenario: string, versionsCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -419,12 +428,12 @@ export def "apps update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}"))
-  let body = {"description": $description, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}"))
+  let req_body = {"description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the available endpoint deployment regions and URLs.
@@ -444,7 +453,7 @@ export def "apps-endpoints list" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/endpoints"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/endpoints"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -469,12 +478,12 @@ export def "apps-permissions delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/permissions"))
-  let body = {"email": $email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/permissions"))
+  let req_body = {"email": $email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the list of user emails that have permissions to access your application.
@@ -494,7 +503,7 @@ export def "apps-permissions list" [
 ]: nothing -> record<emails: list<string>, owner: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/permissions"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/permissions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -519,12 +528,12 @@ export def "apps-permissions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/permissions"))
-  let body = {"email": $email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/permissions"))
+  let req_body = {"email": $email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Replaces the current users access list with the one sent in the body. If an empty list is sent, all access to other users will be removed.
@@ -541,17 +550,17 @@ export def "apps-permissions update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --emails: list # The email address of the users.
+  --emails: list<string> # The email address of the users.
 ]: any -> record<code: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/permissions"))
-  let body = {"emails": $emails} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/permissions"))
+  let req_body = {"emails": $emails} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Publishes a specific version of the application.
@@ -575,19 +584,19 @@ export def "apps-publish publish" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/publish"))
-  let body = {"isStaging": $is_staging, "region": $region, "versionId": $version_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/publish"))
+  let req_body = {"isStaging": $is_staging, "region": $region, "versionId": $version_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the query logs of the past month for the application.
 #
 # GET /apps/{appId}/querylogs
 # operationId: Apps_DownloadQueryLogs
-export def "apps-querylogs download" [
+export def "apps-querylogs download-list-logs" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -600,7 +609,7 @@ export def "apps-querylogs download" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/querylogs"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/querylogs"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -623,7 +632,7 @@ export def "apps-settings get" [
 ]: nothing -> record<id: string, public: bool> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/settings"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -648,12 +657,12 @@ export def "apps-settings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/settings"))
-  let body = {"public": $public} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/settings"))
+  let req_body = {"public": $public} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the application versions info.
@@ -676,7 +685,7 @@ export def "apps-versions list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/versions") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -687,9 +696,9 @@ export def "apps-versions list" [
 # POST /apps/{appId}/versions/import
 # operationId: Versions_Import
 # --closedLists item shape: {name?: string, subLists?: list}
-# --composites item shape: {children?: list, name?: string}
-# --entities item shape: {children?: list, name?: string}
-# --intents item shape: {children?: list, name?: string}
+# --composites item shape: {children?: list<string>, name?: string}
+# --entities item shape: {children?: list<string>, name?: string}
+# --intents item shape: {children?: list<string>, name?: string}
 # --model_features item shape: {activated?: bool, mode?: bool, name?: string, words?: string}
 # --regex_features item shape: {activated?: bool, name?: string, pattern?: string}
 # --utterances item shape: {entities?: list, intent?: string, text?: string}
@@ -704,13 +713,13 @@ export def "apps-versions-import import" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-id: string # The new versionId to import. If not specified, the versionId will be read from the imported object.
-  --bing-entities: list # List of prebuilt intents.
+  --bing-entities: list<string> # List of prebuilt intents.
   --closed-lists: list # List of closed lists. — item shape: {name?: string, subLists?: list}
-  --composites: list # List of composite entities. — item shape: {children?: list, name?: string}
+  --composites: list # List of composite entities. — item shape: {children?: list<string>, name?: string}
   --culture: string # The culture of the application. E.g.: en-us.
   --desc: string # The description of the application.
-  --entities: list # List of entities. — item shape: {children?: list, name?: string}
-  --intents: list # List of intents. — item shape: {children?: list, name?: string}
+  --entities: list # List of entities. — item shape: {children?: list<string>, name?: string}
+  --intents: list # List of intents. — item shape: {children?: list<string>, name?: string}
   --model-features: list # List of model features. — item shape: {activated?: bool, mode?: bool, name?: string, words?: string}
   --name: string # The name of the application.
   --regex-features: list # List of pattern features. — item shape: {activated?: bool, name?: string, pattern?: string}
@@ -721,12 +730,12 @@ export def "apps-versions-import import" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "versionId" $version_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}/versions/import") $qp)
-  let body = {"bing_entities": $bing_entities, "closedLists": $closed_lists, "composites": $composites, "culture": $culture, "desc": $desc, "entities": $entities, "intents": $intents, "model_features": $model_features, "name": $name, "regex_features": $regex_features, "utterances": $utterances, "versionId": $version_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/versions/import") $qp)
+  let req_body = {"bing_entities": $bing_entities, "closedLists": $closed_lists, "composites": $composites, "culture": $culture, "desc": $desc, "entities": $entities, "intents": $intents, "model_features": $model_features, "name": $name, "regex_features": $regex_features, "utterances": $utterances, "versionId": $version_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an application version.
@@ -747,7 +756,7 @@ export def "apps-versions delete" [
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -771,7 +780,7 @@ export def "apps-versions get" [
 ]: nothing -> record<assignedEndpointKey: record, createdDateTime: string, endpointHitsCount: int, endpointUrl: string, entitiesCount: int, externalApiKeys: record, intentsCount: int, lastModifiedDateTime: string, lastPublishedDateTime: string, lastTrainedDateTime: string, trainingStatus: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -797,12 +806,12 @@ export def "apps-versions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/"))
-  let body = {"version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/"))
+  let req_body = {"version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a new version using the current snapshot of the selected application version.
@@ -825,19 +834,19 @@ export def "apps-versions-clone clone" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/clone"))
-  let body = {"version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/clone"))
+  let req_body = {"version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets information about the closedlist models.
 #
 # GET /apps/{appId}/versions/{versionId}/closedlists
 # operationId: Model_ListClosedLists
-export def "apps-versions-closedlists list" [
+export def "apps-versions-closedlists list-model-closed-lists" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -854,7 +863,7 @@ export def "apps-versions-closedlists list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -864,8 +873,8 @@ export def "apps-versions-closedlists list" [
 #
 # POST /apps/{appId}/versions/{versionId}/closedlists
 # operationId: Model_AddClosedList
-# --subLists item shape: {canonicalForm?: string, list?: list}
-export def "apps-versions-closedlists create" [
+# --subLists item shape: {canonicalForm?: string, list?: list<string>}
+export def "apps-versions-closedlists create-model-closed-list" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -877,24 +886,24 @@ export def "apps-versions-closedlists create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the closed list feature.
-  --sub-lists: list # Sublists for the feature. — item shape: {canonicalForm?: string, list?: list}
+  --sub-lists: list # Sublists for the feature. — item shape: {canonicalForm?: string, list?: list<string>}
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists"))
-  let body = {"name": $name, "subLists": $sub_lists} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists"))
+  let req_body = {"name": $name, "subLists": $sub_lists} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a closed list model from the application.
 #
 # DELETE /apps/{appId}/versions/{versionId}/closedlists/{clEntityId}
 # operationId: Model_DeleteClosedList
-export def "apps-versions-closedlists delete" [
+export def "apps-versions-closedlists delete-model-closed-list" [
   app_id: string
   version_id: string
   cl_entity_id: string
@@ -909,7 +918,7 @@ export def "apps-versions-closedlists delete" [
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, cl_entity_id: $cl_entity_id} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -919,7 +928,7 @@ export def "apps-versions-closedlists delete" [
 #
 # GET /apps/{appId}/versions/{versionId}/closedlists/{clEntityId}
 # operationId: Model_GetClosedList
-export def "apps-versions-closedlists get" [
+export def "apps-versions-closedlists get-model-closed-list" [
   app_id: string
   version_id: string
   cl_entity_id: string
@@ -934,7 +943,7 @@ export def "apps-versions-closedlists get" [
 ]: nothing -> record<subLists: table<id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, cl_entity_id: $cl_entity_id} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -944,8 +953,8 @@ export def "apps-versions-closedlists get" [
 #
 # PATCH /apps/{appId}/versions/{versionId}/closedlists/{clEntityId}
 # operationId: Model_PatchClosedList
-# --subLists item shape: {canonicalForm?: string, list?: list}
-export def "apps-versions-closedlists update-by-appId-versionId-clEntityId" [
+# --subLists item shape: {canonicalForm?: string, list?: list<string>}
+export def "apps-versions-closedlists update-model-closed-list-by-appId-versionId-clEntityId" [
   app_id: string
   version_id: string
   cl_entity_id: string
@@ -957,25 +966,25 @@ export def "apps-versions-closedlists update-by-appId-versionId-clEntityId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sub-lists: list # Sublists to add. — item shape: {canonicalForm?: string, list?: list}
+  --sub-lists: list # Sublists to add. — item shape: {canonicalForm?: string, list?: list<string>}
 ]: any -> record<code: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, cl_entity_id: $cl_entity_id} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}"))
-  let body = {"subLists": $sub_lists} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}"))
+  let req_body = {"subLists": $sub_lists} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the closed list model.
 #
 # PUT /apps/{appId}/versions/{versionId}/closedlists/{clEntityId}
 # operationId: Model_UpdateClosedList
-# --subLists item shape: {canonicalForm?: string, list?: list}
-export def "apps-versions-closedlists update-by-appId-versionId-clEntityId-1" [
+# --subLists item shape: {canonicalForm?: string, list?: list<string>}
+export def "apps-versions-closedlists update-model-closed-list-by-appId-versionId-clEntityId-1" [
   app_id: string
   version_id: string
   cl_entity_id: string
@@ -988,24 +997,24 @@ export def "apps-versions-closedlists update-by-appId-versionId-clEntityId-1" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The new name of the closed list feature.
-  --sub-lists: list # The new sublists for the feature. — item shape: {canonicalForm?: string, list?: list}
+  --sub-lists: list # The new sublists for the feature. — item shape: {canonicalForm?: string, list?: list<string>}
 ]: any -> record<code: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, cl_entity_id: $cl_entity_id} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}"))
-  let body = {"name": $name, "subLists": $sub_lists} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}"))
+  let req_body = {"name": $name, "subLists": $sub_lists} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a list to an existing closed list.
 #
 # POST /apps/{appId}/versions/{versionId}/closedlists/{clEntityId}/sublists
 # operationId: Model_AddSubList
-export def "apps-versions-closedlists-sublists create" [
+export def "apps-versions-closedlists-sublists create-model-sub-list" [
   app_id: string
   version_id: string
   cl_entity_id: string
@@ -1018,24 +1027,24 @@ export def "apps-versions-closedlists-sublists create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --canonical-form: string # The standard form that the list represents.
-  --list: list # List of synonym words.
+  --list: list<string> # List of synonym words.
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, cl_entity_id: $cl_entity_id} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}/sublists"))
-  let body = {"canonicalForm": $canonical_form, "list": $list} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}/sublists"))
+  let req_body = {"canonicalForm": $canonical_form, "list": $list} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a sublist of a specific closed list model.
 #
 # DELETE /apps/{appId}/versions/{versionId}/closedlists/{clEntityId}/sublists/{subListId}
 # operationId: Model_DeleteSubList
-export def "apps-versions-closedlists-sublists delete" [
+export def "apps-versions-closedlists-sublists delete-model-sub-list" [
   app_id: string
   version_id: string
   cl_entity_id: string
@@ -1051,7 +1060,7 @@ export def "apps-versions-closedlists-sublists delete" [
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, cl_entity_id: $cl_entity_id, sub_list_id: $sub_list_id} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}/sublists/{sub_list_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id), sub_list_id: (encode-path-segment $sub_list_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}/sublists/{sub_list_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1061,7 +1070,7 @@ export def "apps-versions-closedlists-sublists delete" [
 #
 # PUT /apps/{appId}/versions/{versionId}/closedlists/{clEntityId}/sublists/{subListId}
 # operationId: Model_UpdateSubList
-export def "apps-versions-closedlists-sublists update" [
+export def "apps-versions-closedlists-sublists update-model-sub-list" [
   app_id: string
   version_id: string
   cl_entity_id: string
@@ -1075,24 +1084,24 @@ export def "apps-versions-closedlists-sublists update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --canonical-form: string # The standard form that the list represents.
-  --list: list # List of synonym words.
+  --list: list<string> # List of synonym words.
 ]: any -> record<code: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, cl_entity_id: $cl_entity_id, sub_list_id: $sub_list_id} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}/sublists/{sub_list_id}"))
-  let body = {"canonicalForm": $canonical_form, "list": $list} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), cl_entity_id: (encode-path-segment $cl_entity_id), sub_list_id: (encode-path-segment $sub_list_id)} | format pattern "/apps/{app_id}/versions/{version_id}/closedlists/{cl_entity_id}/sublists/{sub_list_id}"))
+  let req_body = {"canonicalForm": $canonical_form, "list": $list} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets information about the composite entity models.
 #
 # GET /apps/{appId}/versions/{versionId}/compositeentities
 # operationId: Model_ListCompositeEntities
-export def "apps-versions-compositeentities list" [
+export def "apps-versions-compositeentities list-model-composite-entities" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1109,7 +1118,7 @@ export def "apps-versions-compositeentities list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1119,7 +1128,7 @@ export def "apps-versions-compositeentities list" [
 #
 # POST /apps/{appId}/versions/{versionId}/compositeentities
 # operationId: Model_AddCompositeEntity
-export def "apps-versions-compositeentities create-composite-entity" [
+export def "apps-versions-compositeentities create-model-composite-entity" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1130,25 +1139,25 @@ export def "apps-versions-compositeentities create-composite-entity" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --children: list # Child entities.
+  --children: list<string> # Child entities.
   --name: string # Entity name.
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities"))
-  let body = {"children": $children, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities"))
+  let req_body = {"children": $children, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a composite entity extractor from the application.
 #
 # DELETE /apps/{appId}/versions/{versionId}/compositeentities/{cEntityId}
 # operationId: Model_DeleteCompositeEntity
-export def "apps-versions-compositeentities delete-composite-entity" [
+export def "apps-versions-compositeentities delete-model-composite-entity" [
   app_id: string
   version_id: string
   c_entity_id: string
@@ -1163,7 +1172,7 @@ export def "apps-versions-compositeentities delete-composite-entity" [
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, c_entity_id: $c_entity_id} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1173,7 +1182,7 @@ export def "apps-versions-compositeentities delete-composite-entity" [
 #
 # GET /apps/{appId}/versions/{versionId}/compositeentities/{cEntityId}
 # operationId: Model_GetCompositeEntity
-export def "apps-versions-compositeentities get-composite-entity" [
+export def "apps-versions-compositeentities get-model-composite-entity" [
   app_id: string
   version_id: string
   c_entity_id: string
@@ -1188,7 +1197,7 @@ export def "apps-versions-compositeentities get-composite-entity" [
 ]: nothing -> record<children: table<id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, c_entity_id: $c_entity_id} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1198,7 +1207,7 @@ export def "apps-versions-compositeentities get-composite-entity" [
 #
 # PUT /apps/{appId}/versions/{versionId}/compositeentities/{cEntityId}
 # operationId: Model_UpdateCompositeEntity
-export def "apps-versions-compositeentities update-composite-entity" [
+export def "apps-versions-compositeentities update-model-composite-entity" [
   app_id: string
   version_id: string
   c_entity_id: string
@@ -1210,25 +1219,25 @@ export def "apps-versions-compositeentities update-composite-entity" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --children: list # Child entities.
+  --children: list<string> # Child entities.
   --name: string # Entity name.
 ]: any -> record<code: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, c_entity_id: $c_entity_id} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}"))
-  let body = {"children": $children, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}"))
+  let req_body = {"children": $children, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a single child in an existing composite entity model.
 #
 # POST /apps/{appId}/versions/{versionId}/compositeentities/{cEntityId}/children
 # operationId: Model_AddCompositeEntityChild
-export def "apps-versions-compositeentities-children create-composite-entity-child" [
+export def "apps-versions-compositeentities-children create-model-composite-entity-child" [
   app_id: string
   version_id: string
   c_entity_id: string
@@ -1245,19 +1254,19 @@ export def "apps-versions-compositeentities-children create-composite-entity-chi
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, c_entity_id: $c_entity_id} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}/children"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}/children"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a composite entity extractor child from the application.
 #
 # DELETE /apps/{appId}/versions/{versionId}/compositeentities/{cEntityId}/children/{cChildId}
 # operationId: Model_DeleteCompositeEntityChild
-export def "apps-versions-compositeentities-children delete-composite-entity-child" [
+export def "apps-versions-compositeentities-children delete-model-composite-entity-child" [
   app_id: string
   version_id: string
   c_entity_id: string
@@ -1273,7 +1282,7 @@ export def "apps-versions-compositeentities-children delete-composite-entity-chi
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, c_entity_id: $c_entity_id, c_child_id: $c_child_id} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}/children/{c_child_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), c_entity_id: (encode-path-segment $c_entity_id), c_child_id: (encode-path-segment $c_child_id)} | format pattern "/apps/{app_id}/versions/{version_id}/compositeentities/{c_entity_id}/children/{c_child_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1283,7 +1292,7 @@ export def "apps-versions-compositeentities-children delete-composite-entity-chi
 #
 # POST /apps/{appId}/versions/{versionId}/customprebuiltdomains
 # operationId: Model_AddCustomPrebuiltDomain
-export def "apps-versions-customprebuiltdomains create-custom-prebuilt-domain" [
+export def "apps-versions-customprebuiltdomains create-model-custom-prebuilt-domain" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1299,19 +1308,19 @@ export def "apps-versions-customprebuiltdomains create-custom-prebuilt-domain" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltdomains"))
-  let body = {"domainName": $domain_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltdomains"))
+  let req_body = {"domainName": $domain_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a prebuilt domain's models from the application.
 #
 # DELETE /apps/{appId}/versions/{versionId}/customprebuiltdomains/{domainName}
 # operationId: Model_DeleteCustomPrebuiltDomain
-export def "apps-versions-customprebuiltdomains delete-custom-prebuilt-domain" [
+export def "apps-versions-customprebuiltdomains delete-model-custom-prebuilt-domain" [
   app_id: string
   version_id: string
   domain_name: string
@@ -1326,7 +1335,7 @@ export def "apps-versions-customprebuiltdomains delete-custom-prebuilt-domain" [
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, domain_name: $domain_name} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltdomains/{domain_name}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), domain_name: (encode-path-segment $domain_name)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltdomains/{domain_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1336,7 +1345,7 @@ export def "apps-versions-customprebuiltdomains delete-custom-prebuilt-domain" [
 #
 # GET /apps/{appId}/versions/{versionId}/customprebuiltentities
 # operationId: Model_ListCustomPrebuiltEntities
-export def "apps-versions-customprebuiltentities list-custom-prebuilt-entities" [
+export def "apps-versions-customprebuiltentities list-model-custom-prebuilt-entities" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1350,7 +1359,7 @@ export def "apps-versions-customprebuiltentities list-custom-prebuilt-entities" 
 ]: nothing -> table<customPrebuiltDomainName: string, customPrebuiltModelName: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltentities"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltentities"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1360,7 +1369,7 @@ export def "apps-versions-customprebuiltentities list-custom-prebuilt-entities" 
 #
 # POST /apps/{appId}/versions/{versionId}/customprebuiltentities
 # operationId: Model_AddCustomPrebuiltEntity
-export def "apps-versions-customprebuiltentities create-custom-prebuilt-entity" [
+export def "apps-versions-customprebuiltentities create-model-custom-prebuilt-entity" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1377,19 +1386,19 @@ export def "apps-versions-customprebuiltentities create-custom-prebuilt-entity" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltentities"))
-  let body = {"domainName": $domain_name, "modelName": $model_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltentities"))
+  let req_body = {"domainName": $domain_name, "modelName": $model_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets custom prebuilt intents information of this application.
 #
 # GET /apps/{appId}/versions/{versionId}/customprebuiltintents
 # operationId: Model_ListCustomPrebuiltIntents
-export def "apps-versions-customprebuiltintents list-custom-prebuilt-intents" [
+export def "apps-versions-customprebuiltintents list-model-custom-prebuilt-intents" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1403,7 +1412,7 @@ export def "apps-versions-customprebuiltintents list-custom-prebuilt-intents" [
 ]: nothing -> table<customPrebuiltDomainName: string, customPrebuiltModelName: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltintents"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltintents"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1413,7 +1422,7 @@ export def "apps-versions-customprebuiltintents list-custom-prebuilt-intents" [
 #
 # POST /apps/{appId}/versions/{versionId}/customprebuiltintents
 # operationId: Model_AddCustomPrebuiltIntent
-export def "apps-versions-customprebuiltintents create-custom-prebuilt-intent" [
+export def "apps-versions-customprebuiltintents create-model-custom-prebuilt-intent" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1430,19 +1439,19 @@ export def "apps-versions-customprebuiltintents create-custom-prebuilt-intent" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltintents"))
-  let body = {"domainName": $domain_name, "modelName": $model_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltintents"))
+  let req_body = {"domainName": $domain_name, "modelName": $model_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets all custom prebuilt models information of this application.
 #
 # GET /apps/{appId}/versions/{versionId}/customprebuiltmodels
 # operationId: Model_ListCustomPrebuiltModels
-export def "apps-versions-customprebuiltmodels list-custom-prebuilt-models" [
+export def "apps-versions-customprebuiltmodels list-model-custom-prebuilt-models" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1456,7 +1465,7 @@ export def "apps-versions-customprebuiltmodels list-custom-prebuilt-models" [
 ]: nothing -> table<id: string, name: string, readableType: string, typeId: int, customPrebuiltDomainName: string, customPrebuiltModelName: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltmodels"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/customprebuiltmodels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1466,7 +1475,7 @@ export def "apps-versions-customprebuiltmodels list-custom-prebuilt-models" [
 #
 # GET /apps/{appId}/versions/{versionId}/entities
 # operationId: Model_ListEntities
-export def "apps-versions-entities list" [
+export def "apps-versions-entities list-model" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1483,7 +1492,7 @@ export def "apps-versions-entities list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/entities") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1493,7 +1502,7 @@ export def "apps-versions-entities list" [
 #
 # POST /apps/{appId}/versions/{versionId}/entities
 # operationId: Model_AddEntity
-export def "apps-versions-entities create-entity" [
+export def "apps-versions-entities create-model-entity" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1509,19 +1518,19 @@ export def "apps-versions-entities create-entity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/entities"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an entity extractor from the application.
 #
 # DELETE /apps/{appId}/versions/{versionId}/entities/{entityId}
 # operationId: Model_DeleteEntity
-export def "apps-versions-entities delete-entity" [
+export def "apps-versions-entities delete-model-entity" [
   app_id: string
   version_id: string
   entity_id: string
@@ -1536,7 +1545,7 @@ export def "apps-versions-entities delete-entity" [
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, entity_id: $entity_id} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1546,7 +1555,7 @@ export def "apps-versions-entities delete-entity" [
 #
 # GET /apps/{appId}/versions/{versionId}/entities/{entityId}
 # operationId: Model_GetEntity
-export def "apps-versions-entities get-entity" [
+export def "apps-versions-entities get-model-entity" [
   app_id: string
   version_id: string
   entity_id: string
@@ -1561,7 +1570,7 @@ export def "apps-versions-entities get-entity" [
 ]: nothing -> record<customPrebuiltDomainName: string, customPrebuiltModelName: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, entity_id: $entity_id} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1571,7 +1580,7 @@ export def "apps-versions-entities get-entity" [
 #
 # PUT /apps/{appId}/versions/{versionId}/entities/{entityId}
 # operationId: Model_UpdateEntity
-export def "apps-versions-entities update-entity" [
+export def "apps-versions-entities update-model-entity" [
   app_id: string
   version_id: string
   entity_id: string
@@ -1588,19 +1597,19 @@ export def "apps-versions-entities update-entity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, entity_id: $entity_id} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get suggestion examples that would improve the accuracy of the entity model.
 #
 # GET /apps/{appId}/versions/{versionId}/entities/{entityId}/suggest
 # operationId: Model_GetEntitySuggestions
-export def "apps-versions-entities-suggest get-entity-suggestions" [
+export def "apps-versions-entities-suggest get-model-entity-suggestions" [
   app_id: string
   version_id: string
   entity_id: string
@@ -1617,7 +1626,7 @@ export def "apps-versions-entities-suggest get-entity-suggestions" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, entity_id: $entity_id} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/suggest") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), entity_id: (encode-path-segment $entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/entities/{entity_id}/suggest") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1646,12 +1655,12 @@ export def "apps-versions-example create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/example"))
-  let body = {"entityLabels": $entity_labels, "intentName": $intent_name, "text": $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/example"))
+  let req_body = {"entityLabels": $entity_labels, "intentName": $intent_name, "text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns examples to be reviewed.
@@ -1675,7 +1684,7 @@ export def "apps-versions-examples list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/examples") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/examples") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1685,7 +1694,7 @@ export def "apps-versions-examples list" [
 #
 # POST /apps/{appId}/versions/{versionId}/examples
 # operationId: Examples_Batch
-export def "apps-versions-examples post" [
+export def "apps-versions-examples create-batch" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1701,11 +1710,12 @@ export def "apps-versions-examples post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/examples"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/examples"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the labeled example with the specified ID.
@@ -1727,7 +1737,7 @@ export def "apps-versions-examples delete" [
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, example_id: $example_id} | format pattern "/apps/{app_id}/versions/{version_id}/examples/{example_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), example_id: (encode-path-segment $example_id)} | format pattern "/apps/{app_id}/versions/{version_id}/examples/{example_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1751,7 +1761,7 @@ export def "apps-versions-export export" [
 ]: nothing -> record<bing_entities: list<string>, closedLists: table<name: string, subLists: list>, composites: table<children: list, name: string>, culture: string, desc: string, entities: table<children: list, name: string>, intents: table<children: list, name: string>, model_features: table<activated: bool, mode: bool, name: string, words: string>, name: string, regex_features: table<activated: bool, name: string, pattern: string>, utterances: table<entities: list, intent: string, text: string>, versionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/export"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/export"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1778,7 +1788,7 @@ export def "apps-versions-features list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/features") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/features") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1788,7 +1798,7 @@ export def "apps-versions-features list" [
 #
 # GET /apps/{appId}/versions/{versionId}/hierarchicalentities
 # operationId: Model_ListHierarchicalEntities
-export def "apps-versions-hierarchicalentities list" [
+export def "apps-versions-hierarchicalentities list-model-hierarchical-entities" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1805,7 +1815,7 @@ export def "apps-versions-hierarchicalentities list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1815,7 +1825,7 @@ export def "apps-versions-hierarchicalentities list" [
 #
 # POST /apps/{appId}/versions/{versionId}/hierarchicalentities
 # operationId: Model_AddHierarchicalEntity
-export def "apps-versions-hierarchicalentities create-hierarchical-entity" [
+export def "apps-versions-hierarchicalentities create-model-hierarchical-entity" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1826,25 +1836,25 @@ export def "apps-versions-hierarchicalentities create-hierarchical-entity" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --children: list # Child entities.
+  --children: list<string> # Child entities.
   --name: string # Entity name.
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities"))
-  let body = {"children": $children, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities"))
+  let req_body = {"children": $children, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a hierarchical entity extractor from the application version.
 #
 # DELETE /apps/{appId}/versions/{versionId}/hierarchicalentities/{hEntityId}
 # operationId: Model_DeleteHierarchicalEntity
-export def "apps-versions-hierarchicalentities delete-hierarchical-entity" [
+export def "apps-versions-hierarchicalentities delete-model-hierarchical-entity" [
   app_id: string
   version_id: string
   h_entity_id: string
@@ -1859,7 +1869,7 @@ export def "apps-versions-hierarchicalentities delete-hierarchical-entity" [
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, h_entity_id: $h_entity_id} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1869,7 +1879,7 @@ export def "apps-versions-hierarchicalentities delete-hierarchical-entity" [
 #
 # GET /apps/{appId}/versions/{versionId}/hierarchicalentities/{hEntityId}
 # operationId: Model_GetHierarchicalEntity
-export def "apps-versions-hierarchicalentities get-hierarchical-entity" [
+export def "apps-versions-hierarchicalentities get-model-hierarchical-entity" [
   app_id: string
   version_id: string
   h_entity_id: string
@@ -1884,7 +1894,7 @@ export def "apps-versions-hierarchicalentities get-hierarchical-entity" [
 ]: nothing -> record<children: table<id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, h_entity_id: $h_entity_id} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1894,7 +1904,7 @@ export def "apps-versions-hierarchicalentities get-hierarchical-entity" [
 #
 # PUT /apps/{appId}/versions/{versionId}/hierarchicalentities/{hEntityId}
 # operationId: Model_UpdateHierarchicalEntity
-export def "apps-versions-hierarchicalentities update-hierarchical-entity" [
+export def "apps-versions-hierarchicalentities update-model-hierarchical-entity" [
   app_id: string
   version_id: string
   h_entity_id: string
@@ -1906,25 +1916,25 @@ export def "apps-versions-hierarchicalentities update-hierarchical-entity" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --children: list # Child entities.
+  --children: list<string> # Child entities.
   --name: string # Entity name.
 ]: any -> record<code: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, h_entity_id: $h_entity_id} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}"))
-  let body = {"children": $children, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}"))
+  let req_body = {"children": $children, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a single child in an existing hierarchical entity model.
 #
 # POST /apps/{appId}/versions/{versionId}/hierarchicalentities/{hEntityId}/children
 # operationId: Model_AddHierarchicalEntityChild
-export def "apps-versions-hierarchicalentities-children create-hierarchical-entity-child" [
+export def "apps-versions-hierarchicalentities-children create-model-hierarchical-entity-child" [
   app_id: string
   version_id: string
   h_entity_id: string
@@ -1941,19 +1951,19 @@ export def "apps-versions-hierarchicalentities-children create-hierarchical-enti
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, h_entity_id: $h_entity_id} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/children"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/children"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a hierarchical entity extractor child from the application.
 #
 # DELETE /apps/{appId}/versions/{versionId}/hierarchicalentities/{hEntityId}/children/{hChildId}
 # operationId: Model_DeleteHierarchicalEntityChild
-export def "apps-versions-hierarchicalentities-children delete-hierarchical-entity-child" [
+export def "apps-versions-hierarchicalentities-children delete-model-hierarchical-entity-child" [
   app_id: string
   version_id: string
   h_entity_id: string
@@ -1969,7 +1979,7 @@ export def "apps-versions-hierarchicalentities-children delete-hierarchical-enti
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, h_entity_id: $h_entity_id, h_child_id: $h_child_id} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/children/{h_child_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id), h_child_id: (encode-path-segment $h_child_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/children/{h_child_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1979,7 +1989,7 @@ export def "apps-versions-hierarchicalentities-children delete-hierarchical-enti
 #
 # GET /apps/{appId}/versions/{versionId}/hierarchicalentities/{hEntityId}/children/{hChildId}
 # operationId: Model_GetHierarchicalEntityChild
-export def "apps-versions-hierarchicalentities-children get-hierarchical-entity-child" [
+export def "apps-versions-hierarchicalentities-children get-model-hierarchical-entity-child" [
   app_id: string
   version_id: string
   h_entity_id: string
@@ -1995,7 +2005,7 @@ export def "apps-versions-hierarchicalentities-children get-hierarchical-entity-
 ]: nothing -> record<readableType: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, h_entity_id: $h_entity_id, h_child_id: $h_child_id} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/children/{h_child_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id), h_child_id: (encode-path-segment $h_child_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/children/{h_child_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2005,7 +2015,7 @@ export def "apps-versions-hierarchicalentities-children get-hierarchical-entity-
 #
 # PUT /apps/{appId}/versions/{versionId}/hierarchicalentities/{hEntityId}/children/{hChildId}
 # operationId: Model_UpdateHierarchicalEntityChild
-export def "apps-versions-hierarchicalentities-children update-hierarchical-entity-child" [
+export def "apps-versions-hierarchicalentities-children update-model-hierarchical-entity-child" [
   app_id: string
   version_id: string
   h_entity_id: string
@@ -2023,19 +2033,19 @@ export def "apps-versions-hierarchicalentities-children update-hierarchical-enti
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, h_entity_id: $h_entity_id, h_child_id: $h_child_id} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/children/{h_child_id}"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), h_entity_id: (encode-path-segment $h_entity_id), h_child_id: (encode-path-segment $h_child_id)} | format pattern "/apps/{app_id}/versions/{version_id}/hierarchicalentities/{h_entity_id}/children/{h_child_id}"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets information about the intent models.
 #
 # GET /apps/{appId}/versions/{versionId}/intents
 # operationId: Model_ListIntents
-export def "apps-versions-intents list" [
+export def "apps-versions-intents list-model" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2052,7 +2062,7 @@ export def "apps-versions-intents list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/intents") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2062,7 +2072,7 @@ export def "apps-versions-intents list" [
 #
 # POST /apps/{appId}/versions/{versionId}/intents
 # operationId: Model_AddIntent
-export def "apps-versions-intents create" [
+export def "apps-versions-intents create-model" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2078,19 +2088,19 @@ export def "apps-versions-intents create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/intents"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an intent classifier from the application.
 #
 # DELETE /apps/{appId}/versions/{versionId}/intents/{intentId}
 # operationId: Model_DeleteIntent
-export def "apps-versions-intents delete" [
+export def "apps-versions-intents delete-model" [
   app_id: string
   version_id: string
   intent_id: string
@@ -2107,7 +2117,7 @@ export def "apps-versions-intents delete" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "deleteUtterances" $delete_utterances "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, intent_id: $intent_id} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2117,7 +2127,7 @@ export def "apps-versions-intents delete" [
 #
 # GET /apps/{appId}/versions/{versionId}/intents/{intentId}
 # operationId: Model_GetIntent
-export def "apps-versions-intents get" [
+export def "apps-versions-intents get-model" [
   app_id: string
   version_id: string
   intent_id: string
@@ -2132,7 +2142,7 @@ export def "apps-versions-intents get" [
 ]: nothing -> record<customPrebuiltDomainName: string, customPrebuiltModelName: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, intent_id: $intent_id} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2142,7 +2152,7 @@ export def "apps-versions-intents get" [
 #
 # PUT /apps/{appId}/versions/{versionId}/intents/{intentId}
 # operationId: Model_UpdateIntent
-export def "apps-versions-intents update" [
+export def "apps-versions-intents update-model" [
   app_id: string
   version_id: string
   intent_id: string
@@ -2159,19 +2169,19 @@ export def "apps-versions-intents update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, intent_id: $intent_id} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Suggests examples that would improve the accuracy of the intent model.
 #
 # GET /apps/{appId}/versions/{versionId}/intents/{intentId}/suggest
 # operationId: Model_GetIntentSuggestions
-export def "apps-versions-intents-suggest get-intent-suggestions" [
+export def "apps-versions-intents-suggest get-model-suggestions" [
   app_id: string
   version_id: string
   intent_id: string
@@ -2188,7 +2198,7 @@ export def "apps-versions-intents-suggest get-intent-suggestions" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, intent_id: $intent_id} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}/suggest") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/apps/{app_id}/versions/{version_id}/intents/{intent_id}/suggest") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2198,7 +2208,7 @@ export def "apps-versions-intents-suggest get-intent-suggestions" [
 #
 # GET /apps/{appId}/versions/{versionId}/listprebuilts
 # operationId: Model_ListPrebuiltEntities
-export def "apps-versions-listprebuilts list-prebuilt-entities" [
+export def "apps-versions-listprebuilts list-model-prebuilt-entities" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2212,7 +2222,7 @@ export def "apps-versions-listprebuilts list-prebuilt-entities" [
 ]: nothing -> table<description: string, examples: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/listprebuilts"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/listprebuilts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2239,7 +2249,7 @@ export def "apps-versions-models list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/models") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/models") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2251,7 +2261,7 @@ export def "apps-versions-models list" [
 # DEPRECATED
 # operationId: Features_GetApplicationVersionPatternFeatures
 @deprecated
-export def "apps-versions-patterns get-application-version-pattern-features" [
+export def "apps-versions-patterns get-features-application-features" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2268,7 +2278,7 @@ export def "apps-versions-patterns get-application-version-pattern-features" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/patterns") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patterns") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2280,7 +2290,7 @@ export def "apps-versions-patterns get-application-version-pattern-features" [
 # DEPRECATED
 # operationId: Features_CreatePatternFeature
 @deprecated
-export def "apps-versions-patterns create-pattern-feature" [
+export def "apps-versions-patterns create-features-feature" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2297,12 +2307,12 @@ export def "apps-versions-patterns create-pattern-feature" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/patterns"))
-  let body = {"name": $name, "pattern": $pattern} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patterns"))
+  let req_body = {"name": $name, "pattern": $pattern} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # [DEPRECATED NOTICE: This operation will soon be removed] Deletes a pattern feature.
@@ -2311,7 +2321,7 @@ export def "apps-versions-patterns create-pattern-feature" [
 # DEPRECATED
 # operationId: Features_DeletePatternFeature
 @deprecated
-export def "apps-versions-patterns delete-pattern-feature" [
+export def "apps-versions-patterns delete-features-feature" [
   app_id: string
   version_id: string
   pattern_id: int
@@ -2326,7 +2336,7 @@ export def "apps-versions-patterns delete-pattern-feature" [
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, pattern_id: $pattern_id} | format pattern "/apps/{app_id}/versions/{version_id}/patterns/{pattern_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), pattern_id: (encode-path-segment $pattern_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patterns/{pattern_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2338,7 +2348,7 @@ export def "apps-versions-patterns delete-pattern-feature" [
 # DEPRECATED
 # operationId: Features_GetPatternFeatureInfo
 @deprecated
-export def "apps-versions-patterns get-pattern-feature-info" [
+export def "apps-versions-patterns get-features-feature-get" [
   app_id: string
   version_id: string
   pattern_id: int
@@ -2353,7 +2363,7 @@ export def "apps-versions-patterns get-pattern-feature-info" [
 ]: nothing -> record<pattern: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, pattern_id: $pattern_id} | format pattern "/apps/{app_id}/versions/{version_id}/patterns/{pattern_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), pattern_id: (encode-path-segment $pattern_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patterns/{pattern_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2365,7 +2375,7 @@ export def "apps-versions-patterns get-pattern-feature-info" [
 # DEPRECATED
 # operationId: Features_UpdatePatternFeature
 @deprecated
-export def "apps-versions-patterns update-pattern-feature" [
+export def "apps-versions-patterns update-features-feature" [
   app_id: string
   version_id: string
   pattern_id: int
@@ -2384,19 +2394,19 @@ export def "apps-versions-patterns update-pattern-feature" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, pattern_id: $pattern_id} | format pattern "/apps/{app_id}/versions/{version_id}/patterns/{pattern_id}"))
-  let body = {"isActive": $is_active, "name": $name, "pattern": $pattern} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), pattern_id: (encode-path-segment $pattern_id)} | format pattern "/apps/{app_id}/versions/{version_id}/patterns/{pattern_id}"))
+  let req_body = {"isActive": $is_active, "name": $name, "pattern": $pattern} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets all the phraselist features.
 #
 # GET /apps/{appId}/versions/{versionId}/phraselists
 # operationId: Features_ListPhraseLists
-export def "apps-versions-phraselists list" [
+export def "apps-versions-phraselists list-features-phrase-lists" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2413,7 +2423,7 @@ export def "apps-versions-phraselists list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2423,7 +2433,7 @@ export def "apps-versions-phraselists list" [
 #
 # POST /apps/{appId}/versions/{versionId}/phraselists
 # operationId: Features_AddPhraseList
-export def "apps-versions-phraselists create" [
+export def "apps-versions-phraselists create-features-phrase-list" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2441,19 +2451,19 @@ export def "apps-versions-phraselists create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists"))
-  let body = {"isExchangeable": $is_exchangeable, "name": $name, "phrases": $phrases} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists"))
+  let req_body = {"isExchangeable": $is_exchangeable, "name": $name, "phrases": $phrases} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a phraselist feature.
 #
 # DELETE /apps/{appId}/versions/{versionId}/phraselists/{phraselistId}
 # operationId: Features_DeletePhraseList
-export def "apps-versions-phraselists delete" [
+export def "apps-versions-phraselists delete-features-phrase-list" [
   app_id: string
   version_id: string
   phraselist_id: int
@@ -2468,7 +2478,7 @@ export def "apps-versions-phraselists delete" [
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, phraselist_id: $phraselist_id} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists/{phraselist_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), phraselist_id: (encode-path-segment $phraselist_id)} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists/{phraselist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2478,7 +2488,7 @@ export def "apps-versions-phraselists delete" [
 #
 # GET /apps/{appId}/versions/{versionId}/phraselists/{phraselistId}
 # operationId: Features_GetPhraseList
-export def "apps-versions-phraselists get" [
+export def "apps-versions-phraselists get-features-phrase-list" [
   app_id: string
   version_id: string
   phraselist_id: int
@@ -2493,7 +2503,7 @@ export def "apps-versions-phraselists get" [
 ]: nothing -> record<isExchangeable: bool, phrases: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, phraselist_id: $phraselist_id} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists/{phraselist_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), phraselist_id: (encode-path-segment $phraselist_id)} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists/{phraselist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2503,7 +2513,7 @@ export def "apps-versions-phraselists get" [
 #
 # PUT /apps/{appId}/versions/{versionId}/phraselists/{phraselistId}
 # operationId: Features_UpdatePhraseList
-export def "apps-versions-phraselists update" [
+export def "apps-versions-phraselists update-features-phrase-list" [
   app_id: string
   version_id: string
   phraselist_id: int
@@ -2523,19 +2533,19 @@ export def "apps-versions-phraselists update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, phraselist_id: $phraselist_id} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists/{phraselist_id}"))
-  let body = {"isActive": $is_active, "isExchangeable": $is_exchangeable, "name": $name, "phrases": $phrases} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), phraselist_id: (encode-path-segment $phraselist_id)} | format pattern "/apps/{app_id}/versions/{version_id}/phraselists/{phraselist_id}"))
+  let req_body = {"isActive": $is_active, "isExchangeable": $is_exchangeable, "name": $name, "phrases": $phrases} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets information about the prebuilt entity models.
 #
 # GET /apps/{appId}/versions/{versionId}/prebuilts
 # operationId: Model_ListPrebuilts
-export def "apps-versions-prebuilts list" [
+export def "apps-versions-prebuilts list-model" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2552,7 +2562,7 @@ export def "apps-versions-prebuilts list" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts") $qp)
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2562,7 +2572,7 @@ export def "apps-versions-prebuilts list" [
 #
 # POST /apps/{appId}/versions/{versionId}/prebuilts
 # operationId: Model_AddPrebuilt
-export def "apps-versions-prebuilts create" [
+export def "apps-versions-prebuilts create-model" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2578,18 +2588,19 @@ export def "apps-versions-prebuilts create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a prebuilt entity extractor from the application.
 #
 # DELETE /apps/{appId}/versions/{versionId}/prebuilts/{prebuiltId}
 # operationId: Model_DeletePrebuilt
-export def "apps-versions-prebuilts delete" [
+export def "apps-versions-prebuilts delete-model" [
   app_id: string
   version_id: string
   prebuilt_id: string
@@ -2604,7 +2615,7 @@ export def "apps-versions-prebuilts delete" [
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, prebuilt_id: $prebuilt_id} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts/{prebuilt_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), prebuilt_id: (encode-path-segment $prebuilt_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts/{prebuilt_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2614,7 +2625,7 @@ export def "apps-versions-prebuilts delete" [
 #
 # GET /apps/{appId}/versions/{versionId}/prebuilts/{prebuiltId}
 # operationId: Model_GetPrebuilt
-export def "apps-versions-prebuilts get" [
+export def "apps-versions-prebuilts get-model" [
   app_id: string
   version_id: string
   prebuilt_id: string
@@ -2629,7 +2640,7 @@ export def "apps-versions-prebuilts get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id, prebuilt_id: $prebuilt_id} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts/{prebuilt_id}"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id), prebuilt_id: (encode-path-segment $prebuilt_id)} | format pattern "/apps/{app_id}/versions/{version_id}/prebuilts/{prebuilt_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2655,11 +2666,12 @@ export def "apps-versions-suggest delete-unlabelled-utterance" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/suggest"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/suggest"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the training status of all models (intents and entities) for the specified LUIS app. You must call the train API to train the LUIS app before you call this API to get training status. "appID" specifies the LUIS app ID. "versionId" specifies the version number of the LUIS app. For example, "0.1".
@@ -2681,7 +2693,7 @@ export def "apps-versions-train get-status" [
 ]: nothing -> table<details: record<exampleCount: int, failureReason: string, status: string, statusId: int, trainingDateTime: string>, modelId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/train"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/train"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2705,7 +2717,7 @@ export def "apps-versions-train version" [
 ]: nothing -> record<status: string, statusId: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({app_id: $app_id, version_id: $version_id} | format pattern "/apps/{app_id}/versions/{version_id}/train"))
+  let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), version_id: (encode-path-segment $version_id)} | format pattern "/apps/{app_id}/versions/{version_id}/train"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

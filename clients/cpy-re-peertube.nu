@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -60,6 +69,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   }
   if ($method in ["head" "options"]) { return $resp }
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
 def base-url-completer [] { ["https://peertube2.cpy.re" "https://peertube3.cpy.re" "https://peertube.cpy.re"] }
@@ -139,7 +175,7 @@ export def "abuses get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # only list the report with this id
-  --predefined-reason: list # predefined reason the listed reports should contain
+  --predefined-reason: list<string> # predefined reason the listed reports should contain
   --search: string # plain search that will match with video titles, reporter names and more
   --state: int@state-completer
   --search-reporter: string # only list reports of a specific reporter
@@ -167,7 +203,7 @@ export def "abuses get" [
 # --account shape: {id?: int}
 # --comment shape: {id?: any}
 # --video shape: {endAt?: int, id?: any, startAt?: int}
-export def "abuses post" [
+export def "abuses create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +214,7 @@ export def "abuses post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --account: record # shape: {id?: int}
   --comment: record # shape: {id?: any}
-  --predefined-reasons: list # Reason categories that help triage reports
+  --predefined-reasons: list<string> # Reason categories that help triage reports
   reason: string # Reason why the user reports this video
   --video: record # shape: {endAt?: int, id?: any, startAt?: int}
 ]: any -> record<abuse: record<id: int>> {
@@ -186,11 +222,11 @@ export def "abuses post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/abuses")
-  let body = {"account": $account, "comment": $comment, "predefinedReasons": $predefined_reasons, "reason": $reason, "video": $video} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account": $account, "comment": $comment, "predefinedReasons": $predefined_reasons, "reason": $reason, "video": $video} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an abuse
@@ -209,7 +245,7 @@ export def "abuses delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({abuse_id: $abuse_id} | format pattern "/api/v1/abuses/{abuse_id}"))
+  let full_url = (build-url $base ({abuse_id: (encode-path-segment $abuse_id)} | format pattern "/api/v1/abuses/{abuse_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -218,7 +254,7 @@ export def "abuses delete" [
 # Update an abuse
 #
 # PUT /api/v1/abuses/{abuseId}
-export def "abuses put" [
+export def "abuses update" [
   abuse_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,12 +270,12 @@ export def "abuses put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({abuse_id: $abuse_id} | format pattern "/api/v1/abuses/{abuse_id}"))
-  let body = {"moderationComment": $moderation_comment, "state": $state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({abuse_id: (encode-path-segment $abuse_id)} | format pattern "/api/v1/abuses/{abuse_id}"))
+  let req_body = {"moderationComment": $moderation_comment, "state": $state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List messages of an abuse
@@ -258,7 +294,7 @@ export def "abuses-messages get" [
 ]: nothing -> record<data: table<account: record, byModerator: bool, createdAt: string, id: int, message: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({abuse_id: $abuse_id} | format pattern "/api/v1/abuses/{abuse_id}/messages"))
+  let full_url = (build-url $base ({abuse_id: (encode-path-segment $abuse_id)} | format pattern "/api/v1/abuses/{abuse_id}/messages"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -267,7 +303,7 @@ export def "abuses-messages get" [
 # Add message to an abuse
 #
 # POST /api/v1/abuses/{abuseId}/messages
-export def "abuses-messages post" [
+export def "abuses-messages create" [
   abuse_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -282,12 +318,12 @@ export def "abuses-messages post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({abuse_id: $abuse_id} | format pattern "/api/v1/abuses/{abuse_id}/messages"))
-  let body = {"message": $message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({abuse_id: (encode-path-segment $abuse_id)} | format pattern "/api/v1/abuses/{abuse_id}/messages"))
+  let req_body = {"message": $message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an abuse message
@@ -307,7 +343,7 @@ export def "abuses-messages delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({abuse_id: $abuse_id, abuse_message_id: $abuse_message_id} | format pattern "/api/v1/abuses/{abuse_id}/messages/{abuse_message_id}"))
+  let full_url = (build-url $base ({abuse_id: (encode-path-segment $abuse_id), abuse_message_id: (encode-path-segment $abuse_message_id)} | format pattern "/api/v1/abuses/{abuse_id}/messages/{abuse_message_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -356,7 +392,7 @@ export def "accounts get" [
 ]: nothing -> record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string, description: string, displayName: string, userId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/v1/accounts/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -384,7 +420,7 @@ export def "accounts-followers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/v1/accounts/{name}/followers") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/followers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -411,7 +447,7 @@ export def "accounts-ratings get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "rating" $rating "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/v1/accounts/{name}/ratings") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/ratings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -437,7 +473,7 @@ export def "accounts-video-channel-syncs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/v1/accounts/{name}/video-channel-syncs") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/video-channel-syncs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -464,7 +500,7 @@ export def "accounts-video-channels get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "withStats" $with_stats "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/v1/accounts/{name}/video-channels") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/video-channels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -492,7 +528,7 @@ export def "accounts-video-playlists get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "playlistType" $playlist_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/v1/accounts/{name}/video-playlists") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/video-playlists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -532,7 +568,7 @@ export def "accounts-videos get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/v1/accounts/{name}/videos") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/videos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -550,8 +586,8 @@ export def "blocklist-status get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accounts: list # Check if these accounts are blocked (e.g. [goofy@example.com, donald@example.com])
-  --hosts: list # Check if these hosts are blocked (e.g. [example.com])
+  --accounts: list<string> # Check if these accounts are blocked (e.g. [goofy@example.com, donald@example.com])
+  --hosts: list<string> # Check if these hosts are blocked (e.g. [example.com])
 ]: nothing -> record<accounts: record, hosts: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -610,7 +646,7 @@ export def "config-about get" [
 #
 # DELETE /api/v1/config/custom
 # operationId: delCustomConfig
-export def "config-custom delCustomConfig" [
+export def "config-custom delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -696,7 +732,7 @@ export def "custom-pages-homepage-instance get" [
 # Set instance custom homepage
 #
 # PUT /api/v1/custom-pages/homepage/instance
-export def "custom-pages-homepage-instance put" [
+export def "custom-pages-homepage-instance update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -711,17 +747,17 @@ export def "custom-pages-homepage-instance put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/custom-pages/homepage/instance")
-  let body = {"content": $content} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"content": $content} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Pause job queue
 #
 # POST /api/v1/jobs/pause
-export def "jobs-pause post" [
+export def "jobs-pause create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -742,7 +778,7 @@ export def "jobs-pause post" [
 # Resume job queue
 #
 # POST /api/v1/jobs/resume
-export def "jobs-resume post" [
+export def "jobs-resume create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -782,7 +818,7 @@ export def "jobs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jobType" $job_type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({state: $state} | format pattern "/api/v1/jobs/{state}") $qp)
+  let full_url = (build-url $base ({state: (encode-path-segment $state)} | format pattern "/api/v1/jobs/{state}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -791,7 +827,7 @@ export def "jobs get" [
 # Create playback metrics
 #
 # POST /api/v1/metrics/playback
-export def "metrics-playback post" [
+export def "metrics-playback create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -814,18 +850,18 @@ export def "metrics-playback post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/metrics/playback")
-  let body = {"downloadedBytesHTTP": $downloaded_bytes_http, "downloadedBytesP2P": $downloaded_bytes_p2p, "errors": $errors, "fps": $fps, "playerMode": $player_mode, "resolution": $resolution, "resolutionChanges": $resolution_changes, "uploadedBytesP2P": $uploaded_bytes_p2p, "videoId": $video_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"downloadedBytesHTTP": $downloaded_bytes_http, "downloadedBytesP2P": $downloaded_bytes_p2p, "errors": $errors, "fps": $fps, "playerMode": $player_mode, "resolution": $resolution, "resolutionChanges": $resolution_changes, "uploadedBytesP2P": $uploaded_bytes_p2p, "videoId": $video_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Login prerequisite
 #
 # GET /api/v1/oauth-clients/local
 # operationId: getOAuthClient
-export def "oauth-clients-local get" [
+export def "oauth-clients-local get-o-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -920,18 +956,18 @@ export def "plugins-install create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/plugins/install")
-  let body = {"npmName": $npm_name, "path": $path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"npmName": $npm_name, "path": $path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Uninstall a plugin
 #
 # POST /api/v1/plugins/uninstall
 # operationId: uninstallPlugin
-export def "plugins-uninstall uninstallPlugin" [
+export def "plugins-uninstall create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -946,11 +982,11 @@ export def "plugins-uninstall uninstallPlugin" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/plugins/uninstall")
-  let body = {"npmName": $npm_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"npmName": $npm_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a plugin
@@ -973,11 +1009,11 @@ export def "plugins-update update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/plugins/update")
-  let body = {"npmName": $npm_name, "path": $path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"npmName": $npm_name, "path": $path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a plugin
@@ -997,7 +1033,7 @@ export def "plugins get" [
 ]: nothing -> record<createdAt: string, description: string, enabled: bool, homepage: string, latestVersion: string, name: string, peertubeEngine: string, settings: record, type: int, uninstalled: bool, updatedAt: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({npm_name: $npm_name} | format pattern "/api/v1/plugins/{npm_name}"))
+  let full_url = (build-url $base ({npm_name: (encode-path-segment $npm_name)} | format pattern "/api/v1/plugins/{npm_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1019,7 +1055,7 @@ export def "plugins-public-settings get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({npm_name: $npm_name} | format pattern "/api/v1/plugins/{npm_name}/public-settings"))
+  let full_url = (build-url $base ({npm_name: (encode-path-segment $npm_name)} | format pattern "/api/v1/plugins/{npm_name}/public-settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1041,7 +1077,7 @@ export def "plugins-registered-settings get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({npm_name: $npm_name} | format pattern "/api/v1/plugins/{npm_name}/registered-settings"))
+  let full_url = (build-url $base ({npm_name: (encode-path-segment $npm_name)} | format pattern "/api/v1/plugins/{npm_name}/registered-settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1050,7 +1086,7 @@ export def "plugins-registered-settings get" [
 # Set a plugin's settings
 #
 # PUT /api/v1/plugins/{npmName}/settings
-export def "plugins-settings put" [
+export def "plugins-settings update" [
   npm_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1065,12 +1101,12 @@ export def "plugins-settings put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({npm_name: $npm_name} | format pattern "/api/v1/plugins/{npm_name}/settings"))
-  let body = {"settings": $settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({npm_name: (encode-path-segment $npm_name)} | format pattern "/api/v1/plugins/{npm_name}/settings"))
+  let req_body = {"settings": $settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search channels
@@ -1089,7 +1125,7 @@ export def "search-video-channels list" [
   --search: string # String to search. If the user can make a remote URI search, and the string is an URI then the PeerTube instance will fetch the remote object and add it to its database. Then, you can use the REST API to fetch the complete channel information and interact with it.
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --search-target: string@search-target-completer # If the administrator enabled search index support, you can override the default search target.  **Warning**: If you choose to make an index search, PeerTube will get results from a third party service. It means the instance may not yet know the objects you fetched. If you want to load video/channel information:   * If the current user has the ability to make a remote URI search (this information is available in the config endpoint),   then reuse the search API to make a search using the object URI so PeerTube instance fetches the remote object and fill its database.   After that, you can use the classic REST API endpoints to fetch the complete object or interact with it   * If the current user doesn't have the ability to make a remote URI search, then redirect the user on the origin instance or fetch   the data from the origin instance API
+  --search-target: string@search-target-completer # If the administrator enabled search index support, you can override the default search target. **Warning**: If you choose to make an index search, PeerTube will get results from a third party service. It means the instance may not yet know the objects you fetched. If you want to load video/channel information: * If the current user has the ability to make a remote URI search (this information is available in the config endpoint), then reuse the search API to make a search using the object URI so PeerTube instance fetches the remote object and fill its database. After that, you can use the classic REST API endpoints to fetch the complete object or interact with it * If the current user doesn't have the ability to make a remote URI search, then redirect the user on the origin instance or fetch the data from the origin instance API
   --qp-sort: string # Sort column (e.g. -createdAt)
 ]: nothing -> record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1117,7 +1153,7 @@ export def "search-video-playlists list" [
   --search: string # String to search. If the user can make a remote URI search, and the string is an URI then the PeerTube instance will fetch the remote object and add it to its database. Then, you can use the REST API to fetch the complete playlist information and interact with it.
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --search-target: string@search-target-completer # If the administrator enabled search index support, you can override the default search target.  **Warning**: If you choose to make an index search, PeerTube will get results from a third party service. It means the instance may not yet know the objects you fetched. If you want to load video/channel information:   * If the current user has the ability to make a remote URI search (this information is available in the config endpoint),   then reuse the search API to make a search using the object URI so PeerTube instance fetches the remote object and fill its database.   After that, you can use the classic REST API endpoints to fetch the complete object or interact with it   * If the current user doesn't have the ability to make a remote URI search, then redirect the user on the origin instance or fetch   the data from the origin instance API
+  --search-target: string@search-target-completer # If the administrator enabled search index support, you can override the default search target. **Warning**: If you choose to make an index search, PeerTube will get results from a third party service. It means the instance may not yet know the objects you fetched. If you want to load video/channel information: * If the current user has the ability to make a remote URI search (this information is available in the config endpoint), then reuse the search API to make a search using the object URI so PeerTube instance fetches the remote object and fill its database. After that, you can use the classic REST API endpoints to fetch the complete object or interact with it * If the current user doesn't have the ability to make a remote URI search, then redirect the user on the origin instance or fetch the data from the origin instance API
   --qp-sort: string # Sort column (e.g. -createdAt)
 ]: nothing -> record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: record, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1159,7 +1195,7 @@ export def "search-videos list" [
   --skip-count: string@skip-count-completer # if you don't need the `total` in the response (default: false)
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-  --search-target: string@search-target-completer # If the administrator enabled search index support, you can override the default search target.  **Warning**: If you choose to make an index search, PeerTube will get results from a third party service. It means the instance may not yet know the objects you fetched. If you want to load video/channel information:   * If the current user has the ability to make a remote URI search (this information is available in the config endpoint),   then reuse the search API to make a search using the object URI so PeerTube instance fetches the remote object and fill its database.   After that, you can use the classic REST API endpoints to fetch the complete object or interact with it   * If the current user doesn't have the ability to make a remote URI search, then redirect the user on the origin instance or fetch   the data from the origin instance API
+  --search-target: string@search-target-completer # If the administrator enabled search index support, you can override the default search target. **Warning**: If you choose to make an index search, PeerTube will get results from a third party service. It means the instance may not yet know the objects you fetched. If you want to load video/channel information: * If the current user has the ability to make a remote URI search (this information is available in the config endpoint), then reuse the search API to make a search using the object URI so PeerTube instance fetches the remote object and fill its database. After that, you can use the classic REST API endpoints to fetch the complete object or interact with it * If the current user doesn't have the ability to make a remote URI search, then redirect the user on the origin instance or fetch the data from the origin instance API
   --qp-sort: string@sort-completer-3 # Sort videos by criteria (prefixing with `-` means `DESC` order):
   --start-date: string # Get videos that are published after this date (format: date-time)
   --end-date: string # Get videos that are published before this date (format: date-time)
@@ -1227,7 +1263,7 @@ export def "server-blocklist-accounts get" [
 # Block an account
 #
 # POST /api/v1/server/blocklist/accounts
-export def "server-blocklist-accounts post" [
+export def "server-blocklist-accounts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1242,11 +1278,11 @@ export def "server-blocklist-accounts post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/server/blocklist/accounts")
-  let body = {"accountName": $account_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"accountName": $account_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unblock an account by its handle
@@ -1265,7 +1301,7 @@ export def "server-blocklist-accounts delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({account_name: $account_name} | format pattern "/api/v1/server/blocklist/accounts/{account_name}"))
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name)} | format pattern "/api/v1/server/blocklist/accounts/{account_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1299,7 +1335,7 @@ export def "server-blocklist-servers get" [
 # Block a server
 #
 # POST /api/v1/server/blocklist/servers
-export def "server-blocklist-servers post" [
+export def "server-blocklist-servers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1314,11 +1350,11 @@ export def "server-blocklist-servers post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/server/blocklist/servers")
-  let body = {"host": $host} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"host": $host} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unblock a server by its domain
@@ -1337,7 +1373,7 @@ export def "server-blocklist-servers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({host: $host} | format pattern "/api/v1/server/blocklist/servers/{host}"))
+  let full_url = (build-url $base ({host: (encode-path-segment $host)} | format pattern "/api/v1/server/blocklist/servers/{host}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1386,7 +1422,7 @@ export def "server-followers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name_with_host: $name_with_host} | format pattern "/api/v1/server/followers/{name_with_host}"))
+  let full_url = (build-url $base ({name_with_host: (encode-path-segment $name_with_host)} | format pattern "/api/v1/server/followers/{name_with_host}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1395,7 +1431,7 @@ export def "server-followers delete" [
 # Accept a pending follower to your server
 #
 # POST /api/v1/server/followers/{nameWithHost}/accept
-export def "server-followers-accept post" [
+export def "server-followers-accept create" [
   name_with_host: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1408,7 +1444,7 @@ export def "server-followers-accept post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name_with_host: $name_with_host} | format pattern "/api/v1/server/followers/{name_with_host}/accept"))
+  let full_url = (build-url $base ({name_with_host: (encode-path-segment $name_with_host)} | format pattern "/api/v1/server/followers/{name_with_host}/accept"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1417,7 +1453,7 @@ export def "server-followers-accept post" [
 # Reject a pending follower to your server
 #
 # POST /api/v1/server/followers/{nameWithHost}/reject
-export def "server-followers-reject post" [
+export def "server-followers-reject create" [
   name_with_host: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1430,7 +1466,7 @@ export def "server-followers-reject post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name_with_host: $name_with_host} | format pattern "/api/v1/server/followers/{name_with_host}/reject"))
+  let full_url = (build-url $base ({name_with_host: (encode-path-segment $name_with_host)} | format pattern "/api/v1/server/followers/{name_with_host}/reject"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1466,7 +1502,7 @@ export def "server-following get" [
 # Follow a list of actors (PeerTube instance, channel or account)
 #
 # POST /api/v1/server/following
-export def "server-following post" [
+export def "server-following create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1475,18 +1511,18 @@ export def "server-following post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --handles: list
-  --hosts: list
+  --handles: list<string>
+  --hosts: list<string>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/server/following")
-  let body = {"handles": $handles, "hosts": $hosts} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"handles": $handles, "hosts": $hosts} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unfollow an actor (PeerTube instance, channel or account)
@@ -1505,7 +1541,7 @@ export def "server-following delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({host_or_handle: $host_or_handle} | format pattern "/api/v1/server/following/{host_or_handle}"))
+  let full_url = (build-url $base ({host_or_handle: (encode-path-segment $host_or_handle)} | format pattern "/api/v1/server/following/{host_or_handle}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1550,18 +1586,18 @@ export def "server-logs-client send" [
   message: string
   --meta: string # Additional information regarding this log
   --stack-trace: string # Stack trace of the error if there is one
-  --body-url: string # URL of the current user page
+  url: string # URL of the current user page
   --user-agent: string # User agent of the web browser that sends the message
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/server/logs/client")
-  let body = {"level": $level, "message": $message, "meta": $meta, "stackTrace": $stack_trace, "url": $body_url, "userAgent": $user_agent} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"level": $level, "message": $message, "meta": $meta, "stackTrace": $stack_trace, "url": $url, "userAgent": $user_agent} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List videos being mirrored
@@ -1610,18 +1646,18 @@ export def "server-redundancy-videos update-mirrored" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/server/redundancy/videos")
-  let body = {"videoId": $video_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"videoId": $video_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a mirror done on a video
 #
 # DELETE /api/v1/server/redundancy/videos/{redundancyId}
 # operationId: delMirroredVideo
-export def "server-redundancy-videos delMirroredVideo" [
+export def "server-redundancy-videos delete-mirrored" [
   redundancy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1634,7 +1670,7 @@ export def "server-redundancy-videos delMirroredVideo" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({redundancy_id: $redundancy_id} | format pattern "/api/v1/server/redundancy/videos/{redundancy_id}"))
+  let full_url = (build-url $base ({redundancy_id: (encode-path-segment $redundancy_id)} | format pattern "/api/v1/server/redundancy/videos/{redundancy_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1643,7 +1679,7 @@ export def "server-redundancy-videos delMirroredVideo" [
 # Update a server redundancy policy
 #
 # PUT /api/v1/server/redundancy/{host}
-export def "server-redundancy put" [
+export def "server-redundancy update" [
   host: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1658,12 +1694,12 @@ export def "server-redundancy put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({host: $host} | format pattern "/api/v1/server/redundancy/{host}"))
-  let body = {"redundancyAllowed": $redundancy_allowed} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({host: (encode-path-segment $host)} | format pattern "/api/v1/server/redundancy/{host}"))
+  let req_body = {"redundancyAllowed": $redundancy_allowed} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get instance stats
@@ -1742,18 +1778,18 @@ export def "users create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users")
-  let body = {"adminFlags": $admin_flags, "channelName": $channel_name, "email": $email, "password": $password, "role": $role, "username": $username, "videoQuota": $video_quota, "videoQuotaDaily": $video_quota_daily} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"adminFlags": $admin_flags, "channelName": $channel_name, "email": $email, "password": $password, "role": $role, "username": $username, "videoQuota": $video_quota, "videoQuotaDaily": $video_quota_daily} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Resend user verification link
 #
 # POST /api/v1/users/ask-send-verify-email
 # operationId: resendEmailToVerifyUser
-export def "users-ask-send-verify-email resendEmailToVerifyUser" [
+export def "users-ask-send-verify-email resend" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1768,18 +1804,18 @@ export def "users-ask-send-verify-email resendEmailToVerifyUser" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/ask-send-verify-email")
-  let body = {"email": $email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get my user information
 #
 # GET /api/v1/users/me
 # operationId: getUserInfo
-export def "users-me get-user-info" [
+export def "users-me get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1801,7 +1837,7 @@ export def "users-me get-user-info" [
 #
 # PUT /api/v1/users/me
 # operationId: putUserInfo
-export def "users-me update-user-info" [
+export def "users-me update-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1823,18 +1859,18 @@ export def "users-me update-user-info" [
   --p2p-enabled: oneof<nothing, bool> # whether to enable P2P in the player or not
   --password: string # format: password
   --theme: string
-  --video-languages: list # list of languages to filter videos down to
+  --video-languages: list<string> # list of languages to filter videos down to
   --videos-history-enabled: oneof<nothing, bool> # whether to keep track of watched history or not
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me")
-  let body = {"autoPlayNextVideo": $auto_play_next_video, "autoPlayNextVideoPlaylist": $auto_play_next_video_playlist, "autoPlayVideo": $auto_play_video, "currentPassword": $current_password, "displayNSFW": $display_nsfw, "displayName": $display_name, "email": $email, "noAccountSetupWarningModal": $no_account_setup_warning_modal, "noInstanceConfigWarningModal": $no_instance_config_warning_modal, "noWelcomeModal": $no_welcome_modal, "p2pEnabled": $p2p_enabled, "password": $password, "theme": $theme, "videoLanguages": $video_languages, "videosHistoryEnabled": $videos_history_enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"autoPlayNextVideo": $auto_play_next_video, "autoPlayNextVideoPlaylist": $auto_play_next_video_playlist, "autoPlayVideo": $auto_play_video, "currentPassword": $current_password, "displayNSFW": $display_nsfw, "displayName": $display_name, "email": $email, "noAccountSetupWarningModal": $no_account_setup_warning_modal, "noInstanceConfigWarningModal": $no_instance_config_warning_modal, "noWelcomeModal": $no_welcome_modal, "p2pEnabled": $p2p_enabled, "password": $password, "theme": $theme, "videoLanguages": $video_languages, "videosHistoryEnabled": $videos_history_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List my abuses
@@ -1889,7 +1925,7 @@ export def "users-me-avatar delete" [
 # Update my user avatar
 #
 # POST /api/v1/users/me/avatar/pick
-export def "users-me-avatar-pick post" [
+export def "users-me-avatar-pick create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1904,11 +1940,12 @@ export def "users-me-avatar-pick post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me/avatar/pick")
-  let body = {"avatarfile": $avatarfile} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"avatarfile": $avatarfile} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["avatarfile"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # List watched videos history
@@ -1939,7 +1976,7 @@ export def "users-me-history-videos get" [
 # Clear video history
 #
 # POST /api/v1/users/me/history/videos/remove
-export def "users-me-history-videos-remove post" [
+export def "users-me-history-videos-remove create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1954,11 +1991,12 @@ export def "users-me-history-videos-remove post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me/history/videos/remove")
-  let body = {"beforeDate": $before_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"beforeDate": $before_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body [])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Delete history element
@@ -1977,7 +2015,7 @@ export def "users-me-history-videos delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/api/v1/users/me/history/videos/{video_id}"))
+  let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/api/v1/users/me/history/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1986,7 +2024,7 @@ export def "users-me-history-videos delete" [
 # Update my notification settings
 #
 # PUT /api/v1/users/me/notification-settings
-export def "users-me-notification-settings put" [
+export def "users-me-notification-settings update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2012,11 +2050,11 @@ export def "users-me-notification-settings put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me/notification-settings")
-  let body = {"abuseAsModerator": $abuse_as_moderator, "autoInstanceFollowing": $auto_instance_following, "blacklistOnMyVideo": $blacklist_on_my_video, "commentMention": $comment_mention, "myVideoImportFinished": $my_video_import_finished, "myVideoPublished": $my_video_published, "newCommentOnMyVideo": $new_comment_on_my_video, "newFollow": $new_follow, "newInstanceFollower": $new_instance_follower, "newUserRegistration": $new_user_registration, "newVideoFromSubscription": $new_video_from_subscription, "videoAutoBlacklistAsModerator": $video_auto_blacklist_as_moderator} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"abuseAsModerator": $abuse_as_moderator, "autoInstanceFollowing": $auto_instance_following, "blacklistOnMyVideo": $blacklist_on_my_video, "commentMention": $comment_mention, "myVideoImportFinished": $my_video_import_finished, "myVideoPublished": $my_video_published, "newCommentOnMyVideo": $new_comment_on_my_video, "newFollow": $new_follow, "newInstanceFollower": $new_instance_follower, "newUserRegistration": $new_user_registration, "newVideoFromSubscription": $new_video_from_subscription, "videoAutoBlacklistAsModerator": $video_auto_blacklist_as_moderator} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List my notifications
@@ -2048,7 +2086,7 @@ export def "users-me-notifications get" [
 # Mark notifications as read by their id
 #
 # POST /api/v1/users/me/notifications/read
-export def "users-me-notifications-read post" [
+export def "users-me-notifications-read create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2057,23 +2095,23 @@ export def "users-me-notifications-read post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  ids: list # ids of the notifications to mark as read
+  ids: list<int> # ids of the notifications to mark as read
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me/notifications/read")
-  let body = {"ids": $ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ids": $ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Mark all my notification as read
 #
 # POST /api/v1/users/me/notifications/read-all
-export def "users-me-notifications-read-all post" [
+export def "users-me-notifications-read-all create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2119,7 +2157,7 @@ export def "users-me-subscriptions list" [
 # Add subscription to my user
 #
 # POST /api/v1/users/me/subscriptions
-export def "users-me-subscriptions post" [
+export def "users-me-subscriptions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2134,11 +2172,11 @@ export def "users-me-subscriptions post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me/subscriptions")
-  let body = {"uri": $uri} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"uri": $uri} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get if subscriptions exist for my user
@@ -2153,7 +2191,7 @@ export def "users-me-subscriptions-exist get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --uris: list # list of uris to check if each is part of the user subscriptions
+  --uris: list<string> # list of uris to check if each is part of the user subscriptions
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2218,7 +2256,7 @@ export def "users-me-subscriptions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_handle: $subscription_handle} | format pattern "/api/v1/users/me/subscriptions/{subscription_handle}"))
+  let full_url = (build-url $base ({subscription_handle: (encode-path-segment $subscription_handle)} | format pattern "/api/v1/users/me/subscriptions/{subscription_handle}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2240,7 +2278,7 @@ export def "users-me-subscriptions get" [
 ]: nothing -> record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string, banners: table<createdAt: string, path: string, updatedAt: string, width: int>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_handle: $subscription_handle} | format pattern "/api/v1/users/me/subscriptions/{subscription_handle}"))
+  let full_url = (build-url $base ({subscription_handle: (encode-path-segment $subscription_handle)} | format pattern "/api/v1/users/me/subscriptions/{subscription_handle}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2359,7 +2397,7 @@ export def "users-me-videos-rating get" [
 ]: nothing -> record<id: int, rating: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({video_id: $video_id} | format pattern "/api/v1/users/me/videos/{video_id}/rating"))
+  let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/api/v1/users/me/videos/{video_id}/rating"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2389,11 +2427,11 @@ export def "users-register create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/register")
-  let body = {"channel": $channel, "displayName": $display_name, "email": $email, "password": $password, "username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"channel": $channel, "displayName": $display_name, "email": $email, "password": $password, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List registrations
@@ -2427,7 +2465,7 @@ export def "users-registrations list" [
 #
 # POST /api/v1/users/registrations/ask-send-verify-email
 # operationId: resendEmailToVerifyRegistration
-export def "users-registrations-ask-send-verify-email resendEmailToVerifyRegistration" [
+export def "users-registrations-ask-send-verify-email resend" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2442,11 +2480,11 @@ export def "users-registrations-ask-send-verify-email resendEmailToVerifyRegistr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/registrations/ask-send-verify-email")
-  let body = {"email": $email} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request registration
@@ -2474,11 +2512,11 @@ export def "users-registrations-request request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/registrations/request")
-  let body = {"channel": $channel, "displayName": $display_name, "email": $email, "password": $password, "username": $username, "registrationReason": $registration_reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"channel": $channel, "displayName": $display_name, "email": $email, "password": $password, "username": $username, "registrationReason": $registration_reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete registration
@@ -2498,7 +2536,7 @@ export def "users-registrations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({registration_id: $registration_id} | format pattern "/api/v1/users/registrations/{registration_id}"))
+  let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/v1/users/registrations/{registration_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2508,7 +2546,7 @@ export def "users-registrations delete" [
 #
 # POST /api/v1/users/registrations/{registrationId}/accept
 # operationId: acceptRegistration
-export def "users-registrations-accept acceptRegistration" [
+export def "users-registrations-accept create" [
   registration_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2524,12 +2562,12 @@ export def "users-registrations-accept acceptRegistration" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({registration_id: $registration_id} | format pattern "/api/v1/users/registrations/{registration_id}/accept"))
-  let body = {"moderationResponse": $moderation_response, "preventEmailDelivery": $prevent_email_delivery} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/v1/users/registrations/{registration_id}/accept"))
+  let req_body = {"moderationResponse": $moderation_response, "preventEmailDelivery": $prevent_email_delivery} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reject registration
@@ -2552,12 +2590,12 @@ export def "users-registrations-reject reject" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({registration_id: $registration_id} | format pattern "/api/v1/users/registrations/{registration_id}/reject"))
-  let body = {"moderationResponse": $moderation_response, "preventEmailDelivery": $prevent_email_delivery} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/v1/users/registrations/{registration_id}/reject"))
+  let req_body = {"moderationResponse": $moderation_response, "preventEmailDelivery": $prevent_email_delivery} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Verify a registration email
@@ -2579,12 +2617,12 @@ export def "users-registrations-verify-email verify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({registration_id: $registration_id} | format pattern "/api/v1/users/registrations/{registration_id}/verify-email"))
-  let body = {"verificationString": $verification_string} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/v1/users/registrations/{registration_id}/verify-email"))
+  let req_body = {"verificationString": $verification_string} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Logout
@@ -2629,17 +2667,19 @@ export def "users-token get-o-auth" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/token")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a user
 #
 # DELETE /api/v1/users/{id}
 # operationId: delUser
-export def "users delUser" [
+export def "users delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2652,7 +2692,7 @@ export def "users delUser" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/users/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2677,7 +2717,7 @@ export def "users get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "withStats" $with_stats "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/users/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2709,19 +2749,19 @@ export def "users update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/users/{id}"))
-  let body = {"adminFlags": $admin_flags, "email": $email, "emailVerified": $email_verified, "password": $password, "pluginAuth": $plugin_auth, "role": $role, "videoQuota": $video_quota, "videoQuotaDaily": $video_quota_daily} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}"))
+  let req_body = {"adminFlags": $admin_flags, "email": $email, "emailVerified": $email_verified, "password": $password, "pluginAuth": $plugin_auth, "role": $role, "videoQuota": $video_quota, "videoQuotaDaily": $video_quota_daily} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Confirm two factor auth
 #
 # POST /api/v1/users/{id}/two-factor/confirm-request
 # operationId: confirmTwoFactorRequest
-export def "users-two-factor-confirm-request confirmTwoFactorRequest" [
+export def "users-two-factor-confirm-request confirm" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2737,12 +2777,12 @@ export def "users-two-factor-confirm-request confirmTwoFactorRequest" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/users/{id}/two-factor/confirm-request"))
-  let body = {"otpToken": $otp_token, "requestToken": $request_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}/two-factor/confirm-request"))
+  let req_body = {"otpToken": $otp_token, "requestToken": $request_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Disable two factor auth
@@ -2764,12 +2804,12 @@ export def "users-two-factor-disable disable" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/users/{id}/two-factor/disable"))
-  let body = {"currentPassword": $current_password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}/two-factor/disable"))
+  let req_body = {"currentPassword": $current_password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request two factor auth
@@ -2791,12 +2831,12 @@ export def "users-two-factor-request request" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/users/{id}/two-factor/request"))
-  let body = {"currentPassword": $current_password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}/two-factor/request"))
+  let req_body = {"currentPassword": $current_password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Verify a user
@@ -2819,12 +2859,12 @@ export def "users-verify-email verify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/users/{id}/verify-email"))
-  let body = {"isPendingEmail": $is_pending_email, "verificationString": $verification_string} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}/verify-email"))
+  let req_body = {"isPendingEmail": $is_pending_email, "verificationString": $verification_string} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a synchronization for a video channel
@@ -2847,18 +2887,18 @@ export def "video-channel-syncs create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/video-channel-syncs")
-  let body = {"externalChannelUrl": $external_channel_url, "videoChannelId": $video_channel_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"externalChannelUrl": $external_channel_url, "videoChannelId": $video_channel_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a video channel synchronization
 #
 # DELETE /api/v1/video-channel-syncs/{channelSyncId}
 # operationId: delVideoChannelSync
-export def "video-channel-syncs delVideoChannelSync" [
+export def "video-channel-syncs delete" [
   channel_sync_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2871,7 +2911,7 @@ export def "video-channel-syncs delVideoChannelSync" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({channel_sync_id: $channel_sync_id} | format pattern "/api/v1/video-channel-syncs/{channel_sync_id}"))
+  let full_url = (build-url $base ({channel_sync_id: (encode-path-segment $channel_sync_id)} | format pattern "/api/v1/video-channel-syncs/{channel_sync_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2894,7 +2934,7 @@ export def "video-channel-syncs-sync trigger" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({channel_sync_id: $channel_sync_id} | format pattern "/api/v1/video-channel-syncs/{channel_sync_id}/sync"))
+  let full_url = (build-url $base ({channel_sync_id: (encode-path-segment $channel_sync_id)} | format pattern "/api/v1/video-channel-syncs/{channel_sync_id}/sync"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2948,18 +2988,18 @@ export def "video-channels create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/video-channels")
-  let body = {"description": $description, "displayName": $display_name, "support": $support, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "displayName": $display_name, "support": $support, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a video channel
 #
 # DELETE /api/v1/video-channels/{channelHandle}
 # operationId: delVideoChannel
-export def "video-channels delVideoChannel" [
+export def "video-channels delete" [
   channel_handle: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2972,7 +3012,7 @@ export def "video-channels delVideoChannel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({channel_handle: $channel_handle} | format pattern "/api/v1/video-channels/{channel_handle}"))
+  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2995,7 +3035,7 @@ export def "video-channels get" [
 ]: nothing -> record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string, banners: table<createdAt: string, path: string, updatedAt: string, width: int>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({channel_handle: $channel_handle} | format pattern "/api/v1/video-channels/{channel_handle}"))
+  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3023,12 +3063,12 @@ export def "video-channels update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({channel_handle: $channel_handle} | format pattern "/api/v1/video-channels/{channel_handle}"))
-  let body = {"description": $description, "displayName": $display_name, "support": $support, "bulkVideosSupportUpdate": $bulk_videos_support_update} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}"))
+  let req_body = {"description": $description, "displayName": $display_name, "support": $support, "bulkVideosSupportUpdate": $bulk_videos_support_update} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete channel avatar
@@ -3047,7 +3087,7 @@ export def "video-channels-avatar delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({channel_handle: $channel_handle} | format pattern "/api/v1/video-channels/{channel_handle}/avatar"))
+  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/avatar"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3056,7 +3096,7 @@ export def "video-channels-avatar delete" [
 # Update channel avatar
 #
 # POST /api/v1/video-channels/{channelHandle}/avatar/pick
-export def "video-channels-avatar-pick post" [
+export def "video-channels-avatar-pick create" [
   channel_handle: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3071,12 +3111,13 @@ export def "video-channels-avatar-pick post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({channel_handle: $channel_handle} | format pattern "/api/v1/video-channels/{channel_handle}/avatar/pick"))
-  let body = {"avatarfile": $avatarfile} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/avatar/pick"))
+  let req_body = {"avatarfile": $avatarfile} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["avatarfile"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Delete channel banner
@@ -3095,7 +3136,7 @@ export def "video-channels-banner delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({channel_handle: $channel_handle} | format pattern "/api/v1/video-channels/{channel_handle}/banner"))
+  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/banner"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3104,7 +3145,7 @@ export def "video-channels-banner delete" [
 # Update channel banner
 #
 # POST /api/v1/video-channels/{channelHandle}/banner/pick
-export def "video-channels-banner-pick post" [
+export def "video-channels-banner-pick create" [
   channel_handle: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3119,12 +3160,13 @@ export def "video-channels-banner-pick post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({channel_handle: $channel_handle} | format pattern "/api/v1/video-channels/{channel_handle}/banner/pick"))
-  let body = {"bannerfile": $bannerfile} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/banner/pick"))
+  let req_body = {"bannerfile": $bannerfile} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["bannerfile"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # List followers of a video channel
@@ -3149,7 +3191,7 @@ export def "video-channels-followers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_handle: $channel_handle} | format pattern "/api/v1/video-channels/{channel_handle}/followers") $qp)
+  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/followers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3158,7 +3200,7 @@ export def "video-channels-followers get" [
 # Import videos in channel
 #
 # POST /api/v1/video-channels/{channelHandle}/import-videos
-export def "video-channels-import-videos post" [
+export def "video-channels-import-videos create" [
   channel_handle: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3174,12 +3216,12 @@ export def "video-channels-import-videos post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({channel_handle: $channel_handle} | format pattern "/api/v1/video-channels/{channel_handle}/import-videos"))
-  let body = {"externalChannelUrl": $external_channel_url, "videoChannelSyncId": $video_channel_sync_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/import-videos"))
+  let req_body = {"externalChannelUrl": $external_channel_url, "videoChannelSyncId": $video_channel_sync_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List playlists of a channel
@@ -3203,7 +3245,7 @@ export def "video-channels-video-playlists get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "playlistType" $playlist_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_handle: $channel_handle} | format pattern "/api/v1/video-channels/{channel_handle}/video-playlists") $qp)
+  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/video-playlists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3243,7 +3285,7 @@ export def "video-channels-videos get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({channel_handle: $channel_handle} | format pattern "/api/v1/video-channels/{channel_handle}/videos") $qp)
+  let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/videos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3294,23 +3336,24 @@ export def "video-playlists create" [
   --privacy: int@privacy-completer # Video playlist privacy policy (see [/video-playlists/privacies])
   --thumbnailfile: string # Video playlist thumbnail file (format: binary)
   --video-channel-id: any # Video channel in which the playlist will be published
-]: any -> record<videoPlaylist: record<id: int, shortUUID: string, uuid: any>> {
+]: any -> record<videoPlaylist: record<id: int, shortUUID: string, uuid: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/video-playlists")
-  let body = {"description": $description, "displayName": $display_name, "privacy": $privacy, "thumbnailfile": $thumbnailfile, "videoChannelId": $video_channel_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "displayName": $display_name, "privacy": $privacy, "thumbnailfile": $thumbnailfile, "videoChannelId": $video_channel_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["thumbnailfile"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # List available playlist privacy policies
 #
 # GET /api/v1/video-playlists/privacies
 # operationId: getPlaylistPrivacyPolicies
-export def "video-playlists-privacies get-playlist-privacy-policies" [
+export def "video-playlists-privacies get-privacy-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3344,7 +3387,7 @@ export def "video-playlists delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/api/v1/video-playlists/{playlist_id}"))
+  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/api/v1/video-playlists/{playlist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3366,7 +3409,7 @@ export def "video-playlists get" [
 ]: nothing -> record<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record<avatars: list<record>, displayName: string, host: string, id: int, name: string, url: string>, privacy: record<id: int, label: string>, shortUUID: record, thumbnailPath: string, type: record<id: int, label: string>, updatedAt: string, uuid: string, videoChannel: record<avatars: list<record>, displayName: string, host: string, id: int, name: string, url: string>, videoLength: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/api/v1/video-playlists/{playlist_id}"))
+  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/api/v1/video-playlists/{playlist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3375,7 +3418,7 @@ export def "video-playlists get" [
 # Update a video playlist
 #
 # PUT /api/v1/video-playlists/{playlistId}
-export def "video-playlists put" [
+export def "video-playlists update" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3394,12 +3437,13 @@ export def "video-playlists put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/api/v1/video-playlists/{playlist_id}"))
-  let body = {"description": $description, "displayName": $display_name, "privacy": $privacy, "thumbnailfile": $thumbnailfile, "videoChannelId": $video_channel_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/api/v1/video-playlists/{playlist_id}"))
+  let req_body = {"description": $description, "displayName": $display_name, "privacy": $privacy, "thumbnailfile": $thumbnailfile, "videoChannelId": $video_channel_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["thumbnailfile"])
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # List videos of a playlist
@@ -3422,7 +3466,7 @@ export def "video-playlists-videos get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/api/v1/video-playlists/{playlist_id}/videos") $qp)
+  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/api/v1/video-playlists/{playlist_id}/videos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3449,19 +3493,19 @@ export def "video-playlists-videos create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/api/v1/video-playlists/{playlist_id}/videos"))
-  let body = {"startTimestamp": $start_timestamp, "stopTimestamp": $stop_timestamp, "videoId": $video_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/api/v1/video-playlists/{playlist_id}/videos"))
+  let req_body = {"startTimestamp": $start_timestamp, "stopTimestamp": $stop_timestamp, "videoId": $video_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reorder a playlist
 #
 # POST /api/v1/video-playlists/{playlistId}/videos/reorder
 # operationId: reorderVideoPlaylist
-export def "video-playlists-videos-reorder reorderVideoPlaylist" [
+export def "video-playlists-videos-reorder create" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3478,19 +3522,19 @@ export def "video-playlists-videos-reorder reorderVideoPlaylist" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({playlist_id: $playlist_id} | format pattern "/api/v1/video-playlists/{playlist_id}/videos/reorder"))
-  let body = {"insertAfterPosition": $insert_after_position, "reorderLength": $reorder_length, "startPosition": $start_position} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/api/v1/video-playlists/{playlist_id}/videos/reorder"))
+  let req_body = {"insertAfterPosition": $insert_after_position, "reorderLength": $reorder_length, "startPosition": $start_position} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an element from a playlist
 #
 # DELETE /api/v1/video-playlists/{playlistId}/videos/{playlistElementId}
 # operationId: delVideoPlaylistVideo
-export def "video-playlists-videos delVideoPlaylistVideo" [
+export def "video-playlists-videos delete" [
   playlist_id: int
   playlist_element_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3504,7 +3548,7 @@ export def "video-playlists-videos delVideoPlaylistVideo" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({playlist_id: $playlist_id, playlist_element_id: $playlist_element_id} | format pattern "/api/v1/video-playlists/{playlist_id}/videos/{playlist_element_id}"))
+  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id), playlist_element_id: (encode-path-segment $playlist_element_id)} | format pattern "/api/v1/video-playlists/{playlist_id}/videos/{playlist_element_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3531,12 +3575,12 @@ export def "video-playlists-videos update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({playlist_id: $playlist_id, playlist_element_id: $playlist_element_id} | format pattern "/api/v1/video-playlists/{playlist_id}/videos/{playlist_element_id}"))
-  let body = {"startTimestamp": $start_timestamp, "stopTimestamp": $stop_timestamp} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id), playlist_element_id: (encode-path-segment $playlist_element_id)} | format pattern "/api/v1/video-playlists/{playlist_id}/videos/{playlist_element_id}"))
+  let req_body = {"startTimestamp": $start_timestamp, "stopTimestamp": $stop_timestamp} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List videos
@@ -3582,7 +3626,7 @@ export def "videos list" [
 #
 # GET /api/v1/videos/blacklist
 # operationId: getVideoBlocks
-export def "videos-blacklist get-video-blocks" [
+export def "videos-blacklist get-blocks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3656,19 +3700,20 @@ export def "videos-imports import" [
   --privacy: int@privacy-completer-1 # privacy id of the video (see [/videos/privacies](#operation/getPrivacyPolicies))
   --schedule-update: any # shape: {privacy?: "1"|"2"|"3"|"4", updateAt: string}
   --support: string # A text tell the audience how to support the video creator (e.g. Please support our work on https://soutenir.framasoft.org/en/ <3)
-  --tags: list # Video tags (maximum 5 tags each between 2 and 30 characters) (e.g. [framasoft, peertube])
+  --tags: list<string> # Video tags (maximum 5 tags each between 2 and 30 characters) (e.g. [framasoft, peertube])
   --thumbnailfile: string # Video thumbnail file (format: binary)
   --wait-transcoding: oneof<nothing, bool> # Whether or not we wait transcoding before publish the video
-]: any -> record<video: record<id: int, shortUUID: string, uuid: any>> {
+]: any -> record<video: record<id: int, shortUUID: string, uuid: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/videos/imports")
-  let body = {"category": $category, "channelId": $channel_id, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "licence": $licence, "name": $name, "nsfw": $nsfw, "originallyPublishedAt": $originally_published_at, "previewfile": $previewfile, "privacy": $privacy, "scheduleUpdate": $schedule_update, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile, "waitTranscoding": $wait_transcoding} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"category": $category, "channelId": $channel_id, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "licence": $licence, "name": $name, "nsfw": $nsfw, "originallyPublishedAt": $originally_published_at, "previewfile": $previewfile, "privacy": $privacy, "scheduleUpdate": $schedule_update, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile, "waitTranscoding": $wait_transcoding} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["previewfile" "thumbnailfile"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Delete video import
@@ -3687,7 +3732,7 @@ export def "videos-imports delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/imports/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/imports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3696,7 +3741,7 @@ export def "videos-imports delete" [
 # Cancel video import
 #
 # POST /api/v1/videos/imports/{id}/cancel
-export def "videos-imports-cancel post" [
+export def "videos-imports-cancel create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3709,7 +3754,7 @@ export def "videos-imports-cancel post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/imports/{id}/cancel"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/imports/{id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3787,18 +3832,19 @@ export def "videos-live create" [
   --privacy: int@privacy-completer-1 # privacy id of the video (see [/videos/privacies](#operation/getPrivacyPolicies))
   --save-replay: oneof<nothing, bool>
   --support: string # A text tell the audience how to support the creator (e.g. Please support our work on https://soutenir.framasoft.org/en/ <3)
-  --tags: list # Live video/replay tags (maximum 5 tags each between 2 and 30 characters)
+  --tags: list<string> # Live video/replay tags (maximum 5 tags each between 2 and 30 characters)
   --thumbnailfile: string # Live video/replay thumbnail file (format: binary)
-]: any -> record<video: record<id: int, shortUUID: string, uuid: any>> {
+]: any -> record<video: record<id: int, shortUUID: string, uuid: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/videos/live")
-  let body = {"category": $category, "channelId": $channel_id, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "latencyMode": $latency_mode, "licence": $licence, "name": $name, "nsfw": $nsfw, "permanentLive": $permanent_live, "previewfile": $previewfile, "privacy": $privacy, "saveReplay": $save_replay, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"category": $category, "channelId": $channel_id, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "latencyMode": $latency_mode, "licence": $licence, "name": $name, "nsfw": $nsfw, "permanentLive": $permanent_live, "previewfile": $previewfile, "privacy": $privacy, "saveReplay": $save_replay, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["previewfile" "thumbnailfile"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Get information about a live
@@ -3818,7 +3864,7 @@ export def "videos-live get" [
 ]: nothing -> record<latencyMode: int, permanentLive: bool, rtmpUrl: string, rtmpsUrl: string, saveReplay: bool, streamKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/live/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/live/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3845,12 +3891,12 @@ export def "videos-live update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/live/{id}"))
-  let body = {"latencyMode": $latency_mode, "permanentLive": $permanent_live, "saveReplay": $save_replay} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/live/{id}"))
+  let req_body = {"latencyMode": $latency_mode, "permanentLive": $permanent_live, "saveReplay": $save_replay} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List live sessions
@@ -3869,7 +3915,7 @@ export def "videos-live-sessions get" [
 ]: nothing -> record<data: table<endDate: string, error: int, id: int, replayVideo: record, startDate: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/live/{id}/sessions"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/live/{id}/sessions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3899,7 +3945,7 @@ export def "videos-ownership get" [
 # Accept ownership change request
 #
 # POST /api/v1/videos/ownership/{id}/accept
-export def "videos-ownership-accept post" [
+export def "videos-ownership-accept create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3912,7 +3958,7 @@ export def "videos-ownership-accept post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/ownership/{id}/accept"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/ownership/{id}/accept"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3921,7 +3967,7 @@ export def "videos-ownership-accept post" [
 # Refuse ownership change request
 #
 # POST /api/v1/videos/ownership/{id}/refuse
-export def "videos-ownership-refuse post" [
+export def "videos-ownership-refuse create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3934,7 +3980,7 @@ export def "videos-ownership-refuse post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/ownership/{id}/refuse"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/ownership/{id}/refuse"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3990,27 +4036,28 @@ export def "videos-upload upload-legacy" [
   --privacy: int@privacy-completer-1 # privacy id of the video (see [/videos/privacies](#operation/getPrivacyPolicies))
   --schedule-update: any # shape: {privacy?: "1"|"2"|"3"|"4", updateAt: string}
   --support: string # A text tell the audience how to support the video creator (e.g. Please support our work on https://soutenir.framasoft.org/en/ <3)
-  --tags: list # Video tags (maximum 5 tags each between 2 and 30 characters) (e.g. [framasoft, peertube])
+  --tags: list<string> # Video tags (maximum 5 tags each between 2 and 30 characters) (e.g. [framasoft, peertube])
   --thumbnailfile: string # Video thumbnail file (format: binary)
   --wait-transcoding: oneof<nothing, bool> # Whether or not we wait transcoding before publish the video
   videofile: string # Video file (format: binary)
-]: any -> record<video: record<id: int, shortUUID: string, uuid: any>> {
+]: any -> record<video: record<id: int, shortUUID: string, uuid: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/videos/upload")
-  let body = {"category": $category, "channelId": $channel_id, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "licence": $licence, "name": $name, "nsfw": $nsfw, "originallyPublishedAt": $originally_published_at, "previewfile": $previewfile, "privacy": $privacy, "scheduleUpdate": $schedule_update, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile, "waitTranscoding": $wait_transcoding, "videofile": $videofile} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"category": $category, "channelId": $channel_id, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "licence": $licence, "name": $name, "nsfw": $nsfw, "originallyPublishedAt": $originally_published_at, "previewfile": $previewfile, "privacy": $privacy, "scheduleUpdate": $schedule_update, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile, "waitTranscoding": $wait_transcoding, "videofile": $videofile} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["previewfile" "thumbnailfile" "videofile"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Cancel the resumable upload of a video, deleting any data uploaded so far
 #
 # DELETE /api/v1/videos/upload-resumable
 # operationId: uploadResumableCancel
-export def "videos-upload-resumable upload-resumable-cancel" [
+export def "videos-upload-resumable cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4026,10 +4073,10 @@ export def "videos-upload-resumable upload-resumable-cancel" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "upload_id" $upload_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/videos/upload-resumable" $qp)
-  let extra_headers = {"Content-Length": $content_length} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Length": $content_length} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -4038,7 +4085,7 @@ export def "videos-upload-resumable upload-resumable-cancel" [
 # POST /api/v1/videos/upload-resumable
 # operationId: uploadResumableInit
 # --scheduleUpdate shape: {privacy?: "1"|"2"|"3"|"4", updateAt: string}
-export def "videos-upload-resumable upload-resumable-init" [
+export def "videos-upload-resumable upload-init" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4063,7 +4110,7 @@ export def "videos-upload-resumable upload-resumable-init" [
   --privacy: int@privacy-completer-1 # privacy id of the video (see [/videos/privacies](#operation/getPrivacyPolicies))
   --schedule-update: any # shape: {privacy?: "1"|"2"|"3"|"4", updateAt: string}
   --support: string # A text tell the audience how to support the video creator (e.g. Please support our work on https://soutenir.framasoft.org/en/ <3)
-  --tags: list # Video tags (maximum 5 tags each between 2 and 30 characters) (e.g. [framasoft, peertube])
+  --tags: list<string> # Video tags (maximum 5 tags each between 2 and 30 characters) (e.g. [framasoft, peertube])
   --thumbnailfile: string # Video thumbnail file (format: binary)
   --wait-transcoding: oneof<nothing, bool> # Whether or not we wait transcoding before publish the video
   filename: string # Video filename including extension (format: filename, e.g. what_is_peertube.mp4)
@@ -4072,13 +4119,13 @@ export def "videos-upload-resumable upload-resumable-init" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/videos/upload-resumable")
-  let body = {"category": $category, "channelId": $channel_id, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "licence": $licence, "name": $name, "nsfw": $nsfw, "originallyPublishedAt": $originally_published_at, "previewfile": $previewfile, "privacy": $privacy, "scheduleUpdate": $schedule_update, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile, "waitTranscoding": $wait_transcoding, "filename": $filename} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Upload-Content-Length": $x_upload_content_length, "X-Upload-Content-Type": $x_upload_content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"category": $category, "channelId": $channel_id, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "licence": $licence, "name": $name, "nsfw": $nsfw, "originallyPublishedAt": $originally_published_at, "previewfile": $previewfile, "privacy": $privacy, "scheduleUpdate": $schedule_update, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile, "waitTranscoding": $wait_transcoding, "filename": $filename} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Upload-Content-Length": $x_upload_content_length, "X-Upload-Content-Type": $x_upload_content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Send chunk for the resumable upload of a video
@@ -4095,28 +4142,29 @@ export def "videos-upload-resumable upload" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --upload-id: string # Created session id to proceed with. If you didn't send chunks in the last hour, it is not valid anymore and you need to initialize a new upload.
-  --content-range: string # Specifies the bytes in the file that the request is uploading.  For example, a value of `bytes 0-262143/1000000` shows that the request is sending the first 262144 bytes (256 x 1024) in a 2,469,036 byte file.  (e.g. bytes 0-262143/2469036)
-  --content-length: float # Size of the chunk that the request is sending.  Remember that larger chunks are more efficient. PeerTube's web client uses chunks varying from 1048576 bytes (~1MB) and increases or reduces size depending on connection health.  (e.g. 262144)
+  --content-range: string # Specifies the bytes in the file that the request is uploading. For example, a value of `bytes 0-262143/1000000` shows that the request is sending the first 262144 bytes (256 x 1024) in a 2,469,036 byte file. (e.g. bytes 0-262143/2469036)
+  --content-length: float # Size of the chunk that the request is sending. Remember that larger chunks are more efficient. PeerTube's web client uses chunks varying from 1048576 bytes (~1MB) and increases or reduces size depending on connection health. (e.g. 262144)
   --body: record
-]: any -> record<video: record<id: int, shortUUID: string, uuid: any>> {
+]: any -> record<video: record<id: int, shortUUID: string, uuid: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "upload_id" $upload_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/videos/upload-resumable" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Range": $content_range, "Content-Length": $content_length} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  let extra_headers = {"Content-Range": $content_range, "Content-Length": $content_length} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # Delete a video
 #
 # DELETE /api/v1/videos/{id}
 # operationId: delVideo
-export def "videos delVideo" [
+export def "videos delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4129,7 +4177,7 @@ export def "videos delVideo" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4152,7 +4200,7 @@ export def "videos get" [
 ]: nothing -> record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string, description: string, displayName: string, userId: record>, blacklisted: bool, blacklistedReason: string, category: record<id: int, label: string>, channel: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string, banners: list<record>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string>, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: record, isLive: bool, isLocal: bool, language: record<id: string, label: string>, licence: record<id: int, label: string>, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record<id: int, label: string>, publishedAt: string, scheduledUpdate: record<privacy: int, updateAt: string>, shortUUID: record, state: record<id: int, label: string>, thumbnailPath: string, updatedAt: string, userHistory: record<currentTime: int>, uuid: record, views: int, waitTranscoding: bool, commentsEnabled: bool, descriptionPath: string, downloadEnabled: bool, files: table<fileDownloadUrl: string, fileUrl: string, fps: float, id: int, magnetUri: string, metadataUrl: string, resolution: record, size: int, torrentDownloadUrl: string, torrentUrl: string>, streamingPlaylists: table<id: int, type: int, files: list, playlistUrl: string, redundancies: list, segmentsSha256Url: string>, support: string, tags: list<string>, trackerUrls: list<string>, viewers: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4186,26 +4234,27 @@ export def "videos update" [
   --privacy: int@privacy-completer-1 # privacy id of the video (see [/videos/privacies](#operation/getPrivacyPolicies))
   --schedule-update: any # shape: {privacy?: "1"|"2"|"3"|"4", updateAt: string}
   --support: string # A text tell the audience how to support the video creator (e.g. Please support our work on https://soutenir.framasoft.org/en/ <3)
-  --tags: list # Video tags (maximum 5 tags each between 2 and 30 characters)
+  --tags: list<string> # Video tags (maximum 5 tags each between 2 and 30 characters)
   --thumbnailfile: string # Video thumbnail file (format: binary)
   --wait-transcoding: string # Whether or not we wait transcoding before publish the video
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}"))
-  let body = {"category": $category, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "licence": $licence, "name": $name, "nsfw": $nsfw, "originallyPublishedAt": $originally_published_at, "previewfile": $previewfile, "privacy": $privacy, "scheduleUpdate": $schedule_update, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile, "waitTranscoding": $wait_transcoding} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}"))
+  let req_body = {"category": $category, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "licence": $licence, "name": $name, "nsfw": $nsfw, "originallyPublishedAt": $originally_published_at, "previewfile": $previewfile, "privacy": $privacy, "scheduleUpdate": $schedule_update, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile, "waitTranscoding": $wait_transcoding} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["previewfile" "thumbnailfile"])
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # Unblock a video by its id
 #
 # DELETE /api/v1/videos/{id}/blacklist
 # operationId: delVideoBlock
-export def "videos-blacklist delVideoBlock" [
+export def "videos-blacklist delete-block" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4218,7 +4267,7 @@ export def "videos-blacklist delVideoBlock" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}/blacklist"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/blacklist"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4228,7 +4277,7 @@ export def "videos-blacklist delVideoBlock" [
 #
 # POST /api/v1/videos/{id}/blacklist
 # operationId: addVideoBlock
-export def "videos-blacklist create-video-block" [
+export def "videos-blacklist create-block" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4241,7 +4290,7 @@ export def "videos-blacklist create-video-block" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}/blacklist"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/blacklist"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4264,7 +4313,7 @@ export def "videos-captions get" [
 ]: nothing -> record<data: table<captionPath: string, language: record>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}/captions"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/captions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4274,7 +4323,7 @@ export def "videos-captions get" [
 #
 # DELETE /api/v1/videos/{id}/captions/{captionLanguage}
 # operationId: delVideoCaption
-export def "videos-captions delVideoCaption" [
+export def "videos-captions delete" [
   id: string
   caption_language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4288,7 +4337,7 @@ export def "videos-captions delVideoCaption" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, caption_language: $caption_language} | format pattern "/api/v1/videos/{id}/captions/{caption_language}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), caption_language: (encode-path-segment $caption_language)} | format pattern "/api/v1/videos/{id}/captions/{caption_language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4314,12 +4363,13 @@ export def "videos-captions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, caption_language: $caption_language} | format pattern "/api/v1/videos/{id}/captions/{caption_language}"))
-  let body = {"captionfile": $captionfile} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id), caption_language: (encode-path-segment $caption_language)} | format pattern "/api/v1/videos/{id}/captions/{caption_language}"))
+  let req_body = {"captionfile": $captionfile} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["captionfile"])
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # List threads of a video
@@ -4342,7 +4392,7 @@ export def "videos-comment-threads list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}/comment-threads") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/comment-threads") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4351,7 +4401,7 @@ export def "videos-comment-threads list" [
 # Create a thread
 #
 # POST /api/v1/videos/{id}/comment-threads
-export def "videos-comment-threads post" [
+export def "videos-comment-threads create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4366,12 +4416,12 @@ export def "videos-comment-threads post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}/comment-threads"))
-  let body = {"text": $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/comment-threads"))
+  let req_body = {"text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a thread
@@ -4391,7 +4441,7 @@ export def "videos-comment-threads get" [
 ]: nothing -> record<children: list<any>, comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: record, updatedAt: string, url: string, description: string, displayName: string, userId: record>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: record, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, thread_id: $thread_id} | format pattern "/api/v1/videos/{id}/comment-threads/{thread_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), thread_id: (encode-path-segment $thread_id)} | format pattern "/api/v1/videos/{id}/comment-threads/{thread_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4414,7 +4464,7 @@ export def "videos-comments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, comment_id: $comment_id} | format pattern "/api/v1/videos/{id}/comments/{comment_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), comment_id: (encode-path-segment $comment_id)} | format pattern "/api/v1/videos/{id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4423,7 +4473,7 @@ export def "videos-comments delete" [
 # Reply to a thread of a video
 #
 # POST /api/v1/videos/{id}/comments/{commentId}
-export def "videos-comments post" [
+export def "videos-comments create" [
   id: string
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4439,19 +4489,19 @@ export def "videos-comments post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, comment_id: $comment_id} | format pattern "/api/v1/videos/{id}/comments/{comment_id}"))
-  let body = {"text": $text} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id), comment_id: (encode-path-segment $comment_id)} | format pattern "/api/v1/videos/{id}/comments/{comment_id}"))
+  let req_body = {"text": $text} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get complete video description
 #
 # GET /api/v1/videos/{id}/description
 # operationId: getVideoDesc
-export def "videos-description get-video-desc" [
+export def "videos-description get-desc" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4464,7 +4514,7 @@ export def "videos-description get-video-desc" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}/description"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/description"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4473,7 +4523,7 @@ export def "videos-description get-video-desc" [
 # Request ownership change
 #
 # POST /api/v1/videos/{id}/give-ownership
-export def "videos-give-ownership post" [
+export def "videos-give-ownership create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4488,19 +4538,20 @@ export def "videos-give-ownership post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}/give-ownership"))
-  let body = {"username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/give-ownership"))
+  let req_body = {"username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete video HLS files
 #
 # DELETE /api/v1/videos/{id}/hls
 # operationId: delVideoHLS
-export def "videos-hls delVideoHLS" [
+export def "videos-hls delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4513,7 +4564,7 @@ export def "videos-hls delVideoHLS" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}/hls"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/hls"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4535,7 +4586,7 @@ export def "videos-live-session get" [
 ]: nothing -> record<endDate: string, error: int, id: int, replayVideo: record<id: float, shortUUID: string, uuid: string>, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}/live-session"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/live-session"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4544,7 +4595,7 @@ export def "videos-live-session get" [
 # Like/dislike a video
 #
 # PUT /api/v1/videos/{id}/rate
-export def "videos-rate put" [
+export def "videos-rate update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4559,12 +4610,12 @@ export def "videos-rate put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}/rate"))
-  let body = {"rating": $rating} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/rate"))
+  let req_body = {"rating": $rating} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get video source file metadata
@@ -4584,7 +4635,7 @@ export def "videos-source get" [
 ]: nothing -> record<filename: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}/source"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/source"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4609,7 +4660,7 @@ export def "videos-stats-overall get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}/stats/overall") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/stats/overall") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4631,7 +4682,7 @@ export def "videos-stats-retention get" [
 ]: nothing -> record<data: table<retentionPercent: float, second: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}/stats/retention"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/stats/retention"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4657,7 +4708,7 @@ export def "videos-stats-timeseries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, metric: $metric} | format pattern "/api/v1/videos/{id}/stats/timeseries/{metric}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), metric: (encode-path-segment $metric)} | format pattern "/api/v1/videos/{id}/stats/timeseries/{metric}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4666,7 +4717,7 @@ export def "videos-stats-timeseries get" [
 # Create a studio task
 #
 # POST /api/v1/videos/{id}/studio/edit
-export def "videos-studio-edit post" [
+export def "videos-studio-edit create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4681,11 +4732,13 @@ export def "videos-studio-edit post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}/studio/edit"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/studio/edit"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Request video token
@@ -4705,7 +4758,7 @@ export def "videos-token request" [
 ]: nothing -> record<files: record<expires: string, token: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}/token"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/token"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4730,12 +4783,12 @@ export def "videos-transcoding create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}/transcoding"))
-  let body = {"transcodingType": $transcoding_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/transcoding"))
+  let req_body = {"transcodingType": $transcoding_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Notify user is watching a video
@@ -4753,17 +4806,17 @@ export def "videos-views create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   current_time: int # timestamp within the video, in seconds (format: seconds, e.g. 5)
-  --view-event: string@view-event-completer # Event since last viewing call:  * `seek` - If the user seeked the video
+  --view-event: string@view-event-completer # Event since last viewing call: * `seek` - If the user seeked the video
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}/views"))
-  let body = {"currentTime": $current_time, "viewEvent": $view_event} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/views"))
+  let req_body = {"currentTime": $current_time, "viewEvent": $view_event} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Set watching progress of a video
@@ -4771,7 +4824,7 @@ export def "videos-views create" [
 # PUT /api/v1/videos/{id}/watching
 # DEPRECATED
 @deprecated
-export def "videos-watching put" [
+export def "videos-watching update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4782,24 +4835,24 @@ export def "videos-watching put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   current_time: int # timestamp within the video, in seconds (format: seconds, e.g. 5)
-  --view-event: string@view-event-completer # Event since last viewing call:  * `seek` - If the user seeked the video
+  --view-event: string@view-event-completer # Event since last viewing call: * `seek` - If the user seeked the video
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}/watching"))
-  let body = {"currentTime": $current_time, "viewEvent": $view_event} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/watching"))
+  let req_body = {"currentTime": $current_time, "viewEvent": $view_event} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete video WebTorrent files
 #
 # DELETE /api/v1/videos/{id}/webtorrent
 # operationId: delVideoWebTorrent
-export def "videos-webtorrent delVideoWebTorrent" [
+export def "videos-webtorrent delete-web-torrent" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4812,7 +4865,7 @@ export def "videos-webtorrent delVideoWebTorrent" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/videos/{id}/webtorrent"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/webtorrent"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4822,7 +4875,7 @@ export def "videos-webtorrent delVideoWebTorrent" [
 #
 # GET /feeds/subscriptions.{format}
 # operationId: getSyndicatedSubscriptionVideos
-export def "feeds-subscriptions-format get-syndicated-subscription-videos" [
+export def "feeds-subscriptions-format get-syndicated-videos" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4846,7 +4899,7 @@ export def "feeds-subscriptions-format get-syndicated-subscription-videos" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({format: $format} | format pattern "/feeds/subscriptions.{format}") $qp)
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/feeds/subscriptions.{format}") $qp)
   let accept_val = ($accept | default "application/atom+xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4876,7 +4929,7 @@ export def "feeds-video-comments-format get-syndicated" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "videoId" $video_id "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "accountName" $account_name "scalar") (serialize-qp "videoChannelId" $video_channel_id "scalar") (serialize-qp "videoChannelName" $video_channel_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({format: $format} | format pattern "/feeds/video-comments.{format}") $qp)
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/feeds/video-comments.{format}") $qp)
   let accept_val = ($accept | default "application/atom+xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4912,7 +4965,7 @@ export def "feeds-videos-format get-syndicated" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "accountName" $account_name "scalar") (serialize-qp "videoChannelId" $video_channel_id "scalar") (serialize-qp "videoChannelName" $video_channel_name "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({format: $format} | format pattern "/feeds/videos.{format}") $qp)
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/feeds/videos.{format}") $qp)
   let accept_val = ($accept | default "application/atom+xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4937,7 +4990,7 @@ export def "static-streaming-playlists-hls-private get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "videoFileToken" $video_file_token "scalar") (serialize-qp "reinjectVideoFileToken" $reinject_video_file_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({filename: $filename} | format pattern "/static/streaming-playlists/hls/private/{filename}") $qp)
+  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/static/streaming-playlists/hls/private/{filename}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4959,7 +5012,7 @@ export def "static-streaming-playlists-hls get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({filename: $filename} | format pattern "/static/streaming-playlists/hls/{filename}"))
+  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/static/streaming-playlists/hls/{filename}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4983,7 +5036,7 @@ export def "static-webseed-private get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "videoFileToken" $video_file_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({filename: $filename} | format pattern "/static/webseed/private/{filename}") $qp)
+  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/static/webseed/private/{filename}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5005,7 +5058,7 @@ export def "static-webseed get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({filename: $filename} | format pattern "/static/webseed/{filename}"))
+  let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/static/webseed/{filename}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

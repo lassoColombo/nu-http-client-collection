@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.carbondoomsday.com/api"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "text/csv"] }
@@ -91,7 +101,7 @@ export def commands []: nothing -> table {
   }
 }
 
-# CO2 measurements from the Mauna Loa observatory.  This data is made available through the good work of the people at the Mauna Loa observatory. Their release notes say:      These data are made freely available to the public and the scientific     community in the belief that their wide dissemination will lead to greater     understanding and new scientific insights.  We currently scrape the following sources:    * [co2_mlo_weekly.csv]   * [co2_mlo_surface-insitu_1_ccgg_DailyData.txt]   * [weekly_mlo.csv]  We have daily CO2 measurements as far back as 1958.  Learn about using pagination via [the 3rd party documentation].  [co2_mlo_weekly.csv]: https://www.esrl.noaa.gov/gmd/webdata/ccgg/trends/co2_mlo_weekly.csv [co2_mlo_surface-insitu_1_ccgg_DailyData.txt]: ftp://aftp.cmdl.noaa.gov/data/trace_gases/co2/in-situ/surface/mlo/co2_mlo_surface-insitu_1_ccgg_DailyData.txt [weekly_mlo.csv]: http://scrippsco2.ucsd.edu/sites/default/files/data/in_situ_co2/weekly_mlo.csv [the 3rd party documentation]: http://www.django-rest-framework.org/api-guide/pagination/#pagenumberpagination
+# CO2 measurements from the Mauna Loa observatory. This data is made available through the good work of the people at the Mauna Loa observatory. Their release notes say: These data are made freely available to the public and the scientific community in the belief that their wide dissemination will lead to greater understanding and new scientific insights. We currently scrape the following sources: * [co2_mlo_weekly.csv] * [co2_mlo_surface-insitu_1_ccgg_DailyData.txt] * [weekly_mlo.csv] We have daily CO2 measurements as far back as 1958. Learn about using pagination via [the 3rd party documentation]. [co2_mlo_weekly.csv]: https://www.esrl.noaa.gov/gmd/webdata/ccgg/trends/co2_mlo_weekly.csv [co2_mlo_surface-insitu_1_ccgg_DailyData.txt]: ftp://aftp.cmdl.noaa.gov/data/trace_gases/co2/in-situ/surface/mlo/co2_mlo_surface-insitu_1_ccgg_DailyData.txt [weekly_mlo.csv]: http://scrippsco2.ucsd.edu/sites/default/files/data/in_situ_co2/weekly_mlo.csv [the 3rd party documentation]: http://www.django-rest-framework.org/api-guide/pagination/#pagenumberpagination
 #
 # GET /co2/
 # operationId: co2_list
@@ -121,11 +131,11 @@ export def "co2 list" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# CO2 measurements from the Mauna Loa observatory.  This data is made available through the good work of the people at the Mauna Loa observatory. Their release notes say:      These data are made freely available to the public and the scientific     community in the belief that their wide dissemination will lead to greater     understanding and new scientific insights.  We currently scrape the following sources:    * [co2_mlo_weekly.csv]   * [co2_mlo_surface-insitu_1_ccgg_DailyData.txt]   * [weekly_mlo.csv]  We have daily CO2 measurements as far back as 1958.  Learn about using pagination via [the 3rd party documentation].  [co2_mlo_weekly.csv]: https://www.esrl.noaa.gov/gmd/webdata/ccgg/trends/co2_mlo_weekly.csv [co2_mlo_surface-insitu_1_ccgg_DailyData.txt]: ftp://aftp.cmdl.noaa.gov/data/trace_gases/co2/in-situ/surface/mlo/co2_mlo_surface-insitu_1_ccgg_DailyData.txt [weekly_mlo.csv]: http://scrippsco2.ucsd.edu/sites/default/files/data/in_situ_co2/weekly_mlo.csv [the 3rd party documentation]: http://www.django-rest-framework.org/api-guide/pagination/#pagenumberpagination
+# CO2 measurements from the Mauna Loa observatory. This data is made available through the good work of the people at the Mauna Loa observatory. Their release notes say: These data are made freely available to the public and the scientific community in the belief that their wide dissemination will lead to greater understanding and new scientific insights. We currently scrape the following sources: * [co2_mlo_weekly.csv] * [co2_mlo_surface-insitu_1_ccgg_DailyData.txt] * [weekly_mlo.csv] We have daily CO2 measurements as far back as 1958. Learn about using pagination via [the 3rd party documentation]. [co2_mlo_weekly.csv]: https://www.esrl.noaa.gov/gmd/webdata/ccgg/trends/co2_mlo_weekly.csv [co2_mlo_surface-insitu_1_ccgg_DailyData.txt]: ftp://aftp.cmdl.noaa.gov/data/trace_gases/co2/in-situ/surface/mlo/co2_mlo_surface-insitu_1_ccgg_DailyData.txt [weekly_mlo.csv]: http://scrippsco2.ucsd.edu/sites/default/files/data/in_situ_co2/weekly_mlo.csv [the 3rd party documentation]: http://www.django-rest-framework.org/api-guide/pagination/#pagenumberpagination
 #
 # GET /co2/{date}/
 # operationId: co2_read
-export def "co2 read" [
+export def "co2 get" [
   date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -139,7 +149,7 @@ export def "co2 read" [
 ]: nothing -> record<date: string, ppm: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({date: $date} | format pattern "/co2/{date}/"))
+  let full_url = (build-url $base ({date: (encode-path-segment $date)} | format pattern "/co2/{date}/"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

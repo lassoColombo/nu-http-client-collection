@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -105,7 +114,7 @@ export def "security-advisories-cvrf-advisory get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({advisory_id: $advisory_id} | format pattern "/security/advisories/cvrf/advisory/{advisory_id}"))
+  let full_url = (build-url $base ({advisory_id: (encode-path-segment $advisory_id)} | format pattern "/security/advisories/cvrf/advisory/{advisory_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -148,7 +157,7 @@ export def "security-advisories-cvrf-cve get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cve_id: $cve_id} | format pattern "/security/advisories/cvrf/cve/{cve_id}"))
+  let full_url = (build-url $base ({cve_id: (encode-path-segment $cve_id)} | format pattern "/security/advisories/cvrf/cve/{cve_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,7 +179,7 @@ export def "security-advisories-cvrf-latest get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({number: $number} | format pattern "/security/advisories/cvrf/latest/{number}"))
+  let full_url = (build-url $base ({number: (encode-path-segment $number)} | format pattern "/security/advisories/cvrf/latest/{number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -215,7 +224,7 @@ export def "security-advisories-cvrf-severity get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({severity: $severity} | format pattern "/security/advisories/cvrf/severity/{severity}"))
+  let full_url = (build-url $base ({severity: (encode-path-segment $severity)} | format pattern "/security/advisories/cvrf/severity/{severity}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -240,7 +249,7 @@ export def "security-advisories-cvrf-severity-firstpublished get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({severity: $severity} | format pattern "/security/advisories/cvrf/severity/{severity}/firstpublished") $qp)
+  let full_url = (build-url $base ({severity: (encode-path-segment $severity)} | format pattern "/security/advisories/cvrf/severity/{severity}/firstpublished") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -265,7 +274,7 @@ export def "security-advisories-cvrf-severity-lastpublished get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({severity: $severity} | format pattern "/security/advisories/cvrf/severity/{severity}/lastpublished") $qp)
+  let full_url = (build-url $base ({severity: (encode-path-segment $severity)} | format pattern "/security/advisories/cvrf/severity/{severity}/lastpublished") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -287,7 +296,7 @@ export def "security-advisories-cvrf-year get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({year: $year} | format pattern "/security/advisories/cvrf/year/{year}"))
+  let full_url = (build-url $base ({year: (encode-path-segment $year)} | format pattern "/security/advisories/cvrf/year/{year}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -355,7 +364,7 @@ export def "security-advisories-oval-advisory get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({advisory_id: $advisory_id} | format pattern "/security/advisories/oval/advisory/{advisory_id}"))
+  let full_url = (build-url $base ({advisory_id: (encode-path-segment $advisory_id)} | format pattern "/security/advisories/oval/advisory/{advisory_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -398,7 +407,7 @@ export def "security-advisories-oval-cve get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({cve_id: $cve_id} | format pattern "/security/advisories/oval/cve/{cve_id}"))
+  let full_url = (build-url $base ({cve_id: (encode-path-segment $cve_id)} | format pattern "/security/advisories/oval/cve/{cve_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -420,7 +429,7 @@ export def "security-advisories-oval-latest get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({number: $number} | format pattern "/security/advisories/oval/latest/{number}"))
+  let full_url = (build-url $base ({number: (encode-path-segment $number)} | format pattern "/security/advisories/oval/latest/{number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -465,7 +474,7 @@ export def "security-advisories-oval-severity get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({severity: $severity} | format pattern "/security/advisories/oval/severity/{severity}"))
+  let full_url = (build-url $base ({severity: (encode-path-segment $severity)} | format pattern "/security/advisories/oval/severity/{severity}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -490,7 +499,7 @@ export def "security-advisories-oval-severity-firstpublished get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({severity: $severity} | format pattern "/security/advisories/oval/severity/{severity}/firstpublished") $qp)
+  let full_url = (build-url $base ({severity: (encode-path-segment $severity)} | format pattern "/security/advisories/oval/severity/{severity}/firstpublished") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -515,7 +524,7 @@ export def "security-advisories-oval-severity-lastpublished get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({severity: $severity} | format pattern "/security/advisories/oval/severity/{severity}/lastpublished") $qp)
+  let full_url = (build-url $base ({severity: (encode-path-segment $severity)} | format pattern "/security/advisories/oval/severity/{severity}/lastpublished") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

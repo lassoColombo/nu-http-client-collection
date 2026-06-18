@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "availability get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "availability list-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # GET /availability
 # operationId: Query_GetAvailability
-export def "availability get" [
+export def "availability list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,10 +120,10 @@ export def "availability get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "storeType" $store_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/availability" $qp)
-  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -123,7 +132,7 @@ export def "availability get" [
 # POST /eventSchema
 # operationId: Query_GetEventSchema
 # --searchSpan shape: {from: string, to: string}
-export def "event-schema get" [
+export def "event-schema list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,20 +152,20 @@ export def "event-schema get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "storeType" $store_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/eventSchema" $qp)
-  let body = {"searchSpan": $search_span} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"searchSpan": $search_span} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns time series hierarchies definitions in pages.
 #
 # GET /timeseries/hierarchies
 # operationId: TimeSeriesHierarchies_Get
-export def "timeseries-hierarchies get" [
+export def "timeseries-hierarchies get-time-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,10 +183,10 @@ export def "timeseries-hierarchies get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeseries/hierarchies" $qp)
-  let extra_headers = {"x-ms-continuation": $x_ms_continuation, "x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-ms-continuation": $x_ms_continuation, "x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -185,10 +194,10 @@ export def "timeseries-hierarchies get" [
 #
 # POST /timeseries/hierarchies/$batch
 # operationId: TimeSeriesHierarchies_ExecuteBatch
-# --delete shape: {hierarchyIds?: list, names?: list}
-# --get shape: {hierarchyIds?: list, names?: list}
+# --delete shape: {hierarchyIds?: list<string>, names?: list<string>}
+# --get shape: {hierarchyIds?: list<string>, names?: list<string>}
 # --put item shape: {id?: string, name: string, source: record}
-export def "timeseries-hierarchies-batch exec-ute" [
+export def "timeseries-hierarchies-batch create-time-series-execute-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,8 +209,8 @@ export def "timeseries-hierarchies-batch exec-ute" [
   --api-version: string # Version of the API to be used with the client request. Currently supported version is "2018-11-01-preview". (default: 2018-11-01-preview)
   --x-ms-client-request-id: string # Optional client request ID. Service records this value. Allows the service to trace operation across services, and allows the customer to contact support regarding a particular request.
   --x-ms-client-session-id: string # Optional client session ID. Service records this value. Allows the service to trace a group of related operations across services, and allows the customer to contact support regarding a particular group of requests.
-  --delete: record # Request to get or delete multiple time series hierarchies. Exactly one of "hierarchyIds" or "names" must be set. — shape: {hierarchyIds?: list, names?: list}
-  --body-get: record # Request to get or delete multiple time series hierarchies. Exactly one of "hierarchyIds" or "names" must be set. — shape: {hierarchyIds?: list, names?: list}
+  --delete: record # Request to get or delete multiple time series hierarchies. Exactly one of "hierarchyIds" or "names" must be set. — shape: {hierarchyIds?: list<string>, names?: list<string>}
+  --body-get: record # Request to get or delete multiple time series hierarchies. Exactly one of "hierarchyIds" or "names" must be set. — shape: {hierarchyIds?: list<string>, names?: list<string>}
   --put: list # "put" should be set while creating or updating hierarchies. — item shape: {id?: string, name: string, source: record}
 ]: any -> record<delete: table<code: string, details: list, innerError: any, message: string, target: string>, get: table<error: record, hierarchy: record>, put: table<error: record, hierarchy: record>> {
   let input = $in
@@ -209,20 +218,20 @@ export def "timeseries-hierarchies-batch exec-ute" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeseries/hierarchies/$batch" $qp)
-  let body = {"delete": $delete, "get": $body_get, "put": $put} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"delete": $delete, "get": $body_get, "put": $put} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets time series instances in pages.
 #
 # GET /timeseries/instances
 # operationId: TimeSeriesInstances_Get
-export def "timeseries-instances get" [
+export def "timeseries-instances get-time-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,10 +249,10 @@ export def "timeseries-instances get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeseries/instances" $qp)
-  let extra_headers = {"x-ms-continuation": $x_ms_continuation, "x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-ms-continuation": $x_ms_continuation, "x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -251,11 +260,11 @@ export def "timeseries-instances get" [
 #
 # POST /timeseries/instances/$batch
 # operationId: TimeSeriesInstances_ExecuteBatch
-# --delete shape: {names?: list, timeSeriesIds?: list}
-# --get shape: {names?: list, timeSeriesIds?: list}
-# --put item shape: {description?: string, hierarchyIds?: list, instanceFields?: record, name?: string, timeSeriesId: list, typeId: string}
-# --update item shape: {description?: string, hierarchyIds?: list, instanceFields?: record, name?: string, timeSeriesId: list, typeId: string}
-export def "timeseries-instances-batch exec-ute" [
+# --delete shape: {names?: list<string>, timeSeriesIds?: list}
+# --get shape: {names?: list<string>, timeSeriesIds?: list}
+# --put item shape: {description?: string, hierarchyIds?: list<string>, instanceFields?: record, name?: string, timeSeriesId: list, typeId: string}
+# --update item shape: {description?: string, hierarchyIds?: list<string>, instanceFields?: record, name?: string, timeSeriesId: list, typeId: string}
+export def "timeseries-instances-batch create-time-series-execute-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,23 +276,23 @@ export def "timeseries-instances-batch exec-ute" [
   --api-version: string # Version of the API to be used with the client request. Currently supported version is "2018-11-01-preview". (default: 2018-11-01-preview)
   --x-ms-client-request-id: string # Optional client request ID. Service records this value. Allows the service to trace operation across services, and allows the customer to contact support regarding a particular request.
   --x-ms-client-session-id: string # Optional client session ID. Service records this value. Allows the service to trace a group of related operations across services, and allows the customer to contact support regarding a particular group of requests.
-  --delete: record # Request to get or delete instances by time series IDs or time series names. Exactly one of "timeSeriesIds" or "names" must be set. — shape: {names?: list, timeSeriesIds?: list}
-  --body-get: record # Request to get or delete instances by time series IDs or time series names. Exactly one of "timeSeriesIds" or "names" must be set. — shape: {names?: list, timeSeriesIds?: list}
-  --put: list # Time series instances to be created or updated. — item shape: {description?: string, hierarchyIds?: list, instanceFields?: record, name?: string, timeSeriesId: list, typeId: string}
-  --update: list # Time series instances to be updated onlRequest to perform a single operation on a batch of instances. y. If instance does not exist, an error is returned. — item shape: {description?: string, hierarchyIds?: list, instanceFields?: record, name?: string, timeSeriesId: list, typeId: string}
+  --delete: record # Request to get or delete instances by time series IDs or time series names. Exactly one of "timeSeriesIds" or "names" must be set. — shape: {names?: list<string>, timeSeriesIds?: list}
+  --body-get: record # Request to get or delete instances by time series IDs or time series names. Exactly one of "timeSeriesIds" or "names" must be set. — shape: {names?: list<string>, timeSeriesIds?: list}
+  --put: list # Time series instances to be created or updated. — item shape: {description?: string, hierarchyIds?: list<string>, instanceFields?: record, name?: string, timeSeriesId: list, typeId: string}
+  --update: list # Time series instances to be updated onlRequest to perform a single operation on a batch of instances. y. If instance does not exist, an error is returned. — item shape: {description?: string, hierarchyIds?: list<string>, instanceFields?: record, name?: string, timeSeriesId: list, typeId: string}
 ]: any -> record<delete: table<code: string, details: list, innerError: any, message: string, target: string>, get: table<error: record, instance: record>, put: table<error: record, instance: record>, update: table<error: record, instance: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeseries/instances/$batch" $qp)
-  let body = {"delete": $delete, "get": $body_get, "put": $put, "update": $update} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"delete": $delete, "get": $body_get, "put": $put, "update": $update} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Partial list of hits on search for time series instances based on instance attributes.
@@ -292,7 +301,7 @@ export def "timeseries-instances-batch exec-ute" [
 # operationId: TimeSeriesInstances_Search
 # --hierarchies shape: {expand?: record, pageSize?: int, sort?: record}
 # --instances shape: {highlights?: bool, pageSize?: int, recursive?: bool, sort?: record}
-export def "timeseries-instances-search list" [
+export def "timeseries-instances-search list-time-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,7 +316,7 @@ export def "timeseries-instances-search list" [
   --x-ms-client-session-id: string # Optional client session ID. Service records this value. Allows the service to trace a group of related operations across services, and allows the customer to contact support regarding a particular group of requests.
   --hierarchies: record # Parameter of how to return time series instance hierarchies by search instances call. — shape: {expand?: record, pageSize?: int, sort?: record}
   --instances: record # Parameters of how to return time series instances by search instances call. — shape: {highlights?: bool, pageSize?: int, recursive?: bool, sort?: record}
-  --path: list # Filter on hierarchy path of time series instances. Path is represented as array of string path segments. First element should be hierarchy name. Example: ["Location", "California"]. Optional, case sensitive, never empty and can be null.
+  --path: list<string> # Filter on hierarchy path of time series instances. Path is represented as array of string path segments. First element should be hierarchy name. Example: ["Location", "California"]. Optional, case sensitive, never empty and can be null.
   search_string: string # Query search string that will be matched to the attributes of time series instances. Example: "floor 100". Case-insensitive, must be present, but can be empty string.
 ]: any -> record<hierarchyNodes: record<continuationToken: string, hitCount: int, hits: list<record>>, instances: record<continuationToken: string, hitCount: int, hits: list<record>>> {
   let input = $in
@@ -315,20 +324,20 @@ export def "timeseries-instances-search list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeseries/instances/search" $qp)
-  let body = {"hierarchies": $hierarchies, "instances": $instances, "path": $path, "searchString": $search_string} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-ms-continuation": $x_ms_continuation, "x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"hierarchies": $hierarchies, "instances": $instances, "path": $path, "searchString": $search_string} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-ms-continuation": $x_ms_continuation, "x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Suggests keywords based on time series instance attributes to be later used in Search Instances.
 #
 # POST /timeseries/instances/suggest
 # operationId: TimeSeriesInstances_Suggest
-export def "timeseries-instances-suggest post" [
+export def "timeseries-instances-suggest create-time-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,13 +357,13 @@ export def "timeseries-instances-suggest post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeseries/instances/suggest" $qp)
-  let body = {"searchString": $search_string, "take": $take} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"searchString": $search_string, "take": $take} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the model settings which includes model display name, Time Series ID properties and default type ID. Every pay-as-you-go environment has a model that is automatically created.
@@ -378,10 +387,10 @@ export def "timeseries-model-settings get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeseries/modelSettings" $qp)
-  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -409,23 +418,23 @@ export def "timeseries-model-settings update" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeseries/modelSettings" $qp)
-  let body = {"defaultTypeId": $default_type_id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"defaultTypeId": $default_type_id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Executes Time Series Query in pages of results - Get Events, Get Series or Aggregate Series.
 #
 # POST /timeseries/query
 # operationId: Query_Execute
-# --aggregateSeries shape: {filter?: record, inlineVariables?: record, interval: string, projectedVariables?: list, searchSpan: record, timeSeriesId: list}
+# --aggregateSeries shape: {filter?: record, inlineVariables?: record, interval: string, projectedVariables?: list<string>, searchSpan: record, timeSeriesId: list}
 # --getEvents shape: {filter?: record, projectedProperties?: list, searchSpan: record, take?: int, timeSeriesId: list}
-# --getSeries shape: {filter?: record, inlineVariables?: record, projectedVariables?: list, searchSpan: record, take?: int, timeSeriesId: list}
-export def "timeseries-query exec-ute" [
+# --getSeries shape: {filter?: record, inlineVariables?: record, projectedVariables?: list<string>, searchSpan: record, take?: int, timeSeriesId: list}
+export def "timeseries-query list-execute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,29 +448,29 @@ export def "timeseries-query exec-ute" [
   --x-ms-continuation: string # Continuation token from previous page of results to retrieve the next page of the results in calls that support pagination. To get the first page results, specify null continuation token as parameter value. Returned continuation token is null if all results have been returned, and there is no next page of results.
   --x-ms-client-request-id: string # Optional client request ID. Service records this value. Allows the service to trace operation across services, and allows the customer to contact support regarding a particular request.
   --x-ms-client-session-id: string # Optional client session ID. Service records this value. Allows the service to trace a group of related operations across services, and allows the customer to contact support regarding a particular group of requests.
-  --aggregate-series: record # Aggregate Series query. Allows to calculate an aggregated time series from events for a given Time Series ID and search span. — shape: {filter?: record, inlineVariables?: record, interval: string, projectedVariables?: list, searchSpan: record, timeSeriesId: list}
+  --aggregate-series: record # Aggregate Series query. Allows to calculate an aggregated time series from events for a given Time Series ID and search span. — shape: {filter?: record, inlineVariables?: record, interval: string, projectedVariables?: list<string>, searchSpan: record, timeSeriesId: list}
   --get-events: record # Get Events query. Allows to retrieve raw events for a given Time Series ID and search span. — shape: {filter?: record, projectedProperties?: list, searchSpan: record, take?: int, timeSeriesId: list}
-  --get-series: record # Get Series query. Allows to retrieve time series of calculated variable values from events for a given Time Series ID and search span. — shape: {filter?: record, inlineVariables?: record, projectedVariables?: list, searchSpan: record, take?: int, timeSeriesId: list}
+  --get-series: record # Get Series query. Allows to retrieve time series of calculated variable values from events for a given Time Series ID and search span. — shape: {filter?: record, inlineVariables?: record, projectedVariables?: list<string>, searchSpan: record, take?: int, timeSeriesId: list}
 ]: any -> record<continuationToken: string, progress: float, properties: table<name: string, type: string, values: list>, timestamps: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "storeType" $store_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeseries/query" $qp)
-  let body = {"aggregateSeries": $aggregate_series, "getEvents": $get_events, "getSeries": $get_series} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-ms-continuation": $x_ms_continuation, "x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"aggregateSeries": $aggregate_series, "getEvents": $get_events, "getSeries": $get_series} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-ms-continuation": $x_ms_continuation, "x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets time series types in pages.
 #
 # GET /timeseries/types
 # operationId: TimeSeriesTypes_Get
-export def "timeseries-types get" [
+export def "timeseries-types get-time-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,10 +488,10 @@ export def "timeseries-types get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeseries/types" $qp)
-  let extra_headers = {"x-ms-continuation": $x_ms_continuation, "x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-ms-continuation": $x_ms_continuation, "x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -490,10 +499,10 @@ export def "timeseries-types get" [
 #
 # POST /timeseries/types/$batch
 # operationId: TimeSeriesTypes_ExecuteBatch
-# --delete shape: {names?: list, typeIds?: list}
-# --get shape: {names?: list, typeIds?: list}
+# --delete shape: {names?: list<string>, typeIds?: list<string>}
+# --get shape: {names?: list<string>, typeIds?: list<string>}
 # --put item shape: {description?: string, id?: string, name: string, variables: any}
-export def "timeseries-types-batch exec-ute" [
+export def "timeseries-types-batch create-time-series-execute-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -505,8 +514,8 @@ export def "timeseries-types-batch exec-ute" [
   --api-version: string # Version of the API to be used with the client request. Currently supported version is "2018-11-01-preview". (default: 2018-11-01-preview)
   --x-ms-client-request-id: string # Optional client request ID. Service records this value. Allows the service to trace operation across services, and allows the customer to contact support regarding a particular request.
   --x-ms-client-session-id: string # Optional client session ID. Service records this value. Allows the service to trace a group of related operations across services, and allows the customer to contact support regarding a particular group of requests.
-  --delete: record # Request to get or delete time series types by IDs or type names. Exactly one of "typeIds" or "names" must be set. — shape: {names?: list, typeIds?: list}
-  --body-get: record # Request to get or delete time series types by IDs or type names. Exactly one of "typeIds" or "names" must be set. — shape: {names?: list, typeIds?: list}
+  --delete: record # Request to get or delete time series types by IDs or type names. Exactly one of "typeIds" or "names" must be set. — shape: {names?: list<string>, typeIds?: list<string>}
+  --body-get: record # Request to get or delete time series types by IDs or type names. Exactly one of "typeIds" or "names" must be set. — shape: {names?: list<string>, typeIds?: list<string>}
   --put: list # Definition of what time series types to update or create. — item shape: {description?: string, id?: string, name: string, variables: any}
 ]: any -> record<delete: table<code: string, details: list, innerError: any, message: string, target: string>, get: table<error: record, timeSeriesType: record>, put: table<error: record, timeSeriesType: record>> {
   let input = $in
@@ -514,11 +523,11 @@ export def "timeseries-types-batch exec-ute" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeseries/types/$batch" $qp)
-  let body = {"delete": $delete, "get": $body_get, "put": $put} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"delete": $delete, "get": $body_get, "put": $put} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-client-session-id": $x_ms_client_session_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def format-completer [] { ["FileZilla3" "Ftp" "WebDeploy"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-web-sites list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-web-sites list-apps" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/sites
 # operationId: WebApps_List
-export def "subscriptions-providers-microsoft-web-sites list" [
+export def "subscriptions-providers-microsoft-web-sites list-apps" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -110,7 +119,7 @@ export def "subscriptions-providers-microsoft-web-sites list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Web/sites") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Web/sites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,7 +129,7 @@ export def "subscriptions-providers-microsoft-web-sites list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites
 # operationId: WebApps_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-web-sites list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites list-apps" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -131,13 +140,13 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites list-by"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --include-slots: oneof<nothing, bool> # Specify <strong>true</strong> to include deployment slots in results. The default is false, which only gives you the production slot of all apps.
+  --include-slots: oneof<nothing, bool> # Specify true to include deployment slots in results. The default is false, which only gives you the production slot of all apps.
   --api-version: string # API Version
 ]: nothing -> record<nextLink: string, value: table<identity: record, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeSlots" $include_slots "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -147,7 +156,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites list-by"
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}
 # operationId: WebApps_Delete
-export def "subscriptions-resource-groups-providers-microsoft-web-sites delete" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites delete-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -166,7 +175,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites delete" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "deleteMetrics" $delete_metrics "scalar") (serialize-qp "deleteEmptyServerFarm" $delete_empty_server_farm "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,7 +185,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites delete" 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}
 # operationId: WebApps_Get
-export def "subscriptions-resource-groups-providers-microsoft-web-sites get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -193,7 +202,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,8 +213,8 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites get" [
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}
 # operationId: WebApps_Update
 # --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --properties shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, siteConfig?: record, slotSwapStatus?: record}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites update" [
+# --properties shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, ... (2 more fields)}
+export def "subscriptions-resource-groups-providers-microsoft-web-sites update-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -219,19 +228,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites update" 
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
   --identity: record # Managed service identity. — shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-  --properties: any # SitePatchResource resource specific properties — shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, siteConfig?: record, slotSwapStatus?: record}
+  --properties: any # SitePatchResource resource specific properties — shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, ... (2 more fields)}
   --kind: string # Kind of resource.
 ]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<availabilityState: string, clientAffinityEnabled: bool, clientCertEnabled: bool, clientCertExclusionPaths: string, cloningInfo: record<appSettingsOverrides: record, cloneCustomHostNames: bool, cloneSourceControl: bool, configureLoadBalancing: bool, correlationId: string, hostingEnvironment: string, overwrite: bool, sourceWebAppId: string, sourceWebAppLocation: string, trafficManagerProfileId: string, trafficManagerProfileName: string>, containerSize: int, dailyMemoryTimeQuota: int, defaultHostName: string, enabled: bool, enabledHostNames: list<string>, geoDistributions: list<record>, hostNameSslStates: list<record>, hostNames: list<string>, hostNamesDisabled: bool, hostingEnvironmentProfile: record<id: string, name: string, type: string>, httpsOnly: bool, hyperV: bool, inProgressOperationId: string, isDefaultContainer: bool, isXenon: bool, lastModifiedTimeUtc: string, maxNumberOfWorkers: int, outboundIpAddresses: string, possibleOutboundIpAddresses: string, redundancyMode: string, repositorySiteName: string, reserved: bool, resourceGroup: string, scmSiteAlsoStopped: bool, serverFarmId: string, siteConfig: record<alwaysOn: bool, apiDefinition: record, appCommandLine: string, appSettings: list, autoHealEnabled: bool, autoHealRules: record, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list, cors: record, defaultDocuments: list, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record, ftpsState: string, handlerMappings: list, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, slotSwapStatus: record<destinationSlotName: string, sourceSlotName: string, timestampUtc: string>, state: string, suspendedTill: string, targetSwapSlot: string, trafficManagerHostNames: list<string>, usageState: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}") $qp)
-  let body = {"identity": $identity, "properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}") $qp)
+  let req_body = {"identity": $identity, "properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a new web, mobile, or API app in an existing resource group, or updates an existing app.
@@ -239,8 +248,8 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites update" 
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}
 # operationId: WebApps_CreateOrUpdate
 # --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --properties shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, siteConfig?: record, slotSwapStatus?: record}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites create-or-update" [
+# --properties shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, ... (2 more fields)}
+export def "subscriptions-resource-groups-providers-microsoft-web-sites create-apps-or-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -254,7 +263,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites create-o
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
   --identity: record # Managed service identity. — shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-  --properties: any # Site resource specific properties — shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, siteConfig?: record, slotSwapStatus?: record}
+  --properties: any # Site resource specific properties — shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, ... (2 more fields)}
   --kind: string # Kind of resource.
   location: string # Resource Location.
   --tags: record # Resource tags.
@@ -263,19 +272,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites create-o
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}") $qp)
-  let body = {"identity": $identity, "properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}") $qp)
+  let req_body = {"identity": $identity, "properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Analyze a custom hostname.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/analyzeCustomHostname
 # operationId: WebApps_AnalyzeCustomHostname
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-analyze-custom-hostname get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-analyze-custom-hostname get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -293,7 +302,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-analyze-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hostName" $host_name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/analyzeCustomHostname") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/analyzeCustomHostname") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -303,7 +312,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-analyze-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/applySlotConfig
 # operationId: WebApps_ApplySlotConfigToProduction
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-apply-slot-config post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-apply-slot-config create-apps-to-production" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -316,19 +325,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-apply-sl
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
-  --preserve-vnet: oneof<nothing, bool> # <code>true</code> to preserve Virtual Network to the slot during swap; otherwise, <code>false</code>.
+  --preserve-vnet: oneof<nothing, bool> # true to preserve Virtual Network to the slot during swap; otherwise, false.
   target_slot: string # Destination deployment slot during swap operation.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/applySlotConfig") $qp)
-  let body = {"preserveVnet": $preserve_vnet, "targetSlot": $target_slot} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/applySlotConfig") $qp)
+  let req_body = {"preserveVnet": $preserve_vnet, "targetSlot": $target_slot} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a backup of an app.
@@ -336,7 +345,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-apply-sl
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/backup
 # operationId: WebApps_Backup
 # --properties shape: {backupName?: string, backupSchedule?: record, databases?: list, enabled?: bool, storageAccountUrl: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-backup post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-backup create-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -356,19 +365,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-backup p
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/backup") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/backup") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets existing backups of an app.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/backups
 # operationId: WebApps_ListBackups
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -385,7 +394,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/backups") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/backups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -395,7 +404,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups 
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/backups/{backupId}
 # operationId: WebApps_DeleteBackup
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups delete" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups delete-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -413,7 +422,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, backup_id: $backup_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/backups/{backup_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), backup_id: (encode-path-segment $backup_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/backups/{backup_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -423,7 +432,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/backups/{backupId}
 # operationId: WebApps_GetBackupStatus
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups get-backup-status" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups get-apps-status" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -441,7 +450,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, backup_id: $backup_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/backups/{backup_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), backup_id: (encode-path-segment $backup_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/backups/{backup_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -452,7 +461,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups 
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/backups/{backupId}/list
 # operationId: WebApps_ListBackupStatusSecrets
 # --properties shape: {backupName?: string, backupSchedule?: record, databases?: list, enabled?: bool, storageAccountUrl: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups-list list-backup-status-secrets" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups-list list-apps-status-secrets" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -473,12 +482,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, backup_id: $backup_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/backups/{backup_id}/list") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), backup_id: (encode-path-segment $backup_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/backups/{backup_id}/list") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Restores a specific backup to another app (or deployment slot, if specified).
@@ -486,7 +495,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/backups/{backupId}/restore
 # operationId: WebApps_Restore
 # --properties shape: {adjustConnectionStrings?: bool, appServicePlan?: string, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, ignoreDatabases?: bool, operationType?: "Default"|"Clone"|"Relocation"|"Snapshot"|"CloudFS", overwrite: bool, siteName?: string, storageAccountUrl: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups-restore post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups-restore create-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -507,19 +516,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-backups-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, backup_id: $backup_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/backups/{backup_id}/restore") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), backup_id: (encode-path-segment $backup_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/backups/{backup_id}/restore") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List the configurations of an app
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config
 # operationId: WebApps_ListConfigurations
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config list-configurations" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config list-apps-configurations" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -536,7 +545,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config l
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -546,7 +555,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config l
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/appsettings
 # operationId: WebApps_UpdateApplicationSettings
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-appsettings update-application-settings" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-appsettings update-apps-application-settings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -566,19 +575,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-a
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/appsettings") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/appsettings") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the application settings of an app.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/appsettings/list
 # operationId: WebApps_ListApplicationSettings
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-appsettings-list list-application-settings" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-appsettings-list list-apps-application-settings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -595,7 +604,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-a
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/appsettings/list") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/appsettings/list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -605,8 +614,8 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-a
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/authsettings
 # operationId: WebApps_UpdateAuthSettings
-# --properties shape: {additionalLoginParams?: list, allowedAudiences?: list, allowedExternalRedirectUrls?: list, clientId?: string, clientSecret?: string, clientSecretCertificateThumbprint?: string, defaultProvider?: "AzureActiveDirectory"|"Facebook"|"Google"|"MicrosoftAccount"|"Twitter", enabled?: bool, facebookAppId?: string, facebookAppSecret?: string, facebookOAuthScopes?: list, googleClientId?: string, googleClientSecret?: string, googleOAuthScopes?: list, issuer?: string, microsoftAccountClientId?: string, microsoftAccountClientSecret?: string, microsoftAccountOAuthScopes?: list, runtimeVersion?: string, tokenRefreshExtensionHours?: float, tokenStoreEnabled?: bool, twitterConsumerKey?: string, twitterConsumerSecret?: string, unauthenticatedClientAction?: "RedirectToLoginPage"|"AllowAnonymous", validateIssuer?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-authsettings update" [
+# --properties shape: {additionalLoginParams?: list<string>, allowedAudiences?: list<string>, allowedExternalRedirectUrls?: list<string>, clientId?: string, clientSecret?: string, clientSecretCertificateThumbprint?: string, defaultProvider?: "AzureActiveDirectory"|"Facebook"|"Google"|"MicrosoftAccount"|"Twitter", enabled?: bool, facebookAppId?: string, facebookAppSecret?: string, facebookOAuthScopes?: list<string>, googleClientId?: string, googleClientSecret?: string, googleOAuthScopes?: list<string>, issuer?: string, ... (10 more fields)}
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-authsettings update-apps-auth-settings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -619,26 +628,26 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-a
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
-  --properties: any # SiteAuthSettings resource specific properties — shape: {additionalLoginParams?: list, allowedAudiences?: list, allowedExternalRedirectUrls?: list, clientId?: string, clientSecret?: string, clientSecretCertificateThumbprint?: string, defaultProvider?: "AzureActiveDirectory"|"Facebook"|"Google"|"MicrosoftAccount"|"Twitter", enabled?: bool, facebookAppId?: string, facebookAppSecret?: string, facebookOAuthScopes?: list, googleClientId?: string, googleClientSecret?: string, googleOAuthScopes?: list, issuer?: string, microsoftAccountClientId?: string, microsoftAccountClientSecret?: string, microsoftAccountOAuthScopes?: list, runtimeVersion?: string, tokenRefreshExtensionHours?: float, tokenStoreEnabled?: bool, twitterConsumerKey?: string, twitterConsumerSecret?: string, unauthenticatedClientAction?: "RedirectToLoginPage"|"AllowAnonymous", validateIssuer?: bool}
+  --properties: any # SiteAuthSettings resource specific properties — shape: {additionalLoginParams?: list<string>, allowedAudiences?: list<string>, allowedExternalRedirectUrls?: list<string>, clientId?: string, clientSecret?: string, clientSecretCertificateThumbprint?: string, defaultProvider?: "AzureActiveDirectory"|"Facebook"|"Google"|"MicrosoftAccount"|"Twitter", enabled?: bool, facebookAppId?: string, facebookAppSecret?: string, facebookOAuthScopes?: list<string>, googleClientId?: string, googleClientSecret?: string, googleOAuthScopes?: list<string>, issuer?: string, ... (10 more fields)}
   --kind: string # Kind of resource.
 ]: any -> record<properties: record<additionalLoginParams: list<string>, allowedAudiences: list<string>, allowedExternalRedirectUrls: list<string>, clientId: string, clientSecret: string, clientSecretCertificateThumbprint: string, defaultProvider: string, enabled: bool, facebookAppId: string, facebookAppSecret: string, facebookOAuthScopes: list<string>, googleClientId: string, googleClientSecret: string, googleOAuthScopes: list<string>, issuer: string, microsoftAccountClientId: string, microsoftAccountClientSecret: string, microsoftAccountOAuthScopes: list<string>, runtimeVersion: string, tokenRefreshExtensionHours: float, tokenStoreEnabled: bool, twitterConsumerKey: string, twitterConsumerSecret: string, unauthenticatedClientAction: string, validateIssuer: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/authsettings") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/authsettings") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the Authentication/Authorization settings of an app.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/authsettings/list
 # operationId: WebApps_GetAuthSettings
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-authsettings-list get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-authsettings-list get-apps-auth-settings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -655,7 +664,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-a
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/authsettings/list") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/authsettings/list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -665,7 +674,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-a
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/azurestorageaccounts
 # operationId: WebApps_UpdateAzureStorageAccounts
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-azurestorageaccounts update-azure-storage-accounts" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-azurestorageaccounts update-apps-azure-storage-accounts" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -685,19 +694,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-a
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/azurestorageaccounts") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/azurestorageaccounts") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the Azure storage account configurations of an app.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/azurestorageaccounts/list
 # operationId: WebApps_ListAzureStorageAccounts
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-azurestorageaccounts-list list-azure-storage-accounts" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-azurestorageaccounts-list list-apps-azure-storage-accounts" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -714,7 +723,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-a
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/azurestorageaccounts/list") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/azurestorageaccounts/list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -724,7 +733,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-a
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/backup
 # operationId: WebApps_DeleteBackupConfiguration
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-backup delete-backup-configuration" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-backup delete-apps-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -741,7 +750,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-b
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/backup") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/backup") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -752,7 +761,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-b
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/backup
 # operationId: WebApps_UpdateBackupConfiguration
 # --properties shape: {backupName?: string, backupSchedule?: record, databases?: list, enabled?: bool, storageAccountUrl: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-backup update-backup-configuration" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-backup update-apps-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -772,19 +781,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-b
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/backup") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/backup") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the backup configuration of an app.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/backup/list
 # operationId: WebApps_GetBackupConfiguration
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-backup-list get-backup-configuration" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-backup-list get-apps-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -801,7 +810,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-b
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/backup/list") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/backup/list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -811,7 +820,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-b
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/connectionstrings
 # operationId: WebApps_UpdateConnectionStrings
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-connectionstrings update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-connectionstrings update-apps-connection-strings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -831,19 +840,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/connectionstrings") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/connectionstrings") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the connection strings of an app.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/connectionstrings/list
 # operationId: WebApps_ListConnectionStrings
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-connectionstrings-list list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-connectionstrings-list list-apps-connection-strings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -860,7 +869,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/connectionstrings/list") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/connectionstrings/list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -870,7 +879,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/logs
 # operationId: WebApps_GetDiagnosticLogsConfiguration
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-logs get-diagnostic-logs-configuration" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-logs get-apps-diagnostic-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -887,7 +896,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-l
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/logs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -898,7 +907,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-l
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/logs
 # operationId: WebApps_UpdateDiagnosticLogsConfig
 # --properties shape: {applicationLogs?: record, detailedErrorMessages?: record, failedRequestsTracing?: record, httpLogs?: record}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-logs update-diagnostic" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-logs update-apps-diagnostic" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -918,19 +927,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-l
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/logs") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/logs") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Replaces the metadata of an app.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/metadata
 # operationId: WebApps_UpdateMetadata
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-metadata update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-metadata update-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -950,19 +959,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/metadata") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/metadata") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the metadata of an app.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/metadata/list
 # operationId: WebApps_ListMetadata
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-metadata-list list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-metadata-list list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -979,7 +988,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-m
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/metadata/list") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/metadata/list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -989,7 +998,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-m
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/publishingcredentials/list
 # operationId: WebApps_ListPublishingCredentials
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-publishingcredentials-list list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-publishingcredentials-list list-apps-publishing-credentials" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1006,7 +1015,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-p
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/publishingcredentials/list") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/publishingcredentials/list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1017,7 +1026,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-p
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/pushsettings
 # operationId: WebApps_UpdateSitePushSettings
 # --properties shape: {dynamicTagsJson?: string, isPushEnabled: bool, tagWhitelistJson?: string, tagsRequiringAuth?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-pushsettings update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-pushsettings update-apps-push-settings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1037,19 +1046,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-p
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/pushsettings") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/pushsettings") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the Push settings associated with web app.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/pushsettings/list
 # operationId: WebApps_ListSitePushSettings
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-pushsettings-list list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-pushsettings-list push-apps-settings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1066,7 +1075,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-p
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/pushsettings/list") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/pushsettings/list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1076,7 +1085,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-p
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/slotConfigNames
 # operationId: WebApps_ListSlotConfigurationNames
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-slot-config-names list-slot-configuration" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-slot-config-names list-apps-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1093,7 +1102,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-s
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/slotConfigNames") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/slotConfigNames") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1103,8 +1112,8 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-s
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/slotConfigNames
 # operationId: WebApps_UpdateSlotConfigurationNames
-# --properties shape: {appSettingNames?: list, azureStorageConfigNames?: list, connectionStringNames?: list}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-slot-config-names update-slot-configuration" [
+# --properties shape: {appSettingNames?: list<string>, azureStorageConfigNames?: list<string>, connectionStringNames?: list<string>}
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-slot-config-names update-apps-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1117,26 +1126,26 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-s
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
-  --properties: record # Names for connection strings, application settings, and external Azure storage account configuration identifiers to be marked as sticky to the deployment slot and not moved during a swap operation. This is valid for all deployment slots in an app. — shape: {appSettingNames?: list, azureStorageConfigNames?: list, connectionStringNames?: list}
+  --properties: record # Names for connection strings, application settings, and external Azure storage account configuration identifiers to be marked as sticky to the deployment slot and not moved during a swap operation. This is valid for all deployment slots in an app. — shape: {appSettingNames?: list<string>, azureStorageConfigNames?: list<string>, connectionStringNames?: list<string>}
   --kind: string # Kind of resource.
 ]: any -> record<properties: record<appSettingNames: list<string>, azureStorageConfigNames: list<string>, connectionStringNames: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/slotConfigNames") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/slotConfigNames") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the configuration of an app, such as platform version and bitness, default documents, virtual applications, Always On, etc.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/web
 # operationId: WebApps_GetConfiguration
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-web get-configuration" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-web get-apps-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1153,7 +1162,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/web") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/web") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1163,8 +1172,8 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-w
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/web
 # operationId: WebApps_UpdateConfiguration
-# --properties shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, javaContainer?: string, javaContainerVersion?: string, javaVersion?: string, limits?: record, linuxFxVersion?: string, loadBalancing?: "WeightedRoundRobin"|"LeastRequests"|"LeastResponseTime"|"WeightedTotalTraffic"|"RequestHash", localMySqlEnabled?: bool, logsDirectorySizeLimit?: int, machineKey?: record, managedPipelineMode?: "Integrated"|"Classic", managedServiceIdentityId?: int, minTlsVersion?: "1.0"|"1.1"|"1.2", netFrameworkVersion?: string, nodeVersion?: string, numberOfWorkers?: int, phpVersion?: string, publishingUsername?: string, push?: record, pythonVersion?: string, remoteDebuggingEnabled?: bool, remoteDebuggingVersion?: string, requestTracingEnabled?: bool, requestTracingExpirationTime?: string, reservedInstanceCount?: int, scmIpSecurityRestrictions?: list, scmIpSecurityRestrictionsUseMain?: bool, scmType?: "None"|"Dropbox"|"Tfs"|"LocalGit"|"GitHub"|"CodePlexGit"|"CodePlexHg"|"BitbucketGit"|"BitbucketHg"|"ExternalGit"|"ExternalHg"|"OneDrive"|"VSO", tracingOptions?: string, use32BitWorkerProcess?: bool, virtualApplications?: list, vnetName?: string, webSocketsEnabled?: bool, windowsFxVersion?: string, xManagedServiceIdentityId?: int}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-web update-configuration" [
+# --properties shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, ... (34 more fields)}
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-web update-apps-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1177,27 +1186,27 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-w
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
-  --properties: record # Configuration of an App Service app. — shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, javaContainer?: string, javaContainerVersion?: string, javaVersion?: string, limits?: record, linuxFxVersion?: string, loadBalancing?: "WeightedRoundRobin"|"LeastRequests"|"LeastResponseTime"|"WeightedTotalTraffic"|"RequestHash", localMySqlEnabled?: bool, logsDirectorySizeLimit?: int, machineKey?: record, managedPipelineMode?: "Integrated"|"Classic", managedServiceIdentityId?: int, minTlsVersion?: "1.0"|"1.1"|"1.2", netFrameworkVersion?: string, nodeVersion?: string, numberOfWorkers?: int, phpVersion?: string, publishingUsername?: string, push?: record, pythonVersion?: string, remoteDebuggingEnabled?: bool, remoteDebuggingVersion?: string, requestTracingEnabled?: bool, requestTracingExpirationTime?: string, reservedInstanceCount?: int, scmIpSecurityRestrictions?: list, scmIpSecurityRestrictionsUseMain?: bool, scmType?: "None"|"Dropbox"|"Tfs"|"LocalGit"|"GitHub"|"CodePlexGit"|"CodePlexHg"|"BitbucketGit"|"BitbucketHg"|"ExternalGit"|"ExternalHg"|"OneDrive"|"VSO", tracingOptions?: string, use32BitWorkerProcess?: bool, virtualApplications?: list, vnetName?: string, webSocketsEnabled?: bool, windowsFxVersion?: string, xManagedServiceIdentityId?: int}
+  --properties: record # Configuration of an App Service app. — shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, ... (34 more fields)}
   --kind: string # Kind of resource.
 ]: any -> record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/web") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/web") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the configuration of an app.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/web
 # operationId: WebApps_CreateOrUpdateConfiguration
-# --properties shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, javaContainer?: string, javaContainerVersion?: string, javaVersion?: string, limits?: record, linuxFxVersion?: string, loadBalancing?: "WeightedRoundRobin"|"LeastRequests"|"LeastResponseTime"|"WeightedTotalTraffic"|"RequestHash", localMySqlEnabled?: bool, logsDirectorySizeLimit?: int, machineKey?: record, managedPipelineMode?: "Integrated"|"Classic", managedServiceIdentityId?: int, minTlsVersion?: "1.0"|"1.1"|"1.2", netFrameworkVersion?: string, nodeVersion?: string, numberOfWorkers?: int, phpVersion?: string, publishingUsername?: string, push?: record, pythonVersion?: string, remoteDebuggingEnabled?: bool, remoteDebuggingVersion?: string, requestTracingEnabled?: bool, requestTracingExpirationTime?: string, reservedInstanceCount?: int, scmIpSecurityRestrictions?: list, scmIpSecurityRestrictionsUseMain?: bool, scmType?: "None"|"Dropbox"|"Tfs"|"LocalGit"|"GitHub"|"CodePlexGit"|"CodePlexHg"|"BitbucketGit"|"BitbucketHg"|"ExternalGit"|"ExternalHg"|"OneDrive"|"VSO", tracingOptions?: string, use32BitWorkerProcess?: bool, virtualApplications?: list, vnetName?: string, webSocketsEnabled?: bool, windowsFxVersion?: string, xManagedServiceIdentityId?: int}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-web create-or-update-configuration" [
+# --properties shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, ... (34 more fields)}
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-web create-apps-or-update-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1210,26 +1219,26 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-w
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
-  --properties: record # Configuration of an App Service app. — shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, javaContainer?: string, javaContainerVersion?: string, javaVersion?: string, limits?: record, linuxFxVersion?: string, loadBalancing?: "WeightedRoundRobin"|"LeastRequests"|"LeastResponseTime"|"WeightedTotalTraffic"|"RequestHash", localMySqlEnabled?: bool, logsDirectorySizeLimit?: int, machineKey?: record, managedPipelineMode?: "Integrated"|"Classic", managedServiceIdentityId?: int, minTlsVersion?: "1.0"|"1.1"|"1.2", netFrameworkVersion?: string, nodeVersion?: string, numberOfWorkers?: int, phpVersion?: string, publishingUsername?: string, push?: record, pythonVersion?: string, remoteDebuggingEnabled?: bool, remoteDebuggingVersion?: string, requestTracingEnabled?: bool, requestTracingExpirationTime?: string, reservedInstanceCount?: int, scmIpSecurityRestrictions?: list, scmIpSecurityRestrictionsUseMain?: bool, scmType?: "None"|"Dropbox"|"Tfs"|"LocalGit"|"GitHub"|"CodePlexGit"|"CodePlexHg"|"BitbucketGit"|"BitbucketHg"|"ExternalGit"|"ExternalHg"|"OneDrive"|"VSO", tracingOptions?: string, use32BitWorkerProcess?: bool, virtualApplications?: list, vnetName?: string, webSocketsEnabled?: bool, windowsFxVersion?: string, xManagedServiceIdentityId?: int}
+  --properties: record # Configuration of an App Service app. — shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, ... (34 more fields)}
   --kind: string # Kind of resource.
 ]: any -> record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/web") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/web") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a list of web app configuration snapshots identifiers. Each element of the list contains a timestamp and the ID of the snapshot.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/web/snapshots
 # operationId: WebApps_ListConfigurationSnapshotInfo
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-web-snapshots list-configuration-snapshot-info" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-web-snapshots list-apps-configuration-get" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1246,7 +1255,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/web/snapshots") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/web/snapshots") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1256,7 +1265,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-w
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/web/snapshots/{snapshotId}
 # operationId: WebApps_GetConfigurationSnapshot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-web-snapshots get-configuration" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-web-snapshots get-apps-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1274,7 +1283,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, snapshot_id: $snapshot_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/web/snapshots/{snapshot_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/web/snapshots/{snapshot_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1284,7 +1293,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-w
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/web/snapshots/{snapshotId}/recover
 # operationId: WebApps_RecoverSiteConfigurationSnapshot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-web-snapshots-recover post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-web-snapshots-recover create-apps-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1302,7 +1311,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-w
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, snapshot_id: $snapshot_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/web/snapshots/{snapshot_id}/recover") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/web/snapshots/{snapshot_id}/recover") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1312,7 +1321,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-config-w
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/containerlogs
 # operationId: WebApps_GetWebSiteContainerLogs
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-containerlogs get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-containerlogs get-apps-container-logs" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1329,7 +1338,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-containe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/containerlogs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/containerlogs") $qp)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1339,7 +1348,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-containe
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/containerlogs/zip/download
 # operationId: WebApps_GetContainerLogsZip
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-containerlogs-zip-download get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-containerlogs-zip-download get-apps-container-logs" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1356,7 +1365,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-containe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/containerlogs/zip/download") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/containerlogs/zip/download") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1366,7 +1375,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-containe
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/continuouswebjobs
 # operationId: WebApps_ListContinuousWebJobs
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuouswebjobs list-continuous-web-jobs" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuouswebjobs list-apps-continuous-jobs" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1383,7 +1392,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/continuouswebjobs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/continuouswebjobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1393,7 +1402,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuo
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/continuouswebjobs/{webJobName}
 # operationId: WebApps_DeleteContinuousWebJob
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuouswebjobs delete-continuous-web-job" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuouswebjobs delete-apps-continuous-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1411,7 +1420,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, web_job_name: $web_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/continuouswebjobs/{web_job_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/continuouswebjobs/{web_job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1421,7 +1430,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuo
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/continuouswebjobs/{webJobName}
 # operationId: WebApps_GetContinuousWebJob
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuouswebjobs get-continuous-web-job" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuouswebjobs get-apps-continuous-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1439,7 +1448,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, web_job_name: $web_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/continuouswebjobs/{web_job_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/continuouswebjobs/{web_job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1449,7 +1458,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuo
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/continuouswebjobs/{webJobName}/start
 # operationId: WebApps_StartContinuousWebJob
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuouswebjobs-start start-continuous-web-job" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuouswebjobs-start start-apps-continuous-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1467,7 +1476,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, web_job_name: $web_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/continuouswebjobs/{web_job_name}/start") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/continuouswebjobs/{web_job_name}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1477,7 +1486,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuo
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/continuouswebjobs/{webJobName}/stop
 # operationId: WebApps_StopContinuousWebJob
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuouswebjobs-stop stop-continuous-web-job" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuouswebjobs-stop stop-apps-continuous-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1495,7 +1504,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, web_job_name: $web_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/continuouswebjobs/{web_job_name}/stop") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/continuouswebjobs/{web_job_name}/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1505,7 +1514,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-continuo
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/deployments
 # operationId: WebApps_ListDeployments
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployments list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployments list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1522,7 +1531,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/deployments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1532,7 +1541,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployme
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/deployments/{id}
 # operationId: WebApps_DeleteDeployment
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployments delete" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployments delete-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1550,7 +1559,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/deployments/{id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/deployments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1560,7 +1569,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployme
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/deployments/{id}
 # operationId: WebApps_GetDeployment
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployments get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployments get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1578,7 +1587,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/deployments/{id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/deployments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1589,7 +1598,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployme
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/deployments/{id}
 # operationId: WebApps_CreateDeployment
 # --properties shape: {active?: bool, author?: string, author_email?: string, deployer?: string, details?: string, end_time?: string, message?: string, start_time?: string, status?: int}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployments create" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployments create-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1610,19 +1619,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/deployments/{id}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/deployments/{id}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List deployment log for specific deployment for an app, or a deployment slot.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/deployments/{id}/log
 # operationId: WebApps_ListDeploymentLog
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployments-log list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployments-log list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1640,7 +1649,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/deployments/{id}/log") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/deployments/{id}/log") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1651,7 +1660,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-deployme
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/discoverbackup
 # operationId: WebApps_DiscoverBackup
 # --properties shape: {adjustConnectionStrings?: bool, appServicePlan?: string, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, ignoreDatabases?: bool, operationType?: "Default"|"Clone"|"Relocation"|"Snapshot"|"CloudFS", overwrite: bool, siteName?: string, storageAccountUrl: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-discoverbackup post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-discoverbackup create-apps-discover-backup" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1671,19 +1680,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-discover
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/discoverbackup") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/discoverbackup") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists ownership identifiers for domain associated with web app.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers
 # operationId: WebApps_ListDomainOwnershipIdentifiers
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-domain-ownership-identifiers list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-domain-ownership-identifiers list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1700,7 +1709,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-domain-o
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1710,7 +1719,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-domain-o
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers/{domainOwnershipIdentifierName}
 # operationId: WebApps_DeleteDomainOwnershipIdentifier
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-domain-ownership-identifiers delete" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-domain-ownership-identifiers delete-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1728,7 +1737,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-domain-o
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, domain_ownership_identifier_name: $domain_ownership_identifier_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), domain_ownership_identifier_name: (encode-path-segment $domain_ownership_identifier_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1738,7 +1747,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-domain-o
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers/{domainOwnershipIdentifierName}
 # operationId: WebApps_GetDomainOwnershipIdentifier
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-domain-ownership-identifiers get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-domain-ownership-identifiers get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1756,7 +1765,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-domain-o
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, domain_ownership_identifier_name: $domain_ownership_identifier_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), domain_ownership_identifier_name: (encode-path-segment $domain_ownership_identifier_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1767,7 +1776,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-domain-o
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers/{domainOwnershipIdentifierName}
 # operationId: WebApps_UpdateDomainOwnershipIdentifier
 # --properties shape: {id?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-domain-ownership-identifiers update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-domain-ownership-identifiers update-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1788,12 +1797,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-domain-o
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, domain_ownership_identifier_name: $domain_ownership_identifier_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), domain_ownership_identifier_name: (encode-path-segment $domain_ownership_identifier_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a domain ownership identifier for web app, or updates an existing ownership identifier.
@@ -1801,7 +1810,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-domain-o
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers/{domainOwnershipIdentifierName}
 # operationId: WebApps_CreateOrUpdateDomainOwnershipIdentifier
 # --properties shape: {id?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-domain-ownership-identifiers create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-domain-ownership-identifiers create-apps-or-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1822,19 +1831,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-domain-o
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, domain_ownership_identifier_name: $domain_ownership_identifier_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), domain_ownership_identifier_name: (encode-path-segment $domain_ownership_identifier_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the status of the last MSDeploy operation.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/extensions/MSDeploy
 # operationId: WebApps_GetMSDeployStatus
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-extensions-ms-deploy get-ms-deploy-status" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-extensions-ms-deploy get-apps-status" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1851,7 +1860,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-extensio
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/extensions/MSDeploy") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/extensions/MSDeploy") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1862,7 +1871,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-extensio
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/extensions/MSDeploy
 # operationId: WebApps_CreateMSDeployOperation
 # --properties shape: {appOffline?: bool, connectionString?: string, dbType?: string, packageUri?: string, setParameters?: record, setParametersXmlFileUri?: string, skipAppData?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-extensions-ms-deploy create-ms-deploy-operation" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-extensions-ms-deploy create-apps-operation" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1882,19 +1891,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-extensio
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/extensions/MSDeploy") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/extensions/MSDeploy") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the MSDeploy Log for the last MSDeploy operation.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/extensions/MSDeploy/log
 # operationId: WebApps_GetMSDeployLog
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-extensions-ms-deploy-log get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-extensions-ms-deploy-log get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1911,7 +1920,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-extensio
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/extensions/MSDeploy/log") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/extensions/MSDeploy/log") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1921,7 +1930,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-extensio
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/functions
 # operationId: WebApps_ListFunctions
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-functions list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-functions list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1938,7 +1947,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-function
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/functions") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/functions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1948,7 +1957,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-function
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/functions/admin/token
 # operationId: WebApps_GetFunctionsAdminToken
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-functions-admin-token get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-functions-admin-token get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1965,7 +1974,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-function
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/functions/admin/token") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/functions/admin/token") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1975,7 +1984,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-function
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/functions/{functionName}
 # operationId: WebApps_DeleteFunction
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-functions delete" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-functions delete-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1993,7 +2002,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-function
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, function_name: $function_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/functions/{function_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), function_name: (encode-path-segment $function_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/functions/{function_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2003,7 +2012,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-function
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/functions/{functionName}
 # operationId: WebApps_GetFunction
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-functions get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-functions get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2021,7 +2030,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-function
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, function_name: $function_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/functions/{function_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), function_name: (encode-path-segment $function_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/functions/{function_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2032,7 +2041,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-function
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/functions/{functionName}
 # operationId: WebApps_CreateFunction
 # --properties shape: {config?: record, config_href?: string, files?: record, function_app_id?: string, href?: string, script_href?: string, script_root_path_href?: string, secrets_file_href?: string, test_data?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-functions create" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-functions create-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2053,19 +2062,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-function
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, function_name: $function_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/functions/{function_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), function_name: (encode-path-segment $function_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/functions/{function_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get function secrets for a function in a web site, or a deployment slot.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/functions/{functionName}/listsecrets
 # operationId: WebApps_ListFunctionSecrets
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-functions-listsecrets list-function-secrets" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-functions-listsecrets list-apps-secrets" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2083,7 +2092,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-function
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, function_name: $function_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/functions/{function_name}/listsecrets") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), function_name: (encode-path-segment $function_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/functions/{function_name}/listsecrets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2093,7 +2102,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-function
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hostNameBindings
 # operationId: WebApps_ListHostNameBindings
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-name-bindings list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-name-bindings list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2110,7 +2119,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-nam
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hostNameBindings") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hostNameBindings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2120,7 +2129,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-nam
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hostNameBindings/{hostName}
 # operationId: WebApps_DeleteHostNameBinding
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-name-bindings delete" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-name-bindings delete-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2138,7 +2147,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-nam
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, host_name: $host_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hostNameBindings/{host_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), host_name: (encode-path-segment $host_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hostNameBindings/{host_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2148,7 +2157,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-nam
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hostNameBindings/{hostName}
 # operationId: WebApps_GetHostNameBinding
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-name-bindings get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-name-bindings get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2166,7 +2175,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-nam
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, host_name: $host_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hostNameBindings/{host_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), host_name: (encode-path-segment $host_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hostNameBindings/{host_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2177,7 +2186,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-nam
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hostNameBindings/{hostName}
 # operationId: WebApps_CreateOrUpdateHostNameBinding
 # --properties shape: {azureResourceName?: string, azureResourceType?: "Website"|"TrafficManager", customHostNameDnsRecordType?: "CName"|"A", domainId?: string, hostNameType?: "Verified"|"Managed", siteName?: string, sslState?: "Disabled"|"SniEnabled"|"IpBasedEnabled", thumbprint?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-name-bindings create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-name-bindings create-apps-or-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2198,19 +2207,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-host-nam
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, host_name: $host_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hostNameBindings/{host_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), host_name: (encode-path-segment $host_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hostNameBindings/{host_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes a Hybrid Connection from this site.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespaceName}/relays/{relayName}
 # operationId: WebApps_DeleteHybridConnection
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-connection-namespaces-relays delete" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-connection-namespaces-relays delete-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2229,7 +2238,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, namespace_name: $namespace_name, relay_name: $relay_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2239,7 +2248,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespaceName}/relays/{relayName}
 # operationId: WebApps_GetHybridConnection
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-connection-namespaces-relays get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-connection-namespaces-relays get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2258,7 +2267,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, namespace_name: $namespace_name, relay_name: $relay_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2269,7 +2278,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-c
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespaceName}/relays/{relayName}
 # operationId: WebApps_UpdateHybridConnection
 # --properties shape: {hostname?: string, port?: int, relayArmUri?: string, relayName?: string, sendKeyName?: string, sendKeyValue?: string, serviceBusNamespace?: string, serviceBusSuffix?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-connection-namespaces-relays update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-connection-namespaces-relays update-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2291,12 +2300,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, namespace_name: $namespace_name, relay_name: $relay_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a new Hybrid Connection using a Service Bus relay.
@@ -2304,7 +2313,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-c
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespaceName}/relays/{relayName}
 # operationId: WebApps_CreateOrUpdateHybridConnection
 # --properties shape: {hostname?: string, port?: int, relayArmUri?: string, relayName?: string, sendKeyName?: string, sendKeyValue?: string, serviceBusNamespace?: string, serviceBusSuffix?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-connection-namespaces-relays create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-connection-namespaces-relays create-apps-or-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2326,19 +2335,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, namespace_name: $namespace_name, relay_name: $relay_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the send key name and value for a Hybrid Connection.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespaceName}/relays/{relayName}/listKeys
 # operationId: WebApps_ListHybridConnectionKeys
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-connection-namespaces-relays-list-keys list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-connection-namespaces-relays-list-keys list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2357,7 +2366,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, namespace_name: $namespace_name, relay_name: $relay_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}/listKeys") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}/listKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2367,7 +2376,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridConnectionRelays
 # operationId: WebApps_ListHybridConnections
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-connection-relays list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-connection-relays list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2384,7 +2393,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridConnectionRelays") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridConnectionRelays") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2394,7 +2403,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybrid-c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridconnection
 # operationId: WebApps_ListRelayServiceConnections
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridconnection list-relay-service-connections" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridconnection list-apps-relay-service-connections" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2411,7 +2420,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridco
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridconnection") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridconnection") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2421,7 +2430,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridco
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entityName}
 # operationId: WebApps_DeleteRelayServiceConnection
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridconnection delete-relay-service-connection" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridconnection delete-apps-relay-service-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2439,7 +2448,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridco
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, entity_name: $entity_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entity_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), entity_name: (encode-path-segment $entity_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entity_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2449,7 +2458,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridco
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entityName}
 # operationId: WebApps_GetRelayServiceConnection
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridconnection get-relay-service-connection" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridconnection get-apps-relay-service-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2467,7 +2476,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridco
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, entity_name: $entity_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entity_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), entity_name: (encode-path-segment $entity_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entity_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2478,7 +2487,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridco
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entityName}
 # operationId: WebApps_UpdateRelayServiceConnection
 # --properties shape: {biztalkUri?: string, entityConnectionString?: string, entityName?: string, hostname?: string, port?: int, resourceConnectionString?: string, resourceType?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridconnection update-relay-service-connection" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridconnection update-apps-relay-service-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2499,12 +2508,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridco
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, entity_name: $entity_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entity_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), entity_name: (encode-path-segment $entity_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entity_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a new hybrid connection configuration (PUT), or updates an existing one (PATCH).
@@ -2512,7 +2521,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridco
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entityName}
 # operationId: WebApps_CreateOrUpdateRelayServiceConnection
 # --properties shape: {biztalkUri?: string, entityConnectionString?: string, entityName?: string, hostname?: string, port?: int, resourceConnectionString?: string, resourceType?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridconnection create-or-update-relay-service-connection" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridconnection create-apps-or-update-relay-service-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2533,19 +2542,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-hybridco
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, entity_name: $entity_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entity_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), entity_name: (encode-path-segment $entity_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entity_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets all scale-out instances of an app.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/instances
 # operationId: WebApps_ListInstanceIdentifiers
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances list-instance-identifiers" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances list-apps-identifiers" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2562,7 +2571,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2572,7 +2581,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/instances/{instanceId}/extensions/MSDeploy
 # operationId: WebApps_GetInstanceMsDeployStatus
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-extensions-ms-deploy get-instance-ms-deploy-status" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-extensions-ms-deploy get-apps-status" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2590,7 +2599,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, instance_id: $instance_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/extensions/MSDeploy") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/extensions/MSDeploy") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2601,7 +2610,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/instances/{instanceId}/extensions/MSDeploy
 # operationId: WebApps_CreateInstanceMSDeployOperation
 # --properties shape: {appOffline?: bool, connectionString?: string, dbType?: string, packageUri?: string, setParameters?: record, setParametersXmlFileUri?: string, skipAppData?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-extensions-ms-deploy create-instance-ms-deploy-operation" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-extensions-ms-deploy create-apps-operation" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2622,19 +2631,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, instance_id: $instance_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/extensions/MSDeploy") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/extensions/MSDeploy") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the MSDeploy Log for the last MSDeploy operation.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/instances/{instanceId}/extensions/MSDeploy/log
 # operationId: WebApps_GetInstanceMSDeployLog
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-extensions-ms-deploy-log get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-extensions-ms-deploy-log get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2652,7 +2661,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, instance_id: $instance_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/extensions/MSDeploy/log") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/extensions/MSDeploy/log") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2662,7 +2671,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/instances/{instanceId}/processes
 # operationId: WebApps_ListInstanceProcesses
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-processes list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-processes list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2680,7 +2689,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, instance_id: $instance_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2690,7 +2699,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/instances/{instanceId}/processes/{processId}
 # operationId: WebApps_DeleteInstanceProcess
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-processes delete-instance-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-processes delete-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2709,7 +2718,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, instance_id: $instance_id, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2719,7 +2728,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/instances/{instanceId}/processes/{processId}
 # operationId: WebApps_GetInstanceProcess
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-processes get-instance-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-processes get-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2738,7 +2747,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, instance_id: $instance_id, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2748,7 +2757,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/instances/{instanceId}/processes/{processId}/dump
 # operationId: WebApps_GetInstanceProcessDump
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-processes-dump get-instance-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-processes-dump get-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2767,7 +2776,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, instance_id: $instance_id, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}/dump") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}/dump") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2777,7 +2786,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/instances/{instanceId}/processes/{processId}/modules
 # operationId: WebApps_ListInstanceProcessModules
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-processes-modules list-instance-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-processes-modules list-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2796,7 +2805,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, instance_id: $instance_id, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}/modules") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}/modules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2806,7 +2815,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/instances/{instanceId}/processes/{processId}/modules/{baseAddress}
 # operationId: WebApps_GetInstanceProcessModule
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-processes-modules get-instance-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-processes-modules get-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2826,7 +2835,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, instance_id: $instance_id, process_id: $process_id, base_address: $base_address} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}/modules/{base_address}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id), base_address: (encode-path-segment $base_address)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}/modules/{base_address}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2836,7 +2845,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/instances/{instanceId}/processes/{processId}/threads
 # operationId: WebApps_ListInstanceProcessThreads
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-processes-threads list-instance-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-processes-threads list-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2855,7 +2864,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, instance_id: $instance_id, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}/threads") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}/threads") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2865,7 +2874,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/instances/{instanceId}/processes/{processId}/threads/{threadId}
 # operationId: WebApps_GetInstanceProcessThread
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-processes-threads get-instance-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-instances-processes-threads get-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2885,7 +2894,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, instance_id: $instance_id, process_id: $process_id, thread_id: $thread_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}/threads/{thread_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id), thread_id: (encode-path-segment $thread_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}/threads/{thread_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2895,7 +2904,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-instance
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/iscloneable
 # operationId: WebApps_IsCloneable
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-iscloneable post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-iscloneable create-apps-is-cloneable" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2912,7 +2921,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-isclonea
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/iscloneable") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/iscloneable") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2922,7 +2931,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-isclonea
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/listsyncfunctiontriggerstatus
 # operationId: WebApps_ListSyncFunctionTriggers
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-listsyncfunctiontriggerstatus list-sync-function-triggers" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-listsyncfunctiontriggerstatus list-apps-sync-function-triggers" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2939,7 +2948,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-listsync
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/listsyncfunctiontriggerstatus") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/listsyncfunctiontriggerstatus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2949,7 +2958,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-listsync
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/metricdefinitions
 # operationId: WebApps_ListMetricDefinitions
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-metricdefinitions list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-metricdefinitions list-apps-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2966,7 +2975,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-metricde
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/metricdefinitions") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/metricdefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2976,7 +2985,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-metricde
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/metrics
 # operationId: WebApps_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-metrics list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-metrics list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -2995,7 +3004,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-metrics 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "details" $details "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/metrics") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3006,7 +3015,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-metrics 
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/migrate
 # operationId: WebApps_MigrateStorage
 # --properties shape: {azurefilesConnectionString: string, azurefilesShare: string, blockWriteAccessToSite?: bool, switchSiteAfterMigration?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-migrate put" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-migrate update-apps-storage" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3027,12 +3036,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-migrate 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "subscriptionName" $subscription_name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/migrate") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/migrate") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Migrates a local (in-app) MySql database to a remote MySql database.
@@ -3040,7 +3049,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-migrate 
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/migratemysql
 # operationId: WebApps_MigrateMySql
 # --properties shape: {connectionString: string, migrationType: "LocalToRemote"|"RemoteToLocal"}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-migratemysql post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-migratemysql create-apps-migrate-my-sql" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3060,19 +3069,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-migratem
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/migratemysql") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/migratemysql") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the status of MySql in app migration, if one is active, and whether or not MySql in app is enabled
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/migratemysql/status
 # operationId: WebApps_GetMigrateMySqlStatus
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-migratemysql-status get-migrate-my-sql" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-migratemysql-status get-apps-migrate-my-sql" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3089,7 +3098,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-migratem
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/migratemysql/status") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/migratemysql/status") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3099,7 +3108,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-migratem
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/networkConfig/virtualNetwork
 # operationId: WebApps_DeleteSwiftVirtualNetwork
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-config-virtual-network delete-swift" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-config-virtual-network delete-apps-swift" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3116,7 +3125,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkConfig/virtualNetwork") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkConfig/virtualNetwork") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3126,7 +3135,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/networkConfig/virtualNetwork
 # operationId: WebApps_GetSwiftVirtualNetworkConnection
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-config-virtual-network get-swift-virtual-network-connection" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-config-virtual-network get-apps-swift-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3143,7 +3152,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkConfig/virtualNetwork") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkConfig/virtualNetwork") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3154,7 +3163,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/networkConfig/virtualNetwork
 # operationId: WebApps_UpdateSwiftVirtualNetworkConnection
 # --properties shape: {subnetResourceId?: string, swiftSupported?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-config-virtual-network update-swift-virtual-network-connection" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-config-virtual-network update-apps-swift-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3174,12 +3183,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkConfig/virtualNetwork") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkConfig/virtualNetwork") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Integrates this Web App with a Virtual Network. This requires that 1) "swiftSupported" is true when doing a GET against this resource, and 2) that the target Subnet has already been delegated, and is not in use by another App Service Plan other than the one this App is in.
@@ -3187,7 +3196,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/networkConfig/virtualNetwork
 # operationId: WebApps_CreateOrUpdateSwiftVirtualNetworkConnection
 # --properties shape: {subnetResourceId?: string, swiftSupported?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-config-virtual-network create-or-update-swift-virtual-network-connection" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-config-virtual-network create-apps-or-update-swift-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3207,19 +3216,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkConfig/virtualNetwork") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkConfig/virtualNetwork") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets all network features used by the app (or deployment slot, if specified).
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/networkFeatures/{view}
 # operationId: WebApps_ListNetworkFeatures
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-features list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-features list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3237,7 +3246,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, view: $view} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkFeatures/{view}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), view: (encode-path-segment $view)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkFeatures/{view}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3247,7 +3256,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/networkTrace/operationresults/{operationId}
 # operationId: WebApps_GetNetworkTraceOperation
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-trace-operationresults get-network-trace-operation" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-trace-operationresults get-apps-operation" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3265,7 +3274,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, operation_id: $operation_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTrace/operationresults/{operation_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTrace/operationresults/{operation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3275,7 +3284,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/networkTrace/start
 # operationId: WebApps_StartWebSiteNetworkTrace
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-trace-start start" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-trace-start start-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3295,7 +3304,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "durationInSeconds" $duration_in_seconds "scalar") (serialize-qp "maxFrameLength" $max_frame_length "scalar") (serialize-qp "sasUrl" $sas_url "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTrace/start") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTrace/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3305,7 +3314,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/networkTrace/startOperation
 # operationId: WebApps_StartWebSiteNetworkTraceOperation
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-trace-start-operation start" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-trace-start-operation start-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3325,7 +3334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "durationInSeconds" $duration_in_seconds "scalar") (serialize-qp "maxFrameLength" $max_frame_length "scalar") (serialize-qp "sasUrl" $sas_url "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTrace/startOperation") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTrace/startOperation") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3335,7 +3344,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/networkTrace/stop
 # operationId: WebApps_StopWebSiteNetworkTrace
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-trace-stop stop" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-trace-stop stop-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3352,7 +3361,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTrace/stop") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTrace/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3362,7 +3371,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/networkTrace/{operationId}
 # operationId: WebApps_GetNetworkTraces
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-trace get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-trace get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3380,7 +3389,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, operation_id: $operation_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTrace/{operation_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTrace/{operation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3390,7 +3399,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/networkTraces/current/operationresults/{operationId}
 # operationId: WebApps_GetNetworkTraceOperationV2
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-traces-current-operationresults get-network-trace-operation-v2" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-traces-current-operationresults get-apps-operation" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3408,7 +3417,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, operation_id: $operation_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTraces/current/operationresults/{operation_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTraces/current/operationresults/{operation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3418,7 +3427,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/networkTraces/{operationId}
 # operationId: WebApps_GetNetworkTracesV2
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-traces get-network-traces-v2" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-traces get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3436,7 +3445,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, operation_id: $operation_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTraces/{operation_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTraces/{operation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3446,7 +3455,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/newpassword
 # operationId: WebApps_GenerateNewSitePublishingPassword
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-newpassword post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-newpassword generate-apps-new-publishing-password" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3463,7 +3472,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-newpassw
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/newpassword") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/newpassword") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3473,7 +3482,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-newpassw
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/perfcounters
 # operationId: WebApps_ListPerfMonCounters
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-perfcounters list-perf-mon-counters" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-perfcounters list-apps-perf-mon-counters" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3491,7 +3500,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-perfcoun
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/perfcounters") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/perfcounters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3501,7 +3510,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-perfcoun
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/phplogging
 # operationId: WebApps_GetSitePhpErrorLogFlag
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-phplogging get-site-php-error-log-flag" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-phplogging get-apps-php-error-log-flag" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3518,7 +3527,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-phploggi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/phplogging") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/phplogging") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3528,7 +3537,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-phploggi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/premieraddons
 # operationId: WebApps_ListPremierAddOns
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-premieraddons list-premier-add-ons" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-premieraddons list-apps-premier-create-ons" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3545,7 +3554,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-premiera
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/premieraddons") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/premieraddons") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3555,7 +3564,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-premiera
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/premieraddons/{premierAddOnName}
 # operationId: WebApps_DeletePremierAddOn
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-premieraddons delete-premier-add-on" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-premieraddons delete-apps-premier-create" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3573,7 +3582,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-premiera
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, premier_add_on_name: $premier_add_on_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/premieraddons/{premier_add_on_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), premier_add_on_name: (encode-path-segment $premier_add_on_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/premieraddons/{premier_add_on_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3583,7 +3592,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-premiera
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/premieraddons/{premierAddOnName}
 # operationId: WebApps_GetPremierAddOn
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-premieraddons get-premier-add-on" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-premieraddons get-apps-premier-create" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3601,7 +3610,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-premiera
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, premier_add_on_name: $premier_add_on_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/premieraddons/{premier_add_on_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), premier_add_on_name: (encode-path-segment $premier_add_on_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/premieraddons/{premier_add_on_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3612,7 +3621,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-premiera
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/premieraddons/{premierAddOnName}
 # operationId: WebApps_UpdatePremierAddOn
 # --properties shape: {marketplaceOffer?: string, marketplacePublisher?: string, product?: string, sku?: string, vendor?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-premieraddons update-premier-add-on" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-premieraddons update-apps-premier-create" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3633,12 +3642,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-premiera
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, premier_add_on_name: $premier_add_on_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/premieraddons/{premier_add_on_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), premier_add_on_name: (encode-path-segment $premier_add_on_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/premieraddons/{premier_add_on_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a named add-on of an app.
@@ -3646,7 +3655,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-premiera
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/premieraddons/{premierAddOnName}
 # operationId: WebApps_AddPremierAddOn
 # --properties shape: {marketplaceOffer?: string, marketplacePublisher?: string, product?: string, sku?: string, vendor?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-premieraddons create-premier-add-on" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-premieraddons create-apps-premier-create" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3669,19 +3678,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-premiera
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, premier_add_on_name: $premier_add_on_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/premieraddons/{premier_add_on_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), premier_add_on_name: (encode-path-segment $premier_add_on_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/premieraddons/{premier_add_on_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets data around private site access enablement and authorized Virtual Networks that can access the site.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/privateAccess/virtualNetworks
 # operationId: WebApps_GetPrivateAccess
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-private-access-virtual-networks get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-private-access-virtual-networks get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3698,7 +3707,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-private-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/privateAccess/virtualNetworks") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/privateAccess/virtualNetworks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3709,7 +3718,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-private-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/privateAccess/virtualNetworks
 # operationId: WebApps_PutPrivateAccessVnet
 # --properties shape: {enabled?: bool, virtualNetworks?: list}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-private-access-virtual-networks update-private-access-vnet" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-private-access-virtual-networks update-apps-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3729,19 +3738,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-private-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/privateAccess/virtualNetworks") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/privateAccess/virtualNetworks") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get list of processes for a web site, or a deployment slot, or for a specific scaled-out instance in a web site.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/processes
 # operationId: WebApps_ListProcesses
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-processes list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-processes list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3758,7 +3767,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-processe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3768,7 +3777,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-processe
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/processes/{processId}
 # operationId: WebApps_DeleteProcess
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-processes delete-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-processes delete-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3786,7 +3795,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-processe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3796,7 +3805,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-processe
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/processes/{processId}
 # operationId: WebApps_GetProcess
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-processes get-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-processes get-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3814,7 +3823,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-processe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3824,7 +3833,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-processe
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/processes/{processId}/dump
 # operationId: WebApps_GetProcessDump
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-processes-dump get-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-processes-dump get-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3842,7 +3851,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-processe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}/dump") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}/dump") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3852,7 +3861,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-processe
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/processes/{processId}/modules
 # operationId: WebApps_ListProcessModules
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-processes-modules list-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-processes-modules list-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3870,7 +3879,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-processe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}/modules") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}/modules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3880,7 +3889,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-processe
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/processes/{processId}/modules/{baseAddress}
 # operationId: WebApps_GetProcessModule
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-processes-modules get-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-processes-modules get-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3899,7 +3908,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-processe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, process_id: $process_id, base_address: $base_address} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}/modules/{base_address}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), process_id: (encode-path-segment $process_id), base_address: (encode-path-segment $base_address)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}/modules/{base_address}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3909,7 +3918,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-processe
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/processes/{processId}/threads
 # operationId: WebApps_ListProcessThreads
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-processes-threads list-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-processes-threads list-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3927,7 +3936,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-processe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}/threads") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}/threads") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3937,7 +3946,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-processe
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/processes/{processId}/threads/{threadId}
 # operationId: WebApps_GetProcessThread
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-processes-threads get-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-processes-threads get-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3956,7 +3965,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-processe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, process_id: $process_id, thread_id: $thread_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}/threads/{thread_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), process_id: (encode-path-segment $process_id), thread_id: (encode-path-segment $thread_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}/threads/{thread_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3966,7 +3975,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-processe
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/publicCertificates
 # operationId: WebApps_ListPublicCertificates
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-public-certificates list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-public-certificates list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3983,7 +3992,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-public-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/publicCertificates") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/publicCertificates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3993,7 +4002,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-public-c
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/publicCertificates/{publicCertificateName}
 # operationId: WebApps_DeletePublicCertificate
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-public-certificates delete" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-public-certificates delete-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4011,7 +4020,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-public-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, public_certificate_name: $public_certificate_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/publicCertificates/{public_certificate_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), public_certificate_name: (encode-path-segment $public_certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/publicCertificates/{public_certificate_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4021,7 +4030,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-public-c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/publicCertificates/{publicCertificateName}
 # operationId: WebApps_GetPublicCertificate
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-public-certificates get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-public-certificates get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4039,7 +4048,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-public-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, public_certificate_name: $public_certificate_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/publicCertificates/{public_certificate_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), public_certificate_name: (encode-path-segment $public_certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/publicCertificates/{public_certificate_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4050,7 +4059,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-public-c
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/publicCertificates/{publicCertificateName}
 # operationId: WebApps_CreateOrUpdatePublicCertificate
 # --properties shape: {blob?: string, publicCertificateLocation?: "CurrentUserMy"|"LocalMachineMy"|"Unknown"}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-public-certificates create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-public-certificates create-apps-or-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4071,19 +4080,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-public-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, public_certificate_name: $public_certificate_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/publicCertificates/{public_certificate_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), public_certificate_name: (encode-path-segment $public_certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/publicCertificates/{public_certificate_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the publishing profile for an app (or deployment slot, if specified).
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/publishxml
 # operationId: WebApps_ListPublishingProfileXmlWithSecrets
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-publishxml list-publishing-profile-xml-with-secrets" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-publishxml list-apps-publishing-profile-xml-with-secrets" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4096,26 +4105,26 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-publishx
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
-  --format: string@format-completer # Name of the format. Valid values are:  FileZilla3 WebDeploy -- default Ftp
+  --format: string@format-completer # Name of the format. Valid values are: FileZilla3 WebDeploy -- default Ftp
   --include-disaster-recovery-endpoints: oneof<nothing, bool> # Include the DisasterRecover endpoint if true
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/publishxml") $qp)
-  let body = {"format": $format, "includeDisasterRecoveryEndpoints": $include_disaster_recovery_endpoints} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/publishxml") $qp)
+  let req_body = {"format": $format, "includeDisasterRecoveryEndpoints": $include_disaster_recovery_endpoints} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Resets the configuration settings of the current slot if they were previously modified by calling the API with POST.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/resetSlotConfig
 # operationId: WebApps_ResetProductionSlotConfig
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-reset-slot-config reset-production" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-reset-slot-config reset-apps-production" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4132,7 +4141,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-reset-sl
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/resetSlotConfig") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/resetSlotConfig") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4142,7 +4151,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-reset-sl
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/restart
 # operationId: WebApps_Restart
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-restart restart" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-restart restart-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4161,7 +4170,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-restart 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "softRestart" $soft_restart "scalar") (serialize-qp "synchronous" $synchronous "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/restart") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/restart") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4172,7 +4181,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-restart 
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/restoreFromBackupBlob
 # operationId: WebApps_RestoreFromBackupBlob
 # --properties shape: {adjustConnectionStrings?: bool, appServicePlan?: string, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, ignoreDatabases?: bool, operationType?: "Default"|"Clone"|"Relocation"|"Snapshot"|"CloudFS", overwrite: bool, siteName?: string, storageAccountUrl: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-restore-from-backup-blob post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-restore-from-backup-blob create-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4192,12 +4201,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-restore-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/restoreFromBackupBlob") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/restoreFromBackupBlob") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Restores a deleted web app to this web app.
@@ -4205,7 +4214,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-restore-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/restoreFromDeletedApp
 # operationId: WebApps_RestoreFromDeletedApp
 # --properties shape: {deletedSiteId?: string, recoverConfiguration?: bool, snapshotTime?: string, useDRSecondary?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-restore-from-deleted-app post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-restore-from-deleted-app create" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4225,12 +4234,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-restore-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/restoreFromDeletedApp") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/restoreFromDeletedApp") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Restores a web app from a snapshot.
@@ -4238,7 +4247,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-restore-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/restoreSnapshot
 # operationId: WebApps_RestoreSnapshot
 # --properties shape: {ignoreConflictingHostNames?: bool, overwrite: bool, recoverConfiguration?: bool, recoverySource?: record, snapshotTime?: string, useDRSecondary?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-restore-snapshot post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-restore-snapshot create-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4258,19 +4267,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-restore-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/restoreSnapshot") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/restoreSnapshot") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get list of siteextensions for a web site, or a deployment slot.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/siteextensions
 # operationId: WebApps_ListSiteExtensions
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-siteextensions list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-siteextensions list-apps-extensions" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4287,7 +4296,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-siteexte
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/siteextensions") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/siteextensions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4297,7 +4306,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-siteexte
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/siteextensions/{siteExtensionId}
 # operationId: WebApps_DeleteSiteExtension
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-siteextensions delete" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-siteextensions delete-apps-extension" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4315,7 +4324,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-siteexte
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, site_extension_id: $site_extension_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/siteextensions/{site_extension_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), site_extension_id: (encode-path-segment $site_extension_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/siteextensions/{site_extension_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4325,7 +4334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-siteexte
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/siteextensions/{siteExtensionId}
 # operationId: WebApps_GetSiteExtension
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-siteextensions get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-siteextensions get-apps-extension" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4343,7 +4352,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-siteexte
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, site_extension_id: $site_extension_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/siteextensions/{site_extension_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), site_extension_id: (encode-path-segment $site_extension_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/siteextensions/{site_extension_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4353,7 +4362,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-siteexte
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/siteextensions/{siteExtensionId}
 # operationId: WebApps_InstallSiteExtension
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-siteextensions put" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-siteextensions update-apps-install-extension" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4371,7 +4380,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-siteexte
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, site_extension_id: $site_extension_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/siteextensions/{site_extension_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), site_extension_id: (encode-path-segment $site_extension_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/siteextensions/{site_extension_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4381,7 +4390,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-siteexte
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots
 # operationId: WebApps_ListSlots
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4398,7 +4407,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4408,7 +4417,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots li
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}
 # operationId: WebApps_DeleteSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots delete" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots delete-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4428,7 +4437,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots de
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "deleteMetrics" $delete_metrics "scalar") (serialize-qp "deleteEmptyServerFarm" $delete_empty_server_farm "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4438,7 +4447,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots de
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}
 # operationId: WebApps_GetSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4456,7 +4465,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots ge
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4467,8 +4476,8 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots ge
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}
 # operationId: WebApps_UpdateSlot
 # --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --properties shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, siteConfig?: record, slotSwapStatus?: record}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots update" [
+# --properties shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, ... (2 more fields)}
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots update-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4483,19 +4492,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots up
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
   --identity: record # Managed service identity. — shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-  --properties: any # SitePatchResource resource specific properties — shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, siteConfig?: record, slotSwapStatus?: record}
+  --properties: any # SitePatchResource resource specific properties — shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, ... (2 more fields)}
   --kind: string # Kind of resource.
 ]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<availabilityState: string, clientAffinityEnabled: bool, clientCertEnabled: bool, clientCertExclusionPaths: string, cloningInfo: record<appSettingsOverrides: record, cloneCustomHostNames: bool, cloneSourceControl: bool, configureLoadBalancing: bool, correlationId: string, hostingEnvironment: string, overwrite: bool, sourceWebAppId: string, sourceWebAppLocation: string, trafficManagerProfileId: string, trafficManagerProfileName: string>, containerSize: int, dailyMemoryTimeQuota: int, defaultHostName: string, enabled: bool, enabledHostNames: list<string>, geoDistributions: list<record>, hostNameSslStates: list<record>, hostNames: list<string>, hostNamesDisabled: bool, hostingEnvironmentProfile: record<id: string, name: string, type: string>, httpsOnly: bool, hyperV: bool, inProgressOperationId: string, isDefaultContainer: bool, isXenon: bool, lastModifiedTimeUtc: string, maxNumberOfWorkers: int, outboundIpAddresses: string, possibleOutboundIpAddresses: string, redundancyMode: string, repositorySiteName: string, reserved: bool, resourceGroup: string, scmSiteAlsoStopped: bool, serverFarmId: string, siteConfig: record<alwaysOn: bool, apiDefinition: record, appCommandLine: string, appSettings: list, autoHealEnabled: bool, autoHealRules: record, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list, cors: record, defaultDocuments: list, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record, ftpsState: string, handlerMappings: list, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, slotSwapStatus: record<destinationSlotName: string, sourceSlotName: string, timestampUtc: string>, state: string, suspendedTill: string, targetSwapSlot: string, trafficManagerHostNames: list<string>, usageState: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}") $qp)
-  let body = {"identity": $identity, "properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}") $qp)
+  let req_body = {"identity": $identity, "properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a new web, mobile, or API app in an existing resource group, or updates an existing app.
@@ -4503,8 +4512,8 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots up
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}
 # operationId: WebApps_CreateOrUpdateSlot
 # --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --properties shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, siteConfig?: record, slotSwapStatus?: record}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots create-or-update" [
+# --properties shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, ... (2 more fields)}
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots create-apps-or-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4519,7 +4528,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots cr
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
   --identity: record # Managed service identity. — shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-  --properties: any # Site resource specific properties — shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, siteConfig?: record, slotSwapStatus?: record}
+  --properties: any # Site resource specific properties — shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, ... (2 more fields)}
   --kind: string # Kind of resource.
   location: string # Resource Location.
   --tags: record # Resource tags.
@@ -4528,19 +4537,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots cr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}") $qp)
-  let body = {"identity": $identity, "properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}") $qp)
+  let req_body = {"identity": $identity, "properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Analyze a custom hostname.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/analyzeCustomHostname
 # operationId: WebApps_AnalyzeCustomHostnameSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-analyze-custom-hostname get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-analyze-custom-hostname get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4559,7 +4568,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-an
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hostName" $host_name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/analyzeCustomHostname") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/analyzeCustomHostname") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4569,7 +4578,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-an
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/applySlotConfig
 # operationId: WebApps_ApplySlotConfigurationSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-apply-slot-config post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-apply-slot-config create-apps-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4583,19 +4592,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ap
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
-  --preserve-vnet: oneof<nothing, bool> # <code>true</code> to preserve Virtual Network to the slot during swap; otherwise, <code>false</code>.
+  --preserve-vnet: oneof<nothing, bool> # true to preserve Virtual Network to the slot during swap; otherwise, false.
   target_slot: string # Destination deployment slot during swap operation.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/applySlotConfig") $qp)
-  let body = {"preserveVnet": $preserve_vnet, "targetSlot": $target_slot} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/applySlotConfig") $qp)
+  let req_body = {"preserveVnet": $preserve_vnet, "targetSlot": $target_slot} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a backup of an app.
@@ -4603,7 +4612,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ap
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backup
 # operationId: WebApps_BackupSlot
 # --properties shape: {backupName?: string, backupSchedule?: record, databases?: list, enabled?: bool, storageAccountUrl: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-backup post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-backup create-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4624,19 +4633,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ba
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backup") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backup") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets existing backups of an app.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups
 # operationId: WebApps_ListBackupsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-backups list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-backups list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4654,7 +4663,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ba
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4664,7 +4673,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ba
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backupId}
 # operationId: WebApps_DeleteBackupSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-backups delete" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-backups delete-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4683,7 +4692,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ba
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, backup_id: $backup_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backup_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), backup_id: (encode-path-segment $backup_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backup_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4693,7 +4702,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ba
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backupId}
 # operationId: WebApps_GetBackupStatusSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-backups get-backup-status" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-backups get-apps-status" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4712,7 +4721,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ba
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, backup_id: $backup_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backup_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), backup_id: (encode-path-segment $backup_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backup_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4723,7 +4732,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ba
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backupId}/list
 # operationId: WebApps_ListBackupStatusSecretsSlot
 # --properties shape: {backupName?: string, backupSchedule?: record, databases?: list, enabled?: bool, storageAccountUrl: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-backups-list list-backup-status-secrets" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-backups-list list-apps-status-secrets" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4745,12 +4754,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ba
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, backup_id: $backup_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backup_id}/list") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), backup_id: (encode-path-segment $backup_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backup_id}/list") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Restores a specific backup to another app (or deployment slot, if specified).
@@ -4758,7 +4767,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ba
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backupId}/restore
 # operationId: WebApps_RestoreSlot
 # --properties shape: {adjustConnectionStrings?: bool, appServicePlan?: string, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, ignoreDatabases?: bool, operationType?: "Default"|"Clone"|"Relocation"|"Snapshot"|"CloudFS", overwrite: bool, siteName?: string, storageAccountUrl: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-backups-restore post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-backups-restore create-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4780,19 +4789,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ba
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, backup_id: $backup_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backup_id}/restore") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), backup_id: (encode-path-segment $backup_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backup_id}/restore") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List the configurations of an app
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config
 # operationId: WebApps_ListConfigurationsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config list-configurations" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config list-apps-configurations" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4810,7 +4819,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4820,7 +4829,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/appsettings
 # operationId: WebApps_UpdateApplicationSettingsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-appsettings update-application-settings" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-appsettings update-apps-application-settings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4841,19 +4850,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/appsettings") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/appsettings") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the application settings of an app.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/appsettings/list
 # operationId: WebApps_ListApplicationSettingsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-appsettings-list list-application-settings" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-appsettings-list list-apps-application-settings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4871,7 +4880,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/appsettings/list") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/appsettings/list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4881,8 +4890,8 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/authsettings
 # operationId: WebApps_UpdateAuthSettingsSlot
-# --properties shape: {additionalLoginParams?: list, allowedAudiences?: list, allowedExternalRedirectUrls?: list, clientId?: string, clientSecret?: string, clientSecretCertificateThumbprint?: string, defaultProvider?: "AzureActiveDirectory"|"Facebook"|"Google"|"MicrosoftAccount"|"Twitter", enabled?: bool, facebookAppId?: string, facebookAppSecret?: string, facebookOAuthScopes?: list, googleClientId?: string, googleClientSecret?: string, googleOAuthScopes?: list, issuer?: string, microsoftAccountClientId?: string, microsoftAccountClientSecret?: string, microsoftAccountOAuthScopes?: list, runtimeVersion?: string, tokenRefreshExtensionHours?: float, tokenStoreEnabled?: bool, twitterConsumerKey?: string, twitterConsumerSecret?: string, unauthenticatedClientAction?: "RedirectToLoginPage"|"AllowAnonymous", validateIssuer?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-authsettings update" [
+# --properties shape: {additionalLoginParams?: list<string>, allowedAudiences?: list<string>, allowedExternalRedirectUrls?: list<string>, clientId?: string, clientSecret?: string, clientSecretCertificateThumbprint?: string, defaultProvider?: "AzureActiveDirectory"|"Facebook"|"Google"|"MicrosoftAccount"|"Twitter", enabled?: bool, facebookAppId?: string, facebookAppSecret?: string, facebookOAuthScopes?: list<string>, googleClientId?: string, googleClientSecret?: string, googleOAuthScopes?: list<string>, issuer?: string, ... (10 more fields)}
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-authsettings update-apps-auth-settings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4896,26 +4905,26 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
-  --properties: any # SiteAuthSettings resource specific properties — shape: {additionalLoginParams?: list, allowedAudiences?: list, allowedExternalRedirectUrls?: list, clientId?: string, clientSecret?: string, clientSecretCertificateThumbprint?: string, defaultProvider?: "AzureActiveDirectory"|"Facebook"|"Google"|"MicrosoftAccount"|"Twitter", enabled?: bool, facebookAppId?: string, facebookAppSecret?: string, facebookOAuthScopes?: list, googleClientId?: string, googleClientSecret?: string, googleOAuthScopes?: list, issuer?: string, microsoftAccountClientId?: string, microsoftAccountClientSecret?: string, microsoftAccountOAuthScopes?: list, runtimeVersion?: string, tokenRefreshExtensionHours?: float, tokenStoreEnabled?: bool, twitterConsumerKey?: string, twitterConsumerSecret?: string, unauthenticatedClientAction?: "RedirectToLoginPage"|"AllowAnonymous", validateIssuer?: bool}
+  --properties: any # SiteAuthSettings resource specific properties — shape: {additionalLoginParams?: list<string>, allowedAudiences?: list<string>, allowedExternalRedirectUrls?: list<string>, clientId?: string, clientSecret?: string, clientSecretCertificateThumbprint?: string, defaultProvider?: "AzureActiveDirectory"|"Facebook"|"Google"|"MicrosoftAccount"|"Twitter", enabled?: bool, facebookAppId?: string, facebookAppSecret?: string, facebookOAuthScopes?: list<string>, googleClientId?: string, googleClientSecret?: string, googleOAuthScopes?: list<string>, issuer?: string, ... (10 more fields)}
   --kind: string # Kind of resource.
 ]: any -> record<properties: record<additionalLoginParams: list<string>, allowedAudiences: list<string>, allowedExternalRedirectUrls: list<string>, clientId: string, clientSecret: string, clientSecretCertificateThumbprint: string, defaultProvider: string, enabled: bool, facebookAppId: string, facebookAppSecret: string, facebookOAuthScopes: list<string>, googleClientId: string, googleClientSecret: string, googleOAuthScopes: list<string>, issuer: string, microsoftAccountClientId: string, microsoftAccountClientSecret: string, microsoftAccountOAuthScopes: list<string>, runtimeVersion: string, tokenRefreshExtensionHours: float, tokenStoreEnabled: bool, twitterConsumerKey: string, twitterConsumerSecret: string, unauthenticatedClientAction: string, validateIssuer: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/authsettings") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/authsettings") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the Authentication/Authorization settings of an app.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/authsettings/list
 # operationId: WebApps_GetAuthSettingsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-authsettings-list get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-authsettings-list get-apps-auth-settings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4933,7 +4942,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/authsettings/list") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/authsettings/list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4943,7 +4952,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/azurestorageaccounts
 # operationId: WebApps_UpdateAzureStorageAccountsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-azurestorageaccounts update-azure-storage-accounts" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-azurestorageaccounts update-apps-azure-storage-accounts" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4964,19 +4973,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/azurestorageaccounts") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/azurestorageaccounts") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the Azure storage account configurations of an app.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/azurestorageaccounts/list
 # operationId: WebApps_ListAzureStorageAccountsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-azurestorageaccounts-list list-azure-storage-accounts" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-azurestorageaccounts-list list-apps-azure-storage-accounts" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -4994,7 +5003,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/azurestorageaccounts/list") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/azurestorageaccounts/list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5004,7 +5013,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/backup
 # operationId: WebApps_DeleteBackupConfigurationSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-backup delete-backup-configuration" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-backup delete-apps-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5022,7 +5031,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/backup") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/backup") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5033,7 +5042,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/backup
 # operationId: WebApps_UpdateBackupConfigurationSlot
 # --properties shape: {backupName?: string, backupSchedule?: record, databases?: list, enabled?: bool, storageAccountUrl: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-backup update-backup-configuration" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-backup update-apps-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5054,19 +5063,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/backup") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/backup") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the backup configuration of an app.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/backup/list
 # operationId: WebApps_GetBackupConfigurationSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-backup-list get-backup-configuration" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-backup-list get-apps-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5084,7 +5093,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/backup/list") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/backup/list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5094,7 +5103,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/connectionstrings
 # operationId: WebApps_UpdateConnectionStringsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-connectionstrings update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-connectionstrings update-apps-connection-strings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5115,19 +5124,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/connectionstrings") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/connectionstrings") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the connection strings of an app.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/connectionstrings/list
 # operationId: WebApps_ListConnectionStringsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-connectionstrings-list list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-connectionstrings-list list-apps-connection-strings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5145,7 +5154,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/connectionstrings/list") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/connectionstrings/list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5155,7 +5164,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/logs
 # operationId: WebApps_GetDiagnosticLogsConfigurationSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-logs get-diagnostic-logs-configuration" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-logs get-apps-diagnostic-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5173,7 +5182,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/logs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5184,7 +5193,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/logs
 # operationId: WebApps_UpdateDiagnosticLogsConfigSlot
 # --properties shape: {applicationLogs?: record, detailedErrorMessages?: record, failedRequestsTracing?: record, httpLogs?: record}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-logs update-diagnostic" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-logs update-apps-diagnostic" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5205,19 +5214,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/logs") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/logs") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Replaces the metadata of an app.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/metadata
 # operationId: WebApps_UpdateMetadataSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-metadata update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-metadata update-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5238,19 +5247,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/metadata") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/metadata") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the metadata of an app.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/metadata/list
 # operationId: WebApps_ListMetadataSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-metadata-list list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-metadata-list list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5268,7 +5277,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/metadata/list") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/metadata/list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5278,7 +5287,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/publishingcredentials/list
 # operationId: WebApps_ListPublishingCredentialsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-publishingcredentials-list list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-publishingcredentials-list list-apps-publishing-credentials" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5296,7 +5305,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/publishingcredentials/list") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/publishingcredentials/list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5307,7 +5316,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/pushsettings
 # operationId: WebApps_UpdateSitePushSettingsSlot
 # --properties shape: {dynamicTagsJson?: string, isPushEnabled: bool, tagWhitelistJson?: string, tagsRequiringAuth?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-pushsettings update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-pushsettings update-apps-push-settings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5328,19 +5337,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/pushsettings") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/pushsettings") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the Push settings associated with web app.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/pushsettings/list
 # operationId: WebApps_ListSitePushSettingsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-pushsettings-list list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-pushsettings-list push-apps-settings" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5358,7 +5367,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/pushsettings/list") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/pushsettings/list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5368,7 +5377,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web
 # operationId: WebApps_GetConfigurationSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-web get-configuration" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-web get-apps-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5386,7 +5395,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5396,8 +5405,8 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web
 # operationId: WebApps_UpdateConfigurationSlot
-# --properties shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, javaContainer?: string, javaContainerVersion?: string, javaVersion?: string, limits?: record, linuxFxVersion?: string, loadBalancing?: "WeightedRoundRobin"|"LeastRequests"|"LeastResponseTime"|"WeightedTotalTraffic"|"RequestHash", localMySqlEnabled?: bool, logsDirectorySizeLimit?: int, machineKey?: record, managedPipelineMode?: "Integrated"|"Classic", managedServiceIdentityId?: int, minTlsVersion?: "1.0"|"1.1"|"1.2", netFrameworkVersion?: string, nodeVersion?: string, numberOfWorkers?: int, phpVersion?: string, publishingUsername?: string, push?: record, pythonVersion?: string, remoteDebuggingEnabled?: bool, remoteDebuggingVersion?: string, requestTracingEnabled?: bool, requestTracingExpirationTime?: string, reservedInstanceCount?: int, scmIpSecurityRestrictions?: list, scmIpSecurityRestrictionsUseMain?: bool, scmType?: "None"|"Dropbox"|"Tfs"|"LocalGit"|"GitHub"|"CodePlexGit"|"CodePlexHg"|"BitbucketGit"|"BitbucketHg"|"ExternalGit"|"ExternalHg"|"OneDrive"|"VSO", tracingOptions?: string, use32BitWorkerProcess?: bool, virtualApplications?: list, vnetName?: string, webSocketsEnabled?: bool, windowsFxVersion?: string, xManagedServiceIdentityId?: int}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-web update-configuration" [
+# --properties shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, ... (34 more fields)}
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-web update-apps-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5411,27 +5420,27 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
-  --properties: record # Configuration of an App Service app. — shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, javaContainer?: string, javaContainerVersion?: string, javaVersion?: string, limits?: record, linuxFxVersion?: string, loadBalancing?: "WeightedRoundRobin"|"LeastRequests"|"LeastResponseTime"|"WeightedTotalTraffic"|"RequestHash", localMySqlEnabled?: bool, logsDirectorySizeLimit?: int, machineKey?: record, managedPipelineMode?: "Integrated"|"Classic", managedServiceIdentityId?: int, minTlsVersion?: "1.0"|"1.1"|"1.2", netFrameworkVersion?: string, nodeVersion?: string, numberOfWorkers?: int, phpVersion?: string, publishingUsername?: string, push?: record, pythonVersion?: string, remoteDebuggingEnabled?: bool, remoteDebuggingVersion?: string, requestTracingEnabled?: bool, requestTracingExpirationTime?: string, reservedInstanceCount?: int, scmIpSecurityRestrictions?: list, scmIpSecurityRestrictionsUseMain?: bool, scmType?: "None"|"Dropbox"|"Tfs"|"LocalGit"|"GitHub"|"CodePlexGit"|"CodePlexHg"|"BitbucketGit"|"BitbucketHg"|"ExternalGit"|"ExternalHg"|"OneDrive"|"VSO", tracingOptions?: string, use32BitWorkerProcess?: bool, virtualApplications?: list, vnetName?: string, webSocketsEnabled?: bool, windowsFxVersion?: string, xManagedServiceIdentityId?: int}
+  --properties: record # Configuration of an App Service app. — shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, ... (34 more fields)}
   --kind: string # Kind of resource.
 ]: any -> record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the configuration of an app.
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web
 # operationId: WebApps_CreateOrUpdateConfigurationSlot
-# --properties shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, javaContainer?: string, javaContainerVersion?: string, javaVersion?: string, limits?: record, linuxFxVersion?: string, loadBalancing?: "WeightedRoundRobin"|"LeastRequests"|"LeastResponseTime"|"WeightedTotalTraffic"|"RequestHash", localMySqlEnabled?: bool, logsDirectorySizeLimit?: int, machineKey?: record, managedPipelineMode?: "Integrated"|"Classic", managedServiceIdentityId?: int, minTlsVersion?: "1.0"|"1.1"|"1.2", netFrameworkVersion?: string, nodeVersion?: string, numberOfWorkers?: int, phpVersion?: string, publishingUsername?: string, push?: record, pythonVersion?: string, remoteDebuggingEnabled?: bool, remoteDebuggingVersion?: string, requestTracingEnabled?: bool, requestTracingExpirationTime?: string, reservedInstanceCount?: int, scmIpSecurityRestrictions?: list, scmIpSecurityRestrictionsUseMain?: bool, scmType?: "None"|"Dropbox"|"Tfs"|"LocalGit"|"GitHub"|"CodePlexGit"|"CodePlexHg"|"BitbucketGit"|"BitbucketHg"|"ExternalGit"|"ExternalHg"|"OneDrive"|"VSO", tracingOptions?: string, use32BitWorkerProcess?: bool, virtualApplications?: list, vnetName?: string, webSocketsEnabled?: bool, windowsFxVersion?: string, xManagedServiceIdentityId?: int}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-web create-or-update-configuration" [
+# --properties shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, ... (34 more fields)}
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-web create-apps-or-update-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5445,26 +5454,26 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
-  --properties: record # Configuration of an App Service app. — shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, javaContainer?: string, javaContainerVersion?: string, javaVersion?: string, limits?: record, linuxFxVersion?: string, loadBalancing?: "WeightedRoundRobin"|"LeastRequests"|"LeastResponseTime"|"WeightedTotalTraffic"|"RequestHash", localMySqlEnabled?: bool, logsDirectorySizeLimit?: int, machineKey?: record, managedPipelineMode?: "Integrated"|"Classic", managedServiceIdentityId?: int, minTlsVersion?: "1.0"|"1.1"|"1.2", netFrameworkVersion?: string, nodeVersion?: string, numberOfWorkers?: int, phpVersion?: string, publishingUsername?: string, push?: record, pythonVersion?: string, remoteDebuggingEnabled?: bool, remoteDebuggingVersion?: string, requestTracingEnabled?: bool, requestTracingExpirationTime?: string, reservedInstanceCount?: int, scmIpSecurityRestrictions?: list, scmIpSecurityRestrictionsUseMain?: bool, scmType?: "None"|"Dropbox"|"Tfs"|"LocalGit"|"GitHub"|"CodePlexGit"|"CodePlexHg"|"BitbucketGit"|"BitbucketHg"|"ExternalGit"|"ExternalHg"|"OneDrive"|"VSO", tracingOptions?: string, use32BitWorkerProcess?: bool, virtualApplications?: list, vnetName?: string, webSocketsEnabled?: bool, windowsFxVersion?: string, xManagedServiceIdentityId?: int}
+  --properties: record # Configuration of an App Service app. — shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, ... (34 more fields)}
   --kind: string # Kind of resource.
 ]: any -> record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a list of web app configuration snapshots identifiers. Each element of the list contains a timestamp and the ID of the snapshot.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web/snapshots
 # operationId: WebApps_ListConfigurationSnapshotInfoSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-web-snapshots list-configuration-snapshot-info" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-web-snapshots list-apps-configuration-get" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5482,7 +5491,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web/snapshots") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web/snapshots") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5492,7 +5501,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web/snapshots/{snapshotId}
 # operationId: WebApps_GetConfigurationSnapshotSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-web-snapshots get-configuration" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-web-snapshots get-apps-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5511,7 +5520,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, snapshot_id: $snapshot_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web/snapshots/{snapshot_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web/snapshots/{snapshot_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5521,7 +5530,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web/snapshots/{snapshotId}/recover
 # operationId: WebApps_RecoverSiteConfigurationSnapshotSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-web-snapshots-recover post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-config-web-snapshots-recover create-apps-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5540,7 +5549,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, snapshot_id: $snapshot_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web/snapshots/{snapshot_id}/recover") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web/snapshots/{snapshot_id}/recover") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5550,7 +5559,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/containerlogs
 # operationId: WebApps_GetWebSiteContainerLogsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-containerlogs get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-containerlogs get-apps-container-logs" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5568,7 +5577,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/containerlogs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/containerlogs") $qp)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5578,7 +5587,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/containerlogs/zip/download
 # operationId: WebApps_GetContainerLogsZipSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-containerlogs-zip-download get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-containerlogs-zip-download get-apps-container-logs" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5596,7 +5605,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/containerlogs/zip/download") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/containerlogs/zip/download") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5606,7 +5615,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs
 # operationId: WebApps_ListContinuousWebJobsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-continuouswebjobs list-continuous-web-jobs" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-continuouswebjobs list-apps-continuous-jobs" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5624,7 +5633,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5634,7 +5643,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs/{webJobName}
 # operationId: WebApps_DeleteContinuousWebJobSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-continuouswebjobs delete-continuous-web-job" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-continuouswebjobs delete-apps-continuous-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5653,7 +5662,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, web_job_name: $web_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs/{web_job_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs/{web_job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5663,7 +5672,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs/{webJobName}
 # operationId: WebApps_GetContinuousWebJobSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-continuouswebjobs get-continuous-web-job" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-continuouswebjobs get-apps-continuous-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5682,7 +5691,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, web_job_name: $web_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs/{web_job_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs/{web_job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5692,7 +5701,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs/{webJobName}/start
 # operationId: WebApps_StartContinuousWebJobSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-continuouswebjobs-start start-continuous-web-job" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-continuouswebjobs-start start-apps-continuous-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5711,7 +5720,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, web_job_name: $web_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs/{web_job_name}/start") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs/{web_job_name}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5721,7 +5730,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs/{webJobName}/stop
 # operationId: WebApps_StopContinuousWebJobSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-continuouswebjobs-stop stop-continuous-web-job" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-continuouswebjobs-stop stop-apps-continuous-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5740,7 +5749,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, web_job_name: $web_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs/{web_job_name}/stop") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs/{web_job_name}/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5750,7 +5759,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-co
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments
 # operationId: WebApps_ListDeploymentsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-deployments list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-deployments list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5768,7 +5777,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-de
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5778,7 +5787,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-de
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}
 # operationId: WebApps_DeleteDeploymentSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-deployments delete" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-deployments delete-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5797,7 +5806,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-de
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5807,7 +5816,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-de
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}
 # operationId: WebApps_GetDeploymentSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-deployments get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-deployments get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5826,7 +5835,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-de
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5837,7 +5846,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-de
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}
 # operationId: WebApps_CreateDeploymentSlot
 # --properties shape: {active?: bool, author?: string, author_email?: string, deployer?: string, details?: string, end_time?: string, message?: string, start_time?: string, status?: int}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-deployments create" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-deployments create-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5859,19 +5868,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-de
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List deployment log for specific deployment for an app, or a deployment slot.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}/log
 # operationId: WebApps_ListDeploymentLogSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-deployments-log list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-deployments-log list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5890,7 +5899,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-de
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}/log") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}/log") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5901,7 +5910,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-de
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/discoverbackup
 # operationId: WebApps_DiscoverBackupSlot
 # --properties shape: {adjustConnectionStrings?: bool, appServicePlan?: string, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, ignoreDatabases?: bool, operationType?: "Default"|"Clone"|"Relocation"|"Snapshot"|"CloudFS", overwrite: bool, siteName?: string, storageAccountUrl: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-discoverbackup post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-discoverbackup create-apps-discover-backup" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5922,19 +5931,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/discoverbackup") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/discoverbackup") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists ownership identifiers for domain associated with web app.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers
 # operationId: WebApps_ListDomainOwnershipIdentifiersSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-domain-ownership-identifiers list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-domain-ownership-identifiers list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5952,7 +5961,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-do
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5962,7 +5971,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-do
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers/{domainOwnershipIdentifierName}
 # operationId: WebApps_DeleteDomainOwnershipIdentifierSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-domain-ownership-identifiers delete" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-domain-ownership-identifiers delete-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -5981,7 +5990,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-do
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, domain_ownership_identifier_name: $domain_ownership_identifier_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), domain_ownership_identifier_name: (encode-path-segment $domain_ownership_identifier_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5991,7 +6000,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-do
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers/{domainOwnershipIdentifierName}
 # operationId: WebApps_GetDomainOwnershipIdentifierSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-domain-ownership-identifiers get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-domain-ownership-identifiers get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6010,7 +6019,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-do
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, domain_ownership_identifier_name: $domain_ownership_identifier_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), domain_ownership_identifier_name: (encode-path-segment $domain_ownership_identifier_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6021,7 +6030,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-do
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers/{domainOwnershipIdentifierName}
 # operationId: WebApps_UpdateDomainOwnershipIdentifierSlot
 # --properties shape: {id?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-domain-ownership-identifiers update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-domain-ownership-identifiers update-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6043,12 +6052,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-do
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, domain_ownership_identifier_name: $domain_ownership_identifier_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), domain_ownership_identifier_name: (encode-path-segment $domain_ownership_identifier_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a domain ownership identifier for web app, or updates an existing ownership identifier.
@@ -6056,7 +6065,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-do
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers/{domainOwnershipIdentifierName}
 # operationId: WebApps_CreateOrUpdateDomainOwnershipIdentifierSlot
 # --properties shape: {id?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-domain-ownership-identifiers create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-domain-ownership-identifiers create-apps-or-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6078,19 +6087,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-do
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, domain_ownership_identifier_name: $domain_ownership_identifier_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), domain_ownership_identifier_name: (encode-path-segment $domain_ownership_identifier_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the status of the last MSDeploy operation.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/extensions/MSDeploy
 # operationId: WebApps_GetMSDeployStatusSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-extensions-ms-deploy get-ms-deploy-status" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-extensions-ms-deploy get-apps-status" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6108,7 +6117,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ex
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/extensions/MSDeploy") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/extensions/MSDeploy") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6119,7 +6128,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ex
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/extensions/MSDeploy
 # operationId: WebApps_CreateMSDeployOperationSlot
 # --properties shape: {appOffline?: bool, connectionString?: string, dbType?: string, packageUri?: string, setParameters?: record, setParametersXmlFileUri?: string, skipAppData?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-extensions-ms-deploy create-ms-deploy-operation" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-extensions-ms-deploy create-apps-operation" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6140,19 +6149,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ex
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/extensions/MSDeploy") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/extensions/MSDeploy") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the MSDeploy Log for the last MSDeploy operation.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/extensions/MSDeploy/log
 # operationId: WebApps_GetMSDeployLogSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-extensions-ms-deploy-log get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-extensions-ms-deploy-log get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6170,7 +6179,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ex
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/extensions/MSDeploy/log") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/extensions/MSDeploy/log") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6180,7 +6189,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ex
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions
 # operationId: WebApps_ListInstanceFunctionsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-functions list-instance" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-functions list-apps-instance" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6198,7 +6207,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-fu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6208,7 +6217,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-fu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/admin/token
 # operationId: WebApps_GetFunctionsAdminTokenSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-functions-admin-token get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-functions-admin-token get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6226,7 +6235,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-fu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/admin/token") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/admin/token") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6236,7 +6245,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-fu
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/{functionName}
 # operationId: WebApps_DeleteInstanceFunctionSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-functions delete-instance" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-functions delete-apps-instance" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6255,7 +6264,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-fu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, function_name: $function_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/{function_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), function_name: (encode-path-segment $function_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/{function_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6265,7 +6274,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-fu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/{functionName}
 # operationId: WebApps_GetInstanceFunctionSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-functions get-instance" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-functions get-apps-instance" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6284,7 +6293,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-fu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, function_name: $function_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/{function_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), function_name: (encode-path-segment $function_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/{function_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6295,7 +6304,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-fu
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/{functionName}
 # operationId: WebApps_CreateInstanceFunctionSlot
 # --properties shape: {config?: record, config_href?: string, files?: record, function_app_id?: string, href?: string, script_href?: string, script_root_path_href?: string, secrets_file_href?: string, test_data?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-functions create-instance" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-functions create-apps-instance" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6317,19 +6326,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-fu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, function_name: $function_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/{function_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), function_name: (encode-path-segment $function_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/{function_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get function secrets for a function in a web site, or a deployment slot.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/{functionName}/listsecrets
 # operationId: WebApps_ListFunctionSecretsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-functions-listsecrets list-function-secrets" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-functions-listsecrets list-apps-secrets" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6348,7 +6357,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-fu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, function_name: $function_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/{function_name}/listsecrets") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), function_name: (encode-path-segment $function_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/{function_name}/listsecrets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6358,7 +6367,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-fu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings
 # operationId: WebApps_ListHostNameBindingsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-host-name-bindings list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-host-name-bindings list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6376,7 +6385,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ho
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6386,7 +6395,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ho
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings/{hostName}
 # operationId: WebApps_DeleteHostNameBindingSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-host-name-bindings delete" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-host-name-bindings delete-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6405,7 +6414,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ho
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, host_name: $host_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings/{host_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), host_name: (encode-path-segment $host_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings/{host_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6415,7 +6424,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ho
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings/{hostName}
 # operationId: WebApps_GetHostNameBindingSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-host-name-bindings get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-host-name-bindings get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6434,7 +6443,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ho
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, host_name: $host_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings/{host_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), host_name: (encode-path-segment $host_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings/{host_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6445,7 +6454,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ho
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings/{hostName}
 # operationId: WebApps_CreateOrUpdateHostNameBindingSlot
 # --properties shape: {azureResourceName?: string, azureResourceType?: "Website"|"TrafficManager", customHostNameDnsRecordType?: "CName"|"A", domainId?: string, hostNameType?: "Verified"|"Managed", siteName?: string, sslState?: "Disabled"|"SniEnabled"|"IpBasedEnabled", thumbprint?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-host-name-bindings create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-host-name-bindings create-apps-or-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6467,19 +6476,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ho
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, host_name: $host_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings/{host_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), host_name: (encode-path-segment $host_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings/{host_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes a Hybrid Connection from this site.
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespaceName}/relays/{relayName}
 # operationId: WebApps_DeleteHybridConnectionSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybrid-connection-namespaces-relays delete" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybrid-connection-namespaces-relays delete-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6499,7 +6508,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, namespace_name: $namespace_name, relay_name: $relay_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6509,7 +6518,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespaceName}/relays/{relayName}
 # operationId: WebApps_GetHybridConnectionSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybrid-connection-namespaces-relays get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybrid-connection-namespaces-relays get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6529,7 +6538,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, namespace_name: $namespace_name, relay_name: $relay_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6540,7 +6549,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespaceName}/relays/{relayName}
 # operationId: WebApps_UpdateHybridConnectionSlot
 # --properties shape: {hostname?: string, port?: int, relayArmUri?: string, relayName?: string, sendKeyName?: string, sendKeyValue?: string, serviceBusNamespace?: string, serviceBusSuffix?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybrid-connection-namespaces-relays update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybrid-connection-namespaces-relays update-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6563,12 +6572,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, namespace_name: $namespace_name, relay_name: $relay_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a new Hybrid Connection using a Service Bus relay.
@@ -6576,7 +6585,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespaceName}/relays/{relayName}
 # operationId: WebApps_CreateOrUpdateHybridConnectionSlot
 # --properties shape: {hostname?: string, port?: int, relayArmUri?: string, relayName?: string, sendKeyName?: string, sendKeyValue?: string, serviceBusNamespace?: string, serviceBusSuffix?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybrid-connection-namespaces-relays create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybrid-connection-namespaces-relays create-apps-or-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6599,19 +6608,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, namespace_name: $namespace_name, relay_name: $relay_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the send key name and value for a Hybrid Connection.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespaceName}/relays/{relayName}/listKeys
 # operationId: WebApps_ListHybridConnectionKeysSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybrid-connection-namespaces-relays-list-keys list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybrid-connection-namespaces-relays-list-keys list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6631,7 +6640,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, namespace_name: $namespace_name, relay_name: $relay_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}/listKeys") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}/listKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6641,7 +6650,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionRelays
 # operationId: WebApps_ListHybridConnectionsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybrid-connection-relays list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybrid-connection-relays list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6659,7 +6668,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionRelays") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionRelays") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6669,7 +6678,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection
 # operationId: WebApps_ListRelayServiceConnectionsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybridconnection list-relay-service-connections" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybridconnection list-apps-relay-service-connections" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6687,7 +6696,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6697,7 +6706,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entityName}
 # operationId: WebApps_DeleteRelayServiceConnectionSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybridconnection delete-relay-service-connection" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybridconnection delete-apps-relay-service-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6716,7 +6725,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, entity_name: $entity_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entity_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), entity_name: (encode-path-segment $entity_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entity_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6726,7 +6735,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entityName}
 # operationId: WebApps_GetRelayServiceConnectionSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybridconnection get-relay-service-connection" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybridconnection get-apps-relay-service-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6745,7 +6754,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, entity_name: $entity_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entity_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), entity_name: (encode-path-segment $entity_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entity_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6756,7 +6765,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entityName}
 # operationId: WebApps_UpdateRelayServiceConnectionSlot
 # --properties shape: {biztalkUri?: string, entityConnectionString?: string, entityName?: string, hostname?: string, port?: int, resourceConnectionString?: string, resourceType?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybridconnection update-relay-service-connection" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybridconnection update-apps-relay-service-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6778,12 +6787,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, entity_name: $entity_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entity_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), entity_name: (encode-path-segment $entity_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entity_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a new hybrid connection configuration (PUT), or updates an existing one (PATCH).
@@ -6791,7 +6800,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entityName}
 # operationId: WebApps_CreateOrUpdateRelayServiceConnectionSlot
 # --properties shape: {biztalkUri?: string, entityConnectionString?: string, entityName?: string, hostname?: string, port?: int, resourceConnectionString?: string, resourceType?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybridconnection create-or-update-relay-service-connection" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hybridconnection create-apps-or-update-relay-service-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6813,19 +6822,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-hy
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, entity_name: $entity_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entity_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), entity_name: (encode-path-segment $entity_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entity_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets all scale-out instances of an app.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances
 # operationId: WebApps_ListInstanceIdentifiersSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances list-instance-identifiers" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances list-apps-identifiers" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6843,7 +6852,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6853,7 +6862,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instanceId}/extensions/MSDeploy
 # operationId: WebApps_GetInstanceMsDeployStatusSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-extensions-ms-deploy get-instance-ms-deploy-status" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-extensions-ms-deploy get-apps-status" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6872,7 +6881,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, instance_id: $instance_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/extensions/MSDeploy") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/extensions/MSDeploy") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6883,7 +6892,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instanceId}/extensions/MSDeploy
 # operationId: WebApps_CreateInstanceMSDeployOperationSlot
 # --properties shape: {appOffline?: bool, connectionString?: string, dbType?: string, packageUri?: string, setParameters?: record, setParametersXmlFileUri?: string, skipAppData?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-extensions-ms-deploy create-instance-ms-deploy-operation" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-extensions-ms-deploy create-apps-operation" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6905,19 +6914,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, instance_id: $instance_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/extensions/MSDeploy") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/extensions/MSDeploy") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the MSDeploy Log for the last MSDeploy operation.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instanceId}/extensions/MSDeploy/log
 # operationId: WebApps_GetInstanceMSDeployLogSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-extensions-ms-deploy-log get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-extensions-ms-deploy-log get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6936,7 +6945,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, instance_id: $instance_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/extensions/MSDeploy/log") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/extensions/MSDeploy/log") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6946,7 +6955,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instanceId}/processes
 # operationId: WebApps_ListInstanceProcessesSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-processes list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-processes list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6965,7 +6974,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, instance_id: $instance_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6975,7 +6984,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instanceId}/processes/{processId}
 # operationId: WebApps_DeleteInstanceProcessSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-processes delete-instance-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-processes delete-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -6995,7 +7004,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, instance_id: $instance_id, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7005,7 +7014,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instanceId}/processes/{processId}
 # operationId: WebApps_GetInstanceProcessSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-processes get-instance-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-processes get-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7025,7 +7034,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, instance_id: $instance_id, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7035,7 +7044,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instanceId}/processes/{processId}/dump
 # operationId: WebApps_GetInstanceProcessDumpSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-processes-dump get-instance-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-processes-dump get-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7055,7 +7064,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, instance_id: $instance_id, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}/dump") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}/dump") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7065,7 +7074,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instanceId}/processes/{processId}/modules
 # operationId: WebApps_ListInstanceProcessModulesSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-processes-modules list-instance-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-processes-modules list-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7085,7 +7094,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, instance_id: $instance_id, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}/modules") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}/modules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7095,7 +7104,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instanceId}/processes/{processId}/modules/{baseAddress}
 # operationId: WebApps_GetInstanceProcessModuleSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-processes-modules get-instance-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-processes-modules get-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7116,7 +7125,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, instance_id: $instance_id, process_id: $process_id, base_address: $base_address} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}/modules/{base_address}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id), base_address: (encode-path-segment $base_address)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}/modules/{base_address}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7126,7 +7135,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instanceId}/processes/{processId}/threads
 # operationId: WebApps_ListInstanceProcessThreadsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-processes-threads list-instance-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-processes-threads list-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7146,7 +7155,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, instance_id: $instance_id, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}/threads") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}/threads") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7156,7 +7165,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instanceId}/processes/{processId}/threads/{threadId}
 # operationId: WebApps_GetInstanceProcessThreadSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-processes-threads get-instance-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-instances-processes-threads get-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7177,7 +7186,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, instance_id: $instance_id, process_id: $process_id, thread_id: $thread_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}/threads/{thread_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id), thread_id: (encode-path-segment $thread_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}/threads/{thread_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7187,7 +7196,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-in
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/iscloneable
 # operationId: WebApps_IsCloneableSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-iscloneable post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-iscloneable create-apps-is-cloneable" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7205,7 +7214,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-is
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/iscloneable") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/iscloneable") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7215,7 +7224,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-is
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/listsyncfunctiontriggerstatus
 # operationId: WebApps_ListSyncFunctionTriggersSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-listsyncfunctiontriggerstatus list-sync-function-triggers" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-listsyncfunctiontriggerstatus list-apps-sync-function-triggers" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7233,7 +7242,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/listsyncfunctiontriggerstatus") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/listsyncfunctiontriggerstatus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7243,7 +7252,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-li
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/metricdefinitions
 # operationId: WebApps_ListMetricDefinitionsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-metricdefinitions list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-metricdefinitions list-apps-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7261,7 +7270,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-me
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/metricdefinitions") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/metricdefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7271,7 +7280,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-me
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/metrics
 # operationId: WebApps_ListMetricsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-metrics list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-metrics list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7291,7 +7300,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-me
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "details" $details "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/metrics") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7301,7 +7310,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-me
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/migratemysql/status
 # operationId: WebApps_GetMigrateMySqlStatusSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-migratemysql-status get-migrate-my-sql" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-migratemysql-status get-apps-migrate-my-sql" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7319,7 +7328,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-mi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/migratemysql/status") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/migratemysql/status") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7329,7 +7338,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-mi
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkConfig/virtualNetwork
 # operationId: WebApps_DeleteSwiftVirtualNetworkSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-config-virtual-network delete-swift" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-config-virtual-network delete-apps-swift" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7347,7 +7356,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkConfig/virtualNetwork") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkConfig/virtualNetwork") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7357,7 +7366,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkConfig/virtualNetwork
 # operationId: WebApps_GetSwiftVirtualNetworkConnectionSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-config-virtual-network get-swift-virtual-network-connection" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-config-virtual-network get-apps-swift-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7375,7 +7384,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkConfig/virtualNetwork") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkConfig/virtualNetwork") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7386,7 +7395,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkConfig/virtualNetwork
 # operationId: WebApps_UpdateSwiftVirtualNetworkConnectionSlot
 # --properties shape: {subnetResourceId?: string, swiftSupported?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-config-virtual-network update-swift-virtual-network-connection" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-config-virtual-network update-apps-swift-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7407,12 +7416,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkConfig/virtualNetwork") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkConfig/virtualNetwork") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Integrates this Web App with a Virtual Network. This requires that 1) "swiftSupported" is true when doing a GET against this resource, and 2) that the target Subnet has already been delegated, and is not in use by another App Service Plan other than the one this App is in.
@@ -7420,7 +7429,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkConfig/virtualNetwork
 # operationId: WebApps_CreateOrUpdateSwiftVirtualNetworkConnectionSlot
 # --properties shape: {subnetResourceId?: string, swiftSupported?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-config-virtual-network create-or-update-swift-virtual-network-connection" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-config-virtual-network create-apps-or-update-swift-connection" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7441,19 +7450,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkConfig/virtualNetwork") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkConfig/virtualNetwork") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets all network features used by the app (or deployment slot, if specified).
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkFeatures/{view}
 # operationId: WebApps_ListNetworkFeaturesSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-features list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-features list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7472,7 +7481,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, view: $view} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkFeatures/{view}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), view: (encode-path-segment $view)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkFeatures/{view}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7482,7 +7491,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/operationresults/{operationId}
 # operationId: WebApps_GetNetworkTraceOperationSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-trace-operationresults get-network-trace-operation" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-trace-operationresults get-apps-operation" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7501,7 +7510,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, operation_id: $operation_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/operationresults/{operation_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/operationresults/{operation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7511,7 +7520,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/start
 # operationId: WebApps_StartWebSiteNetworkTraceSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-trace-start start" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-trace-start start-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7532,7 +7541,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "durationInSeconds" $duration_in_seconds "scalar") (serialize-qp "maxFrameLength" $max_frame_length "scalar") (serialize-qp "sasUrl" $sas_url "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/start") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7542,7 +7551,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/startOperation
 # operationId: WebApps_StartWebSiteNetworkTraceOperationSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-trace-start-operation start" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-trace-start-operation start-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7563,7 +7572,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "durationInSeconds" $duration_in_seconds "scalar") (serialize-qp "maxFrameLength" $max_frame_length "scalar") (serialize-qp "sasUrl" $sas_url "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/startOperation") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/startOperation") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7573,7 +7582,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/stop
 # operationId: WebApps_StopWebSiteNetworkTraceSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-trace-stop stop" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-trace-stop stop-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7591,7 +7600,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/stop") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7601,7 +7610,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/{operationId}
 # operationId: WebApps_GetNetworkTracesSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-trace get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-trace get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7620,7 +7629,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, operation_id: $operation_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/{operation_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/{operation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7630,7 +7639,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTraces/current/operationresults/{operationId}
 # operationId: WebApps_GetNetworkTraceOperationSlotV2
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-traces-current-operationresults get-network-trace-operation-v2" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-traces-current-operationresults get-apps-operation" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7649,7 +7658,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, operation_id: $operation_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTraces/current/operationresults/{operation_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTraces/current/operationresults/{operation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7659,7 +7668,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTraces/{operationId}
 # operationId: WebApps_GetNetworkTracesSlotV2
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-traces get-network-traces-v2" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-network-traces get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7678,7 +7687,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, operation_id: $operation_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTraces/{operation_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTraces/{operation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7688,7 +7697,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/newpassword
 # operationId: WebApps_GenerateNewSitePublishingPasswordSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-newpassword post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-newpassword generate-apps-new-publishing-password" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7706,7 +7715,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/newpassword") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/newpassword") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7716,7 +7725,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/perfcounters
 # operationId: WebApps_ListPerfMonCountersSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-perfcounters list-perf-mon-counters" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-perfcounters list-apps-perf-mon-counters" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7735,7 +7744,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pe
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/perfcounters") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/perfcounters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7745,7 +7754,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pe
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/phplogging
 # operationId: WebApps_GetSitePhpErrorLogFlagSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-phplogging get-site-php-error-log-flag" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-phplogging get-apps-php-error-log-flag" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7763,7 +7772,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ph
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/phplogging") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/phplogging") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7773,7 +7782,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ph
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons
 # operationId: WebApps_ListPremierAddOnsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-premieraddons list-premier-add-ons" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-premieraddons list-apps-premier-create-ons" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7791,7 +7800,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7801,7 +7810,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premierAddOnName}
 # operationId: WebApps_DeletePremierAddOnSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-premieraddons delete-premier-add-on" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-premieraddons delete-apps-premier-create" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7820,7 +7829,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, premier_add_on_name: $premier_add_on_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premier_add_on_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), premier_add_on_name: (encode-path-segment $premier_add_on_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premier_add_on_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7830,7 +7839,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premierAddOnName}
 # operationId: WebApps_GetPremierAddOnSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-premieraddons get-premier-add-on" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-premieraddons get-apps-premier-create" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7849,7 +7858,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, premier_add_on_name: $premier_add_on_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premier_add_on_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), premier_add_on_name: (encode-path-segment $premier_add_on_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premier_add_on_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7860,7 +7869,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premierAddOnName}
 # operationId: WebApps_UpdatePremierAddOnSlot
 # --properties shape: {marketplaceOffer?: string, marketplacePublisher?: string, product?: string, sku?: string, vendor?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-premieraddons update-premier-add-on" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-premieraddons update-apps-premier-create" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7882,12 +7891,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, premier_add_on_name: $premier_add_on_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premier_add_on_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), premier_add_on_name: (encode-path-segment $premier_add_on_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premier_add_on_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a named add-on of an app.
@@ -7895,7 +7904,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premierAddOnName}
 # operationId: WebApps_AddPremierAddOnSlot
 # --properties shape: {marketplaceOffer?: string, marketplacePublisher?: string, product?: string, sku?: string, vendor?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-premieraddons create-premier-add-on" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-premieraddons create-apps-premier-create" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7919,19 +7928,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, premier_add_on_name: $premier_add_on_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premier_add_on_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), premier_add_on_name: (encode-path-segment $premier_add_on_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premier_add_on_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets data around private site access enablement and authorized Virtual Networks that can access the site.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/privateAccess/virtualNetworks
 # operationId: WebApps_GetPrivateAccessSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-private-access-virtual-networks get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-private-access-virtual-networks get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7949,7 +7958,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/privateAccess/virtualNetworks") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/privateAccess/virtualNetworks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7960,7 +7969,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/privateAccess/virtualNetworks
 # operationId: WebApps_PutPrivateAccessVnetSlot
 # --properties shape: {enabled?: bool, virtualNetworks?: list}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-private-access-virtual-networks update-private-access-vnet" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-private-access-virtual-networks update-apps-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7981,19 +7990,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/privateAccess/virtualNetworks") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/privateAccess/virtualNetworks") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get list of processes for a web site, or a deployment slot, or for a specific scaled-out instance in a web site.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes
 # operationId: WebApps_ListProcessesSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-processes list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-processes list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8011,7 +8020,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8021,7 +8030,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{processId}
 # operationId: WebApps_DeleteProcessSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-processes delete-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-processes delete-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8040,7 +8049,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8050,7 +8059,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{processId}
 # operationId: WebApps_GetProcessSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-processes get-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-processes get-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8069,7 +8078,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8079,7 +8088,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{processId}/dump
 # operationId: WebApps_GetProcessDumpSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-processes-dump get-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-processes-dump get-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8098,7 +8107,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}/dump") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}/dump") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8108,7 +8117,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{processId}/modules
 # operationId: WebApps_ListProcessModulesSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-processes-modules list-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-processes-modules list-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8127,7 +8136,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}/modules") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}/modules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8137,7 +8146,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{processId}/modules/{baseAddress}
 # operationId: WebApps_GetProcessModuleSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-processes-modules get-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-processes-modules get-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8157,7 +8166,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, process_id: $process_id, base_address: $base_address} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}/modules/{base_address}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), process_id: (encode-path-segment $process_id), base_address: (encode-path-segment $base_address)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}/modules/{base_address}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8167,7 +8176,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{processId}/threads
 # operationId: WebApps_ListProcessThreadsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-processes-threads list-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-processes-threads list-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8186,7 +8195,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, process_id: $process_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}/threads") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}/threads") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8196,7 +8205,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{processId}/threads/{threadId}
 # operationId: WebApps_GetProcessThreadSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-processes-threads get-process" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-processes-threads get-apps-process" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8216,7 +8225,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, process_id: $process_id, thread_id: $thread_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}/threads/{thread_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), process_id: (encode-path-segment $process_id), thread_id: (encode-path-segment $thread_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}/threads/{thread_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8226,7 +8235,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publicCertificates
 # operationId: WebApps_ListPublicCertificatesSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-public-certificates list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-public-certificates list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8244,7 +8253,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publicCertificates") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publicCertificates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8254,7 +8263,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pu
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publicCertificates/{publicCertificateName}
 # operationId: WebApps_DeletePublicCertificateSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-public-certificates delete" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-public-certificates delete-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8273,7 +8282,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, public_certificate_name: $public_certificate_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publicCertificates/{public_certificate_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), public_certificate_name: (encode-path-segment $public_certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publicCertificates/{public_certificate_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8283,7 +8292,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publicCertificates/{publicCertificateName}
 # operationId: WebApps_GetPublicCertificateSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-public-certificates get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-public-certificates get-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8302,7 +8311,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, public_certificate_name: $public_certificate_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publicCertificates/{public_certificate_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), public_certificate_name: (encode-path-segment $public_certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publicCertificates/{public_certificate_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8313,7 +8322,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pu
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publicCertificates/{publicCertificateName}
 # operationId: WebApps_CreateOrUpdatePublicCertificateSlot
 # --properties shape: {blob?: string, publicCertificateLocation?: "CurrentUserMy"|"LocalMachineMy"|"Unknown"}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-public-certificates create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-public-certificates create-apps-or-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8335,19 +8344,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, public_certificate_name: $public_certificate_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publicCertificates/{public_certificate_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), public_certificate_name: (encode-path-segment $public_certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publicCertificates/{public_certificate_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the publishing profile for an app (or deployment slot, if specified).
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publishxml
 # operationId: WebApps_ListPublishingProfileXmlWithSecretsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-publishxml list-publishing-profile-xml-with-secrets" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-publishxml list-apps-publishing-profile-xml-with-secrets" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8361,26 +8370,26 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-pu
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
-  --format: string@format-completer # Name of the format. Valid values are:  FileZilla3 WebDeploy -- default Ftp
+  --format: string@format-completer # Name of the format. Valid values are: FileZilla3 WebDeploy -- default Ftp
   --include-disaster-recovery-endpoints: oneof<nothing, bool> # Include the DisasterRecover endpoint if true
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publishxml") $qp)
-  let body = {"format": $format, "includeDisasterRecoveryEndpoints": $include_disaster_recovery_endpoints} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publishxml") $qp)
+  let req_body = {"format": $format, "includeDisasterRecoveryEndpoints": $include_disaster_recovery_endpoints} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Resets the configuration settings of the current slot if they were previously modified by calling the API with POST.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/resetSlotConfig
 # operationId: WebApps_ResetSlotConfigurationSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-reset-slot-config reset-configuration" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-reset-slot-config reset-apps-configuration" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8398,7 +8407,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-re
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/resetSlotConfig") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/resetSlotConfig") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8408,7 +8417,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-re
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restart
 # operationId: WebApps_RestartSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-restart restart" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-restart restart-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8428,7 +8437,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-re
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "softRestart" $soft_restart "scalar") (serialize-qp "synchronous" $synchronous "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restart") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restart") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8439,7 +8448,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-re
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restoreFromBackupBlob
 # operationId: WebApps_RestoreFromBackupBlobSlot
 # --properties shape: {adjustConnectionStrings?: bool, appServicePlan?: string, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, ignoreDatabases?: bool, operationType?: "Default"|"Clone"|"Relocation"|"Snapshot"|"CloudFS", overwrite: bool, siteName?: string, storageAccountUrl: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-restore-from-backup-blob post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-restore-from-backup-blob create-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8460,12 +8469,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-re
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restoreFromBackupBlob") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restoreFromBackupBlob") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Restores a deleted web app to this web app.
@@ -8473,7 +8482,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-re
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restoreFromDeletedApp
 # operationId: WebApps_RestoreFromDeletedAppSlot
 # --properties shape: {deletedSiteId?: string, recoverConfiguration?: bool, snapshotTime?: string, useDRSecondary?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-restore-from-deleted-app post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-restore-from-deleted-app create" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8494,12 +8503,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-re
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restoreFromDeletedApp") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restoreFromDeletedApp") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Restores a web app from a snapshot.
@@ -8507,7 +8516,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-re
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restoreSnapshot
 # operationId: WebApps_RestoreSnapshotSlot
 # --properties shape: {ignoreConflictingHostNames?: bool, overwrite: bool, recoverConfiguration?: bool, recoverySource?: record, snapshotTime?: string, useDRSecondary?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-restore-snapshot post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-restore-snapshot create-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8528,19 +8537,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-re
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restoreSnapshot") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restoreSnapshot") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get list of siteextensions for a web site, or a deployment slot.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/siteextensions
 # operationId: WebApps_ListSiteExtensionsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-siteextensions list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-siteextensions list-apps-extensions" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8558,7 +8567,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-si
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/siteextensions") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/siteextensions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8568,7 +8577,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-si
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/siteextensions/{siteExtensionId}
 # operationId: WebApps_DeleteSiteExtensionSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-siteextensions delete" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-siteextensions delete-apps-extension" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8587,7 +8596,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-si
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, site_extension_id: $site_extension_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/siteextensions/{site_extension_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), site_extension_id: (encode-path-segment $site_extension_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/siteextensions/{site_extension_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8597,7 +8606,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-si
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/siteextensions/{siteExtensionId}
 # operationId: WebApps_GetSiteExtensionSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-siteextensions get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-siteextensions get-apps-extension" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8616,7 +8625,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-si
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, site_extension_id: $site_extension_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/siteextensions/{site_extension_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), site_extension_id: (encode-path-segment $site_extension_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/siteextensions/{site_extension_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8626,7 +8635,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-si
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/siteextensions/{siteExtensionId}
 # operationId: WebApps_InstallSiteExtensionSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-siteextensions put" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-siteextensions update-apps-install-extension" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8645,7 +8654,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-si
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, site_extension_id: $site_extension_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/siteextensions/{site_extension_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), site_extension_id: (encode-path-segment $site_extension_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/siteextensions/{site_extension_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8655,7 +8664,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-si
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/slotsdiffs
 # operationId: WebApps_ListSlotDifferencesSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-slotsdiffs list-differences" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-slotsdiffs list-apps-differences" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8669,26 +8678,26 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sl
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
-  --preserve-vnet: oneof<nothing, bool> # <code>true</code> to preserve Virtual Network to the slot during swap; otherwise, <code>false</code>.
+  --preserve-vnet: oneof<nothing, bool> # true to preserve Virtual Network to the slot during swap; otherwise, false.
   target_slot: string # Destination deployment slot during swap operation.
 ]: any -> record<nextLink: string, value: table<properties: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/slotsdiffs") $qp)
-  let body = {"preserveVnet": $preserve_vnet, "targetSlot": $target_slot} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/slotsdiffs") $qp)
+  let req_body = {"preserveVnet": $preserve_vnet, "targetSlot": $target_slot} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Swaps two deployment slots of an app.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/slotsswap
 # operationId: WebApps_SwapSlotSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-slotsswap post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-slotsswap create-apps-swap" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8702,26 +8711,26 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sl
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
-  --preserve-vnet: oneof<nothing, bool> # <code>true</code> to preserve Virtual Network to the slot during swap; otherwise, <code>false</code>.
+  --preserve-vnet: oneof<nothing, bool> # true to preserve Virtual Network to the slot during swap; otherwise, false.
   target_slot: string # Destination deployment slot during swap operation.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/slotsswap") $qp)
-  let body = {"preserveVnet": $preserve_vnet, "targetSlot": $target_slot} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/slotsswap") $qp)
+  let req_body = {"preserveVnet": $preserve_vnet, "targetSlot": $target_slot} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns all Snapshots to the user.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/snapshots
 # operationId: WebApps_ListSnapshotsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-snapshots list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-snapshots list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8739,7 +8748,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/snapshots") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/snapshots") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8749,7 +8758,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sn
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/snapshotsdr
 # operationId: WebApps_ListSnapshotsFromDRSecondarySlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-snapshotsdr list-snapshots-from-dr-secondary" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-snapshotsdr list-apps-snapshots-from-dr-secondary" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8767,7 +8776,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/snapshotsdr") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/snapshotsdr") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8777,7 +8786,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sn
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web
 # operationId: WebApps_DeleteSourceControlSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sourcecontrols-web delete" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sourcecontrols-web delete-apps-source-control" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8795,7 +8804,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-so
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8805,7 +8814,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-so
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web
 # operationId: WebApps_GetSourceControlSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sourcecontrols-web get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sourcecontrols-web get-apps-source-control" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8823,7 +8832,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-so
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8834,7 +8843,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-so
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web
 # operationId: WebApps_UpdateSourceControlSlot
 # --properties shape: {branch?: string, deploymentRollbackEnabled?: bool, isManualIntegration?: bool, isMercurial?: bool, repoUrl?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sourcecontrols-web update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sourcecontrols-web update-apps-source-control" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8855,12 +8864,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-so
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the source control configuration of an app.
@@ -8868,7 +8877,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-so
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web
 # operationId: WebApps_CreateOrUpdateSourceControlSlot
 # --properties shape: {branch?: string, deploymentRollbackEnabled?: bool, isManualIntegration?: bool, isMercurial?: bool, repoUrl?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sourcecontrols-web create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sourcecontrols-web create-apps-or-update-source-control" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8889,19 +8898,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-so
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Starts an app (or deployment slot, if specified).
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/start
 # operationId: WebApps_StartSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-start start" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-start start-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8919,7 +8928,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-st
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/start") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8929,7 +8938,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-st
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/startNetworkTrace
 # operationId: WebApps_StartNetworkTraceSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-start-network-trace start" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-start-network-trace start-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8950,7 +8959,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-st
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "durationInSeconds" $duration_in_seconds "scalar") (serialize-qp "maxFrameLength" $max_frame_length "scalar") (serialize-qp "sasUrl" $sas_url "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/startNetworkTrace") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/startNetworkTrace") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8960,7 +8969,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-st
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/stop
 # operationId: WebApps_StopSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-stop stop" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-stop stop-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8978,7 +8987,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-st
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/stop") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8988,7 +8997,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-st
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/stopNetworkTrace
 # operationId: WebApps_StopNetworkTraceSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-stop-network-trace stop" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-stop-network-trace stop-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9006,7 +9015,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-st
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/stopNetworkTrace") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/stopNetworkTrace") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9016,7 +9025,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-st
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sync
 # operationId: WebApps_SyncRepositorySlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sync sync-repository" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sync sync-apps-repository" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9034,7 +9043,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sy
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sync") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sync") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9044,7 +9053,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sy
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/syncfunctiontriggers
 # operationId: WebApps_SyncFunctionTriggersSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-syncfunctiontriggers sync-function-triggers" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-syncfunctiontriggers sync-apps-function-triggers" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9062,7 +9071,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sy
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/syncfunctiontriggers") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/syncfunctiontriggers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9072,7 +9081,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-sy
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs
 # operationId: WebApps_ListTriggeredWebJobsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-triggeredwebjobs list-triggered-web-jobs" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-triggeredwebjobs list-apps-triggered-jobs" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9090,7 +9099,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-tr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9100,7 +9109,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-tr
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{webJobName}
 # operationId: WebApps_DeleteTriggeredWebJobSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-triggeredwebjobs delete-triggered-web-job" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-triggeredwebjobs delete-apps-triggered-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9119,7 +9128,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-tr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, web_job_name: $web_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{web_job_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{web_job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9129,7 +9138,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-tr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{webJobName}
 # operationId: WebApps_GetTriggeredWebJobSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-triggeredwebjobs get-triggered-web-job" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-triggeredwebjobs get-apps-triggered-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9148,7 +9157,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-tr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, web_job_name: $web_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{web_job_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{web_job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9158,7 +9167,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-tr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{webJobName}/history
 # operationId: WebApps_ListTriggeredWebJobHistorySlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-triggeredwebjobs-history list-triggered-web-job" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-triggeredwebjobs-history list-apps-triggered-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9177,7 +9186,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-tr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, web_job_name: $web_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{web_job_name}/history") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{web_job_name}/history") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9187,7 +9196,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-tr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{webJobName}/history/{id}
 # operationId: WebApps_GetTriggeredWebJobHistorySlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-triggeredwebjobs-history get-triggered-web-job" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-triggeredwebjobs-history get-apps-triggered-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9207,7 +9216,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-tr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, web_job_name: $web_job_name, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{web_job_name}/history/{id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{web_job_name}/history/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9217,7 +9226,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-tr
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{webJobName}/run
 # operationId: WebApps_RunTriggeredWebJobSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-triggeredwebjobs-run post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-triggeredwebjobs-run create-apps-triggered-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9236,7 +9245,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-tr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, web_job_name: $web_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{web_job_name}/run") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{web_job_name}/run") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9246,7 +9255,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-tr
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/usages
 # operationId: WebApps_ListUsagesSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-usages list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-usages list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9265,7 +9274,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-us
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/usages") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/usages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9275,7 +9284,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-us
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections
 # operationId: WebApps_ListVnetConnectionsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections list-vnet" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections list-apps-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9293,7 +9302,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9303,7 +9312,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnetName}
 # operationId: WebApps_DeleteVnetConnectionSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections delete-vnet" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections delete-apps-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9322,7 +9331,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, vnet_name: $vnet_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), vnet_name: (encode-path-segment $vnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9332,7 +9341,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnetName}
 # operationId: WebApps_GetVnetConnectionSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections get-vnet" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections get-apps-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9351,7 +9360,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, vnet_name: $vnet_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), vnet_name: (encode-path-segment $vnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9362,7 +9371,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnetName}
 # operationId: WebApps_UpdateVnetConnectionSlot
 # --properties shape: {certBlob?: string, dnsServers?: string, isSwift?: bool, vnetResourceId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections update-vnet" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections update-apps-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9384,12 +9393,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, vnet_name: $vnet_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), vnet_name: (encode-path-segment $vnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a Virtual Network connection to an app or slot (PUT) or updates the connection properties (PATCH).
@@ -9397,7 +9406,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnetName}
 # operationId: WebApps_CreateOrUpdateVnetConnectionSlot
 # --properties shape: {certBlob?: string, dnsServers?: string, isSwift?: bool, vnetResourceId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections create-or-update-vnet" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections create-apps-or-update-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9419,19 +9428,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, vnet_name: $vnet_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), vnet_name: (encode-path-segment $vnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets an app's Virtual Network gateway.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: WebApps_GetVnetConnectionGatewaySlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections-gateways get-vnet" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections-gateways get-apps-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9451,7 +9460,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, vnet_name: $vnet_name, gateway_name: $gateway_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}/gateways/{gateway_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), vnet_name: (encode-path-segment $vnet_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}/gateways/{gateway_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9462,7 +9471,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: WebApps_UpdateVnetConnectionGatewaySlot
 # --properties shape: {vnetName?: string, vpnPackageUri: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections-gateways update-vnet" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections-gateways update-apps-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9485,12 +9494,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, vnet_name: $vnet_name, gateway_name: $gateway_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}/gateways/{gateway_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), vnet_name: (encode-path-segment $vnet_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}/gateways/{gateway_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a gateway to a connected Virtual Network (PUT) or updates it (PATCH).
@@ -9498,7 +9507,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: WebApps_CreateOrUpdateVnetConnectionGatewaySlot
 # --properties shape: {vnetName?: string, vpnPackageUri: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections-gateways create-or-update-vnet" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-virtual-network-connections-gateways create-apps-or-update-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9521,19 +9530,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-vi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, vnet_name: $vnet_name, gateway_name: $gateway_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}/gateways/{gateway_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), vnet_name: (encode-path-segment $vnet_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}/gateways/{gateway_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List webjobs for an app, or a deployment slot.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/webjobs
 # operationId: WebApps_ListWebJobsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-webjobs list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-webjobs list-apps-jobs" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9551,7 +9560,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-we
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/webjobs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/webjobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9561,7 +9570,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-we
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/webjobs/{webJobName}
 # operationId: WebApps_GetWebJobSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-webjobs get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-webjobs get-apps-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9580,7 +9589,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-we
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, slot: $slot, web_job_name: $web_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/webjobs/{web_job_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/webjobs/{web_job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9590,7 +9599,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-we
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slotsdiffs
 # operationId: WebApps_ListSlotDifferencesFromProduction
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slotsdiffs list-slot-differences-from-production" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slotsdiffs list-apps-slot-differences-from-production" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9603,26 +9612,26 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slotsdif
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
-  --preserve-vnet: oneof<nothing, bool> # <code>true</code> to preserve Virtual Network to the slot during swap; otherwise, <code>false</code>.
+  --preserve-vnet: oneof<nothing, bool> # true to preserve Virtual Network to the slot during swap; otherwise, false.
   target_slot: string # Destination deployment slot during swap operation.
 ]: any -> record<nextLink: string, value: table<properties: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slotsdiffs") $qp)
-  let body = {"preserveVnet": $preserve_vnet, "targetSlot": $target_slot} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slotsdiffs") $qp)
+  let req_body = {"preserveVnet": $preserve_vnet, "targetSlot": $target_slot} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Swaps two deployment slots of an app.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slotsswap
 # operationId: WebApps_SwapSlotWithProduction
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slotsswap post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slotsswap create-apps-swap-slot-with-production" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9635,26 +9644,26 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slotsswa
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
-  --preserve-vnet: oneof<nothing, bool> # <code>true</code> to preserve Virtual Network to the slot during swap; otherwise, <code>false</code>.
+  --preserve-vnet: oneof<nothing, bool> # true to preserve Virtual Network to the slot during swap; otherwise, false.
   target_slot: string # Destination deployment slot during swap operation.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slotsswap") $qp)
-  let body = {"preserveVnet": $preserve_vnet, "targetSlot": $target_slot} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slotsswap") $qp)
+  let req_body = {"preserveVnet": $preserve_vnet, "targetSlot": $target_slot} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns all Snapshots to the user.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/snapshots
 # operationId: WebApps_ListSnapshots
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-snapshots list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-snapshots list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9671,7 +9680,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-snapshot
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/snapshots") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/snapshots") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9681,7 +9690,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-snapshot
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/snapshotsdr
 # operationId: WebApps_ListSnapshotsFromDRSecondary
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-snapshotsdr list-snapshots-from-dr-secondary" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-snapshotsdr list-apps-snapshots-from-dr-secondary" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9698,7 +9707,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-snapshot
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/snapshotsdr") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/snapshotsdr") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9708,7 +9717,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-snapshot
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web
 # operationId: WebApps_DeleteSourceControl
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourcecontrols-web delete" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourcecontrols-web delete-apps-source-control" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9725,7 +9734,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourceco
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9735,7 +9744,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourceco
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web
 # operationId: WebApps_GetSourceControl
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourcecontrols-web get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourcecontrols-web get-apps-source-control" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9752,7 +9761,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourceco
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9763,7 +9772,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourceco
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web
 # operationId: WebApps_UpdateSourceControl
 # --properties shape: {branch?: string, deploymentRollbackEnabled?: bool, isManualIntegration?: bool, isMercurial?: bool, repoUrl?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourcecontrols-web update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourcecontrols-web update-apps-source-control" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9783,12 +9792,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourceco
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates the source control configuration of an app.
@@ -9796,7 +9805,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourceco
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web
 # operationId: WebApps_CreateOrUpdateSourceControl
 # --properties shape: {branch?: string, deploymentRollbackEnabled?: bool, isManualIntegration?: bool, isMercurial?: bool, repoUrl?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourcecontrols-web create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourcecontrols-web create-apps-or-update-source-control" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9816,19 +9825,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-sourceco
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Starts an app (or deployment slot, if specified).
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/start
 # operationId: WebApps_Start
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-start start" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-start start-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9845,7 +9854,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-start st
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/start") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9855,7 +9864,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-start st
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/startNetworkTrace
 # operationId: WebApps_StartNetworkTrace
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-start-network-trace start" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-start-network-trace start-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9875,7 +9884,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-start-ne
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "durationInSeconds" $duration_in_seconds "scalar") (serialize-qp "maxFrameLength" $max_frame_length "scalar") (serialize-qp "sasUrl" $sas_url "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/startNetworkTrace") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/startNetworkTrace") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9885,7 +9894,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-start-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/stop
 # operationId: WebApps_Stop
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-stop stop" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-stop stop-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9902,7 +9911,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-stop sto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/stop") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9912,7 +9921,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-stop sto
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/stopNetworkTrace
 # operationId: WebApps_StopNetworkTrace
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-stop-network-trace stop" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-stop-network-trace stop-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9929,7 +9938,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-stop-net
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/stopNetworkTrace") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/stopNetworkTrace") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9939,7 +9948,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-stop-net
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/sync
 # operationId: WebApps_SyncRepository
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-sync sync-repository" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-sync sync-apps-repository" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9956,7 +9965,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-sync syn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/sync") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/sync") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9966,7 +9975,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-sync syn
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/syncfunctiontriggers
 # operationId: WebApps_SyncFunctionTriggers
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-syncfunctiontriggers sync-function-triggers" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-syncfunctiontriggers sync-apps-function-triggers" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -9983,7 +9992,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-syncfunc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/syncfunctiontriggers") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/syncfunctiontriggers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9993,7 +10002,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-syncfunc
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs
 # operationId: WebApps_ListTriggeredWebJobs
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggeredwebjobs list-triggered-web-jobs" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggeredwebjobs list-apps-triggered-jobs" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10010,7 +10019,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggere
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10020,7 +10029,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggere
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{webJobName}
 # operationId: WebApps_DeleteTriggeredWebJob
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggeredwebjobs delete-triggered-web-job" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggeredwebjobs delete-apps-triggered-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10038,7 +10047,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggere
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, web_job_name: $web_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{web_job_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{web_job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10048,7 +10057,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggere
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{webJobName}
 # operationId: WebApps_GetTriggeredWebJob
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggeredwebjobs get-triggered-web-job" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggeredwebjobs get-apps-triggered-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10066,7 +10075,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggere
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, web_job_name: $web_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{web_job_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{web_job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10076,7 +10085,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggere
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{webJobName}/history
 # operationId: WebApps_ListTriggeredWebJobHistory
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggeredwebjobs-history list-triggered-web-job" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggeredwebjobs-history list-apps-triggered-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10094,7 +10103,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggere
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, web_job_name: $web_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{web_job_name}/history") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{web_job_name}/history") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10104,7 +10113,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggere
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{webJobName}/history/{id}
 # operationId: WebApps_GetTriggeredWebJobHistory
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggeredwebjobs-history get-triggered-web-job" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggeredwebjobs-history get-apps-triggered-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10123,7 +10132,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggere
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, web_job_name: $web_job_name, id: $id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{web_job_name}/history/{id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{web_job_name}/history/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10133,7 +10142,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggere
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{webJobName}/run
 # operationId: WebApps_RunTriggeredWebJob
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggeredwebjobs-run post" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggeredwebjobs-run create-apps-triggered-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10151,7 +10160,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggere
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, web_job_name: $web_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{web_job_name}/run") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{web_job_name}/run") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10161,7 +10170,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-triggere
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/usages
 # operationId: WebApps_ListUsages
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-usages list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-usages list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10179,7 +10188,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-usages l
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/usages") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/usages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10189,7 +10198,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-usages l
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections
 # operationId: WebApps_ListVnetConnections
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections list-vnet" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections list-apps-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10206,7 +10215,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10216,7 +10225,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnetName}
 # operationId: WebApps_DeleteVnetConnection
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections delete-vnet" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections delete-apps-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10234,7 +10243,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, vnet_name: $vnet_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), vnet_name: (encode-path-segment $vnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10244,7 +10253,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnetName}
 # operationId: WebApps_GetVnetConnection
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections get-vnet" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections get-apps-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10262,7 +10271,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, vnet_name: $vnet_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), vnet_name: (encode-path-segment $vnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10273,7 +10282,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnetName}
 # operationId: WebApps_UpdateVnetConnection
 # --properties shape: {certBlob?: string, dnsServers?: string, isSwift?: bool, vnetResourceId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections update-vnet" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections update-apps-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10294,12 +10303,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, vnet_name: $vnet_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), vnet_name: (encode-path-segment $vnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a Virtual Network connection to an app or slot (PUT) or updates the connection properties (PATCH).
@@ -10307,7 +10316,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnetName}
 # operationId: WebApps_CreateOrUpdateVnetConnection
 # --properties shape: {certBlob?: string, dnsServers?: string, isSwift?: bool, vnetResourceId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections create-or-update-vnet" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections create-apps-or-update-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10328,19 +10337,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, vnet_name: $vnet_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), vnet_name: (encode-path-segment $vnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets an app's Virtual Network gateway.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: WebApps_GetVnetConnectionGateway
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections-gateways get-vnet" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections-gateways get-apps-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10359,7 +10368,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, vnet_name: $vnet_name, gateway_name: $gateway_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}/gateways/{gateway_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), vnet_name: (encode-path-segment $vnet_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}/gateways/{gateway_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10370,7 +10379,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: WebApps_UpdateVnetConnectionGateway
 # --properties shape: {vnetName?: string, vpnPackageUri: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections-gateways update-vnet" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections-gateways update-apps-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10392,12 +10401,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, vnet_name: $vnet_name, gateway_name: $gateway_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}/gateways/{gateway_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), vnet_name: (encode-path-segment $vnet_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}/gateways/{gateway_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds a gateway to a connected Virtual Network (PUT) or updates it (PATCH).
@@ -10405,7 +10414,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: WebApps_CreateOrUpdateVnetConnectionGateway
 # --properties shape: {vnetName?: string, vpnPackageUri: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections-gateways create-or-update-vnet" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-network-connections-gateways create-apps-or-update-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10427,19 +10436,19 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-virtual-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, vnet_name: $vnet_name, gateway_name: $gateway_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}/gateways/{gateway_name}") $qp)
-  let body = {"properties": $properties, "kind": $kind} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), vnet_name: (encode-path-segment $vnet_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}/gateways/{gateway_name}") $qp)
+  let req_body = {"properties": $properties, "kind": $kind} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List webjobs for an app, or a deployment slot.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/webjobs
 # operationId: WebApps_ListWebJobs
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-webjobs list" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-webjobs list-apps-jobs" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10456,7 +10465,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-webjobs 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/webjobs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/webjobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10466,7 +10475,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-webjobs 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/webjobs/{webJobName}
 # operationId: WebApps_GetWebJob
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-webjobs get" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-webjobs get-apps-job" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -10484,7 +10493,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-webjobs 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, web_job_name: $web_job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/webjobs/{web_job_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/webjobs/{web_job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

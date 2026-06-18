@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -273,7 +282,7 @@ export def "drives get" [
 #
 # GET /game/box/advanced
 # operationId: getAdvancedBoxScore
-export def "game-box-advanced get-advanced-box-score" [
+export def "game-box-advanced get-score" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,7 +368,7 @@ export def "games-media get" [
 #
 # GET /games/players
 # operationId: getPlayerGameStats
-export def "games-players get-player-game-stats" [
+export def "games-players get-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,7 +398,7 @@ export def "games-players get-player-game-stats" [
 #
 # GET /games/teams
 # operationId: getTeamGameStats
-export def "games-teams get-team-game-stats" [
+export def "games-teams get-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -528,7 +537,7 @@ export def "metrics-wp get-win-probability-data" [
 #
 # GET /metrics/wp/pregame
 # operationId: getPregameWinProbabilities
-export def "metrics-wp-pregame get-pregame-win-probabilities" [
+export def "metrics-wp-pregame get-win-probabilities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -654,7 +663,7 @@ export def "player-portal get-transfer" [
 #
 # GET /player/returning
 # operationId: getReturningProduction
-export def "player-returning get-returning-production" [
+export def "player-returning get-production" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,7 +689,7 @@ export def "player-returning get-returning-production" [
 #
 # GET /player/search
 # operationId: playerSearch
-export def "player-search playerSearch" [
+export def "player-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -860,7 +869,7 @@ export def "ppa-players-season get" [
 #
 # GET /ppa/predicted
 # operationId: getPredictedPoints
-export def "ppa-predicted get-predicted-points" [
+export def "ppa-predicted get-points" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1219,7 +1228,7 @@ export def "stats-categories get" [
 #
 # GET /stats/game/advanced
 # operationId: getAdvancedTeamGameStats
-export def "stats-game-advanced get-advanced-team" [
+export def "stats-game-advanced get-team" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1306,7 +1315,7 @@ export def "stats-season get-team" [
 #
 # GET /stats/season/advanced
 # operationId: getAdvancedTeamSeasonStats
-export def "stats-season-advanced get-advanced-team" [
+export def "stats-season-advanced get-team" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

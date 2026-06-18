@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-stagesjson get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-stages-json get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 # List account stages
 #
 # GET /v2/account_stages.json
-export def "account-stagesjson get" [
+export def "account-stages-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,8 +110,8 @@ export def "account-stagesjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of account stages to fetch. If a record can't be found, that record won't be returned and your request will be successful
-  --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --ids: list<int> # IDs of account stages to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --updated-at: list<string> # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at, order. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
@@ -135,7 +144,7 @@ export def "account-stages get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/account_stages/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/account_stages/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,7 +153,7 @@ export def "account-stages get" [
 # List Account Tiers
 #
 # GET /v2/account_tiers.json
-export def "account-tiersjson get" [
+export def "account-tiers-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,8 +162,8 @@ export def "account-tiersjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of Account Tiers to fetch. If a record can't be found, that record won't be returned and your request will be successful
-  --name: list # Filters Account Tiers by name. Multiple names can be applied
+  --ids: list<int> # IDs of Account Tiers to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --name: list<string> # Filters Account Tiers by name. Multiple names can be applied
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at, order. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
@@ -187,7 +196,7 @@ export def "account-tiers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/account_tiers/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/account_tiers/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -196,7 +205,7 @@ export def "account-tiers get" [
 # Upsert an account
 #
 # POST /v2/account_upserts.json
-export def "account-upsertsjson post" [
+export def "account-upserts-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +220,7 @@ export def "account-upsertsjson post" [
   --company-type: string # Type of the Account's company
   --conversational-name: string # Conversational name of the Account
   --country: string # Country
-  --crm-id: string # Requires Salesforce.  ID of the person in your external CRM. You must provide a crm_id_type if this is included.  Validations will be applied to the crm_id depending on the crm_id_type. A "salesforce" ID must be exactly 18 characters. A "salesforce" ID must be either an Account (001) object. The type will be validated using the 18 character ID.  This field can only be used if your application or API key has the "account:set_crm_id" scope. 
+  --crm-id: string # Requires Salesforce. ID of the person in your external CRM. You must provide a crm_id_type if this is included. Validations will be applied to the crm_id depending on the crm_id_type. A "salesforce" ID must be exactly 18 characters. A "salesforce" ID must be either an Account (001) object. The type will be validated using the 18 character ID. This field can only be used if your application or API key has the "account:set_crm_id" scope.
   --crm-id-type: string # The CRM that the provided crm_id is for. Must be one of: salesforce
   --custom-fields: list # Custom fields are defined by the user's team. Only fields with values are presented in the API.
   --description: string # Description
@@ -230,26 +239,27 @@ export def "account-upsertsjson post" [
   --size: string # Estimated number of people in employment
   --state: string # State
   --street: string # Street name and number
-  --tags: list # All tags applied to this Account
+  --tags: list<string> # All tags applied to this Account
   --twitter-handle: string # Twitter handle, with @
-  --upsert-key: string # Name of the parameter to upsert on. The field must be provided in the input parameters, or the request will fail. The request will also fail if there are multiple records matched by the upsert field.  If upsert_key is not provided, this endpoint will not update an existing record.  Valid options are: id, crm_id, domain. If crm_id is provided, then a valid crm_id_type must be provided, as documented for the account create and update endpoints.
+  --upsert-key: string # Name of the parameter to upsert on. The field must be provided in the input parameters, or the request will fail. The request will also fail if there are multiple records matched by the upsert field. If upsert_key is not provided, this endpoint will not update an existing record. Valid options are: id, crm_id, domain. If crm_id is provided, then a valid crm_id_type must be provided, as documented for the account create and update endpoints.
   --website: string # Website
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/account_upserts.json")
-  let body = {"account_tier_id": $account_tier_id, "city": $city, "company_stage_id": $company_stage_id, "company_type": $company_type, "conversational_name": $conversational_name, "country": $country, "crm_id": $crm_id, "crm_id_type": $crm_id_type, "custom_fields": $custom_fields, "description": $description, "do_not_contact": $do_not_contact, "domain": $domain, "founded": $founded, "id": $id, "industry": $industry, "linkedin_url": $linkedin_url, "locale": $locale, "name": $name, "owner_id": $owner_id, "phone": $phone, "postal_code": $postal_code, "revenue_range": $revenue_range, "size": $size, "state": $state, "street": $street, "tags": $tags, "twitter_handle": $twitter_handle, "upsert_key": $upsert_key, "website": $website} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account_tier_id": $account_tier_id, "city": $city, "company_stage_id": $company_stage_id, "company_type": $company_type, "conversational_name": $conversational_name, "country": $country, "crm_id": $crm_id, "crm_id_type": $crm_id_type, "custom_fields": $custom_fields, "description": $description, "do_not_contact": $do_not_contact, "domain": $domain, "founded": $founded, "id": $id, "industry": $industry, "linkedin_url": $linkedin_url, "locale": $locale, "name": $name, "owner_id": $owner_id, "phone": $phone, "postal_code": $postal_code, "revenue_range": $revenue_range, "size": $size, "state": $state, "street": $street, "tags": $tags, "twitter_handle": $twitter_handle, "upsert_key": $upsert_key, "website": $website} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List accounts
 #
 # GET /v2/accounts.json
-export def "accountsjson get" [
+export def "accounts-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -258,28 +268,28 @@ export def "accountsjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of accounts to fetch. If a record can't be found, that record won't be returned and your request will be successful
-  --crm-id: list # Filters accounts by crm_id. Multiple crm ids can be applied
-  --tag: list # Filters accounts by the tags applied to the account. Multiple tags can be applied
-  --tag-id: list # Filters accounts by the tag id's applied to the account. Multiple tag id's can be applied
-  --created-at: list # Equality filters that are applied to the created_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
-  --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --ids: list<int> # IDs of accounts to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --crm-id: list<string> # Filters accounts by crm_id. Multiple crm ids can be applied
+  --tag: list<string> # Filters accounts by the tags applied to the account. Multiple tags can be applied
+  --tag-id: list<int> # Filters accounts by the tag id's applied to the account. Multiple tag id's can be applied
+  --created-at: list<string> # Equality filters that are applied to the created_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --updated-at: list<string> # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
   --domain: string # Domain of the accounts to fetch. Domains are unique and lowercase
-  --website: list # Filters accounts by website. Multiple websites can be applied. An additional value of "_is_null" can be passed to filter accounts that do not have a website.
+  --website: list<string> # Filters accounts by website. Multiple websites can be applied. An additional value of "_is_null" can be passed to filter accounts that do not have a website.
   --archived: oneof<nothing, bool> # Filters accounts by archived_at status. Returns only accounts where archived_at is not null if this field is true. Returns only accounts where archived_at is null if this field is false. Do not pass this parameter to return both archived and unarchived accounts. This filter is not applied if any value other than "true" or "false" is passed.
-  --name: list # Names of accounts to fetch. Name matches are exact and case sensitive. Multiple names can be fetched.
-  --account-stage-id: list # Filters accounts by account_stage_id. Multiple account_stage_ids can be applied. An additional value of "_is_null" can be passed to filter accounts that do not have account_stage_id
-  --account-tier-id: list # Filters accounts by account_tier_id. Multiple account tier ids can be applied
-  --owner-id: list # Filters accounts by owner_id. Multiple owner_ids can be applied. An additional value of "_is_null" can be passed to filter accounts that are unowned
+  --name: list<string> # Names of accounts to fetch. Name matches are exact and case sensitive. Multiple names can be fetched.
+  --account-stage-id: list<int> # Filters accounts by account_stage_id. Multiple account_stage_ids can be applied. An additional value of "_is_null" can be passed to filter accounts that do not have account_stage_id
+  --account-tier-id: list<int> # Filters accounts by account_tier_id. Multiple account tier ids can be applied
+  --owner-id: list<string> # Filters accounts by owner_id. Multiple owner_ids can be applied. An additional value of "_is_null" can be passed to filter accounts that are unowned
   --owner-is-active: oneof<nothing, bool> # Filters accounts by whether the owner is active or not.
   --last-contacted: record # Equality filters that are applied to the last_contacted field. A single filter can be used by itself or combined with other filters to create a range. Additional values of "_is_null" or "_is_not_null" can be passed to filter records that either have no timestamp value or any timestamp value. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
   --custom-fields: record # Filters by accounts matching all given custom fields. The custom field names are case-sensitive, but the provided values are case-insensitive. Example: v2/accounts?custom_fields[custom_field_name]=custom_field_value
-  --industry: list # Filters accounts by industry by exact match. Supports partial matching
-  --country: list # Filters accounts by country by exact match. Supports partial matching
-  --state: list # Filters accounts by state by exact match. Supports partial matching
-  --city: list # Filters accounts by city by exact match. Supports partial matching
-  --owner-crm-id: list # Filters accounts by owner_crm_id. Multiple owner_crm_ids can be applied. An additional value of "_is_null" can be passed to filter accounts that are unowned. A "_not_in" modifier can be used to exclude specific owner_crm_ids. Example: v2/accounts?owner_crm_id[_not_in]=id
-  --locales: list # Filters accounts by locale. Multiple locales are allowed
+  --industry: list<string> # Filters accounts by industry by exact match. Supports partial matching
+  --country: list<string> # Filters accounts by country by exact match. Supports partial matching
+  --state: list<string> # Filters accounts by state by exact match. Supports partial matching
+  --city: list<string> # Filters accounts by city by exact match. Supports partial matching
+  --owner-crm-id: list<string> # Filters accounts by owner_crm_id. Multiple owner_crm_ids can be applied. An additional value of "_is_null" can be passed to filter accounts that are unowned. A "_not_in" modifier can be used to exclude specific owner_crm_ids. Example: v2/accounts?owner_crm_id[_not_in]=id
+  --locales: list<string> # Filters accounts by locale. Multiple locales are allowed
   --user-relationships: record # Filters by accounts matching all given user relationship fields, _is_null or _unmapped can be passed to filter accounts with null or unmapped user relationship values. Example: v2/accounts?user_relationships[name]=value
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at, last_contacted_at, account_stage, account_stage_name, account_tier, account_tier_name, name, counts_people. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
@@ -300,7 +310,7 @@ export def "accountsjson get" [
 # Create an account
 #
 # POST /v2/accounts.json
-export def "accountsjson post" [
+export def "accounts-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -315,7 +325,7 @@ export def "accountsjson post" [
   --company-type: string # Type of the Account's company
   --conversational-name: string # Conversational name of the Account
   --country: string # Country
-  --crm-id: string # Requires Salesforce.  ID of the person in your external CRM. You must provide a crm_id_type if this is included.  Validations will be applied to the crm_id depending on the crm_id_type. A "salesforce" ID must be exactly 18 characters. A "salesforce" ID must be either an Account (001) object. The type will be validated using the 18 character ID.  This field can only be used if your application or API key has the "account:set_crm_id" scope. 
+  --crm-id: string # Requires Salesforce. ID of the person in your external CRM. You must provide a crm_id_type if this is included. Validations will be applied to the crm_id depending on the crm_id_type. A "salesforce" ID must be exactly 18 characters. A "salesforce" ID must be either an Account (001) object. The type will be validated using the 18 character ID. This field can only be used if your application or API key has the "account:set_crm_id" scope.
   --crm-id-type: string # The CRM that the provided crm_id is for. Must be one of: salesforce
   --custom-fields: list # Custom fields are defined by the user's team. Only fields with values are presented in the API.
   --description: string # Description
@@ -333,7 +343,7 @@ export def "accountsjson post" [
   --size: string # Estimated number of people in employment
   --state: string # State
   --street: string # Street name and number
-  --tags: list # All tags applied to this Account
+  --tags: list<string> # All tags applied to this Account
   --twitter-handle: string # Twitter handle, with @
   --website: string # Website
 ]: any -> any {
@@ -341,11 +351,12 @@ export def "accountsjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/accounts.json")
-  let body = {"account_tier_id": $account_tier_id, "city": $city, "company_stage_id": $company_stage_id, "company_type": $company_type, "conversational_name": $conversational_name, "country": $country, "crm_id": $crm_id, "crm_id_type": $crm_id_type, "custom_fields": $custom_fields, "description": $description, "do_not_contact": $do_not_contact, "domain": $domain, "founded": $founded, "industry": $industry, "linkedin_url": $linkedin_url, "locale": $locale, "name": $name, "owner_id": $owner_id, "phone": $phone, "postal_code": $postal_code, "revenue_range": $revenue_range, "size": $size, "state": $state, "street": $street, "tags": $tags, "twitter_handle": $twitter_handle, "website": $website} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account_tier_id": $account_tier_id, "city": $city, "company_stage_id": $company_stage_id, "company_type": $company_type, "conversational_name": $conversational_name, "country": $country, "crm_id": $crm_id, "crm_id_type": $crm_id_type, "custom_fields": $custom_fields, "description": $description, "do_not_contact": $do_not_contact, "domain": $domain, "founded": $founded, "industry": $industry, "linkedin_url": $linkedin_url, "locale": $locale, "name": $name, "owner_id": $owner_id, "phone": $phone, "postal_code": $postal_code, "revenue_range": $revenue_range, "size": $size, "state": $state, "street": $street, "tags": $tags, "twitter_handle": $twitter_handle, "website": $website} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete an account
@@ -364,7 +375,7 @@ export def "accounts delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/accounts/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/accounts/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -386,7 +397,7 @@ export def "accounts get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/accounts/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/accounts/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -395,7 +406,7 @@ export def "accounts get" [
 # Update an existing Account
 #
 # PUT /v2/accounts/{id}.json
-export def "accounts put" [
+export def "accounts update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -412,7 +423,7 @@ export def "accounts put" [
   --company-type: string # Type of the Account's company
   --conversational-name: string # Conversational name of the Account
   --country: string # Country
-  --crm-id: string # Requires Salesforce.  ID of the person in your external CRM. You must provide a crm_id_type if this is included.  Validations will be applied to the crm_id depending on the crm_id_type. A "salesforce" ID must be exactly 18 characters. A "salesforce" ID must be either an Account (001) object. The type will be validated using the 18 character ID.  This field can only be used if your application or API key has the "account:set_crm_id" scope. 
+  --crm-id: string # Requires Salesforce. ID of the person in your external CRM. You must provide a crm_id_type if this is included. Validations will be applied to the crm_id depending on the crm_id_type. A "salesforce" ID must be exactly 18 characters. A "salesforce" ID must be either an Account (001) object. The type will be validated using the 18 character ID. This field can only be used if your application or API key has the "account:set_crm_id" scope.
   --crm-id-type: string # The CRM that the provided crm_id is for. Must be one of: salesforce
   --custom-fields: list # Custom fields are defined by the user's team. Only fields with values are presented in the API.
   --description: string # Description
@@ -430,25 +441,26 @@ export def "accounts put" [
   --size: string # Estimated number of people in employment
   --state: string # State
   --street: string # Street name and number
-  --tags: list # All tags applied to this Account
+  --tags: list<string> # All tags applied to this Account
   --twitter-handle: string # Twitter handle, with @
   --website: string # Website
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/accounts/{id}.json"))
-  let body = {"account_tier_id": $account_tier_id, "archived": $archived, "city": $city, "company_stage_id": $company_stage_id, "company_type": $company_type, "conversational_name": $conversational_name, "country": $country, "crm_id": $crm_id, "crm_id_type": $crm_id_type, "custom_fields": $custom_fields, "description": $description, "do_not_contact": $do_not_contact, "domain": $domain, "founded": $founded, "industry": $industry, "linkedin_url": $linkedin_url, "locale": $locale, "name": $name, "owner_id": $owner_id, "phone": $phone, "postal_code": $postal_code, "revenue_range": $revenue_range, "size": $size, "state": $state, "street": $street, "tags": $tags, "twitter_handle": $twitter_handle, "website": $website} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/accounts/{id}.json"))
+  let req_body = {"account_tier_id": $account_tier_id, "archived": $archived, "city": $city, "company_stage_id": $company_stage_id, "company_type": $company_type, "conversational_name": $conversational_name, "country": $country, "crm_id": $crm_id, "crm_id_type": $crm_id_type, "custom_fields": $custom_fields, "description": $description, "do_not_contact": $do_not_contact, "domain": $domain, "founded": $founded, "industry": $industry, "linkedin_url": $linkedin_url, "locale": $locale, "name": $name, "owner_id": $owner_id, "phone": $phone, "postal_code": $postal_code, "revenue_range": $revenue_range, "size": $size, "state": $state, "street": $street, "tags": $tags, "twitter_handle": $twitter_handle, "website": $website} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List call instructions
 #
 # GET /v2/action_details/call_instructions.json
-export def "action-details-call-instructionsjson get" [
+export def "action-details-call-instructions-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -457,7 +469,7 @@ export def "action-details-call-instructionsjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of call instructions to fetch.
+  --ids: list<int> # IDs of call instructions to fetch.
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
@@ -490,7 +502,7 @@ export def "action-details-call-instructions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/action_details/call_instructions/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/action_details/call_instructions/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -499,7 +511,7 @@ export def "action-details-call-instructions get" [
 # List actions
 #
 # GET /v2/actions.json
-export def "actionsjson get" [
+export def "actions-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,15 +520,15 @@ export def "actionsjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of actions to fetch.
+  --ids: list<int> # IDs of actions to fetch.
   --step-id: int # Fetch actions by step ID
   --type: string # Filter actions by type
-  --due-on: list # Equality filters that are applied to the due_on field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
-  --user-guid: list # Filters actions by the user's guid. Multiple user guids can be applied. The user must be a team admin to filter other users' actions
-  --person-id: list # Filters actions by person_id. Multiple person ids can be applied
-  --cadence-id: list # Filters actions by cadence_id. Multiple cadence ids can be applied
-  --multitouch-group-id: list # Filters actions by multitouch_group_id. Multiple multitouch group ids can be applied
-  --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --due-on: list<string> # Equality filters that are applied to the due_on field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --user-guid: list<string> # Filters actions by the user's guid. Multiple user guids can be applied. The user must be a team admin to filter other users' actions
+  --person-id: list<int> # Filters actions by person_id. Multiple person ids can be applied
+  --cadence-id: list<int> # Filters actions by cadence_id. Multiple cadence ids can be applied
+  --multitouch-group-id: list<int> # Filters actions by multitouch_group_id. Multiple multitouch group ids can be applied
+  --updated-at: list<string> # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
@@ -549,7 +561,7 @@ export def "actions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/actions/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/actions/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -558,7 +570,7 @@ export def "actions get" [
 # Create an activity
 #
 # POST /v2/activities.json
-export def "activitiesjson post" [
+export def "activities-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -574,17 +586,18 @@ export def "activitiesjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/activities.json")
-  let body = {"action_id": $action_id, "task_id": $task_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"action_id": $action_id, "task_id": $task_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List calls
 #
 # GET /v2/activities/calls.json
-export def "activities-callsjson get" [
+export def "activities-calls-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,13 +606,13 @@ export def "activities-callsjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of calls to fetch. If a record can't be found, that record won't be returned and your request will be successful
-  --created-at: list # Equality filters that are applied to the created_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
-  --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
-  --user-guid: list # Filters list to only include guids
-  --person-id: list # Filters calls by person_id. Multiple person ids can be applied
-  --sentiment: list # Filters calls by sentiment. Sentiment matches are exact and case sensitive. Multiple sentiments are allowed.
-  --disposition: list # Filters calls by disposition. Disposition matches are exact and case sensitive. Multiple dispositions are allowed.
+  --ids: list<int> # IDs of calls to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --created-at: list<string> # Equality filters that are applied to the created_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --updated-at: list<string> # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --user-guid: list<string> # Filters list to only include guids
+  --person-id: list<int> # Filters calls by person_id. Multiple person ids can be applied
+  --sentiment: list<string> # Filters calls by sentiment. Sentiment matches are exact and case sensitive. Multiple sentiments are allowed.
+  --disposition: list<string> # Filters calls by disposition. Disposition matches are exact and case sensitive. Multiple dispositions are allowed.
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
@@ -619,7 +632,7 @@ export def "activities-callsjson get" [
 # Create a call
 #
 # POST /v2/activities/calls.json
-export def "activities-callsjson post" [
+export def "activities-calls-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -629,10 +642,10 @@ export def "activities-callsjson post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --action-id: int # Action that this call is being logged for. This will validate that the action is still valid before completing it. The same action can never be successfully passed twice to this endpoint. The action must have a type of 'phone'.
-  --crm-params: record # CRM specific parameters. Some parameters are required on a per-team basis. Consume the CrmActivityFields endpoint to receive a list of valid parameters. The "field" property is passed as the key of this object, and the value of this object is the value that you would like to set.  If CrmActivityField has a non-null value, then that value must be submitted, or excluded from API calls, as these values are automatically applied.
+  --crm-params: record # CRM specific parameters. Some parameters are required on a per-team basis. Consume the CrmActivityFields endpoint to receive a list of valid parameters. The "field" property is passed as the key of this object, and the value of this object is the value that you would like to set. If CrmActivityField has a non-null value, then that value must be submitted, or excluded from API calls, as these values are automatically applied.
   --disposition: string # The disposition of the call. Can be required on a per-team basis. Must be present in the disposition list.
   --duration: int # The length of the call, in seconds
-  --linked-call-data-record-ids: list # CallDataRecord associations that will become linked to the created call. It is possible to pass multiple CallDataRecord ids in this field; this can be used to represent multiple phone calls that made up a single call.  Any call data record that is used must not already be linked to a call. It is not possible to link a call data record to multiple calls, and it is not possible to re-assign a call data record to a different call.
+  --linked-call-data-record-ids: list<int> # CallDataRecord associations that will become linked to the created call. It is possible to pass multiple CallDataRecord ids in this field; this can be used to represent multiple phone calls that made up a single call. Any call data record that is used must not already be linked to a call. It is not possible to link a call data record to multiple calls, and it is not possible to re-assign a call data record to a different call.
   --notes: string # Notes to log for the call. This is similar to the notes endpoint, but ensures that the notes get synced to the user's CRM
   person_id: int # The ID of the person whom this call will be logged for
   --sentiment: string # The sentiment of the call. Can be required on a per-team basis. Must be present in the sentiment list.
@@ -643,11 +656,12 @@ export def "activities-callsjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/activities/calls.json")
-  let body = {"action_id": $action_id, "crm_params": $crm_params, "disposition": $disposition, "duration": $duration, "linked_call_data_record_ids": $linked_call_data_record_ids, "notes": $notes, "person_id": $person_id, "sentiment": $sentiment, "to": $body_to, "user_guid": $user_guid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"action_id": $action_id, "crm_params": $crm_params, "disposition": $disposition, "duration": $duration, "linked_call_data_record_ids": $linked_call_data_record_ids, "notes": $notes, "person_id": $person_id, "sentiment": $sentiment, "to": $body_to, "user_guid": $user_guid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetch a call
@@ -666,7 +680,7 @@ export def "activities-calls get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/activities/calls/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/activities/calls/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -675,7 +689,7 @@ export def "activities-calls get" [
 # List emails
 #
 # GET /v2/activities/emails.json
-export def "activities-emailsjson get" [
+export def "activities-emails-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -684,21 +698,21 @@ export def "activities-emailsjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of emails to fetch. If a record can't be found, that record won't be returned and your request will be successful
-  --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --ids: list<int> # IDs of emails to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --updated-at: list<string> # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
   --bounced: oneof<nothing, bool> # Filters emails by whether they have bounced or not
-  --crm-activity-id: list # Filters emails by crm_activity_id. Multiple crm activty ids can be applied
-  --action-id: list # Filters emails by action_id. Multiple action ids can be applied
-  --user-id: list # Filters emails by user_id. Multiple User ids can be applied
-  --status: list # Filters emails by status. Multiple status can be applied, possible values are sent, sent_from_gmail, sent_from_external, pending, pending_reply_check, scheduled, sending, delivering, failed, cancelled, pending_through_gmail, pending_through_external
-  --cadence-id: list # Filters emails by cadence. Multiple cadence ids can be applied
-  --step-id: list # Filters emails by step. Multiple step ids can be applied
+  --crm-activity-id: list<int> # Filters emails by crm_activity_id. Multiple crm activty ids can be applied
+  --action-id: list<int> # Filters emails by action_id. Multiple action ids can be applied
+  --user-id: list<int> # Filters emails by user_id. Multiple User ids can be applied
+  --status: list<string> # Filters emails by status. Multiple status can be applied, possible values are sent, sent_from_gmail, sent_from_external, pending, pending_reply_check, scheduled, sending, delivering, failed, cancelled, pending_through_gmail, pending_through_external
+  --cadence-id: list<int> # Filters emails by cadence. Multiple cadence ids can be applied
+  --step-id: list<int> # Filters emails by step. Multiple step ids can be applied
   --one-off: oneof<nothing, bool> # Filters emails by one-off only
-  --scoped-fields: list # Specify explicit scoped fields desired on the Email Resource.
-  --person-id: list # Filters emails by person_id. Multiple person ids can be applied
-  --email-addresses: list # Filters emails by recipient email address. Multiple emails can be applied.
-  --personalization: list # Filters emails by personalization score
-  --sent-at: list # Equality filters that are applied to the sent_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --scoped-fields: list<string> # Specify explicit scoped fields desired on the Email Resource.
+  --person-id: list<int> # Filters emails by person_id. Multiple person ids can be applied
+  --email-addresses: list<string> # Filters emails by recipient email address. Multiple emails can be applied.
+  --personalization: list<string> # Filters emails by personalization score
+  --sent-at: list<string> # Equality filters that are applied to the sent_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
   --sort-by: string # Key to sort on, must be one of: updated_at, send_time. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
@@ -731,7 +745,7 @@ export def "activities-emails get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/activities/emails/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/activities/emails/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -759,7 +773,7 @@ export def "activity-histories get" [
   --occurred-at: record # Equality filters that are applied to the occurred_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"keys":[{"description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"gt","type":"iso8601 string"},{"description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"gte","type":"iso8601 string"},{"description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"lt","type":"iso8601 string"},{"description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"lte","type":"iso8601 string"}],"type":"object"}
   --pinned: oneof<nothing, bool> # Filter by the pinned status of activity. Must be 'true' or 'false'
   --resource-type: string # Filter by the resource type. A resource is a Salesloft object that the activity is attributed to. A valid resource types must be one of person, account, crm_opportunity. Can be provided as an array
-  --resource-id: list # Filter by the resource id. "resource_type" filter is required to use this filter.
+  --resource-id: list<string> # Filter by the resource id. "resource_type" filter is required to use this filter.
   --updated-at: record # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"keys":[{"description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"gt","type":"iso8601 string"},{"description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"gte","type":"iso8601 string"},{"description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"lt","type":"iso8601 string"},{"description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"lte","type":"iso8601 string"}],"type":"object"}
   --user-guid: string # Filter activities by a user's guid.
 ]: nothing -> any {
@@ -784,7 +798,7 @@ export def "bulk-jobs list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --state: list # The state of the bulk job. Accepts multiple states. Each state must be one of: open, executing, done
+  --state: list<string> # The state of the bulk job. Accepts multiple states. Each state must be one of: open, executing, done
   --id: record # Filter by id using comparison operators. Only supports greater than (gt) comparison (i.e. id[gt]=123)
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
 ]: nothing -> any {
@@ -800,7 +814,7 @@ export def "bulk-jobs list" [
 # Create a bulk job
 #
 # POST /v2/bulk_jobs
-export def "bulk-jobs post" [
+export def "bulk-jobs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -816,11 +830,12 @@ export def "bulk-jobs post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/bulk_jobs")
-  let body = {"name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List job data for a bulk job
@@ -836,14 +851,14 @@ export def "bulk-jobs-job-data get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --status: list # Filter by result status. Accepts multiple statuses. Each status must be one of pending, success, error, retrying
+  --status: list<string> # Filter by result status. Accepts multiple statuses. Each status must be one of pending, success, error, retrying
   --id: record # Filter by id using comparison operators. Only supports greater than (gt) comparison (i.e. id[gt]=123)
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "csv") (serialize-qp "id" $id "multi") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bulk_jobs_id: $bulk_jobs_id} | format pattern "/v2/bulk_jobs/{bulk_jobs_id}/job_data") $qp)
+  let full_url = (build-url $base ({bulk_jobs_id: (encode-path-segment $bulk_jobs_id)} | format pattern "/v2/bulk_jobs/{bulk_jobs_id}/job_data") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -852,7 +867,7 @@ export def "bulk-jobs-job-data get" [
 # Create job data for a bulk job
 #
 # POST /v2/bulk_jobs/{bulk_jobs_id}/job_data
-export def "bulk-jobs-job-data post" [
+export def "bulk-jobs-job-data create" [
   bulk_jobs_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -862,17 +877,18 @@ export def "bulk-jobs-job-data post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  data: list # Array of objects containing parameters to be used to execute an instance of each. Array must be 5,000 records or less.
+  data: list<string> # Array of objects containing parameters to be used to execute an instance of each. Array must be 5,000 records or less.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({bulk_jobs_id: $bulk_jobs_id} | format pattern "/v2/bulk_jobs/{bulk_jobs_id}/job_data"))
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({bulk_jobs_id: (encode-path-segment $bulk_jobs_id)} | format pattern "/v2/bulk_jobs/{bulk_jobs_id}/job_data"))
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List job data for a completed bulk job.
@@ -888,14 +904,14 @@ export def "bulk-jobs-results get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --status: list # Filter by result status. Accepts multiple statuses. Each status must be one of pending, success, error, retrying
+  --status: list<string> # Filter by result status. Accepts multiple statuses. Each status must be one of pending, success, error, retrying
   --id: record # Filter by id using comparison operators. Only supports greater than (gt) comparison (i.e. id[gt]=123)
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "csv") (serialize-qp "id" $id "multi") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({bulk_jobs_id: $bulk_jobs_id} | format pattern "/v2/bulk_jobs/{bulk_jobs_id}/results") $qp)
+  let full_url = (build-url $base ({bulk_jobs_id: (encode-path-segment $bulk_jobs_id)} | format pattern "/v2/bulk_jobs/{bulk_jobs_id}/results") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -917,7 +933,7 @@ export def "bulk-jobs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/bulk_jobs/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/bulk_jobs/{id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -926,7 +942,7 @@ export def "bulk-jobs get" [
 # Update a bulk job
 #
 # PUT /v2/bulk_jobs/{id}
-export def "bulk-jobs put" [
+export def "bulk-jobs update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -942,12 +958,13 @@ export def "bulk-jobs put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/bulk_jobs/{id}"))
-  let body = {"name": $name, "ready_to_execute": $ready_to_execute} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/bulk_jobs/{id}"))
+  let req_body = {"name": $name, "ready_to_execute": $ready_to_execute} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Export a cadence
@@ -966,7 +983,7 @@ export def "cadence-exports get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/cadence_exports/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/cadence_exports/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -975,7 +992,7 @@ export def "cadence-exports get" [
 # Import cadences from JSON
 #
 # POST /v2/cadence_imports.json
-export def "cadence-importsjson post" [
+export def "cadence-imports-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -992,17 +1009,18 @@ export def "cadence-importsjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/cadence_imports.json")
-  let body = {"cadence_content": $cadence_content, "settings": $settings, "sharing_settings": $sharing_settings} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"cadence_content": $cadence_content, "settings": $settings, "sharing_settings": $sharing_settings} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List cadence memberships
 #
 # GET /v2/cadence_memberships.json
-export def "cadence-membershipsjson get" [
+export def "cadence-memberships-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1011,11 +1029,11 @@ export def "cadence-membershipsjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of cadence memberships to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --ids: list<int> # IDs of cadence memberships to fetch. If a record can't be found, that record won't be returned and your request will be successful
   --person-id: int # ID of the person to find cadence memberships for
   --cadence-id: int # ID of the cadence to find cadence memberships for
-  --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
-  --currently-on-cadence: oneof<nothing, bool> # If true, return only cadence memberships for people currently on cadences.  If false, return cadence memberships for people who have been removed from or have completed a cadence.
+  --updated-at: list<string> # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --currently-on-cadence: oneof<nothing, bool> # If true, return only cadence memberships for people currently on cadences. If false, return cadence memberships for people who have been removed from or have completed a cadence.
   --sort-by: string # Key to sort on, must be one of: added_at, updated_at. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
@@ -1035,7 +1053,7 @@ export def "cadence-membershipsjson get" [
 # Create a cadence membership
 #
 # POST /v2/cadence_memberships.json
-export def "cadence-membershipsjson post" [
+export def "cadence-memberships-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1074,7 +1092,7 @@ export def "cadence-memberships delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/cadence_memberships/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/cadence_memberships/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1096,7 +1114,7 @@ export def "cadence-memberships get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/cadence_memberships/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/cadence_memberships/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1105,7 +1123,7 @@ export def "cadence-memberships get" [
 # List cadences
 #
 # GET /v2/cadences.json
-export def "cadencesjson get" [
+export def "cadences-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1114,13 +1132,13 @@ export def "cadencesjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of cadences to fetch. If a record can't be found, that record won't be returned and your request will be successful
-  --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --ids: list<int> # IDs of cadences to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --updated-at: list<string> # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
   --team-cadence: oneof<nothing, bool> # Filters cadences by whether they are a team cadence or not
   --shared: oneof<nothing, bool> # Filters cadences by whether they are shared
-  --owned-by-guid: list # Filters cadences by the owner's guid. Multiple owner guids can be applied
+  --owned-by-guid: list<string> # Filters cadences by the owner's guid. Multiple owner guids can be applied
   --people-addable: oneof<nothing, bool> # Filters cadences by whether they are able to have people added to them
-  --name: list # Filters cadences by name
+  --name: list<string> # Filters cadences by name
   --group-ids: string # Filters by group ids. Also supports group ids passed in as a JSON array string
   --archived: oneof<nothing, bool> # Filters by whether the Cadences have been archived. Excluding this field will result in both archived and unarchived Cadences to return.
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at, name. Defaults to updated_at
@@ -1155,7 +1173,7 @@ export def "cadences get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/cadences/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/cadences/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1178,8 +1196,8 @@ export def "calendar-events get" [
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --sort-by: string # Key to sort on, must be one of: start_time. Defaults to start_time
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
-  --start-time: string # Lower bound (inclusive) for a calendar event's end time to filter by. Must be in ISO 8601 format.  Example: `2022-02-14T10:12:59+00:00`.
-  --end-time: string # Upper bound (exclusive) for a calendar event's start time to filter by. Must be in ISO 8601 format.  Example: `2022-02-14T10:12:59+00:00`.
+  --start-time: string # Lower bound (inclusive) for a calendar event's end time to filter by. Must be in ISO 8601 format. Example: `2022-02-14T10:12:59+00:00`.
+  --end-time: string # Upper bound (exclusive) for a calendar event's start time to filter by. Must be in ISO 8601 format. Example: `2022-02-14T10:12:59+00:00`.
   --user-guid: string # user_guid of the user who created or included as a guest to the event.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1194,7 +1212,7 @@ export def "calendar-events get" [
 # Upsert a calendar event
 #
 # POST /v2/calendar/events/upsert
-export def "calendar-events-upsert post" [
+export def "calendar-events-upsert create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1204,35 +1222,36 @@ export def "calendar-events-upsert post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --all-day: oneof<nothing, bool> # Should be set to `true` for all day calendar events.
-  --attendees: record #   List of attendees of the calendar event.   Example:   ```     {       ...       "attendees": [         {           "name": "Alice",           "email": "alice@example.com",           "status": "accepted",           "organizer": true         },         {           "name": "Bob",           "email": "bob@example.com",           "status": "needsAction",           "organizer": false         }       ]     }   ```   `name`: full name of the attendee    `email`: email address of the attendee    `status`: one of the following - needsAction, accepted, tentative, declined    `organizer`: whether the attendee is the organizer of the calendar event
-  calendar_id: string #   Calendar ID of the calendar event owner.   For the External Calendar connection use `external_{salesloft_user_guid}` format.   Example: `external_00210d1a-df8a-459f-af75-89b953b618b0`.
-  --canceled-at: string #   Cancellation time of the calendar event, as a combined date-time value in the ISO 8601 format with a time zone offset.   Example: `2022-02-14T10:12:59+00:00`.
+  --attendees: record # List of attendees of the calendar event. Example: ``` { ... "attendees": [ { "name": "Alice", "email": "alice@example.com", "status": "accepted", "organizer": true }, { "name": "Bob", "email": "bob@example.com", "status": "needsAction", "organizer": false } ] } ``` `name`: full name of the attendee `email`: email address of the attendee `status`: one of the following - needsAction, accepted, tentative, declined `organizer`: whether the attendee is the organizer of the calendar event
+  calendar_id: string # Calendar ID of the calendar event owner. For the External Calendar connection use `external_{salesloft_user_guid}` format. Example: `external_00210d1a-df8a-459f-af75-89b953b618b0`.
+  --canceled-at: string # Cancellation time of the calendar event, as a combined date-time value in the ISO 8601 format with a time zone offset. Example: `2022-02-14T10:12:59+00:00`.
   --description: string # Description of the calendar event
-  end_time: string #   End time of the calendar event, as a combined date-time value in the ISO 8601 format with a time zone offset.   Example: `2022-02-14T10:12:59+00:00`.  (format: date)
-  i_cal_uid: string #   icalUID of the calendar event. Unique identifier for a calendar event across calendars.    Used as an upsert key.
-  id: string #   Id of the calendar event, different for each occurrence in a recurring series.    Used as an upsert key.
+  end_time: string # End time of the calendar event, as a combined date-time value in the ISO 8601 format with a time zone offset. Example: `2022-02-14T10:12:59+00:00`. (format: date)
+  i_cal_uid: string # icalUID of the calendar event. Unique identifier for a calendar event across calendars. Used as an upsert key.
+  id: string # Id of the calendar event, different for each occurrence in a recurring series. Used as an upsert key.
   --location: string # Location of the calendar event as free-form text.
-  --organizer: string #   Email address of the organizer
+  --organizer: string # Email address of the organizer
   --recurring: oneof<nothing, bool> # Should be set to `true` if this is one of recurring series calendar event.
-  start_time: string #   Start time of the calendar event, as a combined date-time value in the ISO 8601 format with a time zone offset.   Example: `2022-02-14T10:12:59+00:00`.  (format: date)
-  --status: string #   Status of the calendar event. Depending on the status, the calendar event will or will not impact user's availability.   Possible values: `confirmed`, `tentative`, `cancelled`.   Example: `confirmed`.
+  start_time: string # Start time of the calendar event, as a combined date-time value in the ISO 8601 format with a time zone offset. Example: `2022-02-14T10:12:59+00:00`. (format: date)
+  --status: string # Status of the calendar event. Depending on the status, the calendar event will or will not impact user's availability. Possible values: `confirmed`, `tentative`, `cancelled`. Example: `confirmed`.
   --title: string # Title of the calendar event
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/calendar/events/upsert")
-  let body = {"all_day": $all_day, "attendees": $attendees, "calendar_id": $calendar_id, "canceled_at": $canceled_at, "description": $description, "end_time": $end_time, "i_cal_uid": $i_cal_uid, "id": $id, "location": $location, "organizer": $organizer, "recurring": $recurring, "start_time": $start_time, "status": $status, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"all_day": $all_day, "attendees": $attendees, "calendar_id": $calendar_id, "canceled_at": $canceled_at, "description": $description, "end_time": $end_time, "i_cal_uid": $i_cal_uid, "id": $id, "location": $location, "organizer": $organizer, "recurring": $recurring, "start_time": $start_time, "status": $status, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List call data records
 #
 # GET /v2/call_data_records.json
-export def "call-data-recordsjson get" [
+export def "call-data-records-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1241,12 +1260,12 @@ export def "call-data-recordsjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of call data records to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --ids: list<int> # IDs of call data records to fetch. If a record can't be found, that record won't be returned and your request will be successful
   --has-call: oneof<nothing, bool> # Return only call data records which have or do not have a call logged for them
-  --created-at: list # Equality filters that are applied to the created_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
-  --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
-  --user-guid: list # Filters list to only include guids
-  --person-id: list # Filters list by person_id. Multiple person ids can be applied
+  --created-at: list<string> # Equality filters that are applied to the created_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --updated-at: list<string> # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --user-guid: list<string> # Filters list to only include guids
+  --person-id: list<int> # Filters list by person_id. Multiple person ids can be applied
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
@@ -1279,7 +1298,7 @@ export def "call-data-records get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/call_data_records/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/call_data_records/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1288,7 +1307,7 @@ export def "call-data-records get" [
 # List call dispositions
 #
 # GET /v2/call_dispositions.json
-export def "call-dispositionsjson get" [
+export def "call-dispositions-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1316,7 +1335,7 @@ export def "call-dispositionsjson get" [
 # List call sentiments
 #
 # GET /v2/call_sentiments.json
-export def "call-sentimentsjson get" [
+export def "call-sentiments-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1345,7 +1364,7 @@ export def "call-sentimentsjson get" [
 # Create Conversations Call
 #
 # POST /v2/conversations/calls
-export def "conversations-calls post" [
+export def "conversations-calls create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1359,24 +1378,25 @@ export def "conversations-calls post" [
   duration: float # Duration of call in seconds
   --body-from: string # Phone number that call was made from
   recording: record # Object containing recording info including the audio file (.mp3, .wav, .ogg, .m4a)
-  --body-to: string #  Phone number that was called
+  --body-to: string # Phone number that was called
   --user-guid: string # Guid of the Salesloft User to assign the call to. If not provided, will default to the user within the authentication token
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/conversations/calls")
-  let body = {"call_created_at": $call_created_at, "direction": $direction, "duration": $duration, "from": $body_from, "recording": $recording, "to": $body_to, "user_guid": $user_guid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"call_created_at": $call_created_at, "direction": $direction, "duration": $duration, "from": $body_from, "recording": $recording, "to": $body_to, "user_guid": $user_guid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List crm activities
 #
 # GET /v2/crm_activities.json
-export def "crm-activitiesjson get" [
+export def "crm-activities-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1385,8 +1405,8 @@ export def "crm-activitiesjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of crm activities to fetch.
-  --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --ids: list<int> # IDs of crm activities to fetch.
+  --updated-at: list<string> # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
@@ -1419,7 +1439,7 @@ export def "crm-activities get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/crm_activities/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/crm_activities/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1428,7 +1448,7 @@ export def "crm-activities get" [
 # List crm activity fields
 #
 # GET /v2/crm_activity_fields.json
-export def "crm-activity-fieldsjson get" [
+export def "crm-activity-fields-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1457,7 +1477,7 @@ export def "crm-activity-fieldsjson get" [
 # List crm users
 #
 # GET /v2/crm_users.json
-export def "crm-usersjson get" [
+export def "crm-users-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1466,10 +1486,10 @@ export def "crm-usersjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of crm users to fetch. If a record can't be found, that record won't be returned and your request will be successful
-  --crm-id: list # Filters crm users by crm_ids
-  --user-id: list # Filters crm users by user_ids
-  --user-guid: list # Filters crm users by user guids
+  --ids: list<int> # IDs of crm users to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --crm-id: list<string> # Filters crm users by crm_ids
+  --user-id: list<int> # Filters crm users by user_ids
+  --user-guid: list<string> # Filters crm users by user guids
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
@@ -1489,7 +1509,7 @@ export def "crm-usersjson get" [
 # List custom fields
 #
 # GET /v2/custom_fields.json
-export def "custom-fieldsjson get" [
+export def "custom-fields-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1498,7 +1518,7 @@ export def "custom-fieldsjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of custom fields to fetch.
+  --ids: list<int> # IDs of custom fields to fetch.
   --field-type: string # Type of field to fetch. Value must be one of: person, company, opportunity
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at, name. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
@@ -1519,7 +1539,7 @@ export def "custom-fieldsjson get" [
 # Create a custom field
 #
 # POST /v2/custom_fields.json
-export def "custom-fieldsjson post" [
+export def "custom-fields-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1535,11 +1555,12 @@ export def "custom-fieldsjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/custom_fields.json")
-  let body = {"field_type": $field_type, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"field_type": $field_type, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a custom field
@@ -1558,7 +1579,7 @@ export def "custom-fields delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/custom_fields/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/custom_fields/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1580,7 +1601,7 @@ export def "custom-fields get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/custom_fields/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/custom_fields/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1589,7 +1610,7 @@ export def "custom-fields get" [
 # Update a custom field
 #
 # PUT /v2/custom_fields/{id}.json
-export def "custom-fields put" [
+export def "custom-fields update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1605,18 +1626,19 @@ export def "custom-fields put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/custom_fields/{id}.json"))
-  let body = {"field_type": $field_type, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/custom_fields/{id}.json"))
+  let req_body = {"field_type": $field_type, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List email template attachments
 #
 # GET /v2/email_template_attachments.json
-export def "email-template-attachmentsjson get" [
+export def "email-template-attachments-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1625,8 +1647,8 @@ export def "email-template-attachmentsjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of email template attachments to fetch. If a record can't be found, that record won't be returned and your request will be successful
-  --email-template-id: list # Filters email template attachments by email template IDs
+  --ids: list<int> # IDs of email template attachments to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --email-template-id: list<int> # Filters email template attachments by email template IDs
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
@@ -1644,7 +1666,7 @@ export def "email-template-attachmentsjson get" [
 # List email templates
 #
 # GET /v2/email_templates.json
-export def "email-templatesjson get" [
+export def "email-templates-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1653,17 +1675,17 @@ export def "email-templatesjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of email templates to fetch. If a record can't be found, that record won't be returned and your request will be successful
-  --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --ids: list<int> # IDs of email templates to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --updated-at: list<string> # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
   --linked-to-team-template: oneof<nothing, bool> # Filters email templates by whether they are linked to a team template or not
   --search: string # Filters email templates by title or subject
-  --tag-ids: list # Filters email templates by tags applied to the template by tag ID, not to exceed 100 IDs
-  --tag: list # Filters email templates by tags applied to the template, not to exceed 100 tags
+  --tag-ids: list<int> # Filters email templates by tags applied to the template by tag ID, not to exceed 100 IDs
+  --tag: list<string> # Filters email templates by tags applied to the template, not to exceed 100 tags
   --filter-by-owner: oneof<nothing, bool> # Filters email templates by current authenticated user
-  --group-id: list # Filters email templates by groups applied to the template by group ID. Not to exceed 500 IDs. Returns templates that are assigned to any of the group ids.
+  --group-id: list<int> # Filters email templates by groups applied to the template by group ID. Not to exceed 500 IDs. Returns templates that are assigned to any of the group ids.
   --include-cadence-templates: oneof<nothing, bool> # Filters email templates based on whether or not the template has been used on a cadence
   --include-archived-templates: oneof<nothing, bool> # Filters email templates to include archived templates or not
-  --cadence-id: list # Filters email templates to those belonging to the cadence. Not to exceed 100 IDs. If a record can't be found, that record won't be returned and your request will be successful
+  --cadence-id: list<int> # Filters email templates to those belonging to the cadence. Not to exceed 100 IDs. If a record can't be found, that record won't be returned and your request will be successful
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at, last_used_at. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
@@ -1698,7 +1720,7 @@ export def "email-templates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_signature" $include_signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/email_templates/{id}.json") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/email_templates/{id}.json") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1707,7 +1729,7 @@ export def "email-templates get" [
 # Create an External Email
 #
 # POST /v2/external_emails.json
-export def "external-emailsjson post" [
+export def "external-emails-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1723,17 +1745,18 @@ export def "external-emailsjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/external_emails.json")
-  let body = {"mailbox": $mailbox, "raw": $body_raw} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"mailbox": $mailbox, "raw": $body_raw} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List groups
 #
 # GET /v2/groups.json
-export def "groupsjson get" [
+export def "groups-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1742,7 +1765,7 @@ export def "groupsjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of groups to fetch.
+  --ids: list<int> # IDs of groups to fetch.
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
 ]: nothing -> any {
@@ -1771,7 +1794,7 @@ export def "groups get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/groups/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/groups/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1780,7 +1803,7 @@ export def "groups get" [
 # List imports
 #
 # GET /v2/imports.json
-export def "importsjson get" [
+export def "imports-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1789,8 +1812,8 @@ export def "importsjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of imports to fetch. If a record can't be found, that record won't be returned and your request will be successful
-  --user-ids: list # ID of users to fetch imports for. Using this filter will return an empty array for non-admin users who request other user's imports
+  --ids: list<int> # IDs of imports to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --user-ids: list<int> # ID of users to fetch imports for. Using this filter will return an empty array for non-admin users who request other user's imports
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at. Defaults to created_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
@@ -1810,7 +1833,7 @@ export def "importsjson get" [
 # Create an import
 #
 # POST /v2/imports.json
-export def "importsjson post" [
+export def "imports-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1826,11 +1849,12 @@ export def "importsjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/imports.json")
-  let body = {"name": $name, "user_id": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete an import
@@ -1846,12 +1870,12 @@ export def "imports delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --undo: string # Whether to delete people on this Import. Possible values are: [not present], all, single.  'single' will delete people who are only present in this Import. 'all' will delete people even if they are present in other Imports. Not specifying this parameter will not delete any people
+  --undo: string # Whether to delete people on this Import. Possible values are: [not present], all, single. 'single' will delete people who are only present in this Import. 'all' will delete people even if they are present in other Imports. Not specifying this parameter will not delete any people
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "undo" $undo "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/imports/{id}.json") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/imports/{id}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1873,7 +1897,7 @@ export def "imports get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/imports/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/imports/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1882,7 +1906,7 @@ export def "imports get" [
 # Update an import
 #
 # PUT /v2/imports/{id}.json
-export def "imports put" [
+export def "imports update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1898,18 +1922,19 @@ export def "imports put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/imports/{id}.json"))
-  let body = {"name": $name, "user_id": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/imports/{id}.json"))
+  let req_body = {"name": $name, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Create an Live Website Tracking Parameter
 #
 # POST /v2/live_website_tracking_parameters.json
-export def "live-website-tracking-parametersjson post" [
+export def "live-website-tracking-parameters-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1924,17 +1949,18 @@ export def "live-website-tracking-parametersjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/live_website_tracking_parameters.json")
-  let body = {"person_id": $person_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"person_id": $person_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetch current user
 #
 # GET /v2/me.json
-export def "mejson get" [
+export def "me-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1955,7 +1981,7 @@ export def "mejson get" [
 # List meetings
 #
 # GET /v2/meetings.json
-export def "meetingsjson get" [
+export def "meetings-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1964,17 +1990,17 @@ export def "meetingsjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of meetings to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --ids: list<int> # IDs of meetings to fetch. If a record can't be found, that record won't be returned and your request will be successful
   --status: string # Filters meetings by status. Possible values are: pending, booked, failed, retry
   --person-id: string # Filters meetings by person_id. Multiple person ids can be applied
   --account-id: string # Filters meetings by account_id. Multiple account ids can be applied
-  --person-ids: list # Filters meetings by person_id. Multiple person ids can be applied
-  --event-ids: list # Filters meetings by event IDs
-  --i-cal-uids: list # Filters meetings by UIDs provided by calendar provider
-  --task-ids: list # Filters meetings by task_id. Multiple task ids can be applied
+  --person-ids: list<int> # Filters meetings by person_id. Multiple person ids can be applied
+  --event-ids: list<int> # Filters meetings by event IDs
+  --i-cal-uids: list<string> # Filters meetings by UIDs provided by calendar provider
+  --task-ids: list<int> # Filters meetings by task_id. Multiple task ids can be applied
   --include-meetings-settings: oneof<nothing, bool> # Flag to indicate whether to include owned_by_meetings_settings and booked_by_meetings_settings objects
-  --start-time: list # Equality filters that are applied to the start_time field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
-  --user-guids: list # Filters meetings by user_guid. Multiple user guids can be applied
+  --start-time: list<string> # Equality filters that are applied to the start_time field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --user-guids: list<string> # Filters meetings by user_guid. Multiple user guids can be applied
   --show-deleted: oneof<nothing, bool> # Whether to include deleted events in the result
   --sort-by: string # Key to sort on, must be one of: start_time, created_at, updated_at. Defaults to start_time
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
@@ -1995,7 +2021,7 @@ export def "meetingsjson get" [
 # List meeting settings
 #
 # POST /v2/meetings/settings/searches.json
-export def "meetings-settings-searchesjson post" [
+export def "meetings-settings-searches-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2004,8 +2030,8 @@ export def "meetings-settings-searchesjson post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-guids: list # Filters meeting settings by array of user_guids
-  --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --user-guids: list<string> # Filters meeting settings by array of user_guids
+  --updated-at: list<string> # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
   --calendar-type: string # Filters meeting settings by calendar type
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
@@ -2024,7 +2050,7 @@ export def "meetings-settings-searchesjson post" [
 # Update a meeting setting
 #
 # PUT /v2/meetings/settings/{id}.json
-export def "meetings-settings put" [
+export def "meetings-settings update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2059,18 +2085,19 @@ export def "meetings-settings put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/meetings/settings/{id}.json"))
-  let body = {"allow_booking_on_behalf": $allow_booking_on_behalf, "allow_booking_overtime": $allow_booking_overtime, "allow_event_overlap": $allow_event_overlap, "availability_limit": $availability_limit, "availability_limit_enabled": $availability_limit_enabled, "buffer_time_duration": $buffer_time_duration, "calendar_type": $calendar_type, "default_meeting_length": $default_meeting_length, "description": $description, "enable_calendar_sync": $enable_calendar_sync, "enable_dynamic_location": $enable_dynamic_location, "location": $location, "primary_calendar_connection_failed": $primary_calendar_connection_failed, "primary_calendar_id": $primary_calendar_id, "primary_calendar_name": $primary_calendar_name, "schedule_buffer_enabled": $schedule_buffer_enabled, "schedule_delay": $schedule_delay, "share_event_detail": $share_event_detail, "time_zone": $time_zone, "times_available": $times_available, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/meetings/settings/{id}.json"))
+  let req_body = {"allow_booking_on_behalf": $allow_booking_on_behalf, "allow_booking_overtime": $allow_booking_overtime, "allow_event_overlap": $allow_event_overlap, "availability_limit": $availability_limit, "availability_limit_enabled": $availability_limit_enabled, "buffer_time_duration": $buffer_time_duration, "calendar_type": $calendar_type, "default_meeting_length": $default_meeting_length, "description": $description, "enable_calendar_sync": $enable_calendar_sync, "enable_dynamic_location": $enable_dynamic_location, "location": $location, "primary_calendar_connection_failed": $primary_calendar_connection_failed, "primary_calendar_id": $primary_calendar_id, "primary_calendar_name": $primary_calendar_name, "schedule_buffer_enabled": $schedule_buffer_enabled, "schedule_delay": $schedule_delay, "share_event_detail": $share_event_detail, "time_zone": $time_zone, "times_available": $times_available, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Update a meeting
 #
 # PUT /v2/meetings/{id}.json
-export def "meetings put" [
+export def "meetings update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2088,12 +2115,13 @@ export def "meetings put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/meetings/{id}.json"))
-  let body = {"event_id": $event_id, "i_cal_uid": $i_cal_uid, "no_show": $no_show, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/meetings/{id}.json"))
+  let req_body = {"event_id": $event_id, "i_cal_uid": $i_cal_uid, "no_show": $no_show, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetch the MIME content for email
@@ -2112,7 +2140,7 @@ export def "mime-email-payloads get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/mime_email_payloads/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/mime_email_payloads/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2121,7 +2149,7 @@ export def "mime-email-payloads get" [
 # List notes
 #
 # GET /v2/notes.json
-export def "notesjson get" [
+export def "notes-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2130,10 +2158,10 @@ export def "notesjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --associated-with-type: string # Case insensitive type of item with which the note is associated.  Value must be one of: person, account
-  --associated-with-id: int # ID of the item with which the note is associated.  The associated_with_type must also be present if this parameter is used
-  --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
-  --ids: list # IDs of notes to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --associated-with-type: string # Case insensitive type of item with which the note is associated. Value must be one of: person, account
+  --associated-with-id: int # ID of the item with which the note is associated. The associated_with_type must also be present if this parameter is used
+  --updated-at: list<string> # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --ids: list<int> # IDs of notes to fetch. If a record can't be found, that record won't be returned and your request will be successful
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
@@ -2153,7 +2181,7 @@ export def "notesjson get" [
 # Create a note
 #
 # POST /v2/notes.json
-export def "notesjson post" [
+export def "notes-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2163,10 +2191,10 @@ export def "notesjson post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   associated_with_id: int # ID of the item with which the note is associated
-  associated_with_type: string # Case insensitive type of item with which the note is associated.  Value must be one of: person, account
+  associated_with_type: string # Case insensitive type of item with which the note is associated. Value must be one of: person, account
   --call-id: int # ID of the call with which the note is associated. The call cannot already have a note
   content: string # The content of the note
-  --skip-crm-sync: oneof<nothing, bool> # Boolean indicating if the CRM sync should be skipped.  No syncing will occur if true
+  --skip-crm-sync: oneof<nothing, bool> # Boolean indicating if the CRM sync should be skipped. No syncing will occur if true
   --subject: string # The subject of the note's crm activity, defaults to 'Note'
   --user-guid: string # The user to create the note for. Only team admins may create notes on behalf of other users. Defaults to the requesting user
 ]: any -> any {
@@ -2174,11 +2202,12 @@ export def "notesjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/notes.json")
-  let body = {"associated_with_id": $associated_with_id, "associated_with_type": $associated_with_type, "call_id": $call_id, "content": $content, "skip_crm_sync": $skip_crm_sync, "subject": $subject, "user_guid": $user_guid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"associated_with_id": $associated_with_id, "associated_with_type": $associated_with_type, "call_id": $call_id, "content": $content, "skip_crm_sync": $skip_crm_sync, "subject": $subject, "user_guid": $user_guid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a note
@@ -2197,7 +2226,7 @@ export def "notes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/notes/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/notes/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2219,7 +2248,7 @@ export def "notes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/notes/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/notes/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2228,7 +2257,7 @@ export def "notes get" [
 # Update a note
 #
 # PUT /v2/notes/{id}.json
-export def "notes put" [
+export def "notes update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2244,18 +2273,19 @@ export def "notes put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/notes/{id}.json"))
-  let body = {"call_id": $call_id, "content": $content} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/notes/{id}.json"))
+  let req_body = {"call_id": $call_id, "content": $content} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Create an ongoing action
 #
 # POST /v2/ongoing_actions.json
-export def "ongoing-actionsjson post" [
+export def "ongoing-actions-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2270,17 +2300,18 @@ export def "ongoing-actionsjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/ongoing_actions.json")
-  let body = {"action_id": $action_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"action_id": $action_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetches a list of emails ready to be sent by an external email service. Only emails sent with an External Email Client will appear here.
 #
 # GET /v2/pending_emails.json
-export def "pending-emailsjson get" [
+export def "pending-emails-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2306,7 +2337,7 @@ export def "pending-emailsjson get" [
 # Updates the status of an email sent by an External Email Client
 #
 # PUT /v2/pending_emails/{id}.json
-export def "pending-emails put" [
+export def "pending-emails update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2319,23 +2350,24 @@ export def "pending-emails put" [
   --error-message: string # The error message indicating why the email failed to send
   message_id: string # The message id of the email that was sent
   --sent-at: string # The time that the email was actually sent in iso8601 format
-  status: string # Delivery status of the email.  Valid statuses are 'sent' and 'failed'
+  status: string # Delivery status of the email. Valid statuses are 'sent' and 'failed'
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/pending_emails/{id}.json"))
-  let body = {"error_message": $error_message, "message_id": $message_id, "sent_at": $sent_at, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/pending_emails/{id}.json"))
+  let req_body = {"error_message": $error_message, "message_id": $message_id, "sent_at": $sent_at, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List people
 #
 # GET /v2/people.json
-export def "peoplejson get" [
+export def "people-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2344,39 +2376,39 @@ export def "peoplejson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of people to fetch. If a record can't be found, that record won't be returned and your request will be successful
-  --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
-  --email-addresses: list # Filters people by email address. Multiple emails can be applied. An additional value of "_is_null" can be passed to filter people that do not have an email address.
-  --owned-by-guid: list # Filters people by the owner's guid. Multiple owner guids can be applied
-  --person-stage-id: list # Includes people that have a given person_stage. Multiple person stage ids can be applied. An additional value of "_is_null" can be passed to filter people that do not have a stage set.
-  --crm-id: list # Filters people by crm_id. Multiple crm ids can be applied
-  --owner-crm-id: list # Filters people by owner_crm_id. Multiple owner_crm_ids can be applied. An additional value of "_is_null" can be passed to filter people that are unowned. A "_not_in" modifier can be used to exclude specific owner_crm_ids. Example: v2/people?owner_crm_id[_not_in]=id
+  --ids: list<int> # IDs of people to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --updated-at: list<string> # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --email-addresses: list<string> # Filters people by email address. Multiple emails can be applied. An additional value of "_is_null" can be passed to filter people that do not have an email address.
+  --owned-by-guid: list<string> # Filters people by the owner's guid. Multiple owner guids can be applied
+  --person-stage-id: list<int> # Includes people that have a given person_stage. Multiple person stage ids can be applied. An additional value of "_is_null" can be passed to filter people that do not have a stage set.
+  --crm-id: list<string> # Filters people by crm_id. Multiple crm ids can be applied
+  --owner-crm-id: list<string> # Filters people by owner_crm_id. Multiple owner_crm_ids can be applied. An additional value of "_is_null" can be passed to filter people that are unowned. A "_not_in" modifier can be used to exclude specific owner_crm_ids. Example: v2/people?owner_crm_id[_not_in]=id
   --do-not-contact: oneof<nothing, bool> # Includes people that have a given do_not_contact property
   --can-email: oneof<nothing, bool> # Includes people that can be emailed given do_not_contact and contact_restrictions property
   --can-call: oneof<nothing, bool> # Includes people that can be called given do_not_contact and contact_restrictions property
   --can-text: oneof<nothing, bool> # Includes people that can be sent a text message given do_not_contact and contact_restrictions property
-  --account-id: list # Filters people by the account they are linked to. Multiple account ids can be applied
+  --account-id: list<int> # Filters people by the account they are linked to. Multiple account ids can be applied
   --custom-fields: record # Filters by people matching all given custom fields. The custom field names are case-sensitive, but the provided values are case-insensitive. Example: v2/people?custom_fields[custom_field_name]=custom_field_value
-  --import-id: list # Filters people that were imported by the given import ids. Multiple import ids can be applied. An additional value of "_is_null" can be passed to filter people that were not imported.
-  --job-seniority: list # Filters people by job seniorty. Multiple job seniorities can be applied. An additional value of "_is_null" can be passed to filter people do not have a job_seniority.
-  --tag-id: list # Filters people by the tag ids applied to the person. Multiple tag ids can be applied.
+  --import-id: list<int> # Filters people that were imported by the given import ids. Multiple import ids can be applied. An additional value of "_is_null" can be passed to filter people that were not imported.
+  --job-seniority: list<string> # Filters people by job seniorty. Multiple job seniorities can be applied. An additional value of "_is_null" can be passed to filter people do not have a job_seniority.
+  --tag-id: list<int> # Filters people by the tag ids applied to the person. Multiple tag ids can be applied.
   --owner-is-active: oneof<nothing, bool> # Filters people by whether the owner is active or not.
-  --cadence-id: list # Filters people by the cadence that they are currently on. Multiple cadence_ids can be applied. An additional value of "_is_null" can be passed to filter people that are not on a cadence.
-  --starred-by-guid: list # Filters people who have been starred by the user guids given.
+  --cadence-id: list<int> # Filters people by the cadence that they are currently on. Multiple cadence_ids can be applied. An additional value of "_is_null" can be passed to filter people that are not on a cadence.
+  --starred-by-guid: list<string> # Filters people who have been starred by the user guids given.
   --replied: oneof<nothing, bool> # Filters people by whether or not they have replied to an email or not.
   --bounced: oneof<nothing, bool> # Filters people by whether an email that was sent to them bounced or not.
   --success: oneof<nothing, bool> # Filters people by whether or not they have been marked as a success or not.
   --eu-resident: oneof<nothing, bool> # Filters people by whether or not they are marked as an European Union Resident or not.
-  --title: list # Filters people by their title by exact match. Supports partial matching
-  --country: list # Filters people by their country by exact match. Supports partial matching
-  --state: list # Filters people by their state by exact match. Supports partial matching
-  --city: list # Filters people by their city by exact match. Supports partial matching
+  --title: list<string> # Filters people by their title by exact match. Supports partial matching
+  --country: list<string> # Filters people by their country by exact match. Supports partial matching
+  --state: list<string> # Filters people by their state by exact match. Supports partial matching
+  --city: list<string> # Filters people by their city by exact match. Supports partial matching
   --last-contacted: record # Equality filters that are applied to the last_contacted field. A single filter can be used by itself or combined with other filters to create a range. Additional values of "_is_null" or "_is_not_null" can be passed to filter records that either have no timestamp value or any timestamp value. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
-  --created-at: record # Equality filters that are applied to the last_contacted field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --created-at: record # Equality filters that are applied to the last_contacted field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
   --new: oneof<nothing, bool> # Filters people by whether or not that person is on a cadence or if they have been contacted in any way.
   --phone-number: oneof<nothing, bool> # Filter people by whether or not they have a phone number or not
-  --locales: list # Filters people by locales. Multiple locales can be applied. An additional value of "Null" can be passed to filter people that do not have a locale.
-  --owner-id: list # Filters people by owner_id. Multiple owner_ids can be applied.
+  --locales: list<string> # Filters people by locales. Multiple locales can be applied. An additional value of "Null" can be passed to filter people that do not have a locale.
+  --owner-id: list<int> # Filters people by owner_id. Multiple owner_ids can be applied.
   --query: string # For internal use only. This field does not comply with our backwards compatibility policies. This filter is for authenticated users of Salesloft only and will not work for OAuth Applications. Filters people by the string provided. Can search and filter by name, title, industry, email_address and linked account name.
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at, last_contacted_at, name, title, job_seniority, call_count, sent_emails, clicked_emails, replied_emails, viewed_emails, account, cadence_stage_name. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
@@ -2397,7 +2429,7 @@ export def "peoplejson get" [
 # Create a person
 #
 # POST /v2/people.json
-export def "peoplejson post" [
+export def "people-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2409,9 +2441,9 @@ export def "peoplejson post" [
   --account-id: int # ID of the Account to link this person to
   --autotag-date: oneof<nothing, bool> # Whether the date should be added to this person as a tag. Default is false. The tag will be Y-m-d format.
   --city: string # City
-  --contact-restrictions: list # Specific methods of communication to prevent for this person. This will prevent individual execution of these communication types as well as automatically skip cadence steps of this communication type for this person in SalesLoft. Values currently accepted: call, email, message
+  --contact-restrictions: list<string> # Specific methods of communication to prevent for this person. This will prevent individual execution of these communication types as well as automatically skip cadence steps of this communication type for this person in SalesLoft. Values currently accepted: call, email, message
   --country: string # Country
-  --crm-id: string # Requires Salesforce.  ID of the person in your external CRM. You must provide a crm_id_type if this is included.  Validations will be applied to the crm_id depending on the crm_id_type. A "salesforce" ID must be exactly 18 characters. A "salesforce" ID must be either a Lead (00Q) or Contact (003) object. The type will be validated using the 18 character ID.  This field can only be used if your application or API key has the "person:set_crm_id" scope. 
+  --crm-id: string # Requires Salesforce. ID of the person in your external CRM. You must provide a crm_id_type if this is included. Validations will be applied to the crm_id depending on the crm_id_type. A "salesforce" ID must be exactly 18 characters. A "salesforce" ID must be either a Lead (00Q) or Contact (003) object. The type will be validated using the 18 character ID. This field can only be used if your application or API key has the "person:set_crm_id" scope.
   --crm-id-type: string # The CRM that the provided crm_id is for. Must be one of: salesforce
   --custom-fields: record # Custom fields are defined by the user's team. Only fields with values are presented in the API.
   --do-not-contact: oneof<nothing, bool> # Whether or not this person has opted out of all communication. Setting this value to true prevents this person from being called, emailed, or added to a cadence in SalesLoft. If this person is currently in a cadence, they will be removed.
@@ -2435,7 +2467,7 @@ export def "peoplejson post" [
   --phone-extension: string # Phone extension without formatting
   --secondary-email-address: string # Alternate email address
   --state: string # State
-  --tags: list # All tags applied to this person
+  --tags: list<string> # All tags applied to this person
   --title: string # Job title
   --twitter-handle: string # The twitter handle of this person
   --work-city: string # Work location - city
@@ -2446,11 +2478,12 @@ export def "peoplejson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/people.json")
-  let body = {"account_id": $account_id, "autotag_date": $autotag_date, "city": $city, "contact_restrictions": $contact_restrictions, "country": $country, "crm_id": $crm_id, "crm_id_type": $crm_id_type, "custom_fields": $custom_fields, "do_not_contact": $do_not_contact, "email_address": $email_address, "first_name": $first_name, "home_phone": $home_phone, "import_id": $import_id, "job_seniority": $job_seniority, "last_name": $last_name, "linkedin_url": $linkedin_url, "locale": $locale, "mobile_phone": $mobile_phone, "owner_id": $owner_id, "person_company_industry": $person_company_industry, "person_company_name": $person_company_name, "person_company_website": $person_company_website, "person_stage_id": $person_stage_id, "personal_email_address": $personal_email_address, "personal_website": $personal_website, "phone": $phone, "phone_extension": $phone_extension, "secondary_email_address": $secondary_email_address, "state": $state, "tags": $tags, "title": $title, "twitter_handle": $twitter_handle, "work_city": $work_city, "work_country": $work_country, "work_state": $work_state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account_id": $account_id, "autotag_date": $autotag_date, "city": $city, "contact_restrictions": $contact_restrictions, "country": $country, "crm_id": $crm_id, "crm_id_type": $crm_id_type, "custom_fields": $custom_fields, "do_not_contact": $do_not_contact, "email_address": $email_address, "first_name": $first_name, "home_phone": $home_phone, "import_id": $import_id, "job_seniority": $job_seniority, "last_name": $last_name, "linkedin_url": $linkedin_url, "locale": $locale, "mobile_phone": $mobile_phone, "owner_id": $owner_id, "person_company_industry": $person_company_industry, "person_company_name": $person_company_name, "person_company_website": $person_company_website, "person_stage_id": $person_stage_id, "personal_email_address": $personal_email_address, "personal_website": $personal_website, "phone": $phone, "phone_extension": $phone_extension, "secondary_email_address": $secondary_email_address, "state": $state, "tags": $tags, "title": $title, "twitter_handle": $twitter_handle, "work_city": $work_city, "work_country": $work_country, "work_state": $work_state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a person
@@ -2469,7 +2502,7 @@ export def "people delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/people/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/people/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2491,7 +2524,7 @@ export def "people get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/people/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/people/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2500,7 +2533,7 @@ export def "people get" [
 # Update a person
 #
 # PUT /v2/people/{id}.json
-export def "people put" [
+export def "people update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2512,9 +2545,9 @@ export def "people put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: int # ID of the Account to link this person to
   --city: string # City
-  --contact-restrictions: list # Specific methods of communication to prevent for this person. This will prevent individual execution of these communication types as well as automatically skip cadence steps of this communication type for this person in SalesLoft. Values currently accepted: call, email, message
+  --contact-restrictions: list<string> # Specific methods of communication to prevent for this person. This will prevent individual execution of these communication types as well as automatically skip cadence steps of this communication type for this person in SalesLoft. Values currently accepted: call, email, message
   --country: string # Country
-  --crm-id: string # Requires Salesforce.  ID of the person in your external CRM. You must provide a crm_id_type if this is included.  Validations will be applied to the crm_id depending on the crm_id_type. A "salesforce" ID must be exactly 18 characters. A "salesforce" ID must be either a Lead (00Q) or Contact (003) object. The type will be validated using the 18 character ID.  This field can only be used if your application or API key has the "person:set_crm_id" scope. 
+  --crm-id: string # Requires Salesforce. ID of the person in your external CRM. You must provide a crm_id_type if this is included. Validations will be applied to the crm_id depending on the crm_id_type. A "salesforce" ID must be exactly 18 characters. A "salesforce" ID must be either a Lead (00Q) or Contact (003) object. The type will be validated using the 18 character ID. This field can only be used if your application or API key has the "person:set_crm_id" scope.
   --crm-id-type: string # The CRM that the provided crm_id is for. Must be one of: salesforce
   --custom-fields: record # Custom fields are defined by the user's team. Only fields with values are presented in the API.
   --do-not-contact: oneof<nothing, bool> # Whether or not this person has opted out of all communication. Setting this value to true prevents this person from being called, emailed, or added to a cadence in SalesLoft. If this person is currently in a cadence, they will be removed.
@@ -2538,7 +2571,7 @@ export def "people put" [
   --phone-extension: string # Phone extension without formatting
   --secondary-email-address: string # Alternate email address
   --state: string # State
-  --tags: list # All tags applied to this person
+  --tags: list<string> # All tags applied to this person
   --title: string # Job title
   --twitter-handle: string # The twitter handle of this person
   --work-city: string # Work location - city
@@ -2548,18 +2581,19 @@ export def "people put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/people/{id}.json"))
-  let body = {"account_id": $account_id, "city": $city, "contact_restrictions": $contact_restrictions, "country": $country, "crm_id": $crm_id, "crm_id_type": $crm_id_type, "custom_fields": $custom_fields, "do_not_contact": $do_not_contact, "email_address": $email_address, "first_name": $first_name, "home_phone": $home_phone, "import_id": $import_id, "job_seniority": $job_seniority, "last_name": $last_name, "linkedin_url": $linkedin_url, "locale": $locale, "mobile_phone": $mobile_phone, "owner_id": $owner_id, "person_company_industry": $person_company_industry, "person_company_name": $person_company_name, "person_company_website": $person_company_website, "person_stage_id": $person_stage_id, "personal_email_address": $personal_email_address, "personal_website": $personal_website, "phone": $phone, "phone_extension": $phone_extension, "secondary_email_address": $secondary_email_address, "state": $state, "tags": $tags, "title": $title, "twitter_handle": $twitter_handle, "work_city": $work_city, "work_country": $work_country, "work_state": $work_state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/people/{id}.json"))
+  let req_body = {"account_id": $account_id, "city": $city, "contact_restrictions": $contact_restrictions, "country": $country, "crm_id": $crm_id, "crm_id_type": $crm_id_type, "custom_fields": $custom_fields, "do_not_contact": $do_not_contact, "email_address": $email_address, "first_name": $first_name, "home_phone": $home_phone, "import_id": $import_id, "job_seniority": $job_seniority, "last_name": $last_name, "linkedin_url": $linkedin_url, "locale": $locale, "mobile_phone": $mobile_phone, "owner_id": $owner_id, "person_company_industry": $person_company_industry, "person_company_name": $person_company_name, "person_company_website": $person_company_website, "person_stage_id": $person_stage_id, "personal_email_address": $personal_email_address, "personal_website": $personal_website, "phone": $phone, "phone_extension": $phone_extension, "secondary_email_address": $secondary_email_address, "state": $state, "tags": $tags, "title": $title, "twitter_handle": $twitter_handle, "work_city": $work_city, "work_country": $work_country, "work_state": $work_state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List person stages
 #
 # GET /v2/person_stages.json
-export def "person-stagesjson get" [
+export def "person-stages-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2568,7 +2602,7 @@ export def "person-stagesjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of person stages to fetch.
+  --ids: list<int> # IDs of person stages to fetch.
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
@@ -2588,7 +2622,7 @@ export def "person-stagesjson get" [
 # Create a person stage
 #
 # POST /v2/person_stages.json
-export def "person-stagesjson post" [
+export def "person-stages-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2603,11 +2637,12 @@ export def "person-stagesjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/person_stages.json")
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete an person stage
@@ -2626,7 +2661,7 @@ export def "person-stages delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/person_stages/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/person_stages/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2648,7 +2683,7 @@ export def "person-stages get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/person_stages/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/person_stages/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2657,7 +2692,7 @@ export def "person-stages get" [
 # Update a person stage
 #
 # PUT /v2/person_stages/{id}.json
-export def "person-stages put" [
+export def "person-stages update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2672,18 +2707,19 @@ export def "person-stages put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/person_stages/{id}.json"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/person_stages/{id}.json"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Upsert a person
 #
 # POST /v2/person_upserts.json
-export def "person-upsertsjson post" [
+export def "person-upserts-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2694,9 +2730,9 @@ export def "person-upsertsjson post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: int # ID of the Account to link this person to
   --city: string # City
-  --contact-restrictions: list # Specific methods of communication to prevent for this person. This will prevent individual execution of these communication types as well as automatically skip cadence steps of this communication type for this person in SalesLoft. Values currently accepted: call, email, message
+  --contact-restrictions: list<string> # Specific methods of communication to prevent for this person. This will prevent individual execution of these communication types as well as automatically skip cadence steps of this communication type for this person in SalesLoft. Values currently accepted: call, email, message
   --country: string # Country
-  --crm-id: string # Requires Salesforce.  ID of the person in your external CRM. You must provide a crm_id_type if this is included.  Validations will be applied to the crm_id depending on the crm_id_type. A "salesforce" ID must be exactly 18 characters. A "salesforce" ID must be either a Lead (00Q) or Contact (003) object. The type will be validated using the 18 character ID.  This field can only be used if your application or API key has the "person:set_crm_id" scope. 
+  --crm-id: string # Requires Salesforce. ID of the person in your external CRM. You must provide a crm_id_type if this is included. Validations will be applied to the crm_id depending on the crm_id_type. A "salesforce" ID must be exactly 18 characters. A "salesforce" ID must be either a Lead (00Q) or Contact (003) object. The type will be validated using the 18 character ID. This field can only be used if your application or API key has the "person:set_crm_id" scope.
   --crm-id-type: string # The CRM that the provided crm_id is for. Must be one of: salesforce
   --custom-fields: record # Custom fields are defined by the user's team. Only fields with values are presented in the API.
   --do-not-contact: oneof<nothing, bool> # Whether or not this person has opted out of all communication. Setting this value to true prevents this person from being called, emailed, or added to a cadence in SalesLoft. If this person is currently in a cadence, they will be removed.
@@ -2721,10 +2757,10 @@ export def "person-upsertsjson post" [
   --phone-extension: string # Phone extension without formatting
   --secondary-email-address: string # Alternate email address
   --state: string # State
-  --tags: list # All tags applied to this person
+  --tags: list<string> # All tags applied to this person
   --title: string # Job title
   --twitter-handle: string # The twitter handle of this person
-  --upsert-key: string # Name of the parameter to upsert on. The field must be provided in the input parameters, or the request will fail. The request will also fail if there are multiple records matched by the upsert field. This can occur if intentional duplicates by email address is enabled.  If upsert_key is not provided, this endpoint will not update an existing record.  Valid options are: id, crm_id, email_address. If crm_id is provided, then a valid crm_id_type must be provided, as documented for the person create and update endpoints.
+  --upsert-key: string # Name of the parameter to upsert on. The field must be provided in the input parameters, or the request will fail. The request will also fail if there are multiple records matched by the upsert field. This can occur if intentional duplicates by email address is enabled. If upsert_key is not provided, this endpoint will not update an existing record. Valid options are: id, crm_id, email_address. If crm_id is provided, then a valid crm_id_type must be provided, as documented for the person create and update endpoints.
   --work-city: string # Work location - city
   --work-country: string # Work location - country
   --work-state: string # Work location - state
@@ -2733,17 +2769,18 @@ export def "person-upsertsjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/person_upserts.json")
-  let body = {"account_id": $account_id, "city": $city, "contact_restrictions": $contact_restrictions, "country": $country, "crm_id": $crm_id, "crm_id_type": $crm_id_type, "custom_fields": $custom_fields, "do_not_contact": $do_not_contact, "email_address": $email_address, "first_name": $first_name, "home_phone": $home_phone, "id": $id, "import_id": $import_id, "job_seniority": $job_seniority, "last_name": $last_name, "linkedin_url": $linkedin_url, "locale": $locale, "mobile_phone": $mobile_phone, "owner_id": $owner_id, "person_company_industry": $person_company_industry, "person_company_name": $person_company_name, "person_company_website": $person_company_website, "person_stage_id": $person_stage_id, "personal_email_address": $personal_email_address, "personal_website": $personal_website, "phone": $phone, "phone_extension": $phone_extension, "secondary_email_address": $secondary_email_address, "state": $state, "tags": $tags, "title": $title, "twitter_handle": $twitter_handle, "upsert_key": $upsert_key, "work_city": $work_city, "work_country": $work_country, "work_state": $work_state} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"account_id": $account_id, "city": $city, "contact_restrictions": $contact_restrictions, "country": $country, "crm_id": $crm_id, "crm_id_type": $crm_id_type, "custom_fields": $custom_fields, "do_not_contact": $do_not_contact, "email_address": $email_address, "first_name": $first_name, "home_phone": $home_phone, "id": $id, "import_id": $import_id, "job_seniority": $job_seniority, "last_name": $last_name, "linkedin_url": $linkedin_url, "locale": $locale, "mobile_phone": $mobile_phone, "owner_id": $owner_id, "person_company_industry": $person_company_industry, "person_company_name": $person_company_name, "person_company_website": $person_company_website, "person_stage_id": $person_stage_id, "personal_email_address": $personal_email_address, "personal_website": $personal_website, "phone": $phone, "phone_extension": $phone_extension, "secondary_email_address": $secondary_email_address, "state": $state, "tags": $tags, "title": $title, "twitter_handle": $twitter_handle, "upsert_key": $upsert_key, "work_city": $work_city, "work_country": $work_country, "work_state": $work_state} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List phone number assignments
 #
 # GET /v2/phone_number_assignments.json
-export def "phone-number-assignmentsjson get" [
+export def "phone-number-assignments-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2752,7 +2789,7 @@ export def "phone-number-assignmentsjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of phone number assignments to fetch
+  --ids: list<int> # IDs of phone number assignments to fetch
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
@@ -2785,7 +2822,7 @@ export def "phone-number-assignments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/phone_number_assignments/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/phone_number_assignments/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2794,7 +2831,7 @@ export def "phone-number-assignments get" [
 # List caller ids
 #
 # GET /v2/phone_numbers/caller_ids.json
-export def "phone-numbers-caller-idsjson get" [
+export def "phone-numbers-caller-ids-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2830,7 +2867,7 @@ export def "phone-numbers-recording-settings get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/phone_numbers/recording_settings/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/phone_numbers/recording_settings/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2839,7 +2876,7 @@ export def "phone-numbers-recording-settings get" [
 # List saved list views
 #
 # GET /v2/saved_list_views.json
-export def "saved-list-viewsjson get" [
+export def "saved-list-views-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2848,7 +2885,7 @@ export def "saved-list-viewsjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of saved list views to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --ids: list<int> # IDs of saved list views to fetch. If a record can't be found, that record won't be returned and your request will be successful
   --view: string # Type of saved list views to fetch.
   --sort-by: string # Key to sort on, must be one of: name. Defaults to name
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
@@ -2869,7 +2906,7 @@ export def "saved-list-viewsjson get" [
 # Create a saved list view
 #
 # POST /v2/saved_list_views.json
-export def "saved-list-viewsjson post" [
+export def "saved-list-views-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2880,18 +2917,19 @@ export def "saved-list-viewsjson post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-default: oneof<nothing, bool> # Whether the saved list view is the default
   name: string # The name of the saved list view
-  view: string # The type of objects in the saved list view.  Value must be one of: people, companies, or recordings
+  view: string # The type of objects in the saved list view. Value must be one of: people, companies, or recordings
   --view-params: string # JSON object of list view parameters
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/saved_list_views.json")
-  let body = {"is_default": $is_default, "name": $name, "view": $view, "view_params": $view_params} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"is_default": $is_default, "name": $name, "view": $view, "view_params": $view_params} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a saved list view
@@ -2910,7 +2948,7 @@ export def "saved-list-views delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/saved_list_views/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/saved_list_views/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2932,7 +2970,7 @@ export def "saved-list-views get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/saved_list_views/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/saved_list_views/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2941,7 +2979,7 @@ export def "saved-list-views get" [
 # Update a saved list view
 #
 # PUT /v2/saved_list_views/{id}.json
-export def "saved-list-views put" [
+export def "saved-list-views update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2958,18 +2996,19 @@ export def "saved-list-views put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/saved_list_views/{id}.json"))
-  let body = {"is_default": $is_default, "name": $name, "view_params": $view_params} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/saved_list_views/{id}.json"))
+  let req_body = {"is_default": $is_default, "name": $name, "view_params": $view_params} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List steps
 #
 # GET /v2/steps.json
-export def "stepsjson get" [
+export def "steps-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2978,7 +3017,7 @@ export def "stepsjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of steps to fetch.
+  --ids: list<int> # IDs of steps to fetch.
   --cadence-id: int # Filter by cadence ID
   --type: string # Filter by step type
   --has-due-actions: oneof<nothing, bool> # Filter by whether a step has due actions
@@ -3014,7 +3053,7 @@ export def "steps get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/steps/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/steps/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3023,7 +3062,7 @@ export def "steps get" [
 # List successes
 #
 # GET /v2/successes.json
-export def "successesjson get" [
+export def "successes-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3032,9 +3071,9 @@ export def "successesjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of successes to fetch. If a record can't be found, that record won't be returned and your request will be successful
-  --person-id: list # Filters successes by person_id. Multiple person ids can be applied
-  --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --ids: list<int> # IDs of successes to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --person-id: list<int> # Filters successes by person_id. Multiple person ids can be applied
+  --updated-at: list<string> # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at, succeeded_at. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
@@ -3054,7 +3093,7 @@ export def "successesjson get" [
 # List team tags
 #
 # GET /v2/tags.json
-export def "tagsjson get" [
+export def "tags-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3064,7 +3103,7 @@ export def "tagsjson get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Filters tags by name
-  --ids: list # Filters tags by their IDs
+  --ids: list<int> # Filters tags by their IDs
   --sort-by: string # Key to sort on, must be one of: name. Defaults to name
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
@@ -3084,7 +3123,7 @@ export def "tagsjson get" [
 # List tasks
 #
 # GET /v2/tasks.json
-export def "tasksjson get" [
+export def "tasks-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3093,15 +3132,15 @@ export def "tasksjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of tasks to fetch.
-  --user-id: list # Filters tasks by the user to which they are assigned.
-  --person-id: list # Filters tasks by the person to which they are associated.
-  --account-id: list # Filters tasks by the account to which they are associated.
-  --current-state: list # Filters tasks by their current state. Valid current_states include: ['scheduled', 'completed'].
-  --task-type: list # Filters tasks by their task type. Valid task_types include: ['call', 'email', 'general'].
+  --ids: list<int> # IDs of tasks to fetch.
+  --user-id: list<int> # Filters tasks by the user to which they are assigned.
+  --person-id: list<int> # Filters tasks by the person to which they are associated.
+  --account-id: list<int> # Filters tasks by the account to which they are associated.
+  --current-state: list<string> # Filters tasks by their current state. Valid current_states include: ['scheduled', 'completed'].
+  --task-type: list<string> # Filters tasks by their task type. Valid task_types include: ['call', 'email', 'general'].
   --time-interval-filter: string # Filters tasks by time interval. Valid time_intervals include: ['overdue', 'today', 'tomorrow', 'this_week', 'next_week'].
   --idempotency-key: string # Filters tasks by idempotency key.
-  --locale: list # Filters tasks by locale of the person to which they are associated.
+  --locale: list<string> # Filters tasks by locale of the person to which they are associated.
   --sort-by: string # Key to sort on, must be one of: due_date, due_at. Defaults to due_date
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to ASC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
@@ -3121,7 +3160,7 @@ export def "tasksjson get" [
 # Create a Task
 #
 # POST /v2/tasks.json
-export def "tasksjson post" [
+export def "tasks-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3144,11 +3183,12 @@ export def "tasksjson post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/tasks.json")
-  let body = {"current_state": $current_state, "description": $description, "due_date": $due_date, "idempotency_key": $idempotency_key, "person_id": $person_id, "remind_at": $remind_at, "subject": $subject, "task_type": $task_type, "user_id": $user_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"current_state": $current_state, "description": $description, "due_date": $due_date, "idempotency_key": $idempotency_key, "person_id": $person_id, "remind_at": $remind_at, "subject": $subject, "task_type": $task_type, "user_id": $user_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetch a task
@@ -3167,7 +3207,7 @@ export def "tasks get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/tasks/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/tasks/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3176,7 +3216,7 @@ export def "tasks get" [
 # Update a Task
 #
 # PUT /v2/tasks/{id}.json
-export def "tasks put" [
+export def "tasks update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3196,18 +3236,19 @@ export def "tasks put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/tasks/{id}.json"))
-  let body = {"current_state": $current_state, "description": $description, "due_date": $due_date, "is_logged": $is_logged, "remind_at": $remind_at, "subject": $subject} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/tasks/{id}.json"))
+  let req_body = {"current_state": $current_state, "description": $description, "due_date": $due_date, "is_logged": $is_logged, "remind_at": $remind_at, "subject": $subject} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Fetch current team
 #
 # GET /v2/team.json
-export def "teamjson get" [
+export def "team-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3228,7 +3269,7 @@ export def "teamjson get" [
 # List team template attachments
 #
 # GET /v2/team_template_attachments.json
-export def "team-template-attachmentsjson get" [
+export def "team-template-attachments-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3237,8 +3278,8 @@ export def "team-template-attachmentsjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of team template attachments to fetch. If a record can't be found, that record won't be returned and your request will be successful
-  --team-template-id: list # Filters template attachments by team template IDs
+  --ids: list<int> # IDs of team template attachments to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --team-template-id: list<int> # Filters template attachments by team template IDs
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
@@ -3256,7 +3297,7 @@ export def "team-template-attachmentsjson get" [
 # List team templates
 #
 # GET /v2/team_templates.json
-export def "team-templatesjson get" [
+export def "team-templates-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3265,11 +3306,11 @@ export def "team-templatesjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of team templates to fetch. If a record can't be found, that record won't be returned and your request will be successful
-  --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
+  --ids: list<string> # IDs of team templates to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --updated-at: list<string> # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
   --search: string # Filters email templates by title or subject
-  --tag-ids: list # Filters email templates by tags applied to the template by tag ID, not to exceed 100 IDs
-  --tag: list # Filters team templates by tags applied to the template, not to exceed 100 tags
+  --tag-ids: list<int> # Filters email templates by tags applied to the template by tag ID, not to exceed 100 IDs
+  --tag: list<string> # Filters team templates by tags applied to the template, not to exceed 100 tags
   --include-archived-templates: oneof<nothing, bool> # Filters email templates to include archived templates or not
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at, last_used_at. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
@@ -3305,7 +3346,7 @@ export def "team-templates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_signature" $include_signature "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/team_templates/{id}.json") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/team_templates/{id}.json") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3314,7 +3355,7 @@ export def "team-templates get" [
 # Create a live feed item
 #
 # POST /v2/third_party_live_feed_items
-export def "third-party-live-feed-items post" [
+export def "third-party-live-feed-items create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3325,7 +3366,7 @@ export def "third-party-live-feed-items post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   event_occurred_at: string # Equality filters that are applied to the event_occurred_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"keys":[{"description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"gt","type":"iso8601 string"},{"description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"gte","type":"iso8601 string"},{"description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"lt","type":"iso8601 string"},{"description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"lte","type":"iso8601 string"}],"type":"object"}
   idempotency_key: string # Uniquely provided string specific to this event. This should be a value which can't be duplicated between external systems, meaning that an id is not sufficient.
-  message: string # The message that relates to the subject. This message should start with a lower-case past-tense verb and end with a period (e.g. "received a package."). When live feed items are displayed to users, the subject's name is concatenated with the message and a joining space. Only <a> HTML tags with an "href" attribute are allowed. Other attributes and tags will be stripped.
+  message: string # The message that relates to the subject. This message should start with a lower-case past-tense verb and end with a period (e.g. "received a package."). When live feed items are displayed to users, the subject's name is concatenated with the message and a joining space. Only HTML tags with an "href" attribute are allowed. Other attributes and tags will be stripped.
   subject_id: int # The ID of the subject of the live feed item (i.e. the "person" id).
   subject_type: string # The type of the subject of the live feed item. Currently only "person" is supported.
   user_guid: string # The guid for the user that this live feed item should be shown to.
@@ -3334,17 +3375,18 @@ export def "third-party-live-feed-items post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/third_party_live_feed_items")
-  let body = {"event_occurred_at": $event_occurred_at, "idempotency_key": $idempotency_key, "message": $message, "subject_id": $subject_id, "subject_type": $subject_type, "user_guid": $user_guid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"event_occurred_at": $event_occurred_at, "idempotency_key": $idempotency_key, "message": $message, "subject_id": $subject_id, "subject_type": $subject_type, "user_guid": $user_guid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # List users
 #
 # GET /v2/users.json
-export def "usersjson get" [
+export def "users-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3353,18 +3395,18 @@ export def "usersjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ids: list # IDs of users to fetch. If a record can't be found, that record won't be returned and your request will be successful
-  --guid: list # Filters list to only include guids
-  --group-id: list # Filters users by group_id.  An additional value of "_is_null" can be passed to filter users that are not in a group
-  --role-id: list # Filters users by role_id
+  --ids: list<int> # IDs of users to fetch. If a record can't be found, that record won't be returned and your request will be successful
+  --guid: list<string> # Filters list to only include guids
+  --group-id: list<string> # Filters users by group_id. An additional value of "_is_null" can be passed to filter users that are not in a group
+  --role-id: list<string> # Filters users by role_id
   --search: string # Space-separated list of keywords used to find case-insensitive substring matches against First Name, Last Name, or Email
   --active: oneof<nothing, bool> # Filters users based on active attribute. Defaults to not applied
-  --visible-only: oneof<nothing, bool> # Defaults to true.  When true, only shows users that are actionable based on the team's privacy settings. When false, shows all users on the team, even if you can't take action on that user. Deactivated users are also included when false.
-  --per-page: int # How many users to show per page in the range [1, 100]. Defaults to 25.  Results are only paginated if the page parameter is defined
+  --visible-only: oneof<nothing, bool> # Defaults to true. When true, only shows users that are actionable based on the team's privacy settings. When false, shows all users on the team, even if you can't take action on that user. Deactivated users are also included when false.
+  --per-page: int # How many users to show per page in the range [1, 100]. Defaults to 25. Results are only paginated if the page parameter is defined
   --page: int # The current page to fetch users from. Defaults to returning all users
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --has-crm-user: oneof<nothing, bool> # Filters users based on if they have a crm user mapped or not.
-  --work-country: list # Filters users based on assigned work_country.
+  --work-country: list<string> # Filters users based on assigned work_country.
   --sort-by: string # Key to sort on, must be one of: id, email, name, group, role. Defaults to id
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
 ]: nothing -> any {
@@ -3393,7 +3435,7 @@ export def "users get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/users/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/users/{id}.json"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3425,7 +3467,7 @@ export def "webhook-subscriptions list" [
 # Create a webhook subscription
 #
 # POST /v2/webhook_subscriptions
-export def "webhook-subscriptions post" [
+export def "webhook-subscriptions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3442,11 +3484,12 @@ export def "webhook-subscriptions post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/webhook_subscriptions")
-  let body = {"callback_token": $callback_token, "callback_url": $callback_url, "event_type": $event_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"callback_token": $callback_token, "callback_url": $callback_url, "event_type": $event_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a webhook subscription
@@ -3465,7 +3508,7 @@ export def "webhook-subscriptions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/webhook_subscriptions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/webhook_subscriptions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3487,7 +3530,7 @@ export def "webhook-subscriptions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/webhook_subscriptions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/webhook_subscriptions/{id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3496,7 +3539,7 @@ export def "webhook-subscriptions get" [
 # Update a webhook subscription
 #
 # PUT /v2/webhook_subscriptions/{id}
-export def "webhook-subscriptions put" [
+export def "webhook-subscriptions update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3511,10 +3554,11 @@ export def "webhook-subscriptions put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/v2/webhook_subscriptions/{id}"))
-  let body = {"enabled": $enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/webhook_subscriptions/{id}"))
+  let req_body = {"enabled": $enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }

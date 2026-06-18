@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "checkout-pub-order-forms-simulation fulfillment-simulation-external-marketplace" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "checkout-pub-order-forms-simulation create-fulfillment-external-marketplace" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 # --clientProfileData shape: {corporateDocument?: string, corporateName?: string, corporatePhone?: string, customerClass?: string, document?: string, documentType?: string, email?: string, firstName?: string, isCorporate?: bool, lastName?: string, phone?: string, profileCompleteOnLoading?: bool, profileErrorOnLoading?: bool, stateInscription?: string, tradeName?: string}
 # --items item shape: {id?: string, quantity?: int, seller?: string}
 # --marketingData shape: {coupon?: string, utmCampaign?: string, utmMedium?: string, utmSource?: string, utmiCampaign?: string, utmiPage?: string, utmiPart?: string}
-export def "checkout-pub-order-forms-simulation fulfillment-simulation-external-marketplace" [
+export def "checkout-pub-order-forms-simulation create-fulfillment-external-marketplace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,7 +121,7 @@ export def "checkout-pub-order-forms-simulation fulfillment-simulation-external-
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   --client-profile-data: record # Customer's profile information. — shape: {corporateDocument?: string, corporateName?: string, corporatePhone?: string, customerClass?: string, document?: string, documentType?: string, email?: string, firstName?: string, isCorporate?: bool, lastName?: string, phone?: string, profileCompleteOnLoading?: bool, profileErrorOnLoading?: bool, stateInscription?: string, tradeName?: string}
   --country: string # Three letter ISO code of the country of the shipping address. This value must be sent along with the `postalCode` or `geoCoordinates` values. (e.g. BRA)
-  --geo-coordinates: list # Array containing two floats with geocoordinates, first longitude, then latitude. (default: [-47.924747467041016, -15.832582473754883])
+  --geo-coordinates: list<float> # Array containing two floats with geocoordinates, first longitude, then latitude. (default: [-47.924747467041016, -15.832582473754883])
   --is-checked-in: oneof<nothing, bool> # Indicates whether order is checked in. (default: false)
   --items: list # Array containing information about the SKUs inside the cart to be simulated. — item shape: {id?: string, quantity?: int, seller?: string}
   --marketing-data: record # Object containing promotion data such as coupon tracking information and internal or external UTMs. — shape: {coupon?: string, utmCampaign?: string, utmMedium?: string, utmSource?: string, utmiCampaign?: string, utmiPage?: string, utmiPart?: string}
@@ -125,13 +134,15 @@ export def "checkout-pub-order-forms-simulation fulfillment-simulation-external-
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "affiliateId" $affiliate_id "scalar") (serialize-qp "sc" $sc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/checkout/pub/orderForms/simulation" $qp)
-  let body = {"clientProfileData": $client_profile_data, "country": $country, "geoCoordinates": $geo_coordinates, "isCheckedIn": $is_checked_in, "items": $items, "marketingData": $marketing_data, "postalCode": $postal_code, "selectedSla": $selected_sla, "storeId": $store_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"clientProfileData": $client_profile_data, "country": $country, "geoCoordinates": $geo_coordinates, "isCheckedIn": $is_checked_in, "items": $items, "marketingData": $marketing_data, "postalCode": $postal_code, "selectedSla": $selected_sla, "storeId": $store_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Send Category Mapping to VTEX Mapper
@@ -139,7 +150,7 @@ export def "checkout-pub-order-forms-simulation fulfillment-simulation-external-
 # POST /portal.vtexcommercestable.com.br/api/mkp-category-mapper/categories/marketplace/{id}
 # operationId: send-category-mapping-vtex-mapper
 # --categories item shape: {children?: list, id?: string, name?: string}
-export def "portalvtexcommercestablecombr-mkp-category-mapper-categories-marketplace send-category-mapping-vtex-mapper" [
+export def "portal-vtexcommercestable-com-br-mkp-category-mapper-categories-marketplace send-mapping-vtex" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -156,21 +167,23 @@ export def "portalvtexcommercestablecombr-mkp-category-mapper-categories-marketp
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/portal.vtexcommercestable.com.br/api/mkp-category-mapper/categories/marketplace/{id}"))
-  let body = {"categories": $categories} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/portal.vtexcommercestable.com.br/api/mkp-category-mapper/categories/marketplace/{id}"))
+  let req_body = {"categories": $categories} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # VTEX Mapper Registration
 #
 # POST /portal.vtexcommercestable.com.br/api/mkp-category-mapper/connector/register
 # operationId: vtex-mapper-registration
-export def "portalvtexcommercestablecombr-mkp-category-mapper-connector-register vtex-mapper-registration" [
+export def "portal-vtexcommercestable-com-br-mkp-category-mapper-connector-register create-vtex-registration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +196,7 @@ export def "portalvtexcommercestablecombr-mkp-category-mapper-connector-register
   --content-type: string # Describes the type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
   --category-tree-processing-notification-endpoint: string # The `CategoryTreeProcessingNotificationEndpoint` is optional, and should be an endpoint from the external marketplace, that will be notified after the marketplace's category tree is successfully processed or not. (e.g. https://CategoryTreeProcessingNotificationEndpoint.com/api)
-  category_tree_end_point: string # Endpoint that returns categories and attributes according to VTEX  Mapper specifications. (e.g. http://api.vtexinternal.com.br/api/{{marketplaceName}}/mapper/categories)
+  category_tree_end_point: string # Endpoint that returns categories and attributes according to VTEX Mapper specifications. (e.g. http://api.vtexinternal.com.br/api/{{marketplaceName}}/mapper/categories)
   display_name: string # Marketplace Name, that will be displayed in VTEX Mapper. (e.g. Marketplace A)
   mapping_end_point: string # Secure endpoint that will receive the category mapping sent by VTEX Mapper. (e.g. http://api.vtexinternal.com.br/api/{{marketplaceName}}/mapper/mapping)
   properties: record # Refers to the `allowsRemap` property.
@@ -193,13 +206,15 @@ export def "portalvtexcommercestablecombr-mkp-category-mapper-connector-register
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/portal.vtexcommercestable.com.br/api/mkp-category-mapper/connector/register" $qp)
-  let body = {"CategoryTreeProcessingNotificationEndpoint": $category_tree_processing_notification_endpoint, "categoryTreeEndPoint": $category_tree_end_point, "displayName": $display_name, "mappingEndPoint": $mapping_end_point, "properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"CategoryTreeProcessingNotificationEndpoint": $category_tree_processing_notification_endpoint, "categoryTreeEndPoint": $category_tree_end_point, "displayName": $display_name, "mappingEndPoint": $mapping_end_point, "properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # New Order Integration
@@ -211,7 +226,7 @@ export def "portalvtexcommercestablecombr-mkp-category-mapper-connector-register
 # --invoiceData shape: {userPaymentInfo: record}
 # --items item shape: {id: string, price: int, quantity: int}
 # --shippingData shape: {isFob: bool, isMarketplaceFulfillment: bool, logisticsInfo: list, selectedAddresses: list}
-export def "order-integration-orders post" [
+export def "order-integration-orders create-enqueue-new" [
   account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -227,13 +242,13 @@ export def "order-integration-orders post" [
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   --allow-franchises: oneof<nothing, bool> # Boolean indicating whether franchise accounts linked to the main seller should be considered. That is, if the order delivery pickup/SLA can belong to a [franchise account](https://help.vtex.com/en/tutorial/what-is-a-franchise-account--kWQC6RkFSCUFGgY5gSjdl), for example. This field is optional and defaults to `false`. (e.g. false)
   client_profile_data: record # Structure with the customer's information. An order will be identified as corporate if any of the corporate fields are filled out (`corporateDocument`, `corporatePhone`, `corporateName` or `tradeName`). — shape: {corporateDocument: string, corporateName: string, corporatePhone: string, document: string, email: string, firstName: string, lastName: string, phone: string, stateInscription: string, tradeName: string}
-  --connector-endpoint: string # String with the connector's base endpoint that will receive notifications about the orders processing results, as well as status updates from VTEX OMS. This field accepts query strings. You can use the models below:    - `https://{{externalconnector}}.com`    - `https://{{externalconnector.com}}/api/vtex` if you additionaly want to send a relative URL with the endpoint.   This field is optional if the connector uses the [App Template](https://developers.vtex.com/vtex-rest-api/docs/external-marketplace-integration-app-template) and authenticates on our request via `VtexIdclientAutCookie`.    It is required if the connector is native or does not use the App Template. (e.g. https://{{externalconnector.com}}/api/vtex)
-  --connector-name: string # String with the identifier code of the connector responsible for the order.    This field is optional if the connector uses the [App Template](https://developers.vtex.com/vtex-rest-api/docs/external-marketplace-integration-app-template) and authenticates on our request via `VtexIdclientAutCookie`.    It is required if the connector is native or does not use the App Template. (e.g. connectorName)
+  --connector-endpoint: string # String with the connector's base endpoint that will receive notifications about the orders processing results, as well as status updates from VTEX OMS. This field accepts query strings. You can use the models below: - `https://{{externalconnector}}.com` - `https://{{externalconnector.com}}/api/vtex` if you additionaly want to send a relative URL with the endpoint. This field is optional if the connector uses the [App Template](https://developers.vtex.com/vtex-rest-api/docs/external-marketplace-integration-app-template) and authenticates on our request via `VtexIdclientAutCookie`. It is required if the connector is native or does not use the App Template. (e.g. https://{{externalconnector.com}}/api/vtex)
+  --connector-name: string # String with the identifier code of the connector responsible for the order. This field is optional if the connector uses the [App Template](https://developers.vtex.com/vtex-rest-api/docs/external-marketplace-integration-app-template) and authenticates on our request via `VtexIdclientAutCookie`. It is required if the connector is native or does not use the App Template. (e.g. connectorName)
   --custom-data: record # Structure with the order's customizable fields. To insert custom fields in the order, you must first go through the process of [Creating an app](https://developers.vtex.com/vtex-rest-api/docs/external-marketplace-integration-app-template), and then adding the app, as well as the desired fields, within the seller's `orderForm`. More information on [Creating customizable fields in the cart with Checkout API](https://developers.vtex.com/vtex-rest-api/docs/customizable-fields-with-checkout-api). (e.g. {customApps: [{fields: {marketplacePaymentMethod: credit card}, id: marketplace-integration, major: 1}]}) — shape: {customApps: list}
   invoice_data: record # Object with the order's billing data. (e.g. {userPaymentInfo: {paymentMethods: [creditCardPaymentGroup]}}) — shape: {userPaymentInfo: record}
   items: list # item shape: {id: string, price: int, quantity: int}
   marketplace_order_id: string # String that indicates the order's ID in the marketplace. (e.g. 7e62fcd3-827b-400d-be8a-f050a79c4976)
-  marketplace_order_status: string # Required field including a string with the order’s status in the marketplace. If you send an order with the status APPROVED to integrate, our service will automatically try to advance it’s status in VTEX after integrating it. This field accepts the following values:    - `new`    - `approved` (e.g. new)
+  marketplace_order_status: string # Required field including a string with the order’s status in the marketplace. If you send an order with the status APPROVED to integrate, our service will automatically try to advance it’s status in VTEX after integrating it. This field accepts the following values: - `new` - `approved` (e.g. new)
   marketplace_payment_value: int # Integer that indicates the order’s total value, which the marketplace will pay to the seller. It’s important to note that this value should include interest, if that’s the case. If the value is `USD110.50`, convert it to the format → `11050`. (e.g. 11050)
   --pickup-account-name: string # String that indicates the name of the account responsible for the order’s pickup point. It is only required for pickup-in-point orders from franchise accounts, when franchise accounts `allowFranchises` is `true` and the order in question has a `pickup-in-point` delivery type. It is optional otherwise. (e.g. accountName)
   shipping_data: record # shape: {isFob: bool, isMarketplaceFulfillment: bool, logisticsInfo: list, selectedAddresses: list}
@@ -242,14 +257,16 @@ export def "order-integration-orders post" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "an" $an "scalar") (serialize-qp "affiliateId" $affiliate_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_name: $account_name} | format pattern "/{account_name}.vtexcommercestable.com.br/api/order-integration/orders") $qp)
-  let body = {"allowFranchises": $allow_franchises, "clientProfileData": $client_profile_data, "connectorEndpoint": $connector_endpoint, "connectorName": $connector_name, "customData": $custom_data, "invoiceData": $invoice_data, "items": $items, "marketplaceOrderId": $marketplace_order_id, "marketplaceOrderStatus": $marketplace_order_status, "marketplacePaymentValue": $marketplace_payment_value, "pickupAccountName": $pickup_account_name, "shippingData": $shipping_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name)} | format pattern "/{account_name}.vtexcommercestable.com.br/api/order-integration/orders") $qp)
+  let req_body = {"allowFranchises": $allow_franchises, "clientProfileData": $client_profile_data, "connectorEndpoint": $connector_endpoint, "connectorName": $connector_name, "customData": $custom_data, "invoiceData": $invoice_data, "items": $items, "marketplaceOrderId": $marketplace_order_id, "marketplaceOrderStatus": $marketplace_order_status, "marketplacePaymentValue": $marketplace_payment_value, "pickupAccountName": $pickup_account_name, "shippingData": $shipping_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Update Order Status
@@ -269,23 +286,25 @@ export def "order-integration-orders-status update" [
   --an: string # Parameter should indicate the name of the VTEX account where the order is being integrated or updated, meaning the seller responsible for the order. (e.g. apiexamples)
   --content-type: string # Describes the type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  connector_endpoint: string # String with the connector's base endpoint that will receive notifications about the orders processing results, as well as status updates from VTEX OMS. This field does not accept query strings. You can use the models below:    - `https://{{externalconnector}}.com`    - `https://{{externalconnector.com}}/api/vtex` if you additionaly want to send a relative URL with the endpoint.   This field is optional if the connector uses the [App Template](https://developers.vtex.com/vtex-rest-api/docs/external-marketplace-integration-app-template) and authenticates on our request via `VtexIdclientAutCookie`.    It is required if the connector is native or does not use the App Template. (e.g. https://{{externalconnector.com}}/api/vtex)
-  connector_name: string # String with the identifier code of the connector responsible for the order.    This field is optional if the connector uses the [App Template](https://developers.vtex.com/vtex-rest-api/docs/external-marketplace-integration-app-template) and authenticates on our request via `VtexIdclientAutCookie`.    It is required if the connector is native or does not use the App Template. (e.g. connectorName)
+  connector_endpoint: string # String with the connector's base endpoint that will receive notifications about the orders processing results, as well as status updates from VTEX OMS. This field does not accept query strings. You can use the models below: - `https://{{externalconnector}}.com` - `https://{{externalconnector.com}}/api/vtex` if you additionaly want to send a relative URL with the endpoint. This field is optional if the connector uses the [App Template](https://developers.vtex.com/vtex-rest-api/docs/external-marketplace-integration-app-template) and authenticates on our request via `VtexIdclientAutCookie`. It is required if the connector is native or does not use the App Template. (e.g. https://{{externalconnector.com}}/api/vtex)
+  connector_name: string # String with the identifier code of the connector responsible for the order. This field is optional if the connector uses the [App Template](https://developers.vtex.com/vtex-rest-api/docs/external-marketplace-integration-app-template) and authenticates on our request via `VtexIdclientAutCookie`. It is required if the connector is native or does not use the App Template. (e.g. connectorName)
   marketplace_order_id: string # String that indicates the order's ID in the marketplace. (e.g. 7e62fcd3-827b-400d-be8a-f050a79c4976)
-  marketplace_order_status: string # Required field including a string with the order’s status in the marketplace. If you send an order with the status APPROVED to integrate, our service will automatically try to advance its status in VTEX after integrating it. This field accepts the following values:    - `new`    - `approved`. (e.g. new)
+  marketplace_order_status: string # Required field including a string with the order’s status in the marketplace. If you send an order with the status APPROVED to integrate, our service will automatically try to advance its status in VTEX after integrating it. This field accepts the following values: - `new` - `approved`. (e.g. new)
 ]: any -> record<accountName: string, code: string, errors: table<code: string, description: string, source: string>, fields: record<fields: record<franchiseOrderId: string, mainOrderId: string>>, flow: string, marketplaceOrderId: string, message: string, operationId: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_name: $account_name} | format pattern "/{account_name}.vtexcommercestable.com.br/api/order-integration/orders/status") $qp)
-  let body = {"connectorEndpoint": $connector_endpoint, "connectorName": $connector_name, "marketplaceOrderId": $marketplace_order_id, "marketplaceOrderStatus": $marketplace_order_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name)} | format pattern "/{account_name}.vtexcommercestable.com.br/api/order-integration/orders/status") $qp)
+  let req_body = {"connectorEndpoint": $connector_endpoint, "connectorName": $connector_name, "marketplaceOrderId": $marketplace_order_id, "marketplaceOrderStatus": $marketplace_order_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Place fulfillment order
@@ -293,10 +312,10 @@ export def "order-integration-orders-status update" [
 # POST /{accountName}.{environment}.com.br/api/fulfillment/pvt/orders
 # operationId: PlaceFulfillmentOrder
 # --clientProfileData shape: {corporateDocument?: string, corporateName?: string, corporatePhone?: string, document: string, documentType: string, email: string, firstName: string, isCorporate?: bool, lastName: string, phone?: string, stateInscription?: string, tradeName?: string}
-# --items item shape: {attachments?: list, bundleItems?: list, commission?: int, freightCommission?: int, id: string, isGift?: bool, itemAttachment?: record, measurementUnit?: string, price?: int, priceTags?: list, quantity: int, seller: string, unitMultiplier?: int}
+# --items item shape: {attachments?: list<string>, bundleItems?: list, commission?: int, freightCommission?: int, id: string, isGift?: bool, itemAttachment?: record, measurementUnit?: string, price?: int, priceTags?: list, quantity: int, seller: string, unitMultiplier?: int}
 # --marketingData shape: {utmCampaign?: string, utmMedium?: string, utmSource?: string, utmiCampaign?: string, utmiPage?: string, utmiPart?: string}
 # --shippingData shape: {address?: record, logisticsInfo?: list, updateStatus?: string}
-export def "fulfillment-pvt-orders post" [
+export def "fulfillment-pvt-orders create-place" [
   account_name: string
   environment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -313,7 +332,7 @@ export def "fulfillment-pvt-orders post" [
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   client_profile_data: record # Customer's profile information. — shape: {corporateDocument?: string, corporateName?: string, corporatePhone?: string, document: string, documentType: string, email: string, firstName: string, isCorporate?: bool, lastName: string, phone?: string, stateInscription?: string, tradeName?: string}
   --is-created-async: oneof<nothing, bool> # Indicates whether an order is created. It must be `true` if an order is being placed with [Price divergence](https://help.vtex.com/en/tutorial/price-divergence-rule--6RlFLhD1rIRRshl83KnCjW#), otherwise the request will not work. (e.g. false)
-  items: list # Array of objects containing information on each of the order's items. — item shape: {attachments?: list, bundleItems?: list, commission?: int, freightCommission?: int, id: string, isGift?: bool, itemAttachment?: record, measurementUnit?: string, price?: int, priceTags?: list, quantity: int, seller: string, unitMultiplier?: int}
+  items: list # Array of objects containing information on each of the order's items. — item shape: {attachments?: list<string>, bundleItems?: list, commission?: int, freightCommission?: int, id: string, isGift?: bool, itemAttachment?: record, measurementUnit?: string, price?: int, priceTags?: list, quantity: int, seller: string, unitMultiplier?: int}
   --marketing-data: record # shape: {utmCampaign?: string, utmMedium?: string, utmSource?: string, utmiCampaign?: string, utmiPage?: string, utmiPart?: string}
   marketplace_order_id: string # ID of the order in the marketplace. (e.g. 123456789)
   marketplace_payment_value: int # Value of the payment made to the marketplace. (e.g. 100)
@@ -326,21 +345,23 @@ export def "fulfillment-pvt-orders post" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sc" $sc "scalar") (serialize-qp "affiliateId" $affiliate_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_name: $account_name, environment: $environment} | format pattern "/{account_name}.{environment}.com.br/api/fulfillment/pvt/orders") $qp)
-  let body = {"clientProfileData": $client_profile_data, "isCreatedAsync": $is_created_async, "items": $items, "marketingData": $marketing_data, "marketplaceOrderId": $marketplace_order_id, "marketplacePaymentValue": $marketplace_payment_value, "marketplaceServicesEndpoint": $marketplace_services_endpoint, "openTextField": $open_text_field, "paymentData": $payment_data, "shippingData": $shipping_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), environment: (encode-path-segment $environment)} | format pattern "/{account_name}.{environment}.com.br/api/fulfillment/pvt/orders") $qp)
+  let req_body = {"clientProfileData": $client_profile_data, "isCreatedAsync": $is_created_async, "items": $items, "marketingData": $marketing_data, "marketplaceOrderId": $marketplace_order_id, "marketplacePaymentValue": $marketplace_payment_value, "marketplaceServicesEndpoint": $marketplace_services_endpoint, "openTextField": $open_text_field, "paymentData": $payment_data, "shippingData": $shipping_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Authorize dispatch for fulfillment order
 #
 # POST /{accountName}.{environment}.com.br/api/fulfillment/pvt/orders/{orderId}/fulfill
 # operationId: AuthorizeDispatchForFulfillmentOrder
-export def "fulfillment-pvt-orders-fulfill post" [
+export def "fulfillment-pvt-orders-fulfill create-authorize-dispatch" [
   account_name: string
   environment: string
   order_id: string
@@ -362,14 +383,16 @@ export def "fulfillment-pvt-orders-fulfill post" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sc" $sc "scalar") (serialize-qp "affiliateId" $affiliate_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({account_name: $account_name, environment: $environment, order_id: $order_id} | format pattern "/{account_name}.{environment}.com.br/api/fulfillment/pvt/orders/{order_id}/fulfill") $qp)
-  let body = {"marketplaceOrderId": $marketplace_order_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({account_name: (encode-path-segment $account_name), environment: (encode-path-segment $environment), order_id: (encode-path-segment $order_id)} | format pattern "/{account_name}.{environment}.com.br/api/fulfillment/pvt/orders/{order_id}/fulfill") $qp)
+  let req_body = {"marketplaceOrderId": $marketplace_order_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Fulfillment simulation - External Seller
@@ -377,7 +400,7 @@ export def "fulfillment-pvt-orders-fulfill post" [
 # POST /{fulfillmentEndpoint}/pvt/orderForms/simulation
 # operationId: fulfillment-simulation
 # --items item shape: {id: string, quantity: int, seller: string}
-export def "pvt-order-forms-simulation fulfillment-simulation" [
+export def "pvt-order-forms-simulation create-fulfillment" [
   fulfillment_endpoint: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -389,8 +412,8 @@ export def "pvt-order-forms-simulation fulfillment-simulation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
   --content-type: string # Describes the type of the content being sent. (e.g. application/json)
-  --country: string # ISO 3-digit code of the country where the delivery address is located.  This field is mandatory, for shopping carts simulations, where both Country and Postal Code are required. This field should be sent as `null` for storefront simulations, where the information is not necessary. (e.g. USA)
-  --geo-coordinates: list # Geographic coordinates of the delivery address. This may be used instead of the postalCode, in case the marketplace is configured to accept geolocation. Example of value: `[-22.9443504,-43.1825635]`.
+  --country: string # ISO 3-digit code of the country where the delivery address is located. This field is mandatory, for shopping carts simulations, where both Country and Postal Code are required. This field should be sent as `null` for storefront simulations, where the information is not necessary. (e.g. USA)
+  --geo-coordinates: list<string> # Geographic coordinates of the delivery address. This may be used instead of the postalCode, in case the marketplace is configured to accept geolocation. Example of value: `[-22.9443504,-43.1825635]`.
   --items: list # Array containing the cart items. — item shape: {id: string, quantity: int, seller: string}
   postal_code: string # Delivery address postal code. This field is mandatory for shopping carts simulations, where both Country and Postal Code are required. This field should be sent as `null` for storefront simulations, where the information is not necessary. (e.g. 12345678)
   --sc: string # Sales channel (or [trade policy](https://help.vtex.com/en/tutorial/como-funciona-uma-politica-comercial--6Xef8PZiFm40kg2STrMkMV#master-data)) associated to the seller account created. (e.g. 1)
@@ -398,14 +421,16 @@ export def "pvt-order-forms-simulation fulfillment-simulation" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({fulfillment_endpoint: $fulfillment_endpoint} | format pattern "/{fulfillment_endpoint}/pvt/orderForms/simulation"))
-  let body = {"country": $country, "geoCoordinates": $geo_coordinates, "items": $items, "postalCode": $postal_code, "sc": $sc} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({fulfillment_endpoint: (encode-path-segment $fulfillment_endpoint)} | format pattern "/{fulfillment_endpoint}/pvt/orderForms/simulation"))
+  let req_body = {"country": $country, "geoCoordinates": $geo_coordinates, "items": $items, "postalCode": $postal_code, "sc": $sc} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Order placement
@@ -416,7 +441,7 @@ export def "pvt-order-forms-simulation fulfillment-simulation" [
 # --items item shape: {attachments?: list, bundleItems?: list, commission?: int, freightCommission?: int, id?: string, isGift?: bool, itemsAttachment?: list, measurementUnit?: string, price?: int, priceTags?: list, quantity?: int, seller?: string, unitMultiplier?: int}
 # --marketingData shape: {utmCampaign?: string, utmMedium?: string, utmSource?: string, utmiCampaign?: string, utmiPage?: string, utmiPart?: string}
 # --shippingData shape: {address?: record, logisticsInfo?: list, updateStatus?: string}
-export def "pvt-orders order-placement" [
+export def "pvt-orders create-placement" [
   fulfillment_endpoint: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -451,21 +476,23 @@ export def "pvt-orders order-placement" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({fulfillment_endpoint: $fulfillment_endpoint} | format pattern "/{fulfillment_endpoint}/pvt/orders"))
-  let body = {"clientProfileData": $client_profile_data, "items": $items, "marketingData": $marketing_data, "marketplaceOrderId": $marketplace_order_id, "marketplacePaymentValue": $marketplace_payment_value, "marketplaceServicesEndpoint": $marketplace_services_endpoint, "openTextField": $open_text_field, "paymentData": $payment_data, "shippingData": $shipping_data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"content-length": $content_length, "authorization": $authorization, "x-vtex-api-appkey": $x_vtex_api_appkey, "x-vtex-api-apptoken": $x_vtex_api_apptoken, "accept": $hdr_accept, "accept-enconding": $accept_enconding, "x-vtex-operation-id": $x_vtex_operation_id, "x-forwarded-proto": $x_forwarded_proto, "x-forwarded-for": $x_forwarded_for, "x-vtex-cache-client-bypass": $x_vtex_cache_client_bypass, "content-type": $content_type, "traceparent": $traceparent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({fulfillment_endpoint: (encode-path-segment $fulfillment_endpoint)} | format pattern "/{fulfillment_endpoint}/pvt/orders"))
+  let req_body = {"clientProfileData": $client_profile_data, "items": $items, "marketingData": $marketing_data, "marketplaceOrderId": $marketplace_order_id, "marketplacePaymentValue": $marketplace_payment_value, "marketplaceServicesEndpoint": $marketplace_services_endpoint, "openTextField": $open_text_field, "paymentData": $payment_data, "shippingData": $shipping_data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"content-length": $content_length, "authorization": $authorization, "x-vtex-api-appkey": $x_vtex_api_appkey, "x-vtex-api-apptoken": $x_vtex_api_apptoken, "accept": $hdr_accept, "accept-enconding": $accept_enconding, "x-vtex-operation-id": $x_vtex_operation_id, "x-forwarded-proto": $x_forwarded_proto, "x-forwarded-for": $x_forwarded_for, "x-vtex-cache-client-bypass": $x_vtex_cache_client_bypass, "content-type": $content_type, "traceparent": $traceparent} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Marketplace order cancellation
 #
 # POST /{fulfillmentEndpoint}/pvt/orders/{orderId}/cancel
 # operationId: mkp-order-cancellation
-export def "pvt-orders-cancel mkp-order-cancellation" [
+export def "pvt-orders-cancel create-mkp-cancellation" [
   fulfillment_endpoint: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -483,21 +510,23 @@ export def "pvt-orders-cancel mkp-order-cancellation" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({fulfillment_endpoint: $fulfillment_endpoint, order_id: $order_id} | format pattern "/{fulfillment_endpoint}/pvt/orders/{order_id}/cancel"))
-  let body = {"marketplaceOrderId": $marketplace_order_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({fulfillment_endpoint: (encode-path-segment $fulfillment_endpoint), order_id: (encode-path-segment $order_id)} | format pattern "/{fulfillment_endpoint}/pvt/orders/{order_id}/cancel"))
+  let req_body = {"marketplaceOrderId": $marketplace_order_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Authorize fulfillment
 #
 # POST /{fulfillmentEndpoint}/pvt/orders/{sellerOrderId}/fulfill
 # operationId: authorize-fulfillment
-export def "pvt-orders-fulfill authorize-fulfillment" [
+export def "pvt-orders-fulfill create-authorize-fulfillment" [
   fulfillment_endpoint: string
   seller_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -515,21 +544,23 @@ export def "pvt-orders-fulfill authorize-fulfillment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({fulfillment_endpoint: $fulfillment_endpoint, seller_order_id: $seller_order_id} | format pattern "/{fulfillment_endpoint}/pvt/orders/{seller_order_id}/fulfill"))
-  let body = {"marketplaceOrderId": $marketplace_order_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({fulfillment_endpoint: (encode-path-segment $fulfillment_endpoint), seller_order_id: (encode-path-segment $seller_order_id)} | format pattern "/{fulfillment_endpoint}/pvt/orders/{seller_order_id}/fulfill"))
+  let req_body = {"marketplaceOrderId": $marketplace_order_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Cancel order in marketplace
 #
 # POST /{marketplaceServicesEndpoint}/pvt/orders/{marketplaceOrderId}/cancel
 # operationId: cancel-order-in-marketplace
-export def "pvt-orders-cancel cancel-order-in-marketplace" [
+export def "pvt-orders-cancel cancel-in-marketplace" [
   marketplace_services_endpoint: string
   marketplace_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -547,14 +578,16 @@ export def "pvt-orders-cancel cancel-order-in-marketplace" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({marketplace_services_endpoint: $marketplace_services_endpoint, marketplace_order_id: $marketplace_order_id} | format pattern "/{marketplace_services_endpoint}/pvt/orders/{marketplace_order_id}/cancel"))
-  let body = {"reason": $reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({marketplace_services_endpoint: (encode-path-segment $marketplace_services_endpoint), marketplace_order_id: (encode-path-segment $marketplace_order_id)} | format pattern "/{marketplace_services_endpoint}/pvt/orders/{marketplace_order_id}/cancel"))
+  let req_body = {"reason": $reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Send invoice
@@ -562,7 +595,7 @@ export def "pvt-orders-cancel cancel-order-in-marketplace" [
 # POST /{marketplaceServicesEndpoint}/pvt/orders/{marketplaceOrderId}/invoice
 # operationId: send-invoice
 # --items item shape: {id: string, price: int, quantity: int}
-export def "pvt-orders-invoice send-invoice" [
+export def "pvt-orders-invoice send" [
   marketplace_services_endpoint: string
   marketplace_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -587,14 +620,16 @@ export def "pvt-orders-invoice send-invoice" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({marketplace_services_endpoint: $marketplace_services_endpoint, marketplace_order_id: $marketplace_order_id} | format pattern "/{marketplace_services_endpoint}/pvt/orders/{marketplace_order_id}/invoice"))
-  let body = {"courier": $courier, "invoiceNumber": $invoice_number, "invoiceValue": $invoice_value, "issuanceDate": $issuance_date, "items": $items, "trackingNumber": $tracking_number, "trackingUrl": $tracking_url, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({marketplace_services_endpoint: (encode-path-segment $marketplace_services_endpoint), marketplace_order_id: (encode-path-segment $marketplace_order_id)} | format pattern "/{marketplace_services_endpoint}/pvt/orders/{marketplace_order_id}/invoice"))
+  let req_body = {"courier": $courier, "invoiceNumber": $invoice_number, "invoiceValue": $invoice_value, "issuanceDate": $issuance_date, "items": $items, "trackingNumber": $tracking_number, "trackingUrl": $tracking_url, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Send tracking information
@@ -623,14 +658,16 @@ export def "pvt-orders-invoice send-tracking-information" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({marketplace_services_endpoint: $marketplace_services_endpoint, marketplace_order_id: $marketplace_order_id, invoice_number: $invoice_number} | format pattern "/{marketplace_services_endpoint}/pvt/orders/{marketplace_order_id}/invoice/{invoice_number}"))
-  let body = {"courier": $courier, "dispatchedDate": $dispatched_date, "trackingNumber": $tracking_number, "trackingUrl": $tracking_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({marketplace_services_endpoint: (encode-path-segment $marketplace_services_endpoint), marketplace_order_id: (encode-path-segment $marketplace_order_id), invoice_number: (encode-path-segment $invoice_number)} | format pattern "/{marketplace_services_endpoint}/pvt/orders/{marketplace_order_id}/invoice/{invoice_number}"))
+  let req_body = {"courier": $courier, "dispatchedDate": $dispatched_date, "trackingNumber": $tracking_number, "trackingUrl": $tracking_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Update tracking status
@@ -638,7 +675,7 @@ export def "pvt-orders-invoice send-tracking-information" [
 # POST /{marketplaceServicesEndpoint}/pvt/orders/{marketplaceOrderId}/invoice/{invoiceNumber}/tracking
 # operationId: update-tracking-status
 # --events item shape: {city?: string, date?: string, description?: string, state?: string}
-export def "pvt-orders-invoice-tracking update-tracking-status" [
+export def "pvt-orders-invoice-tracking update-status" [
   marketplace_services_endpoint: string
   marketplace_order_id: string
   invoice_number: string
@@ -658,12 +695,14 @@ export def "pvt-orders-invoice-tracking update-tracking-status" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({marketplace_services_endpoint: $marketplace_services_endpoint, marketplace_order_id: $marketplace_order_id, invoice_number: $invoice_number} | format pattern "/{marketplace_services_endpoint}/pvt/orders/{marketplace_order_id}/invoice/{invoice_number}/tracking"))
-  let body = {"events": $events, "isDelivered": $is_delivered} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({marketplace_services_endpoint: (encode-path-segment $marketplace_services_endpoint), marketplace_order_id: (encode-path-segment $marketplace_order_id), invoice_number: (encode-path-segment $invoice_number)} | format pattern "/{marketplace_services_endpoint}/pvt/orders/{marketplace_order_id}/invoice/{invoice_number}/tracking"))
+  let req_body = {"events": $events, "isDelivered": $is_delivered} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }

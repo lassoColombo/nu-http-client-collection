@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-execute-script-actions exec-ute" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-execute-script-actions create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +102,8 @@ export def commands []: nothing -> table {
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/executeScriptActions
 # operationId: Clusters_ExecuteScriptActions
-# --scriptActions item shape: {name: string, parameters?: string, roles: list, uri: string}
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-execute-script-actions exec-ute" [
+# --scriptActions item shape: {name: string, parameters?: string, roles: list<string>, uri: string}
+export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-execute-script-actions create" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -108,25 +117,25 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The HDInsight client API Version.
   --persist-on-success: oneof<nothing, bool> # Gets or sets if the scripts needs to be persisted.
-  --script-actions: list # The list of run time script actions. — item shape: {name: string, parameters?: string, roles: list, uri: string}
+  --script-actions: list # The list of run time script actions. — item shape: {name: string, parameters?: string, roles: list<string>, uri: string}
 ]: any -> record<code: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HDInsight/clusters/{cluster_name}/executeScriptActions") $qp)
-  let body = {"persistOnSuccess": $persist_on_success, "scriptActions": $script_actions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HDInsight/clusters/{cluster_name}/executeScriptActions") $qp)
+  let req_body = {"persistOnSuccess": $persist_on_success, "scriptActions": $script_actions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all the persisted script actions for the specified cluster.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/scriptActions
 # operationId: ScriptActions_ListByCluster
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-script-actions list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-script-actions list" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -143,7 +152,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HDInsight/clusters/{cluster_name}/scriptActions") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HDInsight/clusters/{cluster_name}/scriptActions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,7 +180,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, script_name: $script_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HDInsight/clusters/{cluster_name}/scriptActions/{script_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), script_name: (encode-path-segment $script_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HDInsight/clusters/{cluster_name}/scriptActions/{script_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -181,7 +190,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/scriptExecutionHistory
 # operationId: ScriptExecutionHistory_ListByCluster
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-script-execution-history list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-script-execution-history list" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -198,7 +207,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HDInsight/clusters/{cluster_name}/scriptExecutionHistory") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HDInsight/clusters/{cluster_name}/scriptExecutionHistory") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -208,7 +217,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/scriptExecutionHistory/{scriptExecutionId}
 # operationId: ScriptActions_GetExecutionDetail
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-script-execution-history get-execution-detail" [
+export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-script-execution-history get-actions-detail" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -226,7 +235,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, script_execution_id: $script_execution_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HDInsight/clusters/{cluster_name}/scriptExecutionHistory/{script_execution_id}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), script_execution_id: (encode-path-segment $script_execution_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HDInsight/clusters/{cluster_name}/scriptExecutionHistory/{script_execution_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -236,7 +245,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/scriptExecutionHistory/{scriptExecutionId}/promote
 # operationId: ScriptExecutionHistory_Promote
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-script-execution-history-promote post" [
+export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-script-execution-history-promote create" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -254,7 +263,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, script_execution_id: $script_execution_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HDInsight/clusters/{cluster_name}/scriptExecutionHistory/{script_execution_id}/promote") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), cluster_name: (encode-path-segment $cluster_name), script_execution_id: (encode-path-segment $script_execution_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HDInsight/clusters/{cluster_name}/scriptExecutionHistory/{script_execution_id}/promote") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

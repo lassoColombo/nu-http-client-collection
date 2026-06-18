@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "resourcesjson get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "resources-json get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -91,7 +100,7 @@ export def commands []: nothing -> table {
 # Get Resources by search query
 #
 # GET /resources.json
-export def "resourcesjson get" [
+export def "resources-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,7 +123,7 @@ export def "resourcesjson get" [
 # Get Campaigns
 #
 # GET /resources/campaigns.json
-export def "resources-campaignsjson get" [
+export def "resources-campaigns-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -152,7 +161,7 @@ export def "resources-campaigns get" [
 ]: nothing -> record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: table<contactEmail: string, description: string, endDate: string, id: int, name: string, source: record, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/resources/campaigns/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/campaigns/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -161,7 +170,7 @@ export def "resources-campaigns get" [
 # Get MediaItems by Campaign ID
 #
 # GET /resources/campaigns/{id}/media.json
-export def "resources-campaigns-mediajson get" [
+export def "resources-campaigns-media-json get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +187,7 @@ export def "resources-campaigns-mediajson get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/resources/campaigns/{id}/media.json") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/campaigns/{id}/media.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -203,7 +212,7 @@ export def "resources-campaigns-syndicate-format get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, format: $format} | format pattern "/resources/campaigns/{id}/syndicate.{format}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/campaigns/{id}/syndicate.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -212,7 +221,7 @@ export def "resources-campaigns-syndicate-format get" [
 # Get Languages
 #
 # GET /resources/languages.json
-export def "resources-languagesjson get" [
+export def "resources-languages-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,7 +259,7 @@ export def "resources-languages get" [
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/resources/languages/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/languages/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -259,7 +268,7 @@ export def "resources-languages get" [
 # Get MediaItems
 #
 # GET /resources/media.json
-export def "resources-mediajson get" [
+export def "resources-media-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +343,7 @@ export def "resources-mediajson get" [
 # Get the list of featured content in the syndication system
 #
 # GET /resources/media/featured.json
-export def "resources-media-featuredjson get" [
+export def "resources-media-featured-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +384,7 @@ export def "resources-media-most-popular-media-format get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({format: $format} | format pattern "/resources/media/mostPopularMedia.{format}") $qp)
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/media/mostPopularMedia.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -384,7 +393,7 @@ export def "resources-media-most-popular-media-format get" [
 # Get MediaItems by search query
 #
 # GET /resources/media/searchResults.json
-export def "resources-media-search-resultsjson get" [
+export def "resources-media-search-results-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -422,7 +431,7 @@ export def "resources-media get" [
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/resources/media/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -446,7 +455,7 @@ export def "resources-media-content get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "calledByBuild" $called_by_build "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/resources/media/{id}/content") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/content") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -455,7 +464,7 @@ export def "resources-media-content get" [
 # Get embed code for MediaItem
 #
 # GET /resources/media/{id}/embed.json
-export def "resources-media-embedjson get" [
+export def "resources-media-embed-json get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -477,7 +486,7 @@ export def "resources-media-embedjson get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "flavor" $flavor "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "iframeName" $iframe_name "scalar") (serialize-qp "excludeJquery" $exclude_jquery "scalar") (serialize-qp "excludeDiv" $exclude_div "scalar") (serialize-qp "divId" $div_id "scalar") (serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/resources/media/{id}/embed.json") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/embed.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -486,7 +495,7 @@ export def "resources-media-embedjson get" [
 # Get Tag by ID
 #
 # GET /resources/media/{id}/preview.jpg
-export def "resources-media-previewjpg get" [
+export def "resources-media-preview-jpg get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -499,7 +508,7 @@ export def "resources-media-previewjpg get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/resources/media/{id}/preview.jpg"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/preview.jpg"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -526,7 +535,7 @@ export def "resources-media-related-media-format get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, format: $format} | format pattern "/resources/media/{id}/relatedMedia.{format}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/media/{id}/relatedMedia.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -561,7 +570,7 @@ export def "resources-media-syndicate-format get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cssClass" $css_class "scalar") (serialize-qp "stripStyles" $strip_styles "scalar") (serialize-qp "stripScripts" $strip_scripts "scalar") (serialize-qp "stripImages" $strip_images "scalar") (serialize-qp "stripBreaks" $strip_breaks "scalar") (serialize-qp "stripClasses" $strip_classes "scalar") (serialize-qp "font-size" $font_size "scalar") (serialize-qp "imageFloat" $image_float "scalar") (serialize-qp "imageMargin" $image_margin "scalar") (serialize-qp "autoplay" $autoplay "scalar") (serialize-qp "rel" $rel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, format: $format} | format pattern "/resources/media/{id}/syndicate.{format}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/media/{id}/syndicate.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -570,7 +579,7 @@ export def "resources-media-syndicate-format get" [
 # Get JPG thumbnail for MediaItem
 #
 # GET /resources/media/{id}/thumbnail.jpg
-export def "resources-media-thumbnailjpg get" [
+export def "resources-media-thumbnail-jpg get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -583,7 +592,7 @@ export def "resources-media-thumbnailjpg get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/resources/media/{id}/thumbnail.jpg"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/thumbnail.jpg"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -592,7 +601,7 @@ export def "resources-media-thumbnailjpg get" [
 # Get Youtube metadata for MediaItem
 #
 # GET /resources/media/{id}/youtubeMetaData.json
-export def "resources-media-youtube-meta-datajson get" [
+export def "resources-media-youtube-meta-data-json get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -605,7 +614,7 @@ export def "resources-media-youtube-meta-datajson get" [
 ]: nothing -> record<callback: string, meta: record<messages: list<record>, pagination: record<count: int, currentUrl: string, max: int, nextUrl: string, offset: int, pageNum: int, previousUrl: string, sort: string, total: int, totalPages: int>, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/resources/media/{id}/youtubeMetaData.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/youtubeMetaData.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -627,7 +636,7 @@ export def "resources-media-types-format get" [
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format} | format pattern "/resources/mediaTypes.{format}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/mediaTypes.{format}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -636,7 +645,7 @@ export def "resources-media-types-format get" [
 # Get Sources
 #
 # GET /resources/sources.json
-export def "resources-sourcesjson get" [
+export def "resources-sources-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -674,7 +683,7 @@ export def "resources-sources get" [
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/resources/sources/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/sources/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -699,7 +708,7 @@ export def "resources-sources-syndicate-format get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, format: $format} | format pattern "/resources/sources/{id}/syndicate.{format}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/sources/{id}/syndicate.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -730,7 +739,7 @@ export def "resources-tags-format get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "nameContains" $name_contains "scalar") (serialize-qp "mediaId" $media_id "scalar") (serialize-qp "typeId" $type_id "scalar") (serialize-qp "typeName" $type_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({format: $format} | format pattern "/resources/tags.{format}") $qp)
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/tags.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -752,7 +761,7 @@ export def "resources-tags-tag-languages-format get" [
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format} | format pattern "/resources/tags/tagLanguages.{format}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/tags/tagLanguages.{format}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -774,7 +783,7 @@ export def "resources-tags-tag-types-format get" [
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({format: $format} | format pattern "/resources/tags/tagTypes.{format}"))
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/tags/tagTypes.{format}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -797,7 +806,7 @@ export def "resources-tags get" [
 ]: nothing -> table<callback: string, meta: record<messages: list, pagination: record, status: int>, results: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, format: $format} | format pattern "/resources/tags/{id}.{format}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/tags/{id}.{format}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -824,7 +833,7 @@ export def "resources-tags-media-format get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, format: $format} | format pattern "/resources/tags/{id}/media.{format}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/tags/{id}/media.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -851,7 +860,7 @@ export def "resources-tags-related-format get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, format: $format} | format pattern "/resources/tags/{id}/related.{format}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/tags/{id}/related.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -876,7 +885,7 @@ export def "resources-tags-syndicate-format get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, format: $format} | format pattern "/resources/tags/{id}/syndicate.{format}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/tags/{id}/syndicate.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -900,7 +909,7 @@ export def "resources-user-media-lists get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/resources/userMediaLists/{id}.json") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/userMediaLists/{id}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

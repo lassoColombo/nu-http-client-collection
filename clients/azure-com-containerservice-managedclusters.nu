@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -132,7 +141,7 @@ export def "subscriptions-providers-microsoft-container-service-managed-clusters
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ContainerService/managedClusters") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ContainerService/managedClusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,7 +151,7 @@ export def "subscriptions-providers-microsoft-container-service-managed-clusters
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerService/managedClusters
 # operationId: ManagedClusters_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-container-service-managed-clusters list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-container-service-managed-clusters list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -158,7 +167,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -185,7 +194,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -212,7 +221,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -241,12 +250,12 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}") $qp)
-  let body = {"tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}") $qp)
+  let req_body = {"tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates or updates a managed cluster.
@@ -277,12 +286,12 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}") $qp)
-  let body = {"location": $location, "tags": $tags, "identity": $identity, "properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}") $qp)
+  let req_body = {"location": $location, "tags": $tags, "identity": $identity, "properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets an access profile of a managed cluster.
@@ -307,7 +316,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, role_name: $role_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/accessProfiles/{role_name}/listCredential") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), role_name: (encode-path-segment $role_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/accessProfiles/{role_name}/listCredential") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -334,7 +343,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/agentPools") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/agentPools") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -362,7 +371,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, agent_pool_name: $agent_pool_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/agentPools/{agent_pool_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), agent_pool_name: (encode-path-segment $agent_pool_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/agentPools/{agent_pool_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -390,7 +399,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, agent_pool_name: $agent_pool_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/agentPools/{agent_pool_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), agent_pool_name: (encode-path-segment $agent_pool_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/agentPools/{agent_pool_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -400,7 +409,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerService/managedClusters/{resourceName}/agentPools/{agentPoolName}
 # operationId: AgentPools_CreateOrUpdate
-# --properties shape: {availabilityZones?: list, count?: int, enableAutoScaling?: bool, enableNodePublicIP?: bool, maxCount?: int, maxPods?: int, minCount?: int, nodeTaints?: list, orchestratorVersion?: string, osDiskSizeGB?: int, osType?: "Linux"|"Windows", scaleSetEvictionPolicy?: "Delete"|"Deallocate", scaleSetPriority?: "Low"|"Regular", type?: "VirtualMachineScaleSets"|"AvailabilitySet", vmSize?: "Standard_A1"|"Standard_A10"|"Standard_A11"|"Standard_A1_v2"|"Standard_A2"|"Standard_A2_v2"|"Standard_A2m_v2"|"Standard_A3"|"Standard_A4"|"Standard_A4_v2"|"Standard_A4m_v2"|"Standard_A5"|"Standard_A6"|"Standard_A7"|"Standard_A8"|"Standard_A8_v2"|"Standard_A8m_v2"|"Standard_A9"|"Standard_B2ms"|"Standard_B2s"|"Standard_B4ms"|"Standard_B8ms"|"Standard_D1"|"Standard_D11"|"Standard_D11_v2"|"Standard_D11_v2_Promo"|"Standard_D12"|"Standard_D12_v2"|"Standard_D12_v2_Promo"|"Standard_D13"|"Standard_D13_v2"|"Standard_D13_v2_Promo"|"Standard_D14"|"Standard_D14_v2"|"Standard_D14_v2_Promo"|"Standard_D15_v2"|"Standard_D16_v3"|"Standard_D16s_v3"|"Standard_D1_v2"|"Standard_D2"|"Standard_D2_v2"|"Standard_D2_v2_Promo"|"Standard_D2_v3"|"Standard_D2s_v3"|"Standard_D3"|"Standard_D32_v3"|"Standard_D32s_v3"|"Standard_D3_v2"|"Standard_D3_v2_Promo"|"Standard_D4"|"Standard_D4_v2"|"Standard_D4_v2_Promo"|"Standard_D4_v3"|"Standard_D4s_v3"|"Standard_D5_v2"|"Standard_D5_v2_Promo"|"Standard_D64_v3"|"Standard_D64s_v3"|"Standard_D8_v3"|"Standard_D8s_v3"|"Standard_DS1"|"Standard_DS11"|"Standard_DS11_v2"|"Standard_DS11_v2_Promo"|"Standard_DS12"|"Standard_DS12_v2"|"Standard_DS12_v2_Promo"|"Standard_DS13"|"Standard_DS13-2_v2"|"Standard_DS13-4_v2"|"Standard_DS13_v2"|"Standard_DS13_v2_Promo"|"Standard_DS14"|"Standard_DS14-4_v2"|"Standard_DS14-8_v2"|"Standard_DS14_v2"|"Standard_DS14_v2_Promo"|"Standard_DS15_v2"|"Standard_DS1_v2"|"Standard_DS2"|"Standard_DS2_v2"|"Standard_DS2_v2_Promo"|"Standard_DS3"|"Standard_DS3_v2"|"Standard_DS3_v2_Promo"|"Standard_DS4"|"Standard_DS4_v2"|"Standard_DS4_v2_Promo"|"Standard_DS5_v2"|"Standard_DS5_v2_Promo"|"Standard_E16_v3"|"Standard_E16s_v3"|"Standard_E2_v3"|"Standard_E2s_v3"|"Standard_E32-16s_v3"|"Standard_E32-8s_v3"|"Standard_E32_v3"|"Standard_E32s_v3"|"Standard_E4_v3"|"Standard_E4s_v3"|"Standard_E64-16s_v3"|"Standard_E64-32s_v3"|"Standard_E64_v3"|"Standard_E64s_v3"|"Standard_E8_v3"|"Standard_E8s_v3"|"Standard_F1"|"Standard_F16"|"Standard_F16s"|"Standard_F16s_v2"|"Standard_F1s"|"Standard_F2"|"Standard_F2s"|"Standard_F2s_v2"|"Standard_F32s_v2"|"Standard_F4"|"Standard_F4s"|"Standard_F4s_v2"|"Standard_F64s_v2"|"Standard_F72s_v2"|"Standard_F8"|"Standard_F8s"|"Standard_F8s_v2"|"Standard_G1"|"Standard_G2"|"Standard_G3"|"Standard_G4"|"Standard_G5"|"Standard_GS1"|"Standard_GS2"|"Standard_GS3"|"Standard_GS4"|"Standard_GS4-4"|"Standard_GS4-8"|"Standard_GS5"|"Standard_GS5-16"|"Standard_GS5-8"|"Standard_H16"|"Standard_H16m"|"Standard_H16mr"|"Standard_H16r"|"Standard_H8"|"Standard_H8m"|"Standard_L16s"|"Standard_L32s"|"Standard_L4s"|"Standard_L8s"|"Standard_M128-32ms"|"Standard_M128-64ms"|"Standard_M128ms"|"Standard_M128s"|"Standard_M64-16ms"|"Standard_M64-32ms"|"Standard_M64ms"|"Standard_M64s"|"Standard_NC12"|"Standard_NC12s_v2"|"Standard_NC12s_v3"|"Standard_NC24"|"Standard_NC24r"|"Standard_NC24rs_v2"|"Standard_NC24rs_v3"|"Standard_NC24s_v2"|"Standard_NC24s_v3"|"Standard_NC6"|"Standard_NC6s_v2"|"Standard_NC6s_v3"|"Standard_ND12s"|"Standard_ND24rs"|"Standard_ND24s"|"Standard_ND6s"|"Standard_NV12"|"Standard_NV24"|"Standard_NV6", vnetSubnetID?: string}
+# --properties shape: {availabilityZones?: list<string>, count?: int, enableAutoScaling?: bool, enableNodePublicIP?: bool, maxCount?: int, maxPods?: int, minCount?: int, nodeTaints?: list<string>, orchestratorVersion?: string, osDiskSizeGB?: int, osType?: "Linux"|"Windows", scaleSetEvictionPolicy?: "Delete"|"Deallocate", scaleSetPriority?: "Low"|"Regular", type?: "VirtualMachineScaleSets"|"AvailabilitySet", ... (2 more fields)}
 export def "subscriptions-resource-groups-providers-microsoft-container-service-managed-clusters-agent-pools create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -415,18 +424,18 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --properties: any # Properties for the container service agent pool profile. — shape: {availabilityZones?: list, count?: int, enableAutoScaling?: bool, enableNodePublicIP?: bool, maxCount?: int, maxPods?: int, minCount?: int, nodeTaints?: list, orchestratorVersion?: string, osDiskSizeGB?: int, osType?: "Linux"|"Windows", scaleSetEvictionPolicy?: "Delete"|"Deallocate", scaleSetPriority?: "Low"|"Regular", type?: "VirtualMachineScaleSets"|"AvailabilitySet", vmSize?: "Standard_A1"|"Standard_A10"|"Standard_A11"|"Standard_A1_v2"|"Standard_A2"|"Standard_A2_v2"|"Standard_A2m_v2"|"Standard_A3"|"Standard_A4"|"Standard_A4_v2"|"Standard_A4m_v2"|"Standard_A5"|"Standard_A6"|"Standard_A7"|"Standard_A8"|"Standard_A8_v2"|"Standard_A8m_v2"|"Standard_A9"|"Standard_B2ms"|"Standard_B2s"|"Standard_B4ms"|"Standard_B8ms"|"Standard_D1"|"Standard_D11"|"Standard_D11_v2"|"Standard_D11_v2_Promo"|"Standard_D12"|"Standard_D12_v2"|"Standard_D12_v2_Promo"|"Standard_D13"|"Standard_D13_v2"|"Standard_D13_v2_Promo"|"Standard_D14"|"Standard_D14_v2"|"Standard_D14_v2_Promo"|"Standard_D15_v2"|"Standard_D16_v3"|"Standard_D16s_v3"|"Standard_D1_v2"|"Standard_D2"|"Standard_D2_v2"|"Standard_D2_v2_Promo"|"Standard_D2_v3"|"Standard_D2s_v3"|"Standard_D3"|"Standard_D32_v3"|"Standard_D32s_v3"|"Standard_D3_v2"|"Standard_D3_v2_Promo"|"Standard_D4"|"Standard_D4_v2"|"Standard_D4_v2_Promo"|"Standard_D4_v3"|"Standard_D4s_v3"|"Standard_D5_v2"|"Standard_D5_v2_Promo"|"Standard_D64_v3"|"Standard_D64s_v3"|"Standard_D8_v3"|"Standard_D8s_v3"|"Standard_DS1"|"Standard_DS11"|"Standard_DS11_v2"|"Standard_DS11_v2_Promo"|"Standard_DS12"|"Standard_DS12_v2"|"Standard_DS12_v2_Promo"|"Standard_DS13"|"Standard_DS13-2_v2"|"Standard_DS13-4_v2"|"Standard_DS13_v2"|"Standard_DS13_v2_Promo"|"Standard_DS14"|"Standard_DS14-4_v2"|"Standard_DS14-8_v2"|"Standard_DS14_v2"|"Standard_DS14_v2_Promo"|"Standard_DS15_v2"|"Standard_DS1_v2"|"Standard_DS2"|"Standard_DS2_v2"|"Standard_DS2_v2_Promo"|"Standard_DS3"|"Standard_DS3_v2"|"Standard_DS3_v2_Promo"|"Standard_DS4"|"Standard_DS4_v2"|"Standard_DS4_v2_Promo"|"Standard_DS5_v2"|"Standard_DS5_v2_Promo"|"Standard_E16_v3"|"Standard_E16s_v3"|"Standard_E2_v3"|"Standard_E2s_v3"|"Standard_E32-16s_v3"|"Standard_E32-8s_v3"|"Standard_E32_v3"|"Standard_E32s_v3"|"Standard_E4_v3"|"Standard_E4s_v3"|"Standard_E64-16s_v3"|"Standard_E64-32s_v3"|"Standard_E64_v3"|"Standard_E64s_v3"|"Standard_E8_v3"|"Standard_E8s_v3"|"Standard_F1"|"Standard_F16"|"Standard_F16s"|"Standard_F16s_v2"|"Standard_F1s"|"Standard_F2"|"Standard_F2s"|"Standard_F2s_v2"|"Standard_F32s_v2"|"Standard_F4"|"Standard_F4s"|"Standard_F4s_v2"|"Standard_F64s_v2"|"Standard_F72s_v2"|"Standard_F8"|"Standard_F8s"|"Standard_F8s_v2"|"Standard_G1"|"Standard_G2"|"Standard_G3"|"Standard_G4"|"Standard_G5"|"Standard_GS1"|"Standard_GS2"|"Standard_GS3"|"Standard_GS4"|"Standard_GS4-4"|"Standard_GS4-8"|"Standard_GS5"|"Standard_GS5-16"|"Standard_GS5-8"|"Standard_H16"|"Standard_H16m"|"Standard_H16mr"|"Standard_H16r"|"Standard_H8"|"Standard_H8m"|"Standard_L16s"|"Standard_L32s"|"Standard_L4s"|"Standard_L8s"|"Standard_M128-32ms"|"Standard_M128-64ms"|"Standard_M128ms"|"Standard_M128s"|"Standard_M64-16ms"|"Standard_M64-32ms"|"Standard_M64ms"|"Standard_M64s"|"Standard_NC12"|"Standard_NC12s_v2"|"Standard_NC12s_v3"|"Standard_NC24"|"Standard_NC24r"|"Standard_NC24rs_v2"|"Standard_NC24rs_v3"|"Standard_NC24s_v2"|"Standard_NC24s_v3"|"Standard_NC6"|"Standard_NC6s_v2"|"Standard_NC6s_v3"|"Standard_ND12s"|"Standard_ND24rs"|"Standard_ND24s"|"Standard_ND6s"|"Standard_NV12"|"Standard_NV24"|"Standard_NV6", vnetSubnetID?: string}
+  --properties: any # Properties for the container service agent pool profile. — shape: {availabilityZones?: list<string>, count?: int, enableAutoScaling?: bool, enableNodePublicIP?: bool, maxCount?: int, maxPods?: int, minCount?: int, nodeTaints?: list<string>, orchestratorVersion?: string, osDiskSizeGB?: int, osType?: "Linux"|"Windows", scaleSetEvictionPolicy?: "Delete"|"Deallocate", scaleSetPriority?: "Low"|"Regular", type?: "VirtualMachineScaleSets"|"AvailabilitySet", ... (2 more fields)}
 ]: any -> record<id: string, name: string, type: string, properties: record<availabilityZones: list<string>, count: int, enableAutoScaling: bool, enableNodePublicIP: bool, maxCount: int, maxPods: int, minCount: int, nodeTaints: list<string>, orchestratorVersion: string, osDiskSizeGB: int, osType: string, provisioningState: string, scaleSetEvictionPolicy: string, scaleSetPriority: string, type: string, vmSize: string, vnetSubnetID: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, agent_pool_name: $agent_pool_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/agentPools/{agent_pool_name}") $qp)
-  let body = {"properties": $properties} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), agent_pool_name: (encode-path-segment $agent_pool_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/agentPools/{agent_pool_name}") $qp)
+  let req_body = {"properties": $properties} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets upgrade profile for an agent pool.
@@ -451,7 +460,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, agent_pool_name: $agent_pool_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/agentPools/{agent_pool_name}/upgradeProfiles/default") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), agent_pool_name: (encode-path-segment $agent_pool_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/agentPools/{agent_pool_name}/upgradeProfiles/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -478,7 +487,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/availableAgentPoolVersions") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/availableAgentPoolVersions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -505,7 +514,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/listClusterAdminCredential") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/listClusterAdminCredential") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -532,7 +541,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/listClusterUserCredential") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/listClusterUserCredential") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -542,7 +551,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerService/managedClusters/{resourceName}/resetAADProfile
 # operationId: ManagedClusters_ResetAADProfile
-export def "subscriptions-resource-groups-providers-microsoft-container-service-managed-clusters-reset-aad-profile reset-ad" [
+export def "subscriptions-resource-groups-providers-microsoft-container-service-managed-clusters-reset-aad-profile reset" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -564,12 +573,12 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/resetAADProfile") $qp)
-  let body = {"clientAppID": $client_app_id, "serverAppID": $server_app_id, "serverAppSecret": $server_app_secret, "tenantID": $tenant_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/resetAADProfile") $qp)
+  let req_body = {"clientAppID": $client_app_id, "serverAppID": $server_app_id, "serverAppSecret": $server_app_secret, "tenantID": $tenant_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Reset Service Principal Profile of a managed cluster.
@@ -596,19 +605,19 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/resetServicePrincipalProfile") $qp)
-  let body = {"clientId": $client_id, "secret": $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/resetServicePrincipalProfile") $qp)
+  let req_body = {"clientId": $client_id, "secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Rotate certificates of a managed cluster.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerService/managedClusters/{resourceName}/rotateClusterCertificates
 # operationId: ManagedClusters_RotateClusterCertificates
-export def "subscriptions-resource-groups-providers-microsoft-container-service-managed-clusters-rotate-cluster-certificates post" [
+export def "subscriptions-resource-groups-providers-microsoft-container-service-managed-clusters-rotate-cluster-certificates create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -625,7 +634,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/rotateClusterCertificates") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/rotateClusterCertificates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -652,7 +661,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-service-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/upgradeProfiles/default") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ContainerService/managedClusters/{resource_name}/upgradeProfiles/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

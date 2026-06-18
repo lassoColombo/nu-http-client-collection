@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -120,14 +129,14 @@ export def "channels-configure-logs logs" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/channels/{id}/configure_logs"))
-  let body = {"egressAccessLogs": $egress_access_logs, "ingressAccessLogs": $ingress_access_logs} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/channels/{id}/configure_logs"))
+  let req_body = {"egressAccessLogs": $egress_access_logs, "ingressAccessLogs": $ingress_access_logs} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a new Channel.
@@ -158,13 +167,13 @@ export def "channels create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/channels")
-  let body = {"description": $description, "id": $id, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"description": $description, "id": $id, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a collection of Channels.
@@ -196,10 +205,10 @@ export def "channels list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -234,13 +243,13 @@ export def "harvest-jobs create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/harvest_jobs")
-  let body = {"endTime": $end_time, "id": $id, "originEndpointId": $origin_endpoint_id, "s3Destination": $s3_destination, "startTime": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"endTime": $end_time, "id": $id, "originEndpointId": $origin_endpoint_id, "s3Destination": $s3_destination, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a collection of HarvestJob records.
@@ -274,10 +283,10 @@ export def "harvest-jobs list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeChannelId" $include_channel_id "scalar") (serialize-qp "includeStatus" $include_status "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/harvest_jobs" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -312,26 +321,26 @@ export def "origin-endpoints create" [
   --dash-package: record # A Dynamic Adaptive Streaming over HTTP (DASH) packaging configuration. — shape: {AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeIframeOnlyStream?: any, ManifestLayout?: any, ManifestWindowSeconds?: any, MinBufferTimeSeconds?: any, MinUpdatePeriodSeconds?: any, PeriodTriggers?: any, Profile?: any, SegmentDurationSeconds?: any, SegmentTemplateFormat?: any, StreamSelection?: any, SuggestedPresentationDelaySeconds?: any, UtcTiming?: any, UtcTimingUri?: any}
   --description: string # A short text description of the OriginEndpoint.
   --hls-package: record # An HTTP Live Streaming (HLS) packaging configuration. — shape: {AdMarkers?: any, AdTriggers?: any, AdsOnDeliveryRestrictions?: any, Encryption?: any, IncludeDvbSubtitles?: any, IncludeIframeOnlyStream?: any, PlaylistType?: any, PlaylistWindowSeconds?: any, ProgramDateTimeIntervalSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any, UseAudioRenditionGroup?: any}
-  id: string # The ID of the OriginEndpoint.  The ID must be unique within the region and it cannot be changed after the OriginEndpoint is created.
+  id: string # The ID of the OriginEndpoint. The ID must be unique within the region and it cannot be changed after the OriginEndpoint is created.
   --manifest-name: string # A short string that will be used as the filename of the OriginEndpoint URL (defaults to "index").
   --mss-package: record # A Microsoft Smooth Streaming (MSS) packaging configuration. — shape: {Encryption?: any, ManifestWindowSeconds?: any, SegmentDurationSeconds?: any, StreamSelection?: any}
   --origination: string@origination-completer # Control whether origination of video is allowed for this OriginEndpoint. If set to ALLOW, the OriginEndpoint may by requested, pursuant to any other form of access control. If set to DENY, the OriginEndpoint may not be requested. This can be helpful for Live to VOD harvesting, or for temporarily disabling origination
   --startover-window-seconds: int # Maximum duration (seconds) of content to retain for startover playback. If not specified, startover playback will be disabled for the OriginEndpoint.
   --tags: record # A collection of tags associated with a resource
   --time-delay-seconds: int # Amount of delay (seconds) to enforce on the playback of live content. If not specified, there will be no time delay in effect for the OriginEndpoint.
-  --whitelist: list # A list of source IP CIDR blocks that will be allowed to access the OriginEndpoint.
+  --whitelist: list<string> # A list of source IP CIDR blocks that will be allowed to access the OriginEndpoint.
 ]: any -> record<Arn: record, Authorization: record<CdnIdentifierSecret: record, SecretsRoleArn: record>, ChannelId: record, CmafPackage: record<Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, KeyRotationIntervalSeconds: record, SpekeKeyProvider: record>, HlsManifests: record, SegmentDurationSeconds: record, SegmentPrefix: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>>, CreatedAt: record, DashPackage: record<AdTriggers: record, AdsOnDeliveryRestrictions: record, Encryption: record<KeyRotationIntervalSeconds: record, SpekeKeyProvider: record>, IncludeIframeOnlyStream: record, ManifestLayout: record, ManifestWindowSeconds: record, MinBufferTimeSeconds: record, MinUpdatePeriodSeconds: record, PeriodTriggers: record, Profile: record, SegmentDurationSeconds: record, SegmentTemplateFormat: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>, SuggestedPresentationDelaySeconds: record, UtcTiming: record, UtcTimingUri: record>, Description: record, HlsPackage: record<AdMarkers: record, AdTriggers: record, AdsOnDeliveryRestrictions: record, Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, KeyRotationIntervalSeconds: record, RepeatExtXKey: record, SpekeKeyProvider: record>, IncludeDvbSubtitles: record, IncludeIframeOnlyStream: record, PlaylistType: record, PlaylistWindowSeconds: record, ProgramDateTimeIntervalSeconds: record, SegmentDurationSeconds: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>, UseAudioRenditionGroup: record>, Id: record, ManifestName: record, MssPackage: record<Encryption: record<SpekeKeyProvider: record>, ManifestWindowSeconds: record, SegmentDurationSeconds: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>>, Origination: record, StartoverWindowSeconds: record, Tags: record, TimeDelaySeconds: record, Url: record, Whitelist: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/origin_endpoints")
-  let body = {"authorization": $authorization, "channelId": $channel_id, "cmafPackage": $cmaf_package, "dashPackage": $dash_package, "description": $description, "hlsPackage": $hls_package, "id": $id, "manifestName": $manifest_name, "mssPackage": $mss_package, "origination": $origination, "startoverWindowSeconds": $startover_window_seconds, "tags": $tags, "timeDelaySeconds": $time_delay_seconds, "whitelist": $whitelist} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"authorization": $authorization, "channelId": $channel_id, "cmafPackage": $cmaf_package, "dashPackage": $dash_package, "description": $description, "hlsPackage": $hls_package, "id": $id, "manifestName": $manifest_name, "mssPackage": $mss_package, "origination": $origination, "startoverWindowSeconds": $startover_window_seconds, "tags": $tags, "timeDelaySeconds": $time_delay_seconds, "whitelist": $whitelist} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a collection of OriginEndpoint records.
@@ -364,10 +373,10 @@ export def "origin-endpoints list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "channelId" $channel_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/origin_endpoints" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -395,11 +404,11 @@ export def "channels delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/channels/{id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/channels/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -427,11 +436,11 @@ export def "channels get" [
 ]: nothing -> record<Arn: record, CreatedAt: record, Description: record, EgressAccessLogs: record<LogGroupName: record>, HlsIngest: record<IngestEndpoints: record>, Id: record, IngressAccessLogs: record<LogGroupName: record>, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/channels/{id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/channels/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -461,14 +470,14 @@ export def "channels update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/channels/{id}"))
-  let body = {"description": $description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/channels/{id}"))
+  let req_body = {"description": $description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes an existing OriginEndpoint.
@@ -495,11 +504,11 @@ export def "origin-endpoints delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/origin_endpoints/{id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/origin_endpoints/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -527,11 +536,11 @@ export def "origin-endpoints get" [
 ]: nothing -> record<Arn: record, Authorization: record<CdnIdentifierSecret: record, SecretsRoleArn: record>, ChannelId: record, CmafPackage: record<Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, KeyRotationIntervalSeconds: record, SpekeKeyProvider: record>, HlsManifests: record, SegmentDurationSeconds: record, SegmentPrefix: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>>, CreatedAt: record, DashPackage: record<AdTriggers: record, AdsOnDeliveryRestrictions: record, Encryption: record<KeyRotationIntervalSeconds: record, SpekeKeyProvider: record>, IncludeIframeOnlyStream: record, ManifestLayout: record, ManifestWindowSeconds: record, MinBufferTimeSeconds: record, MinUpdatePeriodSeconds: record, PeriodTriggers: record, Profile: record, SegmentDurationSeconds: record, SegmentTemplateFormat: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>, SuggestedPresentationDelaySeconds: record, UtcTiming: record, UtcTimingUri: record>, Description: record, HlsPackage: record<AdMarkers: record, AdTriggers: record, AdsOnDeliveryRestrictions: record, Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, KeyRotationIntervalSeconds: record, RepeatExtXKey: record, SpekeKeyProvider: record>, IncludeDvbSubtitles: record, IncludeIframeOnlyStream: record, PlaylistType: record, PlaylistWindowSeconds: record, ProgramDateTimeIntervalSeconds: record, SegmentDurationSeconds: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>, UseAudioRenditionGroup: record>, Id: record, ManifestName: record, MssPackage: record<Encryption: record<SpekeKeyProvider: record>, ManifestWindowSeconds: record, SegmentDurationSeconds: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>>, Origination: record, StartoverWindowSeconds: record, Tags: record, TimeDelaySeconds: record, Url: record, Whitelist: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/origin_endpoints/{id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/origin_endpoints/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -571,19 +580,19 @@ export def "origin-endpoints update" [
   --origination: string@origination-completer # Control whether origination of video is allowed for this OriginEndpoint. If set to ALLOW, the OriginEndpoint may by requested, pursuant to any other form of access control. If set to DENY, the OriginEndpoint may not be requested. This can be helpful for Live to VOD harvesting, or for temporarily disabling origination
   --startover-window-seconds: int # Maximum duration (in seconds) of content to retain for startover playback. If not specified, startover playback will be disabled for the OriginEndpoint.
   --time-delay-seconds: int # Amount of delay (in seconds) to enforce on the playback of live content. If not specified, there will be no time delay in effect for the OriginEndpoint.
-  --whitelist: list # A list of source IP CIDR blocks that will be allowed to access the OriginEndpoint.
+  --whitelist: list<string> # A list of source IP CIDR blocks that will be allowed to access the OriginEndpoint.
 ]: any -> record<Arn: record, Authorization: record<CdnIdentifierSecret: record, SecretsRoleArn: record>, ChannelId: record, CmafPackage: record<Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, KeyRotationIntervalSeconds: record, SpekeKeyProvider: record>, HlsManifests: record, SegmentDurationSeconds: record, SegmentPrefix: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>>, CreatedAt: record, DashPackage: record<AdTriggers: record, AdsOnDeliveryRestrictions: record, Encryption: record<KeyRotationIntervalSeconds: record, SpekeKeyProvider: record>, IncludeIframeOnlyStream: record, ManifestLayout: record, ManifestWindowSeconds: record, MinBufferTimeSeconds: record, MinUpdatePeriodSeconds: record, PeriodTriggers: record, Profile: record, SegmentDurationSeconds: record, SegmentTemplateFormat: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>, SuggestedPresentationDelaySeconds: record, UtcTiming: record, UtcTimingUri: record>, Description: record, HlsPackage: record<AdMarkers: record, AdTriggers: record, AdsOnDeliveryRestrictions: record, Encryption: record<ConstantInitializationVector: record, EncryptionMethod: record, KeyRotationIntervalSeconds: record, RepeatExtXKey: record, SpekeKeyProvider: record>, IncludeDvbSubtitles: record, IncludeIframeOnlyStream: record, PlaylistType: record, PlaylistWindowSeconds: record, ProgramDateTimeIntervalSeconds: record, SegmentDurationSeconds: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>, UseAudioRenditionGroup: record>, Id: record, ManifestName: record, MssPackage: record<Encryption: record<SpekeKeyProvider: record>, ManifestWindowSeconds: record, SegmentDurationSeconds: record, StreamSelection: record<MaxVideoBitsPerSecond: record, MinVideoBitsPerSecond: record, StreamOrder: record>>, Origination: record, StartoverWindowSeconds: record, Tags: record, TimeDelaySeconds: record, Url: record, Whitelist: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/origin_endpoints/{id}"))
-  let body = {"authorization": $authorization, "cmafPackage": $cmaf_package, "dashPackage": $dash_package, "description": $description, "hlsPackage": $hls_package, "manifestName": $manifest_name, "mssPackage": $mss_package, "origination": $origination, "startoverWindowSeconds": $startover_window_seconds, "timeDelaySeconds": $time_delay_seconds, "whitelist": $whitelist} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/origin_endpoints/{id}"))
+  let req_body = {"authorization": $authorization, "cmafPackage": $cmaf_package, "dashPackage": $dash_package, "description": $description, "hlsPackage": $hls_package, "manifestName": $manifest_name, "mssPackage": $mss_package, "origination": $origination, "startoverWindowSeconds": $startover_window_seconds, "timeDelaySeconds": $time_delay_seconds, "whitelist": $whitelist} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets details about an existing HarvestJob.
@@ -610,18 +619,18 @@ export def "harvest-jobs get" [
 ]: nothing -> record<Arn: record, ChannelId: record, CreatedAt: record, EndTime: record, Id: record, OriginEndpointId: record, S3Destination: record<BucketName: record, ManifestKey: record, RoleArn: record>, StartTime: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/harvest_jobs/{id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/harvest_jobs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /tags/{resource-arn}
 #
 # operationId: ListTagsForResource
-export def "tags list-tags-for-resource" [
+export def "tags list" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -641,18 +650,18 @@ export def "tags list-tags-for-resource" [
 ]: nothing -> record<Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /tags/{resource-arn}
 #
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tags tag" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -674,14 +683,14 @@ export def "tags tag-resource" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
-  let body = {"tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}"))
+  let req_body = {"tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Changes the Channel's first IngestEndpoint's username and password. WARNING - This API is deprecated. Please use RotateIngestEndpointCredentials instead
@@ -690,7 +699,7 @@ export def "tags tag-resource" [
 # DEPRECATED
 # operationId: RotateChannelCredentials
 @deprecated
-export def "channels-credentials put" [
+export def "channels-credentials update-rotate" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -710,11 +719,11 @@ export def "channels-credentials put" [
 ]: nothing -> record<Arn: record, CreatedAt: record, Description: record, EgressAccessLogs: record<LogGroupName: record>, HlsIngest: record<IngestEndpoints: record>, Id: record, IngressAccessLogs: record<LogGroupName: record>, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/channels/{id}/credentials"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/channels/{id}/credentials"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -722,7 +731,7 @@ export def "channels-credentials put" [
 #
 # PUT /channels/{id}/ingest_endpoints/{ingest_endpoint_id}/credentials
 # operationId: RotateIngestEndpointCredentials
-export def "channels-ingest-endpoints-credentials put" [
+export def "channels-ingest-endpoints-credentials update-rotate" [
   id: string
   ingest_endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -743,18 +752,18 @@ export def "channels-ingest-endpoints-credentials put" [
 ]: nothing -> record<Arn: record, CreatedAt: record, Description: record, EgressAccessLogs: record<LogGroupName: record>, HlsIngest: record<IngestEndpoints: record>, Id: record, IngressAccessLogs: record<LogGroupName: record>, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, ingest_endpoint_id: $ingest_endpoint_id} | format pattern "/channels/{id}/ingest_endpoints/{ingest_endpoint_id}/credentials"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), ingest_endpoint_id: (encode-path-segment $ingest_endpoint_id)} | format pattern "/channels/{id}/ingest_endpoints/{ingest_endpoint_id}/credentials"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE /tags/{resource-arn}#tagKeys
 #
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "tags untag" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -776,10 +785,10 @@ export def "tags untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}#tagKeys") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}#tagKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

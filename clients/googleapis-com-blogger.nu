@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -79,7 +88,7 @@ def status-completer-2 [] { ["EMPTIED" "LIVE" "PENDING" "SPAM"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "blogs-byurl bloggerblogsgetByUrl" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "blogs-byurl get-by-url" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -103,7 +112,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3/blogs/byurl
 # operationId: blogger.blogs.getByUrl
-export def "blogs-byurl bloggerblogsgetByUrl" [
+export def "blogs-byurl get-by-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -123,12 +132,12 @@ export def "blogs-byurl bloggerblogsgetByUrl" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-url: string
+  --url: string
   --view: string@view-completer
 ]: nothing -> record<customMetaData: string, description: string, id: string, kind: string, locale: record<country: string, language: string, variant: string>, name: string, pages: record<selfLink: string, totalItems: int>, posts: record<items: list<record>, selfLink: string, totalItems: int>, published: string, selfLink: string, status: string, updated: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/blogs/byurl" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -139,7 +148,7 @@ export def "blogs-byurl bloggerblogsgetByUrl" [
 #
 # GET /v3/blogs/{blogId}
 # operationId: blogger.blogs.get
-export def "blogs bloggerblogsget" [
+export def "blogs get" [
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -166,7 +175,7 @@ export def "blogs bloggerblogsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxPosts" $max_posts "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id} | format pattern "/v3/blogs/{blog_id}") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id)} | format pattern "/v3/blogs/{blog_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,7 +185,7 @@ export def "blogs bloggerblogsget" [
 #
 # GET /v3/blogs/{blogId}/comments
 # operationId: blogger.comments.listByBlog
-export def "blogs-comments bloggercommentslistByBlog" [
+export def "blogs-comments list" [
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -202,12 +211,12 @@ export def "blogs-comments bloggercommentslistByBlog" [
   --max-results: int
   --page-token: string
   --start-date: string
-  --status: list
+  --status: list<string>
 ]: nothing -> record<etag: string, items: table<author: record, blog: record, content: string, id: string, inReplyTo: record, kind: string, post: record, published: string, selfLink: string, status: string, updated: string>, kind: string, nextPageToken: string, prevPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "fetchBodies" $fetch_bodies "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "status" $status "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id} | format pattern "/v3/blogs/{blog_id}/comments") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id)} | format pattern "/v3/blogs/{blog_id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -217,7 +226,7 @@ export def "blogs-comments bloggercommentslistByBlog" [
 #
 # GET /v3/blogs/{blogId}/pages
 # operationId: blogger.pages.list
-export def "blogs-pages bloggerpageslist" [
+export def "blogs-pages list" [
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -241,13 +250,13 @@ export def "blogs-pages bloggerpageslist" [
   --fetch-bodies: oneof<nothing, bool>
   --max-results: int
   --page-token: string
-  --status: list
+  --status: list<string>
   --view: string@view-completer
 ]: nothing -> record<etag: string, items: table<author: record, blog: record, content: string, etag: string, id: string, kind: string, published: string, selfLink: string, status: string, title: string, trashed: string, updated: string, url: string>, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fetchBodies" $fetch_bodies "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "status" $status "multi") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id} | format pattern "/v3/blogs/{blog_id}/pages") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id)} | format pattern "/v3/blogs/{blog_id}/pages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -259,7 +268,7 @@ export def "blogs-pages bloggerpageslist" [
 # operationId: blogger.pages.insert
 # --author shape: {displayName?: string, id?: string, image?: record, url?: string}
 # --blog shape: {id?: string}
-export def "blogs-pages bloggerpagesinsert" [
+export def "blogs-pages create" [
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,25 +302,25 @@ export def "blogs-pages bloggerpagesinsert" [
   --title: string # The title of this entity. This is the name displayed in the Admin user interface.
   --trashed: string # RFC 3339 date-time when this Page was trashed.
   --updated: string # RFC 3339 date-time when this Page was last updated.
-  --body-url: string # The URL that this Page is displayed at.
+  --url: string # The URL that this Page is displayed at.
 ]: any -> record<author: record<displayName: string, id: string, image: record<url: string>, url: string>, blog: record<id: string>, content: string, etag: string, id: string, kind: string, published: string, selfLink: string, status: string, title: string, trashed: string, updated: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "isDraft" $is_draft "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id} | format pattern "/v3/blogs/{blog_id}/pages") $qp)
-  let body = {"author": $author, "blog": $blog, "content": $content, "etag": $etag, "id": $id, "kind": $kind, "published": $published, "selfLink": $self_link, "status": $status, "title": $title, "trashed": $trashed, "updated": $updated, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id)} | format pattern "/v3/blogs/{blog_id}/pages") $qp)
+  let req_body = {"author": $author, "blog": $blog, "content": $content, "etag": $etag, "id": $id, "kind": $kind, "published": $published, "selfLink": $self_link, "status": $status, "title": $title, "trashed": $trashed, "updated": $updated, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a page by blog id and page id.
 #
 # DELETE /v3/blogs/{blogId}/pages/{pageId}
 # operationId: blogger.pages.delete
-export def "blogs-pages bloggerpagesdelete" [
+export def "blogs-pages delete" [
   blog_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -338,7 +347,7 @@ export def "blogs-pages bloggerpagesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "useTrash" $use_trash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id, page_id: $page_id} | format pattern "/v3/blogs/{blog_id}/pages/{page_id}") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id), page_id: (encode-path-segment $page_id)} | format pattern "/v3/blogs/{blog_id}/pages/{page_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -348,7 +357,7 @@ export def "blogs-pages bloggerpagesdelete" [
 #
 # GET /v3/blogs/{blogId}/pages/{pageId}
 # operationId: blogger.pages.get
-export def "blogs-pages bloggerpagesget" [
+export def "blogs-pages get" [
   blog_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -375,7 +384,7 @@ export def "blogs-pages bloggerpagesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id, page_id: $page_id} | format pattern "/v3/blogs/{blog_id}/pages/{page_id}") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id), page_id: (encode-path-segment $page_id)} | format pattern "/v3/blogs/{blog_id}/pages/{page_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -387,7 +396,7 @@ export def "blogs-pages bloggerpagesget" [
 # operationId: blogger.pages.patch
 # --author shape: {displayName?: string, id?: string, image?: record, url?: string}
 # --blog shape: {id?: string}
-export def "blogs-pages bloggerpagespatch" [
+export def "blogs-pages update-by-blogId-pageId" [
   blog_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -423,18 +432,18 @@ export def "blogs-pages bloggerpagespatch" [
   --title: string # The title of this entity. This is the name displayed in the Admin user interface.
   --trashed: string # RFC 3339 date-time when this Page was trashed.
   --updated: string # RFC 3339 date-time when this Page was last updated.
-  --body-url: string # The URL that this Page is displayed at.
+  --url: string # The URL that this Page is displayed at.
 ]: any -> record<author: record<displayName: string, id: string, image: record<url: string>, url: string>, blog: record<id: string>, content: string, etag: string, id: string, kind: string, published: string, selfLink: string, status: string, title: string, trashed: string, updated: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "publish" $publish "scalar") (serialize-qp "revert" $revert "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id, page_id: $page_id} | format pattern "/v3/blogs/{blog_id}/pages/{page_id}") $qp)
-  let body = {"author": $author, "blog": $blog, "content": $content, "etag": $etag, "id": $id, "kind": $kind, "published": $published, "selfLink": $self_link, "status": $status, "title": $title, "trashed": $trashed, "updated": $updated, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id), page_id: (encode-path-segment $page_id)} | format pattern "/v3/blogs/{blog_id}/pages/{page_id}") $qp)
+  let req_body = {"author": $author, "blog": $blog, "content": $content, "etag": $etag, "id": $id, "kind": $kind, "published": $published, "selfLink": $self_link, "status": $status, "title": $title, "trashed": $trashed, "updated": $updated, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a page by blog id and page id.
@@ -443,7 +452,7 @@ export def "blogs-pages bloggerpagespatch" [
 # operationId: blogger.pages.update
 # --author shape: {displayName?: string, id?: string, image?: record, url?: string}
 # --blog shape: {id?: string}
-export def "blogs-pages bloggerpagesupdate" [
+export def "blogs-pages update-by-blogId-pageId-1" [
   blog_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -479,25 +488,25 @@ export def "blogs-pages bloggerpagesupdate" [
   --title: string # The title of this entity. This is the name displayed in the Admin user interface.
   --trashed: string # RFC 3339 date-time when this Page was trashed.
   --updated: string # RFC 3339 date-time when this Page was last updated.
-  --body-url: string # The URL that this Page is displayed at.
+  --url: string # The URL that this Page is displayed at.
 ]: any -> record<author: record<displayName: string, id: string, image: record<url: string>, url: string>, blog: record<id: string>, content: string, etag: string, id: string, kind: string, published: string, selfLink: string, status: string, title: string, trashed: string, updated: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "publish" $publish "scalar") (serialize-qp "revert" $revert "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id, page_id: $page_id} | format pattern "/v3/blogs/{blog_id}/pages/{page_id}") $qp)
-  let body = {"author": $author, "blog": $blog, "content": $content, "etag": $etag, "id": $id, "kind": $kind, "published": $published, "selfLink": $self_link, "status": $status, "title": $title, "trashed": $trashed, "updated": $updated, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id), page_id: (encode-path-segment $page_id)} | format pattern "/v3/blogs/{blog_id}/pages/{page_id}") $qp)
+  let req_body = {"author": $author, "blog": $blog, "content": $content, "etag": $etag, "id": $id, "kind": $kind, "published": $published, "selfLink": $self_link, "status": $status, "title": $title, "trashed": $trashed, "updated": $updated, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Publishes a page.
 #
 # POST /v3/blogs/{blogId}/pages/{pageId}/publish
 # operationId: blogger.pages.publish
-export def "blogs-pages-publish bloggerpagespublish" [
+export def "blogs-pages-publish publish" [
   blog_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -523,7 +532,7 @@ export def "blogs-pages-publish bloggerpagespublish" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id, page_id: $page_id} | format pattern "/v3/blogs/{blog_id}/pages/{page_id}/publish") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id), page_id: (encode-path-segment $page_id)} | format pattern "/v3/blogs/{blog_id}/pages/{page_id}/publish") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -533,7 +542,7 @@ export def "blogs-pages-publish bloggerpagespublish" [
 #
 # POST /v3/blogs/{blogId}/pages/{pageId}/revert
 # operationId: blogger.pages.revert
-export def "blogs-pages-revert bloggerpagesrevert" [
+export def "blogs-pages-revert create" [
   blog_id: string
   page_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -559,7 +568,7 @@ export def "blogs-pages-revert bloggerpagesrevert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id, page_id: $page_id} | format pattern "/v3/blogs/{blog_id}/pages/{page_id}/revert") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id), page_id: (encode-path-segment $page_id)} | format pattern "/v3/blogs/{blog_id}/pages/{page_id}/revert") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -569,7 +578,7 @@ export def "blogs-pages-revert bloggerpagesrevert" [
 #
 # GET /v3/blogs/{blogId}/pageviews
 # operationId: blogger.pageViews.get
-export def "blogs-pageviews bloggerpageViewsget" [
+export def "blogs-pageviews get" [
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -590,12 +599,12 @@ export def "blogs-pageviews bloggerpageViewsget" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --range: list
+  --range: list<string>
 ]: nothing -> record<blogId: string, counts: table<count: string, timeRange: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "range" $range "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id} | format pattern "/v3/blogs/{blog_id}/pageviews") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id)} | format pattern "/v3/blogs/{blog_id}/pageviews") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -605,7 +614,7 @@ export def "blogs-pageviews bloggerpageViewsget" [
 #
 # GET /v3/blogs/{blogId}/posts
 # operationId: blogger.posts.list
-export def "blogs-posts bloggerpostslist" [
+export def "blogs-posts list" [
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -635,13 +644,13 @@ export def "blogs-posts bloggerpostslist" [
   --page-token: string
   --sort-option: string@sort-option-completer # Sort direction applied to post list.
   --start-date: string
-  --status: list
+  --status: list<string>
   --view: string@view-completer
 ]: nothing -> record<etag: string, items: table<author: record, blog: record, content: string, customMetaData: string, etag: string, id: string, images: list, kind: string, labels: list, location: record, published: string, readerComments: string, replies: record, selfLink: string, status: string, title: string, titleLink: string, trashed: string, updated: string, url: string>, kind: string, nextPageToken: string, prevPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "fetchBodies" $fetch_bodies "scalar") (serialize-qp "fetchImages" $fetch_images "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "sortOption" $sort_option "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "status" $status "multi") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id} | format pattern "/v3/blogs/{blog_id}/posts") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id)} | format pattern "/v3/blogs/{blog_id}/posts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -656,7 +665,7 @@ export def "blogs-posts bloggerpostslist" [
 # --images item shape: {url?: string}
 # --location shape: {lat?: float, lng?: float, name?: string, span?: string}
 # --replies shape: {items?: list, selfLink?: string, totalItems?: string}
-export def "blogs-posts bloggerpostsinsert" [
+export def "blogs-posts create" [
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -688,7 +697,7 @@ export def "blogs-posts bloggerpostsinsert" [
   --id: string # The identifier of this Post.
   --images: list # Display image for the Post. — item shape: {url?: string}
   --kind: string # The kind of this entity. Always blogger#post.
-  --labels: list # The list of labels this Post was tagged with.
+  --labels: list<string> # The list of labels this Post was tagged with.
   --location: record # The location for geotagged posts. — shape: {lat?: float, lng?: float, name?: string, span?: string}
   --published: string # RFC 3339 date-time when this Post was published.
   --reader-comments: string@reader-comments-completer # Comment control and display setting for readers of this post.
@@ -699,25 +708,25 @@ export def "blogs-posts bloggerpostsinsert" [
   --title-link: string # The title link URL, similar to atom's related link.
   --trashed: string # RFC 3339 date-time when this Post was last trashed.
   --updated: string # RFC 3339 date-time when this Post was last updated.
-  --body-url: string # The URL where this Post is displayed.
+  --url: string # The URL where this Post is displayed.
 ]: any -> record<author: record<displayName: string, id: string, image: record<url: string>, url: string>, blog: record<id: string>, content: string, customMetaData: string, etag: string, id: string, images: table<url: string>, kind: string, labels: list<string>, location: record<lat: float, lng: float, name: string, span: string>, published: string, readerComments: string, replies: record<items: list<record>, selfLink: string, totalItems: string>, selfLink: string, status: string, title: string, titleLink: string, trashed: string, updated: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fetchBody" $fetch_body "scalar") (serialize-qp "fetchImages" $fetch_images "scalar") (serialize-qp "isDraft" $is_draft "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id} | format pattern "/v3/blogs/{blog_id}/posts") $qp)
-  let body = {"author": $author, "blog": $blog, "content": $content, "customMetaData": $custom_meta_data, "etag": $etag, "id": $id, "images": $images, "kind": $kind, "labels": $labels, "location": $location, "published": $published, "readerComments": $reader_comments, "replies": $replies, "selfLink": $self_link, "status": $status, "title": $title, "titleLink": $title_link, "trashed": $trashed, "updated": $updated, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id)} | format pattern "/v3/blogs/{blog_id}/posts") $qp)
+  let req_body = {"author": $author, "blog": $blog, "content": $content, "customMetaData": $custom_meta_data, "etag": $etag, "id": $id, "images": $images, "kind": $kind, "labels": $labels, "location": $location, "published": $published, "readerComments": $reader_comments, "replies": $replies, "selfLink": $self_link, "status": $status, "title": $title, "titleLink": $title_link, "trashed": $trashed, "updated": $updated, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a post by path.
 #
 # GET /v3/blogs/{blogId}/posts/bypath
 # operationId: blogger.posts.getByPath
-export def "blogs-posts-bypath bloggerpostsgetByPath" [
+export def "blogs-posts-bypath get-by-path" [
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -745,7 +754,7 @@ export def "blogs-posts-bypath bloggerpostsgetByPath" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "maxComments" $max_comments "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id} | format pattern "/v3/blogs/{blog_id}/posts/bypath") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id)} | format pattern "/v3/blogs/{blog_id}/posts/bypath") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -755,7 +764,7 @@ export def "blogs-posts-bypath bloggerpostsgetByPath" [
 #
 # GET /v3/blogs/{blogId}/posts/search
 # operationId: blogger.posts.search
-export def "blogs-posts-search bloggerpostssearch" [
+export def "blogs-posts-search list" [
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -783,7 +792,7 @@ export def "blogs-posts-search bloggerpostssearch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "fetchBodies" $fetch_bodies "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id} | format pattern "/v3/blogs/{blog_id}/posts/search") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id)} | format pattern "/v3/blogs/{blog_id}/posts/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -793,7 +802,7 @@ export def "blogs-posts-search bloggerpostssearch" [
 #
 # DELETE /v3/blogs/{blogId}/posts/{postId}
 # operationId: blogger.posts.delete
-export def "blogs-posts bloggerpostsdelete" [
+export def "blogs-posts delete" [
   blog_id: string
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -820,7 +829,7 @@ export def "blogs-posts bloggerpostsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "useTrash" $use_trash "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id, post_id: $post_id} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id), post_id: (encode-path-segment $post_id)} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -830,7 +839,7 @@ export def "blogs-posts bloggerpostsdelete" [
 #
 # GET /v3/blogs/{blogId}/posts/{postId}
 # operationId: blogger.posts.get
-export def "blogs-posts bloggerpostsget" [
+export def "blogs-posts get" [
   blog_id: string
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -860,7 +869,7 @@ export def "blogs-posts bloggerpostsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fetchBody" $fetch_body "scalar") (serialize-qp "fetchImages" $fetch_images "scalar") (serialize-qp "maxComments" $max_comments "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id, post_id: $post_id} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id), post_id: (encode-path-segment $post_id)} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -875,7 +884,7 @@ export def "blogs-posts bloggerpostsget" [
 # --images item shape: {url?: string}
 # --location shape: {lat?: float, lng?: float, name?: string, span?: string}
 # --replies shape: {items?: list, selfLink?: string, totalItems?: string}
-export def "blogs-posts bloggerpostspatch" [
+export def "blogs-posts update-by-blogId-postId" [
   blog_id: string
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -910,7 +919,7 @@ export def "blogs-posts bloggerpostspatch" [
   --id: string # The identifier of this Post.
   --images: list # Display image for the Post. — item shape: {url?: string}
   --kind: string # The kind of this entity. Always blogger#post.
-  --labels: list # The list of labels this Post was tagged with.
+  --labels: list<string> # The list of labels this Post was tagged with.
   --location: record # The location for geotagged posts. — shape: {lat?: float, lng?: float, name?: string, span?: string}
   --published: string # RFC 3339 date-time when this Post was published.
   --reader-comments: string@reader-comments-completer # Comment control and display setting for readers of this post.
@@ -921,18 +930,18 @@ export def "blogs-posts bloggerpostspatch" [
   --title-link: string # The title link URL, similar to atom's related link.
   --trashed: string # RFC 3339 date-time when this Post was last trashed.
   --updated: string # RFC 3339 date-time when this Post was last updated.
-  --body-url: string # The URL where this Post is displayed.
+  --url: string # The URL where this Post is displayed.
 ]: any -> record<author: record<displayName: string, id: string, image: record<url: string>, url: string>, blog: record<id: string>, content: string, customMetaData: string, etag: string, id: string, images: table<url: string>, kind: string, labels: list<string>, location: record<lat: float, lng: float, name: string, span: string>, published: string, readerComments: string, replies: record<items: list<record>, selfLink: string, totalItems: string>, selfLink: string, status: string, title: string, titleLink: string, trashed: string, updated: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fetchBody" $fetch_body "scalar") (serialize-qp "fetchImages" $fetch_images "scalar") (serialize-qp "maxComments" $max_comments "scalar") (serialize-qp "publish" $publish "scalar") (serialize-qp "revert" $revert "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id, post_id: $post_id} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}") $qp)
-  let body = {"author": $author, "blog": $blog, "content": $content, "customMetaData": $custom_meta_data, "etag": $etag, "id": $id, "images": $images, "kind": $kind, "labels": $labels, "location": $location, "published": $published, "readerComments": $reader_comments, "replies": $replies, "selfLink": $self_link, "status": $status, "title": $title, "titleLink": $title_link, "trashed": $trashed, "updated": $updated, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id), post_id: (encode-path-segment $post_id)} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}") $qp)
+  let req_body = {"author": $author, "blog": $blog, "content": $content, "customMetaData": $custom_meta_data, "etag": $etag, "id": $id, "images": $images, "kind": $kind, "labels": $labels, "location": $location, "published": $published, "readerComments": $reader_comments, "replies": $replies, "selfLink": $self_link, "status": $status, "title": $title, "titleLink": $title_link, "trashed": $trashed, "updated": $updated, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates a post by blog id and post id.
@@ -944,7 +953,7 @@ export def "blogs-posts bloggerpostspatch" [
 # --images item shape: {url?: string}
 # --location shape: {lat?: float, lng?: float, name?: string, span?: string}
 # --replies shape: {items?: list, selfLink?: string, totalItems?: string}
-export def "blogs-posts bloggerpostsupdate" [
+export def "blogs-posts update-by-blogId-postId-1" [
   blog_id: string
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -979,7 +988,7 @@ export def "blogs-posts bloggerpostsupdate" [
   --id: string # The identifier of this Post.
   --images: list # Display image for the Post. — item shape: {url?: string}
   --kind: string # The kind of this entity. Always blogger#post.
-  --labels: list # The list of labels this Post was tagged with.
+  --labels: list<string> # The list of labels this Post was tagged with.
   --location: record # The location for geotagged posts. — shape: {lat?: float, lng?: float, name?: string, span?: string}
   --published: string # RFC 3339 date-time when this Post was published.
   --reader-comments: string@reader-comments-completer # Comment control and display setting for readers of this post.
@@ -990,25 +999,25 @@ export def "blogs-posts bloggerpostsupdate" [
   --title-link: string # The title link URL, similar to atom's related link.
   --trashed: string # RFC 3339 date-time when this Post was last trashed.
   --updated: string # RFC 3339 date-time when this Post was last updated.
-  --body-url: string # The URL where this Post is displayed.
+  --url: string # The URL where this Post is displayed.
 ]: any -> record<author: record<displayName: string, id: string, image: record<url: string>, url: string>, blog: record<id: string>, content: string, customMetaData: string, etag: string, id: string, images: table<url: string>, kind: string, labels: list<string>, location: record<lat: float, lng: float, name: string, span: string>, published: string, readerComments: string, replies: record<items: list<record>, selfLink: string, totalItems: string>, selfLink: string, status: string, title: string, titleLink: string, trashed: string, updated: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fetchBody" $fetch_body "scalar") (serialize-qp "fetchImages" $fetch_images "scalar") (serialize-qp "maxComments" $max_comments "scalar") (serialize-qp "publish" $publish "scalar") (serialize-qp "revert" $revert "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id, post_id: $post_id} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}") $qp)
-  let body = {"author": $author, "blog": $blog, "content": $content, "customMetaData": $custom_meta_data, "etag": $etag, "id": $id, "images": $images, "kind": $kind, "labels": $labels, "location": $location, "published": $published, "readerComments": $reader_comments, "replies": $replies, "selfLink": $self_link, "status": $status, "title": $title, "titleLink": $title_link, "trashed": $trashed, "updated": $updated, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id), post_id: (encode-path-segment $post_id)} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}") $qp)
+  let req_body = {"author": $author, "blog": $blog, "content": $content, "customMetaData": $custom_meta_data, "etag": $etag, "id": $id, "images": $images, "kind": $kind, "labels": $labels, "location": $location, "published": $published, "readerComments": $reader_comments, "replies": $replies, "selfLink": $self_link, "status": $status, "title": $title, "titleLink": $title_link, "trashed": $trashed, "updated": $updated, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists comments.
 #
 # GET /v3/blogs/{blogId}/posts/{postId}/comments
 # operationId: blogger.comments.list
-export def "blogs-posts-comments bloggercommentslist" [
+export def "blogs-posts-comments list" [
   blog_id: string
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1041,7 +1050,7 @@ export def "blogs-posts-comments bloggercommentslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "fetchBodies" $fetch_bodies "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id, post_id: $post_id} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}/comments") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id), post_id: (encode-path-segment $post_id)} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1051,7 +1060,7 @@ export def "blogs-posts-comments bloggercommentslist" [
 #
 # DELETE /v3/blogs/{blogId}/posts/{postId}/comments/{commentId}
 # operationId: blogger.comments.delete
-export def "blogs-posts-comments bloggercommentsdelete" [
+export def "blogs-posts-comments delete" [
   blog_id: string
   post_id: string
   comment_id: string
@@ -1078,7 +1087,7 @@ export def "blogs-posts-comments bloggercommentsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id, post_id: $post_id, comment_id: $comment_id} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}/comments/{comment_id}") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id), post_id: (encode-path-segment $post_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}/comments/{comment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1088,7 +1097,7 @@ export def "blogs-posts-comments bloggercommentsdelete" [
 #
 # GET /v3/blogs/{blogId}/posts/{postId}/comments/{commentId}
 # operationId: blogger.comments.get
-export def "blogs-posts-comments bloggercommentsget" [
+export def "blogs-posts-comments get" [
   blog_id: string
   post_id: string
   comment_id: string
@@ -1116,7 +1125,7 @@ export def "blogs-posts-comments bloggercommentsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id, post_id: $post_id, comment_id: $comment_id} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}/comments/{comment_id}") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id), post_id: (encode-path-segment $post_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}/comments/{comment_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1126,7 +1135,7 @@ export def "blogs-posts-comments bloggercommentsget" [
 #
 # POST /v3/blogs/{blogId}/posts/{postId}/comments/{commentId}/approve
 # operationId: blogger.comments.approve
-export def "blogs-posts-comments-approve bloggercommentsapprove" [
+export def "blogs-posts-comments-approve approve" [
   blog_id: string
   post_id: string
   comment_id: string
@@ -1153,7 +1162,7 @@ export def "blogs-posts-comments-approve bloggercommentsapprove" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id, post_id: $post_id, comment_id: $comment_id} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}/comments/{comment_id}/approve") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id), post_id: (encode-path-segment $post_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}/comments/{comment_id}/approve") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1163,7 +1172,7 @@ export def "blogs-posts-comments-approve bloggercommentsapprove" [
 #
 # POST /v3/blogs/{blogId}/posts/{postId}/comments/{commentId}/removecontent
 # operationId: blogger.comments.removeContent
-export def "blogs-posts-comments-removecontent bloggercommentsremoveContent" [
+export def "blogs-posts-comments-removecontent delete-content" [
   blog_id: string
   post_id: string
   comment_id: string
@@ -1190,7 +1199,7 @@ export def "blogs-posts-comments-removecontent bloggercommentsremoveContent" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id, post_id: $post_id, comment_id: $comment_id} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}/comments/{comment_id}/removecontent") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id), post_id: (encode-path-segment $post_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}/comments/{comment_id}/removecontent") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1200,7 +1209,7 @@ export def "blogs-posts-comments-removecontent bloggercommentsremoveContent" [
 #
 # POST /v3/blogs/{blogId}/posts/{postId}/comments/{commentId}/spam
 # operationId: blogger.comments.markAsSpam
-export def "blogs-posts-comments-spam bloggercommentsmarkAsSpam" [
+export def "blogs-posts-comments-spam create-mark" [
   blog_id: string
   post_id: string
   comment_id: string
@@ -1227,7 +1236,7 @@ export def "blogs-posts-comments-spam bloggercommentsmarkAsSpam" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id, post_id: $post_id, comment_id: $comment_id} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}/comments/{comment_id}/spam") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id), post_id: (encode-path-segment $post_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}/comments/{comment_id}/spam") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1237,7 +1246,7 @@ export def "blogs-posts-comments-spam bloggercommentsmarkAsSpam" [
 #
 # POST /v3/blogs/{blogId}/posts/{postId}/publish
 # operationId: blogger.posts.publish
-export def "blogs-posts-publish bloggerpostspublish" [
+export def "blogs-posts-publish publish" [
   blog_id: string
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1264,7 +1273,7 @@ export def "blogs-posts-publish bloggerpostspublish" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "publishDate" $publish_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id, post_id: $post_id} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}/publish") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id), post_id: (encode-path-segment $post_id)} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}/publish") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1274,7 +1283,7 @@ export def "blogs-posts-publish bloggerpostspublish" [
 #
 # POST /v3/blogs/{blogId}/posts/{postId}/revert
 # operationId: blogger.posts.revert
-export def "blogs-posts-revert bloggerpostsrevert" [
+export def "blogs-posts-revert create" [
   blog_id: string
   post_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1300,7 +1309,7 @@ export def "blogs-posts-revert bloggerpostsrevert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({blog_id: $blog_id, post_id: $post_id} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}/revert") $qp)
+  let full_url = (build-url $base ({blog_id: (encode-path-segment $blog_id), post_id: (encode-path-segment $post_id)} | format pattern "/v3/blogs/{blog_id}/posts/{post_id}/revert") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1310,7 +1319,7 @@ export def "blogs-posts-revert bloggerpostsrevert" [
 #
 # GET /v3/users/{userId}
 # operationId: blogger.users.get
-export def "users bloggerusersget" [
+export def "users get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1335,7 +1344,7 @@ export def "users bloggerusersget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/v3/users/{user_id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v3/users/{user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1345,7 +1354,7 @@ export def "users bloggerusersget" [
 #
 # GET /v3/users/{userId}/blogs
 # operationId: blogger.blogs.listByUser
-export def "users-blogs bloggerblogslistByUser" [
+export def "users-blogs list" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1367,14 +1376,14 @@ export def "users-blogs bloggerblogslistByUser" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --fetch-user-info: oneof<nothing, bool>
-  --role: list
-  --status: list # Default value of status is LIVE.
+  --role: list<string>
+  --status: list<string> # Default value of status is LIVE.
   --view: string@view-completer
 ]: nothing -> record<blogUserInfos: table<blog: record, blog_user_info: record, kind: string>, items: table<customMetaData: string, description: string, id: string, kind: string, locale: record, name: string, pages: record, posts: record, published: string, selfLink: string, status: string, updated: string, url: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fetchUserInfo" $fetch_user_info "scalar") (serialize-qp "role" $role "multi") (serialize-qp "status" $status "multi") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/v3/users/{user_id}/blogs") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v3/users/{user_id}/blogs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1384,7 +1393,7 @@ export def "users-blogs bloggerblogslistByUser" [
 #
 # GET /v3/users/{userId}/blogs/{blogId}
 # operationId: blogger.blogUserInfos.get
-export def "users-blogs bloggerblogUserInfosget" [
+export def "users-blogs get" [
   user_id: string
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1411,7 +1420,7 @@ export def "users-blogs bloggerblogUserInfosget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxPosts" $max_posts "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, blog_id: $blog_id} | format pattern "/v3/users/{user_id}/blogs/{blog_id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), blog_id: (encode-path-segment $blog_id)} | format pattern "/v3/users/{user_id}/blogs/{blog_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1421,7 +1430,7 @@ export def "users-blogs bloggerblogUserInfosget" [
 #
 # GET /v3/users/{userId}/blogs/{blogId}/posts
 # operationId: blogger.postUserInfos.list
-export def "users-blogs-posts bloggerpostUserInfoslist" [
+export def "users-blogs-posts list" [
   user_id: string
   blog_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1450,13 +1459,13 @@ export def "users-blogs-posts bloggerpostUserInfoslist" [
   --order-by: string@order-by-completer
   --page-token: string
   --start-date: string
-  --status: list
+  --status: list<string>
   --view: string@view-completer
 ]: nothing -> record<items: table<kind: string, post: record, post_user_info: record>, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "fetchBodies" $fetch_bodies "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "status" $status "multi") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, blog_id: $blog_id} | format pattern "/v3/users/{user_id}/blogs/{blog_id}/posts") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), blog_id: (encode-path-segment $blog_id)} | format pattern "/v3/users/{user_id}/blogs/{blog_id}/posts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1466,7 +1475,7 @@ export def "users-blogs-posts bloggerpostUserInfoslist" [
 #
 # GET /v3/users/{userId}/blogs/{blogId}/posts/{postId}
 # operationId: blogger.postUserInfos.get
-export def "users-blogs-posts bloggerpostUserInfosget" [
+export def "users-blogs-posts get" [
   user_id: string
   blog_id: string
   post_id: string
@@ -1494,7 +1503,7 @@ export def "users-blogs-posts bloggerpostUserInfosget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxComments" $max_comments "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user_id: $user_id, blog_id: $blog_id, post_id: $post_id} | format pattern "/v3/users/{user_id}/blogs/{blog_id}/posts/{post_id}") $qp)
+  let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), blog_id: (encode-path-segment $blog_id), post_id: (encode-path-segment $post_id)} | format pattern "/v3/users/{user_id}/blogs/{blog_id}/posts/{post_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

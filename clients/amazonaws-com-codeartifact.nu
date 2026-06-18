@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -78,7 +87,7 @@ def target-status-completer [] { ["Archived" "Deleted" "Disposed" "Published" "U
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "repository-external-connectiondomainrepositoryexternal-connection post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "repository-external-connectiondomainrepositoryexternal-connection create-associate" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,11 +107,11 @@ export def commands []: nothing -> table {
   }
 }
 
-# <p>Adds an existing external connection to a repository. One external connection is allowed per repository.</p> <note> <p>A repository can have one or more upstream repositories, or an external connection.</p> </note>
+# Adds an existing external connection to a repository. One external connection is allowed per repository. A repository can have one or more upstream repositories, or an external connection.
 #
 # POST /v1/repository/external-connection#domain&repository&external-connection
 # operationId: AssociateExternalConnection
-export def "repository-external-connectiondomainrepositoryexternal-connection post" [
+export def "repository-external-connectiondomainrepositoryexternal-connection create-associate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,9 +121,9 @@ export def "repository-external-connectiondomainrepositoryexternal-connection po
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # The name of the domain that contains the repository.
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string #  The name of the repository to which the external connection is added. 
-  --external-connection: string # <p> The name of the external connection to add to the repository. The following values are supported: </p> <ul> <li> <p> <code>public:npmjs</code> - for the npm public repository. </p> </li> <li> <p> <code>public:nuget-org</code> - for the NuGet Gallery. </p> </li> <li> <p> <code>public:pypi</code> - for the Python Package Index. </p> </li> <li> <p> <code>public:maven-central</code> - for Maven Central. </p> </li> <li> <p> <code>public:maven-googleandroid</code> - for the Google Android repository. </p> </li> <li> <p> <code>public:maven-gradleplugins</code> - for the Gradle plugins repository. </p> </li> <li> <p> <code>public:maven-commonsware</code> - for the CommonsWare Android repository. </p> </li> <li> <p> <code>public:maven-clojars</code> - for the Clojars repository. </p> </li> </ul>
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # The name of the repository to which the external connection is added.
+  --external-connection: string # The name of the external connection to add to the repository. The following values are supported: public:npmjs - for the npm public repository. public:nuget-org - for the NuGet Gallery. public:pypi - for the Python Package Index. public:maven-central - for Maven Central. public:maven-googleandroid - for the Google Android repository. public:maven-gradleplugins - for the Gradle plugins repository. public:maven-commonsware - for the CommonsWare Android repository. public:maven-clojars - for the Clojars repository.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -127,18 +136,18 @@ export def "repository-external-connectiondomainrepositoryexternal-connection po
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "external-connection" $external_connection "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/repository/external-connection#domain&repository&external-connection" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Removes an existing external connection from a repository. 
+# Removes an existing external connection from a repository.
 #
 # DELETE /v1/repository/external-connection#domain&repository&external-connection
 # operationId: DisassociateExternalConnection
-export def "repository-external-connectiondomainrepositoryexternal-connection delete" [
+export def "repository-external-connectiondomainrepositoryexternal-connection delete-disassociate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,10 +156,10 @@ export def "repository-external-connectiondomainrepositoryexternal-connection de
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string # The name of the domain that contains the repository from which to remove the external repository. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string # The name of the repository from which the external connection will be removed. 
-  --external-connection: string # The name of the external connection to be removed from the repository. 
+  --domain: string # The name of the domain that contains the repository from which to remove the external repository.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # The name of the repository from which the external connection will be removed.
+  --external-connection: string # The name of the external connection to be removed from the repository.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -163,14 +172,14 @@ export def "repository-external-connectiondomainrepositoryexternal-connection de
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "external-connection" $external_connection "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/repository/external-connection#domain&repository&external-connection" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p> Copies package versions from one repository to another repository in the same domain. </p> <note> <p> You must specify <code>versions</code> or <code>versionRevisions</code>. You cannot specify both. </p> </note>
+# Copies package versions from one repository to another repository in the same domain. You must specify versions or versionRevisions. You cannot specify both.
 #
 # POST /v1/package/versions/copy#domain&source-repository&destination-repository&format&package
 # operationId: CopyPackageVersions
@@ -183,13 +192,13 @@ export def "package-versions-copydomainsource-repositorydestination-repositoryfo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain that contains the source and destination repositories. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --source-repository: string #  The name of the repository that contains the package versions to be copied. 
-  --destination-repository: string #  The name of the repository into which package versions are copied. 
-  --format: string@format-completer #  The format of the package versions to be copied. 
-  --namespace: string # <p>The namespace of the package versions to be copied. The package version component that specifies its namespace depends on its type. For example:</p> <ul> <li> <p> The namespace of a Maven package version is its <code>groupId</code>. The namespace is required when copying Maven package versions. </p> </li> <li> <p> The namespace of an npm package version is its <code>scope</code>. </p> </li> <li> <p> Python and NuGet package versions do not contain a corresponding component, package versions of those formats do not have a namespace. </p> </li> <li> <p> The namespace of a generic package is its <code>namespace</code>. </p> </li> </ul>
-  --package: string #  The name of the package that contains the versions to be copied. 
+  --domain: string # The name of the domain that contains the source and destination repositories.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --source-repository: string # The name of the repository that contains the package versions to be copied.
+  --destination-repository: string # The name of the repository into which package versions are copied.
+  --format: string@format-completer # The format of the package versions to be copied.
+  --namespace: string # The namespace of the package versions to be copied. The package version component that specifies its namespace depends on its type. For example: The namespace of a Maven package version is its groupId. The namespace is required when copying Maven package versions. The namespace of an npm package version is its scope. Python and NuGet package versions do not contain a corresponding component, package versions of those formats do not have a namespace. The namespace of a generic package is its namespace.
+  --package: string # The name of the package that contains the versions to be copied.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -197,26 +206,26 @@ export def "package-versions-copydomainsource-repositorydestination-repositoryfo
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --versions: list # <p> The versions of the package to be copied. </p> <note> <p> You must specify <code>versions</code> or <code>versionRevisions</code>. You cannot specify both. </p> </note>
-  --version-revisions: record # <p> A list of key-value pairs. The keys are package versions and the values are package version revisions. A <code>CopyPackageVersion</code> operation succeeds if the specified versions in the source repository match the specified package version revision. </p> <note> <p> You must specify <code>versions</code> or <code>versionRevisions</code>. You cannot specify both. </p> </note>
-  --allow-overwrite: oneof<nothing, bool> #  Set to true to overwrite a package version that already exists in the destination repository. If set to false and the package version already exists in the destination repository, the package version is returned in the <code>failedVersions</code> field of the response with an <code>ALREADY_EXISTS</code> error code. 
-  --include-from-upstream: oneof<nothing, bool> #  Set to true to copy packages from repositories that are upstream from the source repository to the destination repository. The default setting is false. For more information, see <a href="https://docs.aws.amazon.com/codeartifact/latest/ug/repos-upstream.html">Working with upstream repositories</a>. 
+  --versions: list<string> # The versions of the package to be copied. You must specify versions or versionRevisions. You cannot specify both.
+  --version-revisions: record # A list of key-value pairs. The keys are package versions and the values are package version revisions. A CopyPackageVersion operation succeeds if the specified versions in the source repository match the specified package version revision. You must specify versions or versionRevisions. You cannot specify both.
+  --allow-overwrite: oneof<nothing, bool> # Set to true to overwrite a package version that already exists in the destination repository. If set to false and the package version already exists in the destination repository, the package version is returned in the failedVersions field of the response with an ALREADY_EXISTS error code.
+  --include-from-upstream: oneof<nothing, bool> # Set to true to copy packages from repositories that are upstream from the source repository to the destination repository. The default setting is false. For more information, see Working with upstream repositories (https://docs.aws.amazon.com/codeartifact/latest/ug/repos-upstream.html).
 ]: any -> record<successfulVersions: record, failedVersions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "source-repository" $source_repository "scalar") (serialize-qp "destination-repository" $destination_repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/package/versions/copy#domain&source-repository&destination-repository&format&package" $qp)
-  let body = {"versions": $versions, "versionRevisions": $version_revisions, "allowOverwrite": $allow_overwrite, "includeFromUpstream": $include_from_upstream} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"versions": $versions, "versionRevisions": $version_revisions, "allowOverwrite": $allow_overwrite, "includeFromUpstream": $include_from_upstream} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# <p> Creates a domain. CodeArtifact <i>domains</i> make it easier to manage multiple repositories across an organization. You can use a domain to apply permissions across many repositories owned by different Amazon Web Services accounts. An asset is stored only once in a domain, even if it's in multiple repositories. </p> <p>Although you can have multiple domains, we recommend a single production domain that contains all published artifacts so that your development teams can find and share packages. You can use a second pre-production domain to test changes to the production domain configuration. </p>
+# Creates a domain. CodeArtifact domains make it easier to manage multiple repositories across an organization. You can use a domain to apply permissions across many repositories owned by different Amazon Web Services accounts. An asset is stored only once in a domain, even if it's in multiple repositories. Although you can have multiple domains, we recommend a single production domain that contains all published artifacts so that your development teams can find and share packages. You can use a second pre-production domain to test changes to the production domain configuration.
 #
 # POST /v1/domain#domain
 # operationId: CreateDomain
@@ -230,7 +239,7 @@ export def "domaindomain create-domain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain to create. All domain names in an Amazon Web Services Region that are in the same Amazon Web Services account must be unique. The domain name is used as the prefix in DNS hostnames. Do not use sensitive information in a domain name because it is publicly discoverable. 
+  --domain: string # The name of the domain to create. All domain names in an Amazon Web Services Region that are in the same Amazon Web Services account must be unique. The domain name is used as the prefix in DNS hostnames. Do not use sensitive information in a domain name because it is publicly discoverable.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -238,7 +247,7 @@ export def "domaindomain create-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --encryption-key: string # <p> The encryption key for the domain. This is used to encrypt content stored in a domain. An encryption key can be a key ID, a key Amazon Resource Name (ARN), a key alias, or a key alias ARN. To specify an <code>encryptionKey</code>, your IAM role must have <code>kms:DescribeKey</code> and <code>kms:CreateGrant</code> permissions on the encryption key that is used. For more information, see <a href="https://docs.aws.amazon.com/kms/latest/APIReference/API_DescribeKey.html#API_DescribeKey_RequestSyntax">DescribeKey</a> in the <i>Key Management Service API Reference</i> and <a href="https://docs.aws.amazon.com/kms/latest/developerguide/kms-api-permissions-reference.html">Key Management Service API Permissions Reference</a> in the <i>Key Management Service Developer Guide</i>. </p> <important> <p> CodeArtifact supports only symmetric CMKs. Do not associate an asymmetric CMK with your domain. For more information, see <a href="https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html">Using symmetric and asymmetric keys</a> in the <i>Key Management Service Developer Guide</i>. </p> </important>
+  --encryption-key: string # The encryption key for the domain. This is used to encrypt content stored in a domain. An encryption key can be a key ID, a key Amazon Resource Name (ARN), a key alias, or a key alias ARN. To specify an encryptionKey, your IAM role must have kms:DescribeKey and kms:CreateGrant permissions on the encryption key that is used. For more information, see DescribeKey (https://docs.aws.amazon.com/kms/latest/APIReference/API_DescribeKey.html#API_DescribeKey_RequestSyntax) in the Key Management Service API Reference and Key Management Service API Permissions Reference (https://docs.aws.amazon.com/kms/latest/developerguide/kms-api-permissions-reference.html) in the Key Management Service Developer Guide. CodeArtifact supports only symmetric CMKs. Do not associate an asymmetric CMK with your domain. For more information, see Using symmetric and asymmetric keys (https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html) in the Key Management Service Developer Guide.
   --tags: list # One or more tag key-value pairs for the domain. — item shape: {key: any, value: any}
 ]: any -> record<domain: record<name: record, owner: record, arn: record, status: record, createdTime: record, encryptionKey: record, repositoryCount: record, assetSizeBytes: record, s3BucketArn: record>> {
   let input = $in
@@ -246,16 +255,16 @@ export def "domaindomain create-domain" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/domain#domain" $qp)
-  let body = {"encryptionKey": $encryption_key, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"encryptionKey": $encryption_key, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Deletes a domain. You cannot delete a domain that contains repositories. If you want to delete a domain with repositories, first delete its repositories. 
+# Deletes a domain. You cannot delete a domain that contains repositories. If you want to delete a domain with repositories, first delete its repositories.
 #
 # DELETE /v1/domain#domain
 # operationId: DeleteDomain
@@ -268,8 +277,8 @@ export def "domaindomain delete-domain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain to delete. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
+  --domain: string # The name of the domain to delete.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -282,18 +291,18 @@ export def "domaindomain delete-domain" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/domain#domain" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns a <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_DomainDescription.html">DomainDescription</a> object that contains information about the requested domain. 
+# Returns a DomainDescription (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_DomainDescription.html) object that contains information about the requested domain.
 #
 # GET /v1/domain#domain
 # operationId: DescribeDomain
-export def "domaindomain get" [
+export def "domaindomain get-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,8 +311,8 @@ export def "domaindomain get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  A string that specifies the name of the requested domain. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
+  --domain: string # A string that specifies the name of the requested domain.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -316,14 +325,14 @@ export def "domaindomain get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/domain#domain" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Creates a repository. 
+# Creates a repository.
 #
 # POST /v1/repository#domain&repository
 # operationId: CreateRepository
@@ -338,9 +347,9 @@ export def "repositorydomainrepository create-repository" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain that contains the created repository. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string #  The name of the repository to create. 
+  --domain: string # The name of the domain that contains the created repository.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # The name of the repository to create.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -348,8 +357,8 @@ export def "repositorydomainrepository create-repository" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --description: string #  A description of the created repository. 
-  --upstreams: list #  A list of upstream repositories to associate with the repository. The order of the upstream repositories in the list determines their priority order when CodeArtifact looks for a requested package version. For more information, see <a href="https://docs.aws.amazon.com/codeartifact/latest/ug/repos-upstream.html">Working with upstream repositories</a>.  — item shape: {repositoryName: any}
+  --description: string # A description of the created repository.
+  --upstreams: list # A list of upstream repositories to associate with the repository. The order of the upstream repositories in the list determines their priority order when CodeArtifact looks for a requested package version. For more information, see Working with upstream repositories (https://docs.aws.amazon.com/codeartifact/latest/ug/repos-upstream.html). — item shape: {repositoryName: any}
   --tags: list # One or more tag key-value pairs for the repository. — item shape: {key: any, value: any}
 ]: any -> record<repository: record<name: record, administratorAccount: record, domainName: record, domainOwner: record, arn: record, description: record, upstreams: record, externalConnections: record, createdTime: record>> {
   let input = $in
@@ -357,16 +366,16 @@ export def "repositorydomainrepository create-repository" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/repository#domain&repository" $qp)
-  let body = {"description": $description, "upstreams": $upstreams, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"description": $description, "upstreams": $upstreams, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Deletes a repository. 
+# Deletes a repository.
 #
 # DELETE /v1/repository#domain&repository
 # operationId: DeleteRepository
@@ -379,9 +388,9 @@ export def "repositorydomainrepository delete-repository" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain that contains the repository to delete. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string #  The name of the repository to delete. 
+  --domain: string # The name of the domain that contains the repository to delete.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # The name of the repository to delete.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -394,18 +403,18 @@ export def "repositorydomainrepository delete-repository" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/repository#domain&repository" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns a <code>RepositoryDescription</code> object that contains detailed information about the requested repository. 
+# Returns a RepositoryDescription object that contains detailed information about the requested repository.
 #
 # GET /v1/repository#domain&repository
 # operationId: DescribeRepository
-export def "repositorydomainrepository get" [
+export def "repositorydomainrepository get-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,9 +423,9 @@ export def "repositorydomainrepository get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain that contains the repository to describe. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string #  A string that specifies the name of the requested repository. 
+  --domain: string # The name of the domain that contains the repository to describe.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # A string that specifies the name of the requested repository.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -429,14 +438,14 @@ export def "repositorydomainrepository get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/repository#domain&repository" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Update the properties of a repository. 
+# Update the properties of a repository.
 #
 # PUT /v1/repository#domain&repository
 # operationId: UpdateRepository
@@ -450,9 +459,9 @@ export def "repositorydomainrepository update-repository" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain associated with the repository to update. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string #  The name of the repository to update. 
+  --domain: string # The name of the domain associated with the repository to update.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # The name of the repository to update.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -460,28 +469,28 @@ export def "repositorydomainrepository update-repository" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --description: string #  An updated repository description. 
-  --upstreams: list #  A list of upstream repositories to associate with the repository. The order of the upstream repositories in the list determines their priority order when CodeArtifact looks for a requested package version. For more information, see <a href="https://docs.aws.amazon.com/codeartifact/latest/ug/repos-upstream.html">Working with upstream repositories</a>.  — item shape: {repositoryName: any}
+  --description: string # An updated repository description.
+  --upstreams: list # A list of upstream repositories to associate with the repository. The order of the upstream repositories in the list determines their priority order when CodeArtifact looks for a requested package version. For more information, see Working with upstream repositories (https://docs.aws.amazon.com/codeartifact/latest/ug/repos-upstream.html). — item shape: {repositoryName: any}
 ]: any -> record<repository: record<name: record, administratorAccount: record, domainName: record, domainOwner: record, arn: record, description: record, upstreams: record, externalConnections: record, createdTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/repository#domain&repository" $qp)
-  let body = {"description": $description, "upstreams": $upstreams} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"description": $description, "upstreams": $upstreams} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Deletes the resource policy set on a domain. 
+# Deletes the resource policy set on a domain.
 #
 # DELETE /v1/domain/permissions/policy#domain
 # operationId: DeleteDomainPermissionsPolicy
-export def "domain-permissions-policydomain delete-domain-permissions-policy" [
+export def "domain-permissions-policydomain delete-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -490,9 +499,9 @@ export def "domain-permissions-policydomain delete-domain-permissions-policy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain associated with the resource policy to be deleted. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --policy-revision: string #  The current revision of the resource policy to be deleted. This revision is used for optimistic locking, which prevents others from overwriting your changes to the domain's resource policy. 
+  --domain: string # The name of the domain associated with the resource policy to be deleted.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --policy-revision: string # The current revision of the resource policy to be deleted. This revision is used for optimistic locking, which prevents others from overwriting your changes to the domain's resource policy.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -505,18 +514,18 @@ export def "domain-permissions-policydomain delete-domain-permissions-policy" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "policy-revision" $policy_revision "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/domain/permissions/policy#domain" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p> Returns the resource policy attached to the specified domain. </p> <note> <p> The policy is a resource-based policy, not an identity-based policy. For more information, see <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_identity-vs-resource.html">Identity-based policies and resource-based policies </a> in the <i>IAM User Guide</i>. </p> </note>
+# Returns the resource policy attached to the specified domain. The policy is a resource-based policy, not an identity-based policy. For more information, see Identity-based policies and resource-based policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_identity-vs-resource.html) in the IAM User Guide.
 #
 # GET /v1/domain/permissions/policy#domain
 # operationId: GetDomainPermissionsPolicy
-export def "domain-permissions-policydomain get-domain-permissions-policy" [
+export def "domain-permissions-policydomain get-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -525,8 +534,8 @@ export def "domain-permissions-policydomain get-domain-permissions-policy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain to which the resource policy is attached. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
+  --domain: string # The name of the domain to which the resource policy is attached.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -539,14 +548,14 @@ export def "domain-permissions-policydomain get-domain-permissions-policy" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/domain/permissions/policy#domain" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Deletes a package and all associated package versions. A deleted package cannot be restored. To delete one or more package versions, use the <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_DeletePackageVersions.html">DeletePackageVersions</a> API.
+# Deletes a package and all associated package versions. A deleted package cannot be restored. To delete one or more package versions, use the DeletePackageVersions (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_DeletePackageVersions.html) API.
 #
 # DELETE /v1/package#domain&repository&format&package
 # operationId: DeletePackage
@@ -560,10 +569,10 @@ export def "packagedomainrepositoryformatpackage delete-package" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # The name of the domain that contains the package to delete.
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
   --repository: string # The name of the repository that contains the package to delete.
   --format: string@format-completer # The format of the requested package to delete.
-  --namespace: string # <p>The namespace of the package to delete. The package component that specifies its namespace depends on its type. For example:</p> <ul> <li> <p> The namespace of a Maven package is its <code>groupId</code>. The namespace is required when deleting Maven package versions. </p> </li> <li> <p> The namespace of an npm package is its <code>scope</code>.</p> </li> <li> <p> Python and NuGet packages do not contain corresponding components, packages of those formats do not have a namespace. </p> </li> <li> <p> The namespace of a generic package is its <code>namespace</code>. </p> </li> </ul>
+  --namespace: string # The namespace of the package to delete. The package component that specifies its namespace depends on its type. For example: The namespace of a Maven package is its groupId. The namespace is required when deleting Maven package versions. The namespace of an npm package is its scope. Python and NuGet packages do not contain corresponding components, packages of those formats do not have a namespace. The namespace of a generic package is its namespace.
   --package: string # The name of the package to delete.
   --x-amz-content-sha256: string
   --x-amz-date: string
@@ -577,18 +586,18 @@ export def "packagedomainrepositoryformatpackage delete-package" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/package#domain&repository&format&package" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns a <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageDescription.html">PackageDescription</a> object that contains information about the requested package.
+# Returns a PackageDescription (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageDescription.html) object that contains information about the requested package.
 #
 # GET /v1/package#domain&repository&format&package
 # operationId: DescribePackage
-export def "packagedomainrepositoryformatpackage get" [
+export def "packagedomainrepositoryformatpackage get-package" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -598,10 +607,10 @@ export def "packagedomainrepositoryformatpackage get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # The name of the domain that contains the repository that contains the package.
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string # The name of the repository that contains the requested package. 
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # The name of the repository that contains the requested package.
   --format: string@format-completer # A format that specifies the type of the requested package.
-  --namespace: string # <p>The namespace of the requested package. The package component that specifies its namespace depends on its type. For example:</p> <ul> <li> <p> The namespace of a Maven package is its <code>groupId</code>. The namespace is required when requesting Maven packages. </p> </li> <li> <p> The namespace of an npm package is its <code>scope</code>. </p> </li> <li> <p> Python and NuGet packages do not contain a corresponding component, packages of those formats do not have a namespace. </p> </li> <li> <p> The namespace of a generic package is its <code>namespace</code>. </p> </li> </ul>
+  --namespace: string # The namespace of the requested package. The package component that specifies its namespace depends on its type. For example: The namespace of a Maven package is its groupId. The namespace is required when requesting Maven packages. The namespace of an npm package is its scope. Python and NuGet packages do not contain a corresponding component, packages of those formats do not have a namespace. The namespace of a generic package is its namespace.
   --package: string # The name of the requested package.
   --x-amz-content-sha256: string
   --x-amz-date: string
@@ -615,14 +624,14 @@ export def "packagedomainrepositoryformatpackage get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/package#domain&repository&format&package" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p>Sets the package origin configuration for a package.</p> <p>The package origin configuration determines how new versions of a package can be added to a repository. You can allow or block direct publishing of new package versions, or ingestion and retaining of new package versions from an external connection or upstream source. For more information about package origin controls and configuration, see <a href="https://docs.aws.amazon.com/codeartifact/latest/ug/package-origin-controls.html">Editing package origin controls</a> in the <i>CodeArtifact User Guide</i>.</p> <p> <code>PutPackageOriginConfiguration</code> can be called on a package that doesn't yet exist in the repository. When called on a package that does not exist, a package is created in the repository with no versions and the requested restrictions are set on the package. This can be used to preemptively block ingesting or retaining any versions from external connections or upstream repositories, or to block publishing any versions of the package into the repository before connecting any package managers or publishers to the repository.</p>
+# Sets the package origin configuration for a package. The package origin configuration determines how new versions of a package can be added to a repository. You can allow or block direct publishing of new package versions, or ingestion and retaining of new package versions from an external connection or upstream source. For more information about package origin controls and configuration, see Editing package origin controls (https://docs.aws.amazon.com/codeartifact/latest/ug/package-origin-controls.html) in the CodeArtifact User Guide. PutPackageOriginConfiguration can be called on a package that doesn't yet exist in the repository. When called on a package that does not exist, a package is created in the repository with no versions and the requested restrictions are set on the package. This can be used to preemptively block ingesting or retaining any versions from external connections or upstream repositories, or to block publishing any versions of the package into the repository before connecting any package managers or publishers to the repository.
 #
 # POST /v1/package#domain&repository&format&package
 # operationId: PutPackageOriginConfiguration
@@ -637,10 +646,10 @@ export def "packagedomainrepositoryformatpackage update-package-origin-configura
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # The name of the domain that contains the repository that contains the package.
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
   --repository: string # The name of the repository that contains the package.
   --format: string@format-completer # A format that specifies the type of the package to be updated.
-  --namespace: string # <p>The namespace of the package to be updated. The package component that specifies its namespace depends on its type. For example:</p> <ul> <li> <p> The namespace of a Maven package is its <code>groupId</code>. </p> </li> <li> <p> The namespace of an npm package is its <code>scope</code>. </p> </li> <li> <p> Python and NuGet packages do not contain a corresponding component, packages of those formats do not have a namespace. </p> </li> <li> <p> The namespace of a generic package is its <code>namespace</code>. </p> </li> </ul>
+  --namespace: string # The namespace of the package to be updated. The package component that specifies its namespace depends on its type. For example: The namespace of a Maven package is its groupId. The namespace of an npm package is its scope. Python and NuGet packages do not contain a corresponding component, packages of those formats do not have a namespace. The namespace of a generic package is its namespace.
   --package: string # The name of the package to be updated.
   --x-amz-content-sha256: string
   --x-amz-date: string
@@ -656,16 +665,16 @@ export def "packagedomainrepositoryformatpackage update-package-origin-configura
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/package#domain&repository&format&package" $qp)
-  let body = {"restrictions": $restrictions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"restrictions": $restrictions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Deletes one or more versions of a package. A deleted package version cannot be restored in your repository. If you want to remove a package version from your repository and be able to restore it later, set its status to <code>Archived</code>. Archived packages cannot be downloaded from a repository and don't show up with list package APIs (for example, <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_ListPackageVersions.html">ListPackageVersions</a>), but you can restore them using <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_UpdatePackageVersionsStatus.html">UpdatePackageVersionsStatus</a>. 
+# Deletes one or more versions of a package. A deleted package version cannot be restored in your repository. If you want to remove a package version from your repository and be able to restore it later, set its status to Archived. Archived packages cannot be downloaded from a repository and don't show up with list package APIs (for example, ListPackageVersions (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_ListPackageVersions.html)), but you can restore them using UpdatePackageVersionsStatus (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_UpdatePackageVersionsStatus.html).
 #
 # POST /v1/package/versions/delete#domain&repository&format&package
 # operationId: DeletePackageVersions
@@ -678,12 +687,12 @@ export def "package-versions-deletedomainrepositoryformatpackage delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain that contains the package to delete. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string #  The name of the repository that contains the package versions to delete. 
-  --format: string@format-completer #  The format of the package versions to delete. 
-  --namespace: string # <p>The namespace of the package versions to be deleted. The package version component that specifies its namespace depends on its type. For example:</p> <ul> <li> <p> The namespace of a Maven package version is its <code>groupId</code>. The namespace is required when deleting Maven package versions. </p> </li> <li> <p> The namespace of an npm package version is its <code>scope</code>. </p> </li> <li> <p> Python and NuGet package versions do not contain a corresponding component, package versions of those formats do not have a namespace. </p> </li> <li> <p> The namespace of a generic package is its <code>namespace</code>. </p> </li> </ul>
-  --package: string #  The name of the package with the versions to delete. 
+  --domain: string # The name of the domain that contains the package to delete.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # The name of the repository that contains the package versions to delete.
+  --format: string@format-completer # The format of the package versions to delete.
+  --namespace: string # The namespace of the package versions to be deleted. The package version component that specifies its namespace depends on its type. For example: The namespace of a Maven package version is its groupId. The namespace is required when deleting Maven package versions. The namespace of an npm package version is its scope. Python and NuGet package versions do not contain a corresponding component, package versions of those formats do not have a namespace. The namespace of a generic package is its namespace.
+  --package: string # The name of the package with the versions to delete.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -691,28 +700,28 @@ export def "package-versions-deletedomainrepositoryformatpackage delete" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  versions: list #  An array of strings that specify the versions of the package to delete. 
-  --expected-status: string@expected-status-completer #  The expected status of the package version to delete. 
+  versions: list<string> # An array of strings that specify the versions of the package to delete.
+  --expected-status: string@expected-status-completer # The expected status of the package version to delete.
 ]: any -> record<successfulVersions: record, failedVersions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/package/versions/delete#domain&repository&format&package" $qp)
-  let body = {"versions": $versions, "expectedStatus": $expected_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"versions": $versions, "expectedStatus": $expected_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# <p> Deletes the resource policy that is set on a repository. After a resource policy is deleted, the permissions allowed and denied by the deleted policy are removed. The effect of deleting a resource policy might not be immediate. </p> <important> <p> Use <code>DeleteRepositoryPermissionsPolicy</code> with caution. After a policy is deleted, Amazon Web Services users, roles, and accounts lose permissions to perform the repository actions granted by the deleted policy. </p> </important>
+# Deletes the resource policy that is set on a repository. After a resource policy is deleted, the permissions allowed and denied by the deleted policy are removed. The effect of deleting a resource policy might not be immediate. Use DeleteRepositoryPermissionsPolicy with caution. After a policy is deleted, Amazon Web Services users, roles, and accounts lose permissions to perform the repository actions granted by the deleted policy.
 #
 # DELETE /v1/repository/permissions/policies#domain&repository
 # operationId: DeleteRepositoryPermissionsPolicy
-export def "repository-permissions-policiesdomainrepository delete-repository-permissions-policy" [
+export def "repository-permissions-policiesdomainrepository delete-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -721,10 +730,10 @@ export def "repository-permissions-policiesdomainrepository delete-repository-pe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain that contains the repository associated with the resource policy to be deleted. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string #  The name of the repository that is associated with the resource policy to be deleted 
-  --policy-revision: string #  The revision of the repository's resource policy to be deleted. This revision is used for optimistic locking, which prevents others from accidentally overwriting your changes to the repository's resource policy. 
+  --domain: string # The name of the domain that contains the repository associated with the resource policy to be deleted.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # The name of the repository that is associated with the resource policy to be deleted
+  --policy-revision: string # The revision of the repository's resource policy to be deleted. This revision is used for optimistic locking, which prevents others from accidentally overwriting your changes to the repository's resource policy.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -737,18 +746,18 @@ export def "repository-permissions-policiesdomainrepository delete-repository-pe
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "policy-revision" $policy_revision "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/repository/permissions/policies#domain&repository" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns a <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageVersionDescription.html">PackageVersionDescription</a> object that contains information about the requested package version. 
+# Returns a PackageVersionDescription (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageVersionDescription.html) object that contains information about the requested package version.
 #
 # GET /v1/package/version#domain&repository&format&package&version
 # operationId: DescribePackageVersion
-export def "package-versiondomainrepositoryformatpackageversion version" [
+export def "package-versiondomainrepositoryformatpackageversion get-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -757,13 +766,13 @@ export def "package-versiondomainrepositoryformatpackageversion version" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain that contains the repository that contains the package version. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string #  The name of the repository that contains the package version. 
-  --format: string@format-completer #  A format that specifies the type of the requested package version. 
-  --namespace: string # <p>The namespace of the requested package version. The package version component that specifies its namespace depends on its type. For example:</p> <ul> <li> <p> The namespace of a Maven package version is its <code>groupId</code>. </p> </li> <li> <p> The namespace of an npm package version is its <code>scope</code>. </p> </li> <li> <p> Python and NuGet package versions do not contain a corresponding component, package versions of those formats do not have a namespace. </p> </li> <li> <p> The namespace of a generic package is its <code>namespace</code>. </p> </li> </ul>
-  --package: string #  The name of the requested package version. 
-  --version: string #  A string that contains the package version (for example, <code>3.5.2</code>). 
+  --domain: string # The name of the domain that contains the repository that contains the package version.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # The name of the repository that contains the package version.
+  --format: string@format-completer # A format that specifies the type of the requested package version.
+  --namespace: string # The namespace of the requested package version. The package version component that specifies its namespace depends on its type. For example: The namespace of a Maven package version is its groupId. The namespace of an npm package version is its scope. Python and NuGet package versions do not contain a corresponding component, package versions of those formats do not have a namespace. The namespace of a generic package is its namespace.
+  --package: string # The name of the requested package version.
+  --version: string # A string that contains the package version (for example, 3.5.2).
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -776,18 +785,18 @@ export def "package-versiondomainrepositoryformatpackageversion version" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/package/version#domain&repository&format&package&version" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p> Deletes the assets in package versions and sets the package versions' status to <code>Disposed</code>. A disposed package version cannot be restored in your repository because its assets are deleted. </p> <p> To view all disposed package versions in a repository, use <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_ListPackageVersions.html">ListPackageVersions</a> and set the <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_ListPackageVersions.html#API_ListPackageVersions_RequestSyntax">status</a> parameter to <code>Disposed</code>. </p> <p> To view information about a disposed package version, use <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_DescribePackageVersion.html">DescribePackageVersion</a>. </p>
+# Deletes the assets in package versions and sets the package versions' status to Disposed. A disposed package version cannot be restored in your repository because its assets are deleted. To view all disposed package versions in a repository, use ListPackageVersions (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_ListPackageVersions.html) and set the status (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_ListPackageVersions.html#API_ListPackageVersions_RequestSyntax) parameter to Disposed. To view information about a disposed package version, use DescribePackageVersion (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_DescribePackageVersion.html).
 #
 # POST /v1/package/versions/dispose#domain&repository&format&package
 # operationId: DisposePackageVersions
-export def "package-versions-disposedomainrepositoryformatpackage post" [
+export def "package-versions-disposedomainrepositoryformatpackage create-dispose" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,12 +805,12 @@ export def "package-versions-disposedomainrepositoryformatpackage post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain that contains the repository you want to dispose. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string #  The name of the repository that contains the package versions you want to dispose. 
-  --format: string@format-completer #  A format that specifies the type of package versions you want to dispose. 
-  --namespace: string # <p>The namespace of the package versions to be disposed. The package version component that specifies its namespace depends on its type. For example:</p> <ul> <li> <p> The namespace of a Maven package version is its <code>groupId</code>. </p> </li> <li> <p> The namespace of an npm package version is its <code>scope</code>. </p> </li> <li> <p> Python and NuGet package versions do not contain a corresponding component, package versions of those formats do not have a namespace. </p> </li> <li> <p> The namespace of a generic package is its <code>namespace</code>. </p> </li> </ul>
-  --package: string #  The name of the package with the versions you want to dispose. 
+  --domain: string # The name of the domain that contains the repository you want to dispose.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # The name of the repository that contains the package versions you want to dispose.
+  --format: string@format-completer # A format that specifies the type of package versions you want to dispose.
+  --namespace: string # The namespace of the package versions to be disposed. The package version component that specifies its namespace depends on its type. For example: The namespace of a Maven package version is its groupId. The namespace of an npm package version is its scope. Python and NuGet package versions do not contain a corresponding component, package versions of those formats do not have a namespace. The namespace of a generic package is its namespace.
+  --package: string # The name of the package with the versions you want to dispose.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -809,29 +818,29 @@ export def "package-versions-disposedomainrepositoryformatpackage post" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  versions: list #  The versions of the package you want to dispose. 
-  --version-revisions: record #  The revisions of the package versions you want to dispose. 
-  --expected-status: string@expected-status-completer #  The expected status of the package version to dispose. 
+  versions: list<string> # The versions of the package you want to dispose.
+  --version-revisions: record # The revisions of the package versions you want to dispose.
+  --expected-status: string@expected-status-completer # The expected status of the package version to dispose.
 ]: any -> record<successfulVersions: record, failedVersions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/package/versions/dispose#domain&repository&format&package" $qp)
-  let body = {"versions": $versions, "versionRevisions": $version_revisions, "expectedStatus": $expected_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"versions": $versions, "versionRevisions": $version_revisions, "expectedStatus": $expected_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# <p> Generates a temporary authorization token for accessing repositories in the domain. This API requires the <code>codeartifact:GetAuthorizationToken</code> and <code>sts:GetServiceBearerToken</code> permissions. For more information about authorization tokens, see <a href="https://docs.aws.amazon.com/codeartifact/latest/ug/tokens-authentication.html">CodeArtifact authentication and tokens</a>. </p> <note> <p>CodeArtifact authorization tokens are valid for a period of 12 hours when created with the <code>login</code> command. You can call <code>login</code> periodically to refresh the token. When you create an authorization token with the <code>GetAuthorizationToken</code> API, you can set a custom authorization period, up to a maximum of 12 hours, with the <code>durationSeconds</code> parameter.</p> <p>The authorization period begins after <code>login</code> or <code>GetAuthorizationToken</code> is called. If <code>login</code> or <code>GetAuthorizationToken</code> is called while assuming a role, the token lifetime is independent of the maximum session duration of the role. For example, if you call <code>sts assume-role</code> and specify a session duration of 15 minutes, then generate a CodeArtifact authorization token, the token will be valid for the full authorization period even though this is longer than the 15-minute session duration.</p> <p>See <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use.html">Using IAM Roles</a> for more information on controlling session duration. </p> </note>
+# Generates a temporary authorization token for accessing repositories in the domain. This API requires the codeartifact:GetAuthorizationToken and sts:GetServiceBearerToken permissions. For more information about authorization tokens, see CodeArtifact authentication and tokens (https://docs.aws.amazon.com/codeartifact/latest/ug/tokens-authentication.html). CodeArtifact authorization tokens are valid for a period of 12 hours when created with the login command. You can call login periodically to refresh the token. When you create an authorization token with the GetAuthorizationToken API, you can set a custom authorization period, up to a maximum of 12 hours, with the durationSeconds parameter. The authorization period begins after login or GetAuthorizationToken is called. If login or GetAuthorizationToken is called while assuming a role, the token lifetime is independent of the maximum session duration of the role. For example, if you call sts assume-role and specify a session duration of 15 minutes, then generate a CodeArtifact authorization token, the token will be valid for the full authorization period even though this is longer than the 15-minute session duration. See Using IAM Roles (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use.html) for more information on controlling session duration.
 #
 # POST /v1/authorization-token#domain
 # operationId: GetAuthorizationToken
-export def "authorization-tokendomain get-authorization-token" [
+export def "authorization-tokendomain get-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -840,9 +849,9 @@ export def "authorization-tokendomain get-authorization-token" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain that is in scope for the generated authorization token. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --duration: int # The time, in seconds, that the generated authorization token is valid. Valid values are <code>0</code> and any number between <code>900</code> (15 minutes) and <code>43200</code> (12 hours). A value of <code>0</code> will set the expiration of the authorization token to the same expiration of the user's role's temporary credentials.
+  --domain: string # The name of the domain that is in scope for the generated authorization token.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --duration: int # The time, in seconds, that the generated authorization token is valid. Valid values are 0 and any number between 900 (15 minutes) and 43200 (12 hours). A value of 0 will set the expiration of the authorization token to the same expiration of the user's role's temporary credentials.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -855,18 +864,18 @@ export def "authorization-tokendomain get-authorization-token" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "duration" $duration "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/authorization-token#domain" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns an asset (or file) that is in a package. For example, for a Maven package version, use <code>GetPackageVersionAsset</code> to download a <code>JAR</code> file, a <code>POM</code> file, or any other assets in the package version. 
+# Returns an asset (or file) that is in a package. For example, for a Maven package version, use GetPackageVersionAsset to download a JAR file, a POM file, or any other assets in the package version.
 #
 # GET /v1/package/version/asset#domain&repository&format&package&version&asset
 # operationId: GetPackageVersionAsset
-export def "package-version-assetdomainrepositoryformatpackageversionasset get-package-version-asset" [
+export def "package-version-assetdomainrepositoryformatpackageversionasset get-asset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -875,15 +884,15 @@ export def "package-version-assetdomainrepositoryformatpackageversionasset get-p
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain that contains the repository that contains the package version with the requested asset. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string #  The repository that contains the package version with the requested asset. 
-  --format: string@format-completer #  A format that specifies the type of the package version with the requested asset file. 
-  --namespace: string # <p>The namespace of the package version with the requested asset file. The package version component that specifies its namespace depends on its type. For example:</p> <ul> <li> <p> The namespace of a Maven package version is its <code>groupId</code>. </p> </li> <li> <p> The namespace of an npm package version is its <code>scope</code>. </p> </li> <li> <p> Python and NuGet package versions do not contain a corresponding component, package versions of those formats do not have a namespace. </p> </li> <li> <p> The namespace of a generic package is its <code>namespace</code>. </p> </li> </ul>
-  --package: string #  The name of the package that contains the requested asset. 
-  --version: string #  A string that contains the package version (for example, <code>3.5.2</code>). 
-  --asset: string #  The name of the requested asset. 
-  --revision: string #  The name of the package version revision that contains the requested asset. 
+  --domain: string # The name of the domain that contains the repository that contains the package version with the requested asset.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # The repository that contains the package version with the requested asset.
+  --format: string@format-completer # A format that specifies the type of the package version with the requested asset file.
+  --namespace: string # The namespace of the package version with the requested asset file. The package version component that specifies its namespace depends on its type. For example: The namespace of a Maven package version is its groupId. The namespace of an npm package version is its scope. Python and NuGet package versions do not contain a corresponding component, package versions of those formats do not have a namespace. The namespace of a generic package is its namespace.
+  --package: string # The name of the package that contains the requested asset.
+  --version: string # A string that contains the package version (for example, 3.5.2).
+  --asset: string # The name of the requested asset.
+  --revision: string # The name of the package version revision that contains the requested asset.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -896,18 +905,18 @@ export def "package-version-assetdomainrepositoryformatpackageversionasset get-p
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "asset" $asset "scalar") (serialize-qp "revision" $revision "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/package/version/asset#domain&repository&format&package&version&asset" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p> Gets the readme file or descriptive text for a package version. </p> <p> The returned text might contain formatting. For example, it might contain formatting for Markdown or reStructuredText. </p>
+# Gets the readme file or descriptive text for a package version. The returned text might contain formatting. For example, it might contain formatting for Markdown or reStructuredText.
 #
 # GET /v1/package/version/readme#domain&repository&format&package&version
 # operationId: GetPackageVersionReadme
-export def "package-version-readmedomainrepositoryformatpackageversion get-package-version-readme" [
+export def "package-version-readmedomainrepositoryformatpackageversion get-readme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -916,13 +925,13 @@ export def "package-version-readmedomainrepositoryformatpackageversion get-packa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain that contains the repository that contains the package version with the requested readme file. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string #  The repository that contains the package with the requested readme file. 
-  --format: string@format-completer #  A format that specifies the type of the package version with the requested readme file. 
-  --namespace: string # <p>The namespace of the package version with the requested readme file. The package version component that specifies its namespace depends on its type. For example:</p> <ul> <li> <p> The namespace of an npm package version is its <code>scope</code>. </p> </li> <li> <p> Python and NuGet package versions do not contain a corresponding component, package versions of those formats do not have a namespace. </p> </li> </ul>
-  --package: string #  The name of the package version that contains the requested readme file. 
-  --version: string #  A string that contains the package version (for example, <code>3.5.2</code>). 
+  --domain: string # The name of the domain that contains the repository that contains the package version with the requested readme file.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # The repository that contains the package with the requested readme file.
+  --format: string@format-completer # A format that specifies the type of the package version with the requested readme file.
+  --namespace: string # The namespace of the package version with the requested readme file. The package version component that specifies its namespace depends on its type. For example: The namespace of an npm package version is its scope. Python and NuGet package versions do not contain a corresponding component, package versions of those formats do not have a namespace.
+  --package: string # The name of the package version that contains the requested readme file.
+  --version: string # A string that contains the package version (for example, 3.5.2).
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -935,18 +944,18 @@ export def "package-version-readmedomainrepositoryformatpackageversion get-packa
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/package/version/readme#domain&repository&format&package&version" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p> Returns the endpoint of a repository for a specific package format. A repository has one endpoint for each package format: </p> <ul> <li> <p> <code>maven</code> </p> </li> <li> <p> <code>npm</code> </p> </li> <li> <p> <code>nuget</code> </p> </li> <li> <p> <code>pypi</code> </p> </li> </ul>
+# Returns the endpoint of a repository for a specific package format. A repository has one endpoint for each package format: maven npm nuget pypi
 #
 # GET /v1/repository/endpoint#domain&repository&format
 # operationId: GetRepositoryEndpoint
-export def "repository-endpointdomainrepositoryformat get-repository-endpoint" [
+export def "repository-endpointdomainrepositoryformat get-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -955,10 +964,10 @@ export def "repository-endpointdomainrepositoryformat get-repository-endpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain that contains the repository. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain that contains the repository. It does not include dashes or spaces. 
-  --repository: string #  The name of the repository. 
-  --format: string@format-completer #  Returns which endpoint of a repository to return. A repository has one endpoint for each package format. 
+  --domain: string # The name of the domain that contains the repository.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain that contains the repository. It does not include dashes or spaces.
+  --repository: string # The name of the repository.
+  --format: string@format-completer # Returns which endpoint of a repository to return. A repository has one endpoint for each package format.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -971,18 +980,18 @@ export def "repository-endpointdomainrepositoryformat get-repository-endpoint" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/repository/endpoint#domain&repository&format" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns the resource policy that is set on a repository. 
+# Returns the resource policy that is set on a repository.
 #
 # GET /v1/repository/permissions/policy#domain&repository
 # operationId: GetRepositoryPermissionsPolicy
-export def "repository-permissions-policydomainrepository get-repository-permissions-policy" [
+export def "repository-permissions-policydomainrepository get-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -991,9 +1000,9 @@ export def "repository-permissions-policydomainrepository get-repository-permiss
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain containing the repository whose associated resource policy is to be retrieved. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string #  The name of the repository whose associated resource policy is to be retrieved. 
+  --domain: string # The name of the domain containing the repository whose associated resource policy is to be retrieved.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # The name of the repository whose associated resource policy is to be retrieved.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1006,18 +1015,18 @@ export def "repository-permissions-policydomainrepository get-repository-permiss
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/repository/permissions/policy#domain&repository" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p> Sets the resource policy on a repository that specifies permissions to access it. </p> <p> When you call <code>PutRepositoryPermissionsPolicy</code>, the resource policy on the repository is ignored when evaluting permissions. This ensures that the owner of a repository cannot lock themselves out of the repository, which would prevent them from being able to update the resource policy. </p>
+# Sets the resource policy on a repository that specifies permissions to access it. When you call PutRepositoryPermissionsPolicy, the resource policy on the repository is ignored when evaluting permissions. This ensures that the owner of a repository cannot lock themselves out of the repository, which would prevent them from being able to update the resource policy.
 #
 # PUT /v1/repository/permissions/policy#domain&repository
 # operationId: PutRepositoryPermissionsPolicy
-export def "repository-permissions-policydomainrepository update-repository-permissions-policy" [
+export def "repository-permissions-policydomainrepository update-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1026,9 +1035,9 @@ export def "repository-permissions-policydomainrepository update-repository-perm
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain containing the repository to set the resource policy on. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string #  The name of the repository to set the resource policy on. 
+  --domain: string # The name of the domain containing the repository to set the resource policy on.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # The name of the repository to set the resource policy on.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1036,24 +1045,24 @@ export def "repository-permissions-policydomainrepository update-repository-perm
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --policy-revision: string #  Sets the revision of the resource policy that specifies permissions to access the repository. This revision is used for optimistic locking, which prevents others from overwriting your changes to the repository's resource policy. 
-  policy_document: string #  A valid displayable JSON Aspen policy string to be set as the access control resource policy on the provided repository. 
+  --policy-revision: string # Sets the revision of the resource policy that specifies permissions to access the repository. This revision is used for optimistic locking, which prevents others from overwriting your changes to the repository's resource policy.
+  policy_document: string # A valid displayable JSON Aspen policy string to be set as the access control resource policy on the provided repository.
 ]: any -> record<policy: record<resourceArn: record, revision: record, document: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/repository/permissions/policy#domain&repository" $qp)
-  let body = {"policyRevision": $policy_revision, "policyDocument": $policy_document} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"policyRevision": $policy_revision, "policyDocument": $policy_document} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Returns a list of <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageVersionDescription.html">DomainSummary</a> objects for all domains owned by the Amazon Web Services account that makes this call. Each returned <code>DomainSummary</code> object contains information about a domain. 
+# Returns a list of DomainSummary (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageVersionDescription.html) objects for all domains owned by the Amazon Web Services account that makes this call. Each returned DomainSummary object contains information about a domain.
 #
 # POST /v1/domains
 # operationId: ListDomains
@@ -1075,28 +1084,28 @@ export def "domains list" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --max-results: int #  The maximum number of results to return per page. 
-  --next-token: string #  The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results. 
+  --max-results: int # The maximum number of results to return per page.
+  --next-token: string # The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results.
 ]: any -> record<domains: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/domains" $qp)
-  let body = {"maxResults": $max_results, "nextToken": $next_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"maxResults": $max_results, "nextToken": $next_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Returns a list of <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_AssetSummary.html">AssetSummary</a> objects for assets in a package version. 
+# Returns a list of AssetSummary (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_AssetSummary.html) objects for assets in a package version.
 #
 # POST /v1/package/version/assets#domain&repository&format&package&version
 # operationId: ListPackageVersionAssets
-export def "package-version-assetsdomainrepositoryformatpackageversion list-package-version-assets" [
+export def "package-version-assetsdomainrepositoryformatpackageversion list-assets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1105,15 +1114,15 @@ export def "package-version-assetsdomainrepositoryformatpackageversion list-pack
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain that contains the repository associated with the package version assets. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string #  The name of the repository that contains the package that contains the requested package version assets. 
-  --format: string@format-completer #  The format of the package that contains the requested package version assets. 
-  --namespace: string # <p>The namespace of the package version that contains the requested package version assets. The package version component that specifies its namespace depends on its type. For example:</p> <ul> <li> <p> The namespace of a Maven package version is its <code>groupId</code>. </p> </li> <li> <p> The namespace of an npm package version is its <code>scope</code>. </p> </li> <li> <p> Python and NuGet package versions do not contain a corresponding component, package versions of those formats do not have a namespace. </p> </li> <li> <p> The namespace of a generic package is its <code>namespace</code>. </p> </li> </ul>
-  --package: string #  The name of the package that contains the requested package version assets. 
-  --version: string #  A string that contains the package version (for example, <code>3.5.2</code>). 
-  --max-results: int #  The maximum number of results to return per page. 
-  --next-token: string #  The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results. 
+  --domain: string # The name of the domain that contains the repository associated with the package version assets.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # The name of the repository that contains the package that contains the requested package version assets.
+  --format: string@format-completer # The format of the package that contains the requested package version assets.
+  --namespace: string # The namespace of the package version that contains the requested package version assets. The package version component that specifies its namespace depends on its type. For example: The namespace of a Maven package version is its groupId. The namespace of an npm package version is its scope. Python and NuGet package versions do not contain a corresponding component, package versions of those formats do not have a namespace. The namespace of a generic package is its namespace.
+  --package: string # The name of the package that contains the requested package version assets.
+  --version: string # A string that contains the package version (for example, 3.5.2).
+  --max-results: int # The maximum number of results to return per page.
+  --next-token: string # The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results.
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
   --x-amz-content-sha256: string
@@ -1128,18 +1137,18 @@ export def "package-version-assetsdomainrepositoryformatpackageversion list-pack
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/package/version/assets#domain&repository&format&package&version" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns the direct dependencies for a package version. The dependencies are returned as <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageDependency.html">PackageDependency</a> objects. CodeArtifact extracts the dependencies for a package version from the metadata file for the package format (for example, the <code>package.json</code> file for npm packages and the <code>pom.xml</code> file for Maven). Any package version dependencies that are not listed in the configuration file are not returned. 
+# Returns the direct dependencies for a package version. The dependencies are returned as PackageDependency (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageDependency.html) objects. CodeArtifact extracts the dependencies for a package version from the metadata file for the package format (for example, the package.json file for npm packages and the pom.xml file for Maven). Any package version dependencies that are not listed in the configuration file are not returned.
 #
 # POST /v1/package/version/dependencies#domain&repository&format&package&version
 # operationId: ListPackageVersionDependencies
-export def "package-version-dependenciesdomainrepositoryformatpackageversion list-package-version-dependencies" [
+export def "package-version-dependenciesdomainrepositoryformatpackageversion list-dependencies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1148,14 +1157,14 @@ export def "package-version-dependenciesdomainrepositoryformatpackageversion lis
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain that contains the repository that contains the requested package version dependencies. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string #  The name of the repository that contains the requested package version. 
-  --format: string@format-completer #  The format of the package with the requested dependencies. 
-  --namespace: string # <p>The namespace of the package version with the requested dependencies. The package version component that specifies its namespace depends on its type. For example:</p> <ul> <li> <p> The namespace of a Maven package version is its <code>groupId</code>. </p> </li> <li> <p> The namespace of an npm package version is its <code>scope</code>. </p> </li> <li> <p> Python and NuGet package versions do not contain a corresponding component, package versions of those formats do not have a namespace. </p> </li> <li> <p> The namespace of a generic package is its <code>namespace</code>. </p> </li> </ul>
-  --package: string #  The name of the package versions' package. 
-  --version: string #  A string that contains the package version (for example, <code>3.5.2</code>). 
-  --next-token: string #  The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results. 
+  --domain: string # The name of the domain that contains the repository that contains the requested package version dependencies.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # The name of the repository that contains the requested package version.
+  --format: string@format-completer # The format of the package with the requested dependencies.
+  --namespace: string # The namespace of the package version with the requested dependencies. The package version component that specifies its namespace depends on its type. For example: The namespace of a Maven package version is its groupId. The namespace of an npm package version is its scope. Python and NuGet package versions do not contain a corresponding component, package versions of those formats do not have a namespace. The namespace of a generic package is its namespace.
+  --package: string # The name of the package versions' package.
+  --version: string # A string that contains the package version (for example, 3.5.2).
+  --next-token: string # The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1168,18 +1177,18 @@ export def "package-version-dependenciesdomainrepositoryformatpackageversion lis
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "next-token" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/package/version/dependencies#domain&repository&format&package&version" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns a list of <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageVersionSummary.html">PackageVersionSummary</a> objects for package versions in a repository that match the request parameters. Package versions of all statuses will be returned by default when calling <code>list-package-versions</code> with no <code>--status</code> parameter. 
+# Returns a list of PackageVersionSummary (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageVersionSummary.html) objects for package versions in a repository that match the request parameters. Package versions of all statuses will be returned by default when calling list-package-versions with no --status parameter.
 #
 # POST /v1/package/versions#domain&repository&format&package
 # operationId: ListPackageVersions
-export def "package-versionsdomainrepositoryformatpackage list-package-versions" [
+export def "package-versionsdomainrepositoryformatpackage list-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1188,17 +1197,17 @@ export def "package-versionsdomainrepositoryformatpackage list-package-versions"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain that contains the repository that contains the requested package versions. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string #  The name of the repository that contains the requested package versions. 
-  --format: string@format-completer #  The format of the package versions you want to list. 
-  --namespace: string # <p>The namespace of the package that contains the requested package versions. The package component that specifies its namespace depends on its type. For example:</p> <ul> <li> <p> The namespace of a Maven package is its <code>groupId</code>. </p> </li> <li> <p> The namespace of an npm package is its <code>scope</code>. </p> </li> <li> <p> Python and NuGet packages do not contain a corresponding component, packages of those formats do not have a namespace. </p> </li> <li> <p> The namespace of a generic package is its <code>namespace</code>. </p> </li> </ul>
-  --package: string #  The name of the package for which you want to request package versions. 
-  --status: string@status-completer #  A string that filters the requested package versions by status. 
-  --sort-by: string@sort-by-completer #  How to sort the requested list of package versions. 
-  --max-results: int #  The maximum number of results to return per page. 
-  --next-token: string #  The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results. 
-  --origin-type: string@origin-type-completer # The <code>originType</code> used to filter package versions. Only package versions with the provided <code>originType</code> will be returned.
+  --domain: string # The name of the domain that contains the repository that contains the requested package versions.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # The name of the repository that contains the requested package versions.
+  --format: string@format-completer # The format of the package versions you want to list.
+  --namespace: string # The namespace of the package that contains the requested package versions. The package component that specifies its namespace depends on its type. For example: The namespace of a Maven package is its groupId. The namespace of an npm package is its scope. Python and NuGet packages do not contain a corresponding component, packages of those formats do not have a namespace. The namespace of a generic package is its namespace.
+  --package: string # The name of the package for which you want to request package versions.
+  --status: string@status-completer # A string that filters the requested package versions by status.
+  --sort-by: string@sort-by-completer # How to sort the requested list of package versions.
+  --max-results: int # The maximum number of results to return per page.
+  --next-token: string # The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results.
+  --origin-type: string@origin-type-completer # The originType used to filter package versions. Only package versions with the provided originType will be returned.
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
   --x-amz-content-sha256: string
@@ -1213,14 +1222,14 @@ export def "package-versionsdomainrepositoryformatpackage list-package-versions"
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "originType" $origin_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/package/versions#domain&repository&format&package" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns a list of <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageSummary.html">PackageSummary</a> objects for packages in a repository that match the request parameters. 
+# Returns a list of PackageSummary (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageSummary.html) objects for packages in a repository that match the request parameters.
 #
 # POST /v1/packages#domain&repository
 # operationId: ListPackages
@@ -1233,16 +1242,16 @@ export def "packagesdomainrepository list-packages" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain that contains the repository that contains the requested packages. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string #  The name of the repository that contains the requested packages. 
+  --domain: string # The name of the domain that contains the repository that contains the requested packages.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # The name of the repository that contains the requested packages.
   --format: string@format-completer # The format used to filter requested packages. Only packages from the provided format will be returned.
-  --namespace: string # <p>The namespace prefix used to filter requested packages. Only packages with a namespace that starts with the provided string value are returned. Note that although this option is called <code>--namespace</code> and not <code>--namespace-prefix</code>, it has prefix-matching behavior.</p> <p>Each package format uses namespace as follows:</p> <ul> <li> <p> The namespace of a Maven package is its <code>groupId</code>. </p> </li> <li> <p> The namespace of an npm package is its <code>scope</code>. </p> </li> <li> <p> Python and NuGet packages do not contain a corresponding component, packages of those formats do not have a namespace. </p> </li> <li> <p> The namespace of a generic package is its <code>namespace</code>. </p> </li> </ul>
-  --package-prefix: string #  A prefix used to filter requested packages. Only packages with names that start with <code>packagePrefix</code> are returned. 
-  --max-results: int #  The maximum number of results to return per page. 
-  --next-token: string #  The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results. 
-  --publish: string@publish-completer # The value of the <code>Publish</code> package origin control restriction used to filter requested packages. Only packages with the provided restriction are returned. For more information, see <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageOriginRestrictions.html">PackageOriginRestrictions</a>.
-  --upstream: string@upstream-completer # The value of the <code>Upstream</code> package origin control restriction used to filter requested packages. Only packages with the provided restriction are returned. For more information, see <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageOriginRestrictions.html">PackageOriginRestrictions</a>.
+  --namespace: string # The namespace prefix used to filter requested packages. Only packages with a namespace that starts with the provided string value are returned. Note that although this option is called --namespace and not --namespace-prefix, it has prefix-matching behavior. Each package format uses namespace as follows: The namespace of a Maven package is its groupId. The namespace of an npm package is its scope. Python and NuGet packages do not contain a corresponding component, packages of those formats do not have a namespace. The namespace of a generic package is its namespace.
+  --package-prefix: string # A prefix used to filter requested packages. Only packages with names that start with packagePrefix are returned.
+  --max-results: int # The maximum number of results to return per page.
+  --next-token: string # The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results.
+  --publish: string@publish-completer # The value of the Publish package origin control restriction used to filter requested packages. Only packages with the provided restriction are returned. For more information, see PackageOriginRestrictions (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageOriginRestrictions.html).
+  --upstream: string@upstream-completer # The value of the Upstream package origin control restriction used to filter requested packages. Only packages with the provided restriction are returned. For more information, see PackageOriginRestrictions (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_PackageOriginRestrictions.html).
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
   --x-amz-content-sha256: string
@@ -1257,14 +1266,14 @@ export def "packagesdomainrepository list-packages" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package-prefix" $package_prefix "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "publish" $publish "scalar") (serialize-qp "upstream" $upstream "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/packages#domain&repository" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns a list of <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_RepositorySummary.html">RepositorySummary</a> objects. Each <code>RepositorySummary</code> contains information about a repository in the specified Amazon Web Services account and that matches the input parameters. 
+# Returns a list of RepositorySummary (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_RepositorySummary.html) objects. Each RepositorySummary contains information about a repository in the specified Amazon Web Services account and that matches the input parameters.
 #
 # POST /v1/repositories
 # operationId: ListRepositories
@@ -1277,9 +1286,9 @@ export def "repositories list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --repository-prefix: string #  A prefix used to filter returned repositories. Only repositories with names that start with <code>repositoryPrefix</code> are returned.
-  --max-results: int #  The maximum number of results to return per page. 
-  --next-token: string #  The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results. 
+  --repository-prefix: string # A prefix used to filter returned repositories. Only repositories with names that start with repositoryPrefix are returned.
+  --max-results: int # The maximum number of results to return per page.
+  --next-token: string # The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results.
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
   --x-amz-content-sha256: string
@@ -1294,18 +1303,18 @@ export def "repositories list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "repository-prefix" $repository_prefix "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/repositories" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-#  Returns a list of <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_RepositorySummary.html">RepositorySummary</a> objects. Each <code>RepositorySummary</code> contains information about a repository in the specified domain and that matches the input parameters. 
+# Returns a list of RepositorySummary (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_RepositorySummary.html) objects. Each RepositorySummary contains information about a repository in the specified domain and that matches the input parameters.
 #
 # POST /v1/domain/repositories#domain
 # operationId: ListRepositoriesInDomain
-export def "domain-repositoriesdomain list-repositories-in" [
+export def "domain-repositoriesdomain list-repositories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1314,12 +1323,12 @@ export def "domain-repositoriesdomain list-repositories-in" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain that contains the returned list of repositories. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --administrator-account: string #  Filter the list of repositories to only include those that are managed by the Amazon Web Services account ID. 
-  --repository-prefix: string #  A prefix used to filter returned repositories. Only repositories with names that start with <code>repositoryPrefix</code> are returned. 
-  --max-results: int #  The maximum number of results to return per page. 
-  --next-token: string #  The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results. 
+  --domain: string # The name of the domain that contains the returned list of repositories.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --administrator-account: string # Filter the list of repositories to only include those that are managed by the Amazon Web Services account ID.
+  --repository-prefix: string # A prefix used to filter returned repositories. Only repositories with names that start with repositoryPrefix are returned.
+  --max-results: int # The maximum number of results to return per page.
+  --next-token: string # The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results.
   --max-results: string # Pagination limit
   --next-token: string # Pagination token
   --x-amz-content-sha256: string
@@ -1334,10 +1343,10 @@ export def "domain-repositoriesdomain list-repositories-in" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "administrator-account" $administrator_account "scalar") (serialize-qp "repository-prefix" $repository_prefix "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/domain/repositories#domain" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1367,14 +1376,14 @@ export def "tagsresource-arn list-tags-for-resource" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/tags#resourceArn" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p>Creates a new package version containing one or more assets (or files).</p> <p>The <code>unfinished</code> flag can be used to keep the package version in the <code>Unfinished</code> state until all of its assets have been uploaded (see <a href="https://docs.aws.amazon.com/codeartifact/latest/ug/packages-overview.html#package-version-status.html#package-version-status">Package version status</a> in the <i>CodeArtifact user guide</i>). To set the package version’s status to <code>Published</code>, omit the <code>unfinished</code> flag when uploading the final asset, or set the status using <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_UpdatePackageVersionsStatus.html">UpdatePackageVersionStatus</a>. Once a package version’s status is set to <code>Published</code>, it cannot change back to <code>Unfinished</code>.</p> <note> <p>Only generic packages can be published using this API. For more information, see <a href="https://docs.aws.amazon.com/codeartifact/latest/ug/using-generic.html">Using generic packages</a> in the <i>CodeArtifact User Guide</i>.</p> </note>
+# Creates a new package version containing one or more assets (or files). The unfinished flag can be used to keep the package version in the Unfinished state until all of its assets have been uploaded (see Package version status (https://docs.aws.amazon.com/codeartifact/latest/ug/packages-overview.html#package-version-status.html#package-version-status) in the CodeArtifact user guide). To set the package version’s status to Published, omit the unfinished flag when uploading the final asset, or set the status using UpdatePackageVersionStatus (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_UpdatePackageVersionsStatus.html). Once a package version’s status is set to Published, it cannot change back to Unfinished. Only generic packages can be published using this API. For more information, see Using generic packages (https://docs.aws.amazon.com/codeartifact/latest/ug/using-generic.html) in the CodeArtifact User Guide.
 #
 # POST /v1/package/version/publish#domain&repository&format&package&version&asset&x-amz-content-sha256
 # operationId: PublishPackageVersion
@@ -1393,9 +1402,9 @@ export def "package-version-publishdomainrepositoryformatpackageversionassetx-am
   --format: string@format-completer # A format that specifies the type of the package version with the requested asset file.
   --namespace: string # The namespace of the package version to publish.
   --package: string # The name of the package version to publish.
-  --version: string # The package version to publish (for example, <code>3.5.2</code>).
-  --asset: string # The name of the asset to publish. Asset names can include Unicode letters and numbers, and the following special characters: <code>~ ! @ ^ &amp; ( ) - ` _ + [ ] { } ; , . `</code> 
-  --unfinished: oneof<nothing, bool> # <p>Specifies whether the package version should remain in the <code>unfinished</code> state. If omitted, the package version status will be set to <code>Published</code> (see <a href="https://docs.aws.amazon.com/codeartifact/latest/ug/packages-overview.html#package-version-status">Package version status</a> in the <i>CodeArtifact User Guide</i>).</p> <p>Valid values: <code>unfinished</code> </p>
+  --version: string # The package version to publish (for example, 3.5.2).
+  --asset: string # The name of the asset to publish. Asset names can include Unicode letters and numbers, and the following special characters: ~ ! @ ^ & ( ) - ` _ + [ ] { } ; , . `
+  --unfinished: oneof<nothing, bool> # Specifies whether the package version should remain in the unfinished state. If omitted, the package version status will be set to Published (see Package version status (https://docs.aws.amazon.com/codeartifact/latest/ug/packages-overview.html#package-version-status) in the CodeArtifact User Guide). Valid values: unfinished
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1403,7 +1412,7 @@ export def "package-version-publishdomainrepositoryformatpackageversionassetx-am
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --x-amz-content-sha256: string # <p>The SHA256 hash of the <code>assetContent</code> to publish. This value must be calculated by the caller and provided with the request (see <a href="https://docs.aws.amazon.com/codeartifact/latest/ug/using-generic.html#publishing-generic-packages">Publishing a generic package</a> in the <i>CodeArtifact User Guide</i>).</p> <p>This value is used as an integrity check to verify that the <code>assetContent</code> has not changed after it was originally sent.</p>
+  --x-amz-content-sha256: string # The SHA256 hash of the assetContent to publish. This value must be calculated by the caller and provided with the request (see Publishing a generic package (https://docs.aws.amazon.com/codeartifact/latest/ug/using-generic.html#publishing-generic-packages) in the CodeArtifact User Guide). This value is used as an integrity check to verify that the assetContent has not changed after it was originally sent.
   asset_content: string # The content of the asset to publish.
 ]: any -> record<format: record, namespace: record, package: record, version: record, versionRevision: record, status: record, asset: record<name: record, size: record, hashes: record>> {
   let input = $in
@@ -1411,16 +1420,16 @@ export def "package-version-publishdomainrepositoryformatpackageversionassetx-am
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "asset" $asset "scalar") (serialize-qp "unfinished" $unfinished "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/package/version/publish#domain&repository&format&package&version&asset&x-amz-content-sha256" $qp)
-  let body = {"assetContent": $asset_content} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-content-sha256": $x_amz_content_sha256} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"assetContent": $asset_content} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-content-sha256": $x_amz_content_sha256} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# <p> Sets a resource policy on a domain that specifies permissions to access it. </p> <p> When you call <code>PutDomainPermissionsPolicy</code>, the resource policy on the domain is ignored when evaluting permissions. This ensures that the owner of a domain cannot lock themselves out of the domain, which would prevent them from being able to update the resource policy. </p>
+# Sets a resource policy on a domain that specifies permissions to access it. When you call PutDomainPermissionsPolicy, the resource policy on the domain is ignored when evaluting permissions. This ensures that the owner of a domain cannot lock themselves out of the domain, which would prevent them from being able to update the resource policy.
 #
 # PUT /v1/domain/permissions/policy
 # operationId: PutDomainPermissionsPolicy
@@ -1440,22 +1449,22 @@ export def "domain-permissions-policy update" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  domain: string #  The name of the domain on which to set the resource policy. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --policy-revision: string #  The current revision of the resource policy to be set. This revision is used for optimistic locking, which prevents others from overwriting your changes to the domain's resource policy. 
-  policy_document: string #  A valid displayable JSON Aspen policy string to be set as the access control resource policy on the provided domain. 
+  domain: string # The name of the domain on which to set the resource policy.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --policy-revision: string # The current revision of the resource policy to be set. This revision is used for optimistic locking, which prevents others from overwriting your changes to the domain's resource policy.
+  policy_document: string # A valid displayable JSON Aspen policy string to be set as the access control resource policy on the provided domain.
 ]: any -> record<policy: record<resourceArn: record, revision: record, document: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/domain/permissions/policy")
-  let body = {"domain": $domain, "domainOwner": $domain_owner, "policyRevision": $policy_revision, "policyDocument": $policy_document} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"domain": $domain, "domainOwner": $domain_owner, "policyRevision": $policy_revision, "policyDocument": $policy_document} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Adds or updates tags for a resource in CodeArtifact.
@@ -1487,13 +1496,13 @@ export def "tagresource-arn tag-resource" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/tag#resourceArn" $qp)
-  let body = {"tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes tags from a resource in CodeArtifact.
@@ -1517,27 +1526,27 @@ export def "untagresource-arn untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  tag_keys: list # The tag key for each tag that you want to remove from the resource.
+  tag_keys: list<string> # The tag key for each tag that you want to remove from the resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/untag#resourceArn" $qp)
-  let body = {"tagKeys": $tag_keys} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"tagKeys": $tag_keys} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-#  Updates the status of one or more versions of a package. Using <code>UpdatePackageVersionsStatus</code>, you can update the status of package versions to <code>Archived</code>, <code>Published</code>, or <code>Unlisted</code>. To set the status of a package version to <code>Disposed</code>, use <a href="https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_DisposePackageVersions.html">DisposePackageVersions</a>. 
+# Updates the status of one or more versions of a package. Using UpdatePackageVersionsStatus, you can update the status of package versions to Archived, Published, or Unlisted. To set the status of a package version to Disposed, use DisposePackageVersions (https://docs.aws.amazon.com/codeartifact/latest/APIReference/API_DisposePackageVersions.html).
 #
 # POST /v1/package/versions/update_status#domain&repository&format&package
 # operationId: UpdatePackageVersionsStatus
-export def "package-versions-update-statusdomainrepositoryformatpackage update-package-versions-status" [
+export def "package-versions-update-statusdomainrepositoryformatpackage update-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1546,12 +1555,12 @@ export def "package-versions-update-statusdomainrepositoryformatpackage update-p
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain: string #  The name of the domain that contains the repository that contains the package versions with a status to be updated. 
-  --domain-owner: string #  The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces. 
-  --repository: string #  The repository that contains the package versions with the status you want to update. 
-  --format: string@format-completer #  A format that specifies the type of the package with the statuses to update. 
-  --namespace: string # <p>The namespace of the package version to be updated. The package version component that specifies its namespace depends on its type. For example:</p> <ul> <li> <p> The namespace of a Maven package version is its <code>groupId</code>. </p> </li> <li> <p> The namespace of an npm package version is its <code>scope</code>. </p> </li> <li> <p> Python and NuGet package versions do not contain a corresponding component, package versions of those formats do not have a namespace. </p> </li> <li> <p> The namespace of a generic package is its <code>namespace</code>. </p> </li> </ul>
-  --package: string #  The name of the package with the version statuses to update. 
+  --domain: string # The name of the domain that contains the repository that contains the package versions with a status to be updated.
+  --domain-owner: string # The 12-digit account number of the Amazon Web Services account that owns the domain. It does not include dashes or spaces.
+  --repository: string # The repository that contains the package versions with the status you want to update.
+  --format: string@format-completer # A format that specifies the type of the package with the statuses to update.
+  --namespace: string # The namespace of the package version to be updated. The package version component that specifies its namespace depends on its type. For example: The namespace of a Maven package version is its groupId. The namespace of an npm package version is its scope. Python and NuGet package versions do not contain a corresponding component, package versions of those formats do not have a namespace. The namespace of a generic package is its namespace.
+  --package: string # The name of the package with the version statuses to update.
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1559,21 +1568,21 @@ export def "package-versions-update-statusdomainrepositoryformatpackage update-p
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  versions: list #  An array of strings that specify the versions of the package with the statuses to update. 
-  --version-revisions: record #  A map of package versions and package version revisions. The map <code>key</code> is the package version (for example, <code>3.5.2</code>), and the map <code>value</code> is the package version revision. 
-  --expected-status: string@expected-status-completer #  The package version’s expected status before it is updated. If <code>expectedStatus</code> is provided, the package version's status is updated only if its status at the time <code>UpdatePackageVersionsStatus</code> is called matches <code>expectedStatus</code>. 
-  target_status: string@target-status-completer #  The status you want to change the package version status to. 
+  versions: list<string> # An array of strings that specify the versions of the package with the statuses to update.
+  --version-revisions: record # A map of package versions and package version revisions. The map key is the package version (for example, 3.5.2), and the map value is the package version revision.
+  --expected-status: string@expected-status-completer # The package version’s expected status before it is updated. If expectedStatus is provided, the package version's status is updated only if its status at the time UpdatePackageVersionsStatus is called matches expectedStatus.
+  target_status: string@target-status-completer # The status you want to change the package version status to.
 ]: any -> record<successfulVersions: record, failedVersions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "domain-owner" $domain_owner "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "package" $package "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/package/versions/update_status#domain&repository&format&package" $qp)
-  let body = {"versions": $versions, "versionRevisions": $version_revisions, "expectedStatus": $expected_status, "targetStatus": $target_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"versions": $versions, "versionRevisions": $version_revisions, "expectedStatus": $expected_status, "targetStatus": $target_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

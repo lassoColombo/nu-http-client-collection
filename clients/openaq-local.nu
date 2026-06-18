@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -73,7 +82,7 @@ def temporal-completer [] { ["day" "dow" "hod" "hour" "month" "moy" "year"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "faviconico get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "favicon-ico get-favico" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +106,7 @@ export def commands []: nothing -> table {
 #
 # GET /favicon.ico
 # operationId: favico_favicon_ico_get
-export def "faviconico get" [
+export def "favicon-ico get-favico" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,7 +128,7 @@ export def "faviconico get" [
 #
 # GET /ping
 # operationId: pong_ping_get
-export def "ping get" [
+export def "ping get-pong" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -141,7 +150,7 @@ export def "ping get" [
 #
 # GET /v1/cities
 # operationId: cities_getv1_v1_cities_get
-export def "cities get" [
+export def "cities get-getv1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -154,9 +163,9 @@ export def "cities get" [
   --page: int # Paginate through results. (default: 1)
   --offset: int # default: 0
   --qp-sort: string # Define sort order. (default: asc)
-  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
-  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
-  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --country-id: string # Limit results by a certain country using two letter country code. (ex. /US)
+  --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
+  --city: list<string> # Limit results by a certain city or cities. (ex. ?city=Chicago or ?city=Chicago&city=Boston)
   --order-by: string # Order by a field (default: city)
   --entity: string
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<city: string, count: int, country: string, firstUpdated: string, lastUpdated: string, locations: int, parameters: list>> {
@@ -173,7 +182,7 @@ export def "cities get" [
 #
 # GET /v1/countries
 # operationId: countries_getv1_v1_countries_get
-export def "countries get" [
+export def "countries get-getv1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,8 +195,8 @@ export def "countries get" [
   --page: int # Paginate through results. (default: 1)
   --offset: int # default: 0
   --qp-sort: string # Define sort order. (default: asc)
-  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
-  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --country-id: string # Limit results by a certain country using two letter country code. (ex. /US)
+  --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
   --order-by: string # default: country
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<cities: int, code: string, count: int, firstUpdated: string, lastUpdated: string, locations: int, name: string, parameters: list, sources: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -203,7 +212,7 @@ export def "countries get" [
 #
 # GET /v1/countries/{country_id}
 # operationId: countries_get_v1_countries__country_id__get
-export def "countries get-by-country_id" [
+export def "countries get-get-by-country_id" [
   country_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -217,13 +226,13 @@ export def "countries get-by-country_id" [
   --page: int # Paginate through results. (default: 1)
   --offset: int # default: 0
   --qp-sort: string # Define sort order. (default: asc)
-  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
   --order-by: string # default: country
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<cities: int, code: string, count: int, firstUpdated: string, lastUpdated: string, locations: int, name: string, parameters: list, sources: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "country" $country "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({country_id: $country_id} | format pattern "/v1/countries/{country_id}") $qp)
+  let full_url = (build-url $base ({country_id: (encode-path-segment $country_id)} | format pattern "/v1/countries/{country_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -233,7 +242,7 @@ export def "countries get-by-country_id" [
 #
 # GET /v1/latest
 # operationId: latest_v1_get_v1_latest_get
-export def "latest get" [
+export def "latest get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,22 +258,22 @@ export def "latest get" [
   --has-geo: oneof<nothing, bool>
   --parameter-id: int
   --parameter: list
-  --unit: list
+  --unit: list<string>
   --coordinates: string
   --radius: int # default: 1000
-  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
-  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
-  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --country-id: string # Limit results by a certain country using two letter country code. (ex. /US)
+  --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
+  --city: list<string> # Limit results by a certain city or cities. (ex. ?city=Chicago or ?city=Chicago&city=Boston)
   --location-id: int
   --location: list
   --order-by: string # Order by a field (default: lastUpdated)
   --is-mobile: oneof<nothing, bool> # Location is mobile
   --is-analysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
-  --source-name: list # Name of the data source
+  --source-name: list<string> # Name of the data source
   --entity: string # Source entity type.
   --sensor-type: string # Type of Sensor
-  --model-name: list # Model Name of Sensor
-  --manufacturer-name: list # Manufacturer of Sensor
+  --model-name: list<string> # Model Name of Sensor
+  --manufacturer-name: list<string> # Manufacturer of Sensor
   --dump-raw: oneof<nothing, bool> # default: false
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -280,7 +289,7 @@ export def "latest get" [
 #
 # GET /v1/latest/{location_id}
 # operationId: latest_v1_get_v1_latest__location_id__get
-export def "latest get-by-location_id" [
+export def "latest get-get-by-location_id" [
   location_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,27 +306,27 @@ export def "latest get-by-location_id" [
   --has-geo: oneof<nothing, bool>
   --parameter-id: int
   --parameter: list
-  --unit: list
+  --unit: list<string>
   --coordinates: string
   --radius: int # default: 1000
-  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
-  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
-  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --country-id: string # Limit results by a certain country using two letter country code. (ex. /US)
+  --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
+  --city: list<string> # Limit results by a certain city or cities. (ex. ?city=Chicago or ?city=Chicago&city=Boston)
   --location: list
   --order-by: string # Order by a field (default: lastUpdated)
   --is-mobile: oneof<nothing, bool> # Location is mobile
   --is-analysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
-  --source-name: list # Name of the data source
+  --source-name: list<string> # Name of the data source
   --entity: string # Source entity type.
   --sensor-type: string # Type of Sensor
-  --model-name: list # Model Name of Sensor
-  --manufacturer-name: list # Manufacturer of Sensor
+  --model-name: list<string> # Model Name of Sensor
+  --manufacturer-name: list<string> # Manufacturer of Sensor
   --dump-raw: oneof<nothing, bool> # default: false
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location_id: $location_id} | format pattern "/v1/latest/{location_id}") $qp)
+  let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/v1/latest/{location_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -327,7 +336,7 @@ export def "latest get-by-location_id" [
 #
 # GET /v1/locations
 # operationId: locationsv1_get_v1_locations_get
-export def "locations get" [
+export def "locations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,22 +352,22 @@ export def "locations get" [
   --has-geo: oneof<nothing, bool>
   --parameter-id: int
   --parameter: list
-  --unit: list
+  --unit: list<string>
   --coordinates: string
   --radius: int # default: 1000
-  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
-  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
-  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --country-id: string # Limit results by a certain country using two letter country code. (ex. /US)
+  --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
+  --city: list<string> # Limit results by a certain city or cities. (ex. ?city=Chicago or ?city=Chicago&city=Boston)
   --location-id: int
   --location: list
   --order-by: string # Order by a field (default: lastUpdated)
   --is-mobile: oneof<nothing, bool> # Location is mobile
   --is-analysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
-  --source-name: list # Name of the data source
+  --source-name: list<string> # Name of the data source
   --entity: string # Source entity type.
   --sensor-type: string # Type of Sensor
-  --model-name: list # Model Name of Sensor
-  --manufacturer-name: list # Manufacturer of Sensor
+  --model-name: list<string> # Model Name of Sensor
+  --manufacturer-name: list<string> # Manufacturer of Sensor
   --dump-raw: oneof<nothing, bool> # default: false
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -374,7 +383,7 @@ export def "locations get" [
 #
 # GET /v1/locations/{location_id}
 # operationId: locationsv1_get_v1_locations__location_id__get
-export def "locations get-by-location_id" [
+export def "locations get-locationsv1-get" [
   location_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -391,27 +400,27 @@ export def "locations get-by-location_id" [
   --has-geo: oneof<nothing, bool>
   --parameter-id: int
   --parameter: list
-  --unit: list
+  --unit: list<string>
   --coordinates: string
   --radius: int # default: 1000
-  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
-  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
-  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --country-id: string # Limit results by a certain country using two letter country code. (ex. /US)
+  --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
+  --city: list<string> # Limit results by a certain city or cities. (ex. ?city=Chicago or ?city=Chicago&city=Boston)
   --location: list
   --order-by: string # Order by a field (default: lastUpdated)
   --is-mobile: oneof<nothing, bool> # Location is mobile
   --is-analysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
-  --source-name: list # Name of the data source
+  --source-name: list<string> # Name of the data source
   --entity: string # Source entity type.
   --sensor-type: string # Type of Sensor
-  --model-name: list # Model Name of Sensor
-  --manufacturer-name: list # Manufacturer of Sensor
+  --model-name: list<string> # Model Name of Sensor
+  --manufacturer-name: list<string> # Manufacturer of Sensor
   --dump-raw: oneof<nothing, bool> # default: false
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location_id: $location_id} | format pattern "/v1/locations/{location_id}") $qp)
+  let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/v1/locations/{location_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -421,7 +430,7 @@ export def "locations get-by-location_id" [
 #
 # GET /v1/measurements
 # operationId: measurements_get_v1_v1_measurements_get
-export def "measurements get" [
+export def "measurements get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,12 +449,12 @@ export def "measurements get" [
   --has-geo: oneof<nothing, bool>
   --parameter-id: int
   --parameter: list
-  --unit: list
+  --unit: list<string>
   --coordinates: string
   --radius: int # default: 1000
-  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
-  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
-  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --country-id: string # Limit results by a certain country using two letter country code. (ex. /US)
+  --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
+  --city: list<string> # Limit results by a certain city or cities. (ex. ?city=Chicago or ?city=Chicago&city=Boston)
   --location-id: int
   --location: list
   --order-by: string # default: datetime
@@ -471,7 +480,7 @@ export def "measurements get" [
 #
 # GET /v1/parameters
 # operationId: parameters_getv1_v1_parameters_get
-export def "parameters get" [
+export def "parameters get-getv1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,9 +493,9 @@ export def "parameters get" [
   --page: int # Paginate through results. (default: 1)
   --offset: int # default: 0
   --qp-sort: string # Define sort order. (default: asc)
-  --source-name: list
-  --source-id: list
-  --source-slug: list
+  --source-name: list<string>
+  --source-id: list<int>
+  --source-slug: list<string>
   --order-by: string # default: id
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<description: string, displayName: string, id: int, isCore: bool, maxColorValue: float, name: string, preferredUnit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -502,7 +511,7 @@ export def "parameters get" [
 #
 # GET /v1/sources
 # operationId: sources_v1_get_v1_sources_get
-export def "sources get" [
+export def "sources get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -531,7 +540,7 @@ export def "sources get" [
 #
 # GET /v2/averages
 # operationId: averages_v2_get_v2_averages_get
-export def "averages get" [
+export def "averages get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -544,18 +553,18 @@ export def "averages get" [
   --date-to: string # default: 2021-08-23T09:48:00+00:00
   --parameter-id: int
   --parameter: list
-  --unit: list
+  --unit: list<string>
   --project-id: int
   --project: list
-  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
-  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --country-id: string # Limit results by a certain country using two letter country code. (ex. /US)
+  --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
   --limit: int # Change the number of results returned. (default: 100)
   --page: int # Paginate through results. (default: 1)
   --offset: int # default: 0
   --qp-sort: string # Define sort order. (default: desc)
   --spatial: string@spatial-completer
   --temporal: string@temporal-completer
-  --location: list
+  --location: list<string>
   --group: oneof<nothing, bool> # default: false
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -571,7 +580,7 @@ export def "averages get" [
 #
 # GET /v2/cities
 # operationId: cities_get_v2_cities_get
-export def "cities get-1" [
+export def "cities get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,9 +593,9 @@ export def "cities get-1" [
   --page: int # Paginate through results. (default: 1)
   --offset: int # default: 0
   --qp-sort: string # Define sort order. (default: asc)
-  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
-  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
-  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --country-id: string # Limit results by a certain country using two letter country code. (ex. /US)
+  --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
+  --city: list<string> # Limit results by a certain city or cities. (ex. ?city=Chicago or ?city=Chicago&city=Boston)
   --order-by: string # Order by a field (default: city)
   --entity: string
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<city: string, count: int, country: string, firstUpdated: string, lastUpdated: string, locations: int, parameters: list>> {
@@ -603,7 +612,7 @@ export def "cities get-1" [
 #
 # GET /v2/countries
 # operationId: countries_get_v2_countries_get
-export def "countries get-1" [
+export def "countries get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -616,8 +625,8 @@ export def "countries get-1" [
   --page: int # Paginate through results. (default: 1)
   --offset: int # default: 0
   --qp-sort: string # Define sort order. (default: asc)
-  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
-  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --country-id: string # Limit results by a certain country using two letter country code. (ex. /US)
+  --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
   --order-by: string # default: country
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<cities: int, code: string, count: int, firstUpdated: string, lastUpdated: string, locations: int, name: string, parameters: list, sources: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -633,7 +642,7 @@ export def "countries get-1" [
 #
 # GET /v2/countries/{country_id}
 # operationId: countries_get_v2_countries__country_id__get
-export def "countries get-by-country_id-1" [
+export def "countries get-get-by-country_id-1" [
   country_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -647,13 +656,13 @@ export def "countries get-by-country_id-1" [
   --page: int # Paginate through results. (default: 1)
   --offset: int # default: 0
   --qp-sort: string # Define sort order. (default: asc)
-  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
   --order-by: string # default: country
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<cities: int, code: string, count: int, firstUpdated: string, lastUpdated: string, locations: int, name: string, parameters: list, sources: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "country" $country "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({country_id: $country_id} | format pattern "/v2/countries/{country_id}") $qp)
+  let full_url = (build-url $base ({country_id: (encode-path-segment $country_id)} | format pattern "/v2/countries/{country_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -663,7 +672,7 @@ export def "countries get-by-country_id-1" [
 #
 # GET /v2/latest
 # operationId: latest_get_v2_latest_get
-export def "latest get-1" [
+export def "latest get-get-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -679,22 +688,22 @@ export def "latest get-1" [
   --has-geo: oneof<nothing, bool>
   --parameter-id: int
   --parameter: list
-  --unit: list
+  --unit: list<string>
   --coordinates: string
   --radius: int # default: 1000
-  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
-  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
-  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --country-id: string # Limit results by a certain country using two letter country code. (ex. /US)
+  --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
+  --city: list<string> # Limit results by a certain city or cities. (ex. ?city=Chicago or ?city=Chicago&city=Boston)
   --location-id: int
   --location: list
   --order-by: string # Order by a field (default: lastUpdated)
   --is-mobile: oneof<nothing, bool> # Location is mobile
   --is-analysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
-  --source-name: list # Name of the data source
+  --source-name: list<string> # Name of the data source
   --entity: string # Source entity type.
   --sensor-type: string # Type of Sensor
-  --model-name: list # Model Name of Sensor
-  --manufacturer-name: list # Manufacturer of Sensor
+  --model-name: list<string> # Model Name of Sensor
+  --manufacturer-name: list<string> # Manufacturer of Sensor
   --dump-raw: oneof<nothing, bool> # default: false
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -710,7 +719,7 @@ export def "latest get-1" [
 #
 # GET /v2/latest/{location_id}
 # operationId: latest_get_v2_latest__location_id__get
-export def "latest get-by-location_id-1" [
+export def "latest get-get-by-location_id-1" [
   location_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -727,27 +736,27 @@ export def "latest get-by-location_id-1" [
   --has-geo: oneof<nothing, bool>
   --parameter-id: int
   --parameter: list
-  --unit: list
+  --unit: list<string>
   --coordinates: string
   --radius: int # default: 1000
-  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
-  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
-  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --country-id: string # Limit results by a certain country using two letter country code. (ex. /US)
+  --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
+  --city: list<string> # Limit results by a certain city or cities. (ex. ?city=Chicago or ?city=Chicago&city=Boston)
   --location: list
   --order-by: string # Order by a field (default: lastUpdated)
   --is-mobile: oneof<nothing, bool> # Location is mobile
   --is-analysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
-  --source-name: list # Name of the data source
+  --source-name: list<string> # Name of the data source
   --entity: string # Source entity type.
   --sensor-type: string # Type of Sensor
-  --model-name: list # Model Name of Sensor
-  --manufacturer-name: list # Manufacturer of Sensor
+  --model-name: list<string> # Model Name of Sensor
+  --manufacturer-name: list<string> # Manufacturer of Sensor
   --dump-raw: oneof<nothing, bool> # default: false
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location_id: $location_id} | format pattern "/v2/latest/{location_id}") $qp)
+  let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/v2/latest/{location_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -757,7 +766,7 @@ export def "latest get-by-location_id-1" [
 #
 # GET /v2/locations
 # operationId: locations_get_v2_locations_get
-export def "locations get-1" [
+export def "locations list-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -773,22 +782,22 @@ export def "locations get-1" [
   --has-geo: oneof<nothing, bool>
   --parameter-id: int
   --parameter: list
-  --unit: list
+  --unit: list<string>
   --coordinates: string
   --radius: int # default: 1000
-  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
-  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
-  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --country-id: string # Limit results by a certain country using two letter country code. (ex. /US)
+  --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
+  --city: list<string> # Limit results by a certain city or cities. (ex. ?city=Chicago or ?city=Chicago&city=Boston)
   --location-id: int
   --location: list
   --order-by: string # Order by a field (default: lastUpdated)
   --is-mobile: oneof<nothing, bool> # Location is mobile
   --is-analysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
-  --source-name: list # Name of the data source
+  --source-name: list<string> # Name of the data source
   --entity: string # Source entity type.
   --sensor-type: string # Type of Sensor
-  --model-name: list # Model Name of Sensor
-  --manufacturer-name: list # Manufacturer of Sensor
+  --model-name: list<string> # Model Name of Sensor
+  --manufacturer-name: list<string> # Manufacturer of Sensor
   --dump-raw: oneof<nothing, bool> # default: false
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -804,7 +813,7 @@ export def "locations get-1" [
 #
 # GET /v2/locations/tiles/mobile-generalized/tiles.json
 # operationId: mobilegentilejson_v2_locations_tiles_mobile_generalized_tiles_json_get
-export def "locations-tiles-mobile-generalized-tilesjson get" [
+export def "locations-tiles-mobile-generalized-tiles-json get-mobilegentilejson" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -826,7 +835,7 @@ export def "locations-tiles-mobile-generalized-tilesjson get" [
 #
 # GET /v2/locations/tiles/mobile-generalized/{z}/{x}/{y}.pbf
 # operationId: get_mobilegentile_v2_locations_tiles_mobile_generalized__z___x___y__pbf_get
-export def "locations-tiles-mobile-generalized get" [
+export def "locations-tiles-mobile-generalized get-mobilegentile-pbf-get" [
   z: int
   x: int
   y: int
@@ -839,7 +848,7 @@ export def "locations-tiles-mobile-generalized get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --parameter: string
-  --location: list # limit data to location id
+  --location: list<int> # limit data to location id
   --last-updated-from: string
   --last-updated-to: string
   --is-mobile: oneof<nothing, bool>
@@ -849,7 +858,7 @@ export def "locations-tiles-mobile-generalized get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "parameter" $parameter "scalar") (serialize-qp "location" $location "multi") (serialize-qp "lastUpdatedFrom" $last_updated_from "scalar") (serialize-qp "lastUpdatedTo" $last_updated_to "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({z: $z, x: $x, y: $y} | format pattern "/v2/locations/tiles/mobile-generalized/{z}/{x}/{y}.pbf") $qp)
+  let full_url = (build-url $base ({z: (encode-path-segment $z), x: (encode-path-segment $x), y: (encode-path-segment $y)} | format pattern "/v2/locations/tiles/mobile-generalized/{z}/{x}/{y}.pbf") $qp)
   let accept_val = "application/x-protobuf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -859,7 +868,7 @@ export def "locations-tiles-mobile-generalized get" [
 #
 # GET /v2/locations/tiles/mobile/tiles.json
 # operationId: mobiletilejson_v2_locations_tiles_mobile_tiles_json_get
-export def "locations-tiles-mobile-tilesjson get" [
+export def "locations-tiles-mobile-tiles-json get-mobiletilejson" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -881,7 +890,7 @@ export def "locations-tiles-mobile-tilesjson get" [
 #
 # GET /v2/locations/tiles/mobile/{z}/{x}/{y}.pbf
 # operationId: get_mobiletile_v2_locations_tiles_mobile__z___x___y__pbf_get
-export def "locations-tiles-mobile get" [
+export def "locations-tiles-mobile get-mobiletile-pbf-get" [
   z: int
   x: int
   y: int
@@ -896,7 +905,7 @@ export def "locations-tiles-mobile get" [
   --date-from: string
   --date-to: string
   --parameter: string
-  --location: list # limit data to location id
+  --location: list<int> # limit data to location id
   --last-updated-from: string
   --last-updated-to: string
   --is-mobile: oneof<nothing, bool>
@@ -906,7 +915,7 @@ export def "locations-tiles-mobile get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "parameter" $parameter "scalar") (serialize-qp "location" $location "multi") (serialize-qp "lastUpdatedFrom" $last_updated_from "scalar") (serialize-qp "lastUpdatedTo" $last_updated_to "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({z: $z, x: $x, y: $y} | format pattern "/v2/locations/tiles/mobile/{z}/{x}/{y}.pbf") $qp)
+  let full_url = (build-url $base ({z: (encode-path-segment $z), x: (encode-path-segment $x), y: (encode-path-segment $y)} | format pattern "/v2/locations/tiles/mobile/{z}/{x}/{y}.pbf") $qp)
   let accept_val = "application/x-protobuf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -916,7 +925,7 @@ export def "locations-tiles-mobile get" [
 #
 # GET /v2/locations/tiles/tiles.json
 # operationId: tilejson_v2_locations_tiles_tiles_json_get
-export def "locations-tiles-tilesjson get" [
+export def "locations-tiles-tiles-json get-tilejson" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -938,7 +947,7 @@ export def "locations-tiles-tilesjson get" [
 #
 # GET /v2/locations/tiles/viewer
 # operationId: demo_v2_locations_tiles_viewer_get
-export def "locations-tiles-viewer get" [
+export def "locations-tiles-viewer get-demo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -960,7 +969,7 @@ export def "locations-tiles-viewer get" [
 #
 # GET /v2/locations/tiles/{z}/{x}/{y}.pbf
 # operationId: get_tile_v2_locations_tiles__z___x___y__pbf_get
-export def "locations-tiles get" [
+export def "locations-tiles get-pbf-get" [
   z: int
   x: int
   y: int
@@ -973,7 +982,7 @@ export def "locations-tiles get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --parameter: string
-  --location: list # limit data to location id
+  --location: list<int> # limit data to location id
   --last-updated-from: string
   --last-updated-to: string
   --is-mobile: oneof<nothing, bool>
@@ -983,7 +992,7 @@ export def "locations-tiles get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "parameter" $parameter "scalar") (serialize-qp "location" $location "multi") (serialize-qp "lastUpdatedFrom" $last_updated_from "scalar") (serialize-qp "lastUpdatedTo" $last_updated_to "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({z: $z, x: $x, y: $y} | format pattern "/v2/locations/tiles/{z}/{x}/{y}.pbf") $qp)
+  let full_url = (build-url $base ({z: (encode-path-segment $z), x: (encode-path-segment $x), y: (encode-path-segment $y)} | format pattern "/v2/locations/tiles/{z}/{x}/{y}.pbf") $qp)
   let accept_val = "application/x-protobuf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -993,7 +1002,7 @@ export def "locations-tiles get" [
 #
 # GET /v2/locations/{location_id}
 # operationId: locations_get_v2_locations__location_id__get
-export def "locations get-by-location_id-1" [
+export def "locations get-get" [
   location_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1010,27 +1019,27 @@ export def "locations get-by-location_id-1" [
   --has-geo: oneof<nothing, bool>
   --parameter-id: int
   --parameter: list
-  --unit: list
+  --unit: list<string>
   --coordinates: string
   --radius: int # default: 1000
-  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
-  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
-  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --country-id: string # Limit results by a certain country using two letter country code. (ex. /US)
+  --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
+  --city: list<string> # Limit results by a certain city or cities. (ex. ?city=Chicago or ?city=Chicago&city=Boston)
   --location: list
   --order-by: string # Order by a field (default: lastUpdated)
   --is-mobile: oneof<nothing, bool> # Location is mobile
   --is-analysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
-  --source-name: list # Name of the data source
+  --source-name: list<string> # Name of the data source
   --entity: string # Source entity type.
   --sensor-type: string # Type of Sensor
-  --model-name: list # Model Name of Sensor
-  --manufacturer-name: list # Manufacturer of Sensor
+  --model-name: list<string> # Model Name of Sensor
+  --manufacturer-name: list<string> # Manufacturer of Sensor
   --dump-raw: oneof<nothing, bool> # default: false
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location_id: $location_id} | format pattern "/v2/locations/{location_id}") $qp)
+  let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/v2/locations/{location_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1040,7 +1049,7 @@ export def "locations get-by-location_id-1" [
 #
 # GET /v2/manufacturers
 # operationId: mfr_get_v2_manufacturers_get
-export def "manufacturers get" [
+export def "manufacturers get-mfr-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1062,7 +1071,7 @@ export def "manufacturers get" [
 #
 # GET /v2/measurements
 # operationId: measurements_get_v2_measurements_get
-export def "measurements get-1" [
+export def "measurements get-get-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1081,12 +1090,12 @@ export def "measurements get-1" [
   --has-geo: oneof<nothing, bool>
   --parameter-id: int
   --parameter: list
-  --unit: list
+  --unit: list<string>
   --coordinates: string
   --radius: int # default: 1000
-  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
-  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
-  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --country-id: string # Limit results by a certain country using two letter country code. (ex. /US)
+  --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
+  --city: list<string> # Limit results by a certain city or cities. (ex. ?city=Chicago or ?city=Chicago&city=Boston)
   --location-id: int
   --location: list
   --order-by: string # default: datetime
@@ -1112,7 +1121,7 @@ export def "measurements get-1" [
 #
 # GET /v2/models
 # operationId: model_get_v2_models_get
-export def "models get" [
+export def "models get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1134,7 +1143,7 @@ export def "models get" [
 #
 # GET /v2/parameters
 # operationId: parameters_get_v2_parameters_get
-export def "parameters get-1" [
+export def "parameters get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1147,9 +1156,9 @@ export def "parameters get-1" [
   --page: int # Paginate through results. (default: 1)
   --offset: int # default: 0
   --qp-sort: string # Define sort order. (default: asc)
-  --source-name: list
-  --source-id: list
-  --source-slug: list
+  --source-name: list<string>
+  --source-id: list<int>
+  --source-slug: list<string>
   --order-by: string # default: id
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<description: string, displayName: string, id: int, isCore: bool, maxColorValue: float, name: string, preferredUnit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1174,15 +1183,15 @@ export def "projects list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
-  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --country-id: string # Limit results by a certain country using two letter country code. (ex. /US)
+  --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
   --limit: int # Change the number of results returned. (default: 100)
   --page: int # Paginate through results. (default: 1)
   --offset: int # default: 0
   --qp-sort: string # Define sort order. (default: asc)
   --parameter-id: int
   --parameter: list
-  --unit: list
+  --unit: list<string>
   --project-id: int
   --project: list
   --order-by: string # default: lastUpdated
@@ -1190,7 +1199,7 @@ export def "projects list" [
   --is-analysis: oneof<nothing, bool>
   --entity: string
   --sensor-type: string
-  --source-name: list
+  --source-name: list<string>
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<bbox: list, countries: list, entity: string, firstUpdated: string, id: int, isAnalysis: bool, isMobile: bool, lastUpdated: string, locationIds: list, locations: int, measurements: int, name: string, parameters: list, sensorType: string, sources: list, subtitle: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1205,7 +1214,7 @@ export def "projects list" [
 #
 # GET /v2/projects/{project_id}
 # operationId: projects_get_v2_projects__project_id__get
-export def "projects get" [
+export def "projects get-get" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1215,27 +1224,27 @@ export def "projects get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
-  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --country-id: string # Limit results by a certain country using two letter country code. (ex. /US)
+  --country: list<string> # Limit results by a certain country using two letter country code. (ex. ?country=US or ?country=US&country=MX)
   --limit: int # Change the number of results returned. (default: 100)
   --page: int # Paginate through results. (default: 1)
   --offset: int # default: 0
   --qp-sort: string # Define sort order. (default: asc)
   --parameter-id: int
   --parameter: list
-  --unit: list
+  --unit: list<string>
   --project: list
   --order-by: string # default: lastUpdated
   --is-mobile: oneof<nothing, bool>
   --is-analysis: oneof<nothing, bool>
   --entity: string
   --sensor-type: string
-  --source-name: list
+  --source-name: list<string>
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<bbox: list, countries: list, entity: string, firstUpdated: string, id: int, isAnalysis: bool, isMobile: bool, lastUpdated: string, locationIds: list, locations: int, measurements: int, name: string, parameters: list, sensorType: string, sources: list, subtitle: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "project" $project "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "sourceName" $source_name "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/v2/projects/{project_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1245,7 +1254,7 @@ export def "projects get" [
 #
 # GET /v2/sources
 # operationId: sources_get_v2_sources_get
-export def "sources get-1" [
+export def "sources get-get-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1258,9 +1267,9 @@ export def "sources get-1" [
   --page: int # Paginate through results. (default: 1)
   --offset: int # default: 0
   --qp-sort: string # Define sort order. (default: asc)
-  --source-name: list
-  --source-id: list
-  --source-slug: list
+  --source-name: list<string>
+  --source-id: list<int>
+  --source-slug: list<string>
   --order-by: string # default: sourceName
 ]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1276,7 +1285,7 @@ export def "sources get-1" [
 #
 # GET /v2/sources/readme/{slug}
 # operationId: readme_get_v2_sources_readme__slug__get
-export def "sources-readme get" [
+export def "sources-readme get-get" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1289,7 +1298,7 @@ export def "sources-readme get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({slug: $slug} | format pattern "/v2/sources/readme/{slug}"))
+  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/v2/sources/readme/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1299,7 +1308,7 @@ export def "sources-readme get" [
 #
 # GET /v2/summary
 # operationId: summary_get_v2_summary_get
-export def "summary get" [
+export def "summary get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

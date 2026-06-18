@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -82,7 +91,7 @@ def scope4-completer [] { ["Chores" "ChoresAdmin" "WishList" "WishListAdmin"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "appkey patch" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "appkey update" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -108,7 +117,7 @@ export def commands []: nothing -> table {
 # DEPRECATED
 # operationId: appkey_patch
 @deprecated
-export def "appkey patch" [
+export def "appkey update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,7 +144,7 @@ export def "appkey patch" [
 # DEPRECATED
 # operationId: appkey_post
 @deprecated
-export def "appkey post" [
+export def "appkey create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +172,7 @@ export def "appkey post" [
 # DEPRECATED
 # operationId: appkey_put
 @deprecated
-export def "appkey put" [
+export def "appkey update-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +196,7 @@ export def "appkey put" [
 #
 # PATCH /authentication/appkey
 # operationId: auth_appkey_patch
-export def "authentication-appkey patch" [
+export def "authentication-appkey update-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +221,7 @@ export def "authentication-appkey patch" [
 #
 # POST /authentication/appkey
 # operationId: auth_appkey_post
-export def "authentication-appkey post" [
+export def "authentication-appkey create-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +247,7 @@ export def "authentication-appkey post" [
 #
 # PUT /authentication/appkey
 # operationId: auth_appkey_put
-export def "authentication-appkey put" [
+export def "authentication-appkey update-auth-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +271,7 @@ export def "authentication-appkey put" [
 #
 # GET /authentication/authkey
 # operationId: auth_authkey_get
-export def "authentication-authkey get" [
+export def "authentication-authkey get-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +299,7 @@ export def "authentication-authkey get" [
 #
 # PATCH /authentication/authkey
 # operationId: auth_authkey_patch
-export def "authentication-authkey patch" [
+export def "authentication-authkey update-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -315,7 +324,7 @@ export def "authentication-authkey patch" [
 #
 # POST /authentication/authkey
 # operationId: auth_authkey_post
-export def "authentication-authkey post" [
+export def "authentication-authkey create-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,7 +350,7 @@ export def "authentication-authkey post" [
 #
 # PUT /authentication/authkey
 # operationId: auth_authkey_put
-export def "authentication-authkey put" [
+export def "authentication-authkey update-auth-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,7 +374,7 @@ export def "authentication-authkey put" [
 #
 # GET /authentication/verifyotp
 # operationId: auth_verifyotp_get
-export def "authentication-verifyotp get" [
+export def "authentication-verifyotp get-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -419,7 +428,7 @@ export def "authkey get" [
 # DEPRECATED
 # operationId: authkey_patch
 @deprecated
-export def "authkey patch" [
+export def "authkey update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -446,7 +455,7 @@ export def "authkey patch" [
 # DEPRECATED
 # operationId: authkey_post
 @deprecated
-export def "authkey post" [
+export def "authkey create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -474,7 +483,7 @@ export def "authkey post" [
 # DEPRECATED
 # operationId: authkey_put
 @deprecated
-export def "authkey put" [
+export def "authkey update-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,7 +532,7 @@ export def "kkid-allowance get" [
 #
 # POST /kkid/allowance
 # operationId: kkid_allowance_post
-export def "kkid-allowance post" [
+export def "kkid-allowance create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -550,7 +559,7 @@ export def "kkid-allowance post" [
 #
 # POST /kkid/apns
 # operationId: kkid_apns_post
-export def "kkid-apns post" [
+export def "kkid-apns create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -637,7 +646,7 @@ export def "kkid-chorelist get" [
 #
 # POST /kkid/chorelist
 # operationId: kkid_chorelist_post
-export def "kkid-chorelist post" [
+export def "kkid-chorelist create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,7 +689,7 @@ export def "kkid-chorelist post" [
 #
 # PUT /kkid/chorelist
 # operationId: kkid_chorelist_put
-export def "kkid-chorelist put" [
+export def "kkid-chorelist update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,7 +725,7 @@ export def "kkid-chorelist put" [
 #
 # POST /kkid/masteruser
 # operationId: kkid_masteruser_post
-export def "kkid-masteruser post" [
+export def "kkid-masteruser create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -852,7 +861,7 @@ export def "kkid-userlist get" [
 #
 # POST /kkid/userlist
 # operationId: kkid_userlist_post
-export def "kkid-userlist post" [
+export def "kkid-userlist create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -880,7 +889,7 @@ export def "kkid-userlist post" [
 #
 # PUT /kkid/userlist
 # operationId: kkid_userlist_put
-export def "kkid-userlist put" [
+export def "kkid-userlist update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -964,7 +973,7 @@ export def "kkid-wishlist get" [
 #
 # POST /kkid/wishlist
 # operationId: kkid_wishlist_post
-export def "kkid-wishlist post" [
+export def "kkid-wishlist create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -992,7 +1001,7 @@ export def "kkid-wishlist post" [
 #
 # PUT /kkid/wishlist
 # operationId: kkid_wishlist_put
-export def "kkid-wishlist put" [
+export def "kkid-wishlist update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

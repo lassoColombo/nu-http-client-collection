@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -109,26 +118,26 @@ export def "token create" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  client_id: string # The unique identifier string for each client. This value should come from the persisted result of the <a>RegisterClient</a> API.
-  client_secret: string # A secret string generated for the client. This value should come from the persisted result of the <a>RegisterClient</a> API.
-  grant_type: string # <p>Supports grant types for the authorization code, refresh token, and device code request. For device code requests, specify the following value:</p> <p> <code>urn:ietf:params:oauth:grant-type:<i>device_code</i> </code> </p> <p>For information about how to obtain the device code, see the <a>StartDeviceAuthorization</a> topic.</p>
-  --device-code: string # Used only when calling this API for the device code grant type. This short-term code is used to identify this authentication attempt. This should come from an in-memory reference to the result of the <a>StartDeviceAuthorization</a> API.
+  client_id: string # The unique identifier string for each client. This value should come from the persisted result of the RegisterClient API.
+  client_secret: string # A secret string generated for the client. This value should come from the persisted result of the RegisterClient API.
+  grant_type: string # Supports grant types for the authorization code, refresh token, and device code request. For device code requests, specify the following value: urn:ietf:params:oauth:grant-type:device_code For information about how to obtain the device code, see the StartDeviceAuthorization topic.
+  --device-code: string # Used only when calling this API for the device code grant type. This short-term code is used to identify this authentication attempt. This should come from an in-memory reference to the result of the StartDeviceAuthorization API.
   --code: string # The authorization code received from the authorization service. This parameter is required to perform an authorization grant request to get access to a token.
-  --refresh-token: string # <p>Currently, <code>refreshToken</code> is not yet implemented and is not supported. For more information about the features and limitations of the current IAM Identity Center OIDC implementation, see <i>Considerations for Using this Guide</i> in the <a href="https://docs.aws.amazon.com/singlesignon/latest/OIDCAPIReference/Welcome.html">IAM Identity Center OIDC API Reference</a>.</p> <p>The token used to obtain an access token in the event that the access token is invalid or expired.</p>
-  --scope: list # The list of scopes that is defined by the client. Upon authorization, this list is used to restrict permissions when granting an access token.
+  --refresh-token: string # Currently, refreshToken is not yet implemented and is not supported. For more information about the features and limitations of the current IAM Identity Center OIDC implementation, see Considerations for Using this Guide in the IAM Identity Center OIDC API Reference (https://docs.aws.amazon.com/singlesignon/latest/OIDCAPIReference/Welcome.html). The token used to obtain an access token in the event that the access token is invalid or expired.
+  --scope: list<string> # The list of scopes that is defined by the client. Upon authorization, this list is used to restrict permissions when granting an access token.
   --redirect-uri: string # The location of the application that will receive the authorization code. Users authorize the service to send the request to this location.
 ]: any -> record<accessToken: record, tokenType: record, expiresIn: record, refreshToken: record, idToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/token")
-  let body = {"clientId": $client_id, "clientSecret": $client_secret, "grantType": $grant_type, "deviceCode": $device_code, "code": $code, "refreshToken": $refresh_token, "scope": $scope, "redirectUri": $redirect_uri} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"clientId": $client_id, "clientSecret": $client_secret, "grantType": $grant_type, "deviceCode": $device_code, "code": $code, "refreshToken": $refresh_token, "scope": $scope, "redirectUri": $redirect_uri} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Registers a client with IAM Identity Center. This allows clients to initiate device authorization. The output should be persisted for reuse through many authentication requests.
@@ -152,20 +161,20 @@ export def "client-register create" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   client_name: string # The friendly name of the client.
-  client_type: string # The type of client. The service supports only <code>public</code> as a client type. Anything other than public will be rejected by the service.
-  --scopes: list # The list of scopes that are defined by the client. Upon authorization, this list is used to restrict permissions when granting an access token.
+  client_type: string # The type of client. The service supports only public as a client type. Anything other than public will be rejected by the service.
+  --scopes: list<string> # The list of scopes that are defined by the client. Upon authorization, this list is used to restrict permissions when granting an access token.
 ]: any -> record<clientId: record, clientSecret: record, clientIdIssuedAt: record, clientSecretExpiresAt: record, authorizationEndpoint: record, tokenEndpoint: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/client/register")
-  let body = {"clientName": $client_name, "clientType": $client_type, "scopes": $scopes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"clientName": $client_name, "clientType": $client_type, "scopes": $scopes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Initiates device authorization by requesting a pair of verification codes from the authorization service.
@@ -188,19 +197,19 @@ export def "device-authorization start" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  client_id: string # The unique identifier string for the client that is registered with IAM Identity Center. This value should come from the persisted result of the <a>RegisterClient</a> API operation.
-  client_secret: string # A secret string that is generated for the client. This value should come from the persisted result of the <a>RegisterClient</a> API operation.
-  start_url: string # The URL for the AWS access portal. For more information, see <a href="https://docs.aws.amazon.com/singlesignon/latest/userguide/using-the-portal.html">Using the AWS access portal</a> in the <i>IAM Identity Center User Guide</i>.
+  client_id: string # The unique identifier string for the client that is registered with IAM Identity Center. This value should come from the persisted result of the RegisterClient API operation.
+  client_secret: string # A secret string that is generated for the client. This value should come from the persisted result of the RegisterClient API operation.
+  start_url: string # The URL for the AWS access portal. For more information, see Using the AWS access portal (https://docs.aws.amazon.com/singlesignon/latest/userguide/using-the-portal.html) in the IAM Identity Center User Guide.
 ]: any -> record<deviceCode: record, userCode: record, verificationUri: record, verificationUriComplete: record, expiresIn: record, interval: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device_authorization")
-  let body = {"clientId": $client_id, "clientSecret": $client_secret, "startUrl": $start_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"clientId": $client_id, "clientSecret": $client_secret, "startUrl": $start_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

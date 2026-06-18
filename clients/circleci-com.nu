@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -127,14 +136,14 @@ export def "project list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --limit: int # The number of builds to return. Maximum 100, defaults to 30.  (default: 30)
-  --offset: int # The API returns builds starting from this offset, defaults to 0.  (default: 0)
+  --limit: int # The number of builds to return. Maximum 100, defaults to 30. (default: 30)
+  --offset: int # The API returns builds starting from this offset, defaults to 0. (default: 0)
   --filter: string@filter-completer # Restricts which builds are returned. Set to "completed", "successful", "failed", "running", or defaults to no filter.
 ]: nothing -> table<body: string, branch: string, build_time_millis: int, build_url: string, committer_email: string, committer_name: string, dont_build: string, lifecycle: string, previous: record<build_num: int, build_time_millis: int, status: string>, queued_at: string, reponame: string, retry_of: int, start_time: string, stop_time: string, subject: string, username: string, vcs_url: string, why: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({username: $username, project: $project} | format pattern "/project/{username}/{project}") $qp)
+  let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project)} | format pattern "/project/{username}/{project}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -143,7 +152,7 @@ export def "project list" [
 # Triggers a new build, returns a summary of the build.
 #
 # POST /project/{username}/{project}
-export def "project post" [
+export def "project create" [
   username: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -162,12 +171,12 @@ export def "project post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username, project: $project} | format pattern "/project/{username}/{project}"))
-  let body = {"build_parameters": $build_parameters, "parallel": $parallel, "revision": $revision, "tag": $tag} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project)} | format pattern "/project/{username}/{project}"))
+  let req_body = {"build_parameters": $build_parameters, "parallel": $parallel, "revision": $revision, "tag": $tag} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Clears the cache for a project.
@@ -187,7 +196,7 @@ export def "project-build-cache delete" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username, project: $project} | format pattern "/project/{username}/{project}/build-cache"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project)} | format pattern "/project/{username}/{project}/build-cache"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -210,7 +219,7 @@ export def "project-checkout-key list" [
 ]: nothing -> table<fingerprint: string, preferred: bool, public_key: string, time: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username, project: $project} | format pattern "/project/{username}/{project}/checkout-key"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project)} | format pattern "/project/{username}/{project}/checkout-key"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -219,7 +228,7 @@ export def "project-checkout-key list" [
 # Creates a new checkout key. Only usable with a user API token.
 #
 # POST /project/{username}/{project}/checkout-key
-export def "project-checkout-key post" [
+export def "project-checkout-key create" [
   username: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -235,11 +244,12 @@ export def "project-checkout-key post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username, project: $project} | format pattern "/project/{username}/{project}/checkout-key"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project)} | format pattern "/project/{username}/{project}/checkout-key"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a checkout key.
@@ -260,7 +270,7 @@ export def "project-checkout-key delete" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username, project: $project, fingerprint: $fingerprint} | format pattern "/project/{username}/{project}/checkout-key/{fingerprint}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), fingerprint: (encode-path-segment $fingerprint)} | format pattern "/project/{username}/{project}/checkout-key/{fingerprint}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -284,7 +294,7 @@ export def "project-checkout-key get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username, project: $project, fingerprint: $fingerprint} | format pattern "/project/{username}/{project}/checkout-key/{fingerprint}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), fingerprint: (encode-path-segment $fingerprint)} | format pattern "/project/{username}/{project}/checkout-key/{fingerprint}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -307,7 +317,7 @@ export def "project-envvar list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username, project: $project} | format pattern "/project/{username}/{project}/envvar"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project)} | format pattern "/project/{username}/{project}/envvar"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -316,7 +326,7 @@ export def "project-envvar list" [
 # Creates a new environment variable
 #
 # POST /project/{username}/{project}/envvar
-export def "project-envvar post" [
+export def "project-envvar create" [
   username: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -330,7 +340,7 @@ export def "project-envvar post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username, project: $project} | format pattern "/project/{username}/{project}/envvar"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project)} | format pattern "/project/{username}/{project}/envvar"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -354,7 +364,7 @@ export def "project-envvar delete" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username, project: $project, name: $name} | format pattern "/project/{username}/{project}/envvar/{name}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), name: (encode-path-segment $name)} | format pattern "/project/{username}/{project}/envvar/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -378,7 +388,7 @@ export def "project-envvar get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username, project: $project, name: $name} | format pattern "/project/{username}/{project}/envvar/{name}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), name: (encode-path-segment $name)} | format pattern "/project/{username}/{project}/envvar/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -387,7 +397,7 @@ export def "project-envvar get" [
 # Create an ssh key used to access external systems that require SSH key-based authentication
 #
 # POST /project/{username}/{project}/ssh-key
-export def "project-ssh-key post" [
+export def "project-ssh-key create" [
   username: string
   project: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -405,20 +415,22 @@ export def "project-ssh-key post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username, project: $project} | format pattern "/project/{username}/{project}/ssh-key"))
-  let body = {"hostname": $hostname, "private_key": $private_key} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project)} | format pattern "/project/{username}/{project}/ssh-key"))
+  let req_body = {"hostname": $hostname, "private_key": $private_key} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
-# Triggers a new build, returns a summary of the build. Optional build parameters can be set using an experimental API.  Note: For more about build parameters, read about [using parameterized builds](https://circleci.com/docs/parameterized-builds/)
+# Triggers a new build, returns a summary of the build. Optional build parameters can be set using an experimental API. Note: For more about build parameters, read about [using parameterized builds](https://circleci.com/docs/parameterized-builds/)
 #
 # POST /project/{username}/{project}/tree/{branch}
-export def "project-tree post" [
+export def "project-tree create" [
   username: string
   project: string
   branch: string
@@ -437,12 +449,12 @@ export def "project-tree post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username, project: $project, branch: $branch} | format pattern "/project/{username}/{project}/tree/{branch}"))
-  let body = {"build_parameters": $build_parameters, "parallel": $parallel, "revision": $revision} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), branch: (encode-path-segment $branch)} | format pattern "/project/{username}/{project}/tree/{branch}"))
+  let req_body = {"build_parameters": $build_parameters, "parallel": $parallel, "revision": $revision} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Full details for a single build. The response includes all of the fields from the build summary. This is also the payload for the [notification webhooks](/docs/configuration/#notify), in which case this object is the value to a key named 'payload'.
@@ -463,7 +475,7 @@ export def "project get" [
 ]: nothing -> record<all_commit_details: table<author_date: string, author_email: string, author_login: string, author_name: string, body: string, commit: string, commit_url: string, committer_date: string, committer_email: string, committer_login: string, committer_name: string, subject: string>, compare: string, job_name: string, node: any, previous_successful_build: record<build_num: int, build_time_millis: int, status: string>, retries: bool, ssh_enabled: bool, timedout: bool, usage_queued_at: string, user: record<admin: bool, all_emails: list<string>, analytics_id: string, avatar_url: string, basic_email_prefs: string, bitbucket: int, bitbucket_authorized: bool, containers: int, created_at: string, days_left_in_trial: int, dev_admin: bool, enrolled_betas: list<string>, github_id: int, github_oauth_scopes: list<string>, gravatar_id: int, heroku_api_key: string, in_beta_program: bool, login: string, name: string, organization_prefs: record, parallelism: int, plan: string, projects: record, pusher_id: string, selected_email: string, sign_in_count: int, trial_end: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username, project: $project, build_num: $build_num} | format pattern "/project/{username}/{project}/{build_num}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), build_num: (encode-path-segment $build_num)} | format pattern "/project/{username}/{project}/{build_num}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -487,7 +499,7 @@ export def "project-artifacts get" [
 ]: nothing -> table<node_index: int, path: string, pretty_path: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username, project: $project, build_num: $build_num} | format pattern "/project/{username}/{project}/{build_num}/artifacts"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), build_num: (encode-path-segment $build_num)} | format pattern "/project/{username}/{project}/{build_num}/artifacts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -496,7 +508,7 @@ export def "project-artifacts get" [
 # Cancels the build, returns a summary of the build.
 #
 # POST /project/{username}/{project}/{build_num}/cancel
-export def "project-cancel post" [
+export def "project-cancel create" [
   username: string
   project: string
   build_num: int
@@ -511,7 +523,7 @@ export def "project-cancel post" [
 ]: nothing -> record<body: string, branch: string, build_time_millis: int, build_url: string, committer_email: string, committer_name: string, dont_build: string, lifecycle: string, previous: record<build_num: int, build_time_millis: int, status: string>, queued_at: string, reponame: string, retry_of: int, start_time: string, stop_time: string, subject: string, username: string, vcs_url: string, why: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username, project: $project, build_num: $build_num} | format pattern "/project/{username}/{project}/{build_num}/cancel"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), build_num: (encode-path-segment $build_num)} | format pattern "/project/{username}/{project}/{build_num}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -520,7 +532,7 @@ export def "project-cancel post" [
 # Retries the build, returns a summary of the new build.
 #
 # POST /project/{username}/{project}/{build_num}/retry
-export def "project-retry post" [
+export def "project-retry create" [
   username: string
   project: string
   build_num: int
@@ -535,7 +547,7 @@ export def "project-retry post" [
 ]: nothing -> record<body: string, branch: string, build_time_millis: int, build_url: string, committer_email: string, committer_name: string, dont_build: string, lifecycle: string, previous: record<build_num: int, build_time_millis: int, status: string>, queued_at: string, reponame: string, retry_of: int, start_time: string, stop_time: string, subject: string, username: string, vcs_url: string, why: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username, project: $project, build_num: $build_num} | format pattern "/project/{username}/{project}/{build_num}/retry"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), build_num: (encode-path-segment $build_num)} | format pattern "/project/{username}/{project}/{build_num}/retry"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -559,7 +571,7 @@ export def "project-tests get" [
 ]: nothing -> record<tests: table<classname: string, file: string, message: string, name: string, result: string, run_time: float, source: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username, project: $project, build_num: $build_num} | format pattern "/project/{username}/{project}/{build_num}/tests"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), build_num: (encode-path-segment $build_num)} | format pattern "/project/{username}/{project}/{build_num}/tests"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -598,8 +610,8 @@ export def "recent-builds get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --limit: int # The number of builds to return. Maximum 100, defaults to 30.  (default: 30)
-  --offset: int # The API returns builds starting from this offset, defaults to 0.  (default: 0)
+  --limit: int # The number of builds to return. Maximum 100, defaults to 30. (default: 30)
+  --offset: int # The API returns builds starting from this offset, defaults to 0. (default: 0)
 ]: nothing -> table<body: string, branch: string, build_time_millis: int, build_url: string, committer_email: string, committer_name: string, dont_build: string, lifecycle: string, previous: record<build_num: int, build_time_millis: int, status: string>, queued_at: string, reponame: string, retry_of: int, start_time: string, stop_time: string, subject: string, username: string, vcs_url: string, why: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
@@ -613,7 +625,7 @@ export def "recent-builds get" [
 # Adds your Heroku API key to CircleCI, takes apikey as form param name.
 #
 # POST /user/heroku-key
-export def "user-heroku-key post" [
+export def "user-heroku-key create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

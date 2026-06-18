@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://bulkexports.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 
 # List all available API commands with their parameters
@@ -105,7 +115,7 @@ export def "exports-jobs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://bulkexports.twilio.com")
-  let full_url = (build-url $base ({job_sid: $job_sid} | format pattern "/v1/Exports/Jobs/{job_sid}"))
+  let full_url = (build-url $base ({job_sid: (encode-path-segment $job_sid)} | format pattern "/v1/Exports/Jobs/{job_sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -127,7 +137,7 @@ export def "exports-jobs get" [
 ]: nothing -> record<details: any, email: string, end_day: string, estimated_completion_time: string, friendly_name: string, job_queue_position: string, job_sid: string, resource_type: string, start_day: string, url: string, webhook_method: string, webhook_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://bulkexports.twilio.com")
-  let full_url = (build-url $base ({job_sid: $job_sid} | format pattern "/v1/Exports/Jobs/{job_sid}"))
+  let full_url = (build-url $base ({job_sid: (encode-path-segment $job_sid)} | format pattern "/v1/Exports/Jobs/{job_sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -150,7 +160,7 @@ export def "exports get" [
 ]: nothing -> record<links: record, resource_type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://bulkexports.twilio.com")
-  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/v1/Exports/{resource_type}"))
+  let full_url = (build-url $base ({resource_type: (encode-path-segment $resource_type)} | format pattern "/v1/Exports/{resource_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,7 +183,7 @@ export def "exports-configuration get" [
 ]: nothing -> record<enabled: bool, resource_type: string, url: string, webhook_method: string, webhook_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://bulkexports.twilio.com")
-  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/v1/Exports/{resource_type}/Configuration"))
+  let full_url = (build-url $base ({resource_type: (encode-path-segment $resource_type)} | format pattern "/v1/Exports/{resource_type}/Configuration"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -200,12 +210,13 @@ export def "exports-configuration update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://bulkexports.twilio.com")
-  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/v1/Exports/{resource_type}/Configuration"))
-  let body = {"Enabled": $enabled, "WebhookMethod": $webhook_method, "WebhookUrl": $webhook_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_type: (encode-path-segment $resource_type)} | format pattern "/v1/Exports/{resource_type}/Configuration"))
+  let req_body = {"Enabled": $enabled, "WebhookMethod": $webhook_method, "WebhookUrl": $webhook_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Days for a resource.
@@ -229,7 +240,7 @@ export def "exports-days list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://bulkexports.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/v1/Exports/{resource_type}/Days") $qp)
+  let full_url = (build-url $base ({resource_type: (encode-path-segment $resource_type)} | format pattern "/v1/Exports/{resource_type}/Days") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -253,7 +264,7 @@ export def "exports-days get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://bulkexports.twilio.com")
-  let full_url = (build-url $base ({resource_type: $resource_type, day: $day} | format pattern "/v1/Exports/{resource_type}/Days/{day}"))
+  let full_url = (build-url $base ({resource_type: (encode-path-segment $resource_type), day: (encode-path-segment $day)} | format pattern "/v1/Exports/{resource_type}/Days/{day}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -262,7 +273,7 @@ export def "exports-days get" [
 # GET /v1/Exports/{ResourceType}/Jobs
 #
 # operationId: ListExportCustomJob
-export def "exports-jobs list-export-custom" [
+export def "exports-jobs list-custom" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -279,7 +290,7 @@ export def "exports-jobs list-export-custom" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://bulkexports.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/v1/Exports/{resource_type}/Jobs") $qp)
+  let full_url = (build-url $base ({resource_type: (encode-path-segment $resource_type)} | format pattern "/v1/Exports/{resource_type}/Jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -288,7 +299,7 @@ export def "exports-jobs list-export-custom" [
 # POST /v1/Exports/{ResourceType}/Jobs
 #
 # operationId: CreateExportCustomJob
-export def "exports-jobs create-export-custom" [
+export def "exports-jobs create-custom" [
   resource_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -308,10 +319,11 @@ export def "exports-jobs create-export-custom" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://bulkexports.twilio.com")
-  let full_url = (build-url $base ({resource_type: $resource_type} | format pattern "/v1/Exports/{resource_type}/Jobs"))
-  let body = {"Email": $email, "EndDay": $end_day, "FriendlyName": $friendly_name, "StartDay": $start_day, "WebhookMethod": $webhook_method, "WebhookUrl": $webhook_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource_type: (encode-path-segment $resource_type)} | format pattern "/v1/Exports/{resource_type}/Jobs"))
+  let req_body = {"Email": $email, "EndDay": $end_day, "FriendlyName": $friendly_name, "StartDay": $start_day, "WebhookMethod": $webhook_method, "WebhookUrl": $webhook_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }

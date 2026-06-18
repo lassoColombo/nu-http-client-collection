@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -138,7 +147,7 @@ export def "subscriptions-providers-microsoft-data-box-jobs list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataBox/jobs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataBox/jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -148,7 +157,7 @@ export def "subscriptions-providers-microsoft-data-box-jobs list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DataBox/locations/{location}/availableSkus
 # operationId: Service_ListAvailableSkus
-export def "subscriptions-providers-microsoft-data-box-locations-available-skus list" [
+export def "subscriptions-providers-microsoft-data-box-locations-available-skus list-service" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -162,19 +171,19 @@ export def "subscriptions-providers-microsoft-data-box-locations-available-skus 
   --api-version: string # The API Version
   country: string # ISO country code. Country for hardware shipment. For codes check: https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Officially_assigned_code_elements
   --body-location: string # Location for data transfer. For locations check: https://management.azure.com/subscriptions/SUBSCRIPTIONID/locations?api-version=2018-01-01
-  --sku-names: list # Sku Names to filter for available skus
+  --sku-names: list<string> # Sku Names to filter for available skus
   transfer_type: string@transfer-type-completer # Type of the transfer.
 ]: any -> record<nextLink: string, value: table<enabled: bool, properties: record, sku: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataBox/locations/{location}/availableSkus") $qp)
-  let body = {"country": $country, "location": $body_location, "skuNames": $sku_names, "transferType": $transfer_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataBox/locations/{location}/availableSkus") $qp)
+  let req_body = {"country": $country, "location": $body_location, "skuNames": $sku_names, "transferType": $transfer_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # This API provides configuration details specific to given region/location.
@@ -183,7 +192,7 @@ export def "subscriptions-providers-microsoft-data-box-locations-available-skus 
 # operationId: Service_RegionConfiguration
 # --scheduleAvailabilityRequest shape: {skuName: "DataBox"|"DataBoxDisk"|"DataBoxHeavy", storageLocation: string}
 # --transportAvailabilityRequest shape: {skuName?: "DataBox"|"DataBoxDisk"|"DataBoxHeavy"}
-export def "subscriptions-providers-microsoft-data-box-locations-region-configuration post" [
+export def "subscriptions-providers-microsoft-data-box-locations-region-configuration create-service" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -202,12 +211,12 @@ export def "subscriptions-providers-microsoft-data-box-locations-region-configur
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataBox/locations/{location}/regionConfiguration") $qp)
-  let body = {"scheduleAvailabilityRequest": $schedule_availability_request, "transportAvailabilityRequest": $transport_availability_request} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataBox/locations/{location}/regionConfiguration") $qp)
+  let req_body = {"scheduleAvailabilityRequest": $schedule_availability_request, "transportAvailabilityRequest": $transport_availability_request} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # [DEPRECATED NOTICE: This operation will soon be removed] This method validates the customer shipping address and provide alternate addresses if any.
@@ -218,7 +227,7 @@ export def "subscriptions-providers-microsoft-data-box-locations-region-configur
 # --shippingAddress shape: {addressType?: "None"|"Residential"|"Commercial", city?: string, companyName?: string, country: string, postalCode: string, stateOrProvince?: string, streetAddress1: string, streetAddress2?: string, streetAddress3?: string, zipExtendedCode?: string}
 # --transportPreferences shape: {preferredShipmentType: "CustomerManaged"|"MicrosoftManaged"}
 @deprecated
-export def "subscriptions-providers-microsoft-data-box-locations-validate-address validate" [
+export def "subscriptions-providers-microsoft-data-box-locations-validate-address validate-service" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -239,12 +248,12 @@ export def "subscriptions-providers-microsoft-data-box-locations-validate-addres
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataBox/locations/{location}/validateAddress") $qp)
-  let body = {"deviceType": $device_type, "shippingAddress": $shipping_address, "transportPreferences": $transport_preferences, "validationType": $validation_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataBox/locations/{location}/validateAddress") $qp)
+  let req_body = {"deviceType": $device_type, "shippingAddress": $shipping_address, "transportPreferences": $transport_preferences, "validationType": $validation_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # This method does all necessary pre-job creation validation under subscription.
@@ -253,7 +262,7 @@ export def "subscriptions-providers-microsoft-data-box-locations-validate-addres
 # Discriminator (request): validationCategory
 # operationId: Service_ValidateInputs
 # --individualRequestDetails item shape: {validationType: "ValidateAddress"|"ValidateDataDestinationDetails"|"ValidateSubscriptionIsAllowedToCreateJob"|"ValidatePreferences"|"ValidateCreateOrderLimit"|"ValidateSkuAvailability"}
-export def "subscriptions-providers-microsoft-data-box-locations-validate-inputs validate" [
+export def "subscriptions-providers-microsoft-data-box-locations-validate-inputs validate-service" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -272,19 +281,19 @@ export def "subscriptions-providers-microsoft-data-box-locations-validate-inputs
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataBox/locations/{location}/validateInputs") $qp)
-  let body = {"individualRequestDetails": $individual_request_details, "validationCategory": $validation_category} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataBox/locations/{location}/validateInputs") $qp)
+  let req_body = {"individualRequestDetails": $individual_request_details, "validationCategory": $validation_category} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all the jobs available under the given resource group.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBox/jobs
 # operationId: Jobs_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs list-by" [
+export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -301,7 +310,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs list
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -328,7 +337,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs dele
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -356,7 +365,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs get"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -388,14 +397,14 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs upda
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}") $qp)
-  let body = {"properties": $properties, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}") $qp)
+  let req_body = {"properties": $properties, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"If-Match": $if_match} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a new job with the specified parameters. Existing job cannot be updated with this API and should instead be updated with the Update job API.
@@ -426,19 +435,19 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs crea
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}") $qp)
-  let body = {"properties": $properties, "location": $location, "sku": $sku, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}") $qp)
+  let req_body = {"properties": $properties, "location": $location, "sku": $sku, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Book shipment pick up.
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBox/jobs/{jobName}/bookShipmentPickUp
 # operationId: Jobs_BookShipmentPickUp
-export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs-book-shipment-pick-up post" [
+export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs-book-shipment-pick-up create" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -459,12 +468,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs-book
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}/bookShipmentPickUp") $qp)
-  let body = {"endTime": $end_time, "shipmentLocation": $shipment_location, "startTime": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}/bookShipmentPickUp") $qp)
+  let req_body = {"endTime": $end_time, "shipmentLocation": $shipment_location, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # CancelJob.
@@ -490,12 +499,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs-canc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}/cancel") $qp)
-  let body = {"reason": $reason} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}/cancel") $qp)
+  let req_body = {"reason": $reason} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # This method gets the unencrypted secrets related to the job.
@@ -519,7 +528,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs-list
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}/listCredentials") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), job_name: (encode-path-segment $job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/jobs/{job_name}/listCredentials") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -529,7 +538,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-jobs-list
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBox/locations/{location}/availableSkus
 # operationId: Service_ListAvailableSkusByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-data-box-locations-available-skus list" [
+export def "subscriptions-resource-groups-providers-microsoft-data-box-locations-available-skus list-service" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -544,19 +553,19 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-locations
   --api-version: string # The API Version
   country: string # ISO country code. Country for hardware shipment. For codes check: https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Officially_assigned_code_elements
   --body-location: string # Location for data transfer. For locations check: https://management.azure.com/subscriptions/SUBSCRIPTIONID/locations?api-version=2018-01-01
-  --sku-names: list # Sku Names to filter for available skus
+  --sku-names: list<string> # Sku Names to filter for available skus
   transfer_type: string@transfer-type-completer # Type of the transfer.
 ]: any -> record<nextLink: string, value: table<enabled: bool, properties: record, sku: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location: $location} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/locations/{location}/availableSkus") $qp)
-  let body = {"country": $country, "location": $body_location, "skuNames": $sku_names, "transferType": $transfer_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/locations/{location}/availableSkus") $qp)
+  let req_body = {"country": $country, "location": $body_location, "skuNames": $sku_names, "transferType": $transfer_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # This method does all necessary pre-job creation validation under resource group.
@@ -565,7 +574,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-locations
 # Discriminator (request): validationCategory
 # operationId: Service_ValidateInputsByResourceGroup
 # --individualRequestDetails item shape: {validationType: "ValidateAddress"|"ValidateDataDestinationDetails"|"ValidateSubscriptionIsAllowedToCreateJob"|"ValidatePreferences"|"ValidateCreateOrderLimit"|"ValidateSkuAvailability"}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-locations-validate-inputs validate" [
+export def "subscriptions-resource-groups-providers-microsoft-data-box-locations-validate-inputs validate-service" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -585,10 +594,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-locations
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location: $location} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/locations/{location}/validateInputs") $qp)
-  let body = {"individualRequestDetails": $individual_request_details, "validationCategory": $validation_category} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), location: (encode-path-segment $location)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBox/locations/{location}/validateInputs") $qp)
+  let req_body = {"individualRequestDetails": $individual_request_details, "validationCategory": $validation_category} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

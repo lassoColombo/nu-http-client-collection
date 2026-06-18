@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -156,7 +165,7 @@ export def "data-hmda-concept get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({concept: $concept} | format pattern "/data/hmda/concept/{concept}"))
+  let full_url = (build-url $base ({concept: (encode-path-segment $concept)} | format pattern "/data/hmda/concept/{concept}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -188,7 +197,7 @@ export def "data-hmda-slice list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "$where" $qp_where "scalar") (serialize-qp "$group" $group "scalar") (serialize-qp "$limit" $limit "scalar") (serialize-qp "$offset" $offset "scalar") (serialize-qp "$orderBy" $order_by "scalar") (serialize-qp "$callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({slice: $slice} | format pattern "/data/hmda/slice/{slice}") $qp)
+  let full_url = (build-url $base ({slice: (encode-path-segment $slice)} | format pattern "/data/hmda/slice/{slice}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -212,7 +221,7 @@ export def "data-hmda-slice-metadata get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({slice: $slice} | format pattern "/data/hmda/slice/{slice}/metadata"))
+  let full_url = (build-url $base ({slice: (encode-path-segment $slice)} | format pattern "/data/hmda/slice/{slice}/metadata"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -236,7 +245,7 @@ export def "data get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dataset: $dataset} | format pattern "/data/{dataset}"))
+  let full_url = (build-url $base ({dataset: (encode-path-segment $dataset)} | format pattern "/data/{dataset}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

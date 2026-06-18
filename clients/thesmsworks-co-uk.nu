@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-any post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-any create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 # Sends a collection of unique SMS messages. Batches may contain up to 5000 messages at a time.
 #
 # POST /batch/any
-export def "batch-any post" [
+export def "batch-any create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,16 +116,17 @@ export def "batch-any post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/batch/any")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Schedules a batch of SMS messages to be sent at the date time you specify
 #
 # POST /batch/schedule
-export def "batch-schedule post" [
+export def "batch-schedule create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -127,7 +137,7 @@ export def "batch-schedule post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   content: string # Message to send to the recipient (e.g. My super awesome batch message)
   --deliveryreporturl: string # The url to which we should POST delivery reports to for this message. If none is specified, we'll use the global delivery report URL that you've configured on your account page. (e.g. http://your.domain.com/delivery/report/path)
-  destinations: list # Telephone numbers of each of the recipients (e.g. [447777777777, 447777777778, 447777777779])
+  destinations: list<string> # Telephone numbers of each of the recipients (e.g. [447777777777, 447777777778, 447777777779])
   --schedule: string # Date-time at which to send the batch. This is only used by the batch/schedule service. (e.g. Wed Jul 19 2017 20:26:28 GMT+0100 (BST))
   sender: string # The sender of the message. Should be no longer than 11 characters for alphanumeric or 15 characters for numeric sender ID's. No spaces or special characters. (e.g. YourCompany)
   --tag: string # An identifying label for the message, which you can use to filter and report on messages you've sent later. Ideal for campaigns. A maximum of 280 characters. (e.g. SummerSpecial)
@@ -138,17 +148,17 @@ export def "batch-schedule post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/batch/schedule")
-  let body = {"content": $content, "deliveryreporturl": $deliveryreporturl, "destinations": $destinations, "schedule": $schedule, "sender": $sender, "tag": $tag, "ttl": $ttl, "validity": $validity} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"content": $content, "deliveryreporturl": $deliveryreporturl, "destinations": $destinations, "schedule": $schedule, "sender": $sender, "tag": $tag, "ttl": $ttl, "validity": $validity} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Send a single SMS message to multiple recipients.  Batches may contain up to 5000 messages at a time.
+# Send a single SMS message to multiple recipients. Batches may contain up to 5000 messages at a time.
 #
 # POST /batch/send
-export def "batch-send post" [
+export def "batch-send create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +169,7 @@ export def "batch-send post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   content: string # Message to send to the recipient (e.g. My super awesome batch message)
   --deliveryreporturl: string # The url to which we should POST delivery reports to for this message. If none is specified, we'll use the global delivery report URL that you've configured on your account page. (e.g. http://your.domain.com/delivery/report/path)
-  destinations: list # Telephone numbers of each of the recipients (e.g. [447777777777, 447777777778, 447777777779])
+  destinations: list<string> # Telephone numbers of each of the recipients (e.g. [447777777777, 447777777778, 447777777779])
   --schedule: string # Date-time at which to send the batch. This is only used by the batch/schedule service. (e.g. Wed Jul 19 2017 20:26:28 GMT+0100 (BST))
   sender: string # The sender of the message. Should be no longer than 11 characters for alphanumeric or 15 characters for numeric sender ID's. No spaces or special characters. (e.g. YourCompany)
   --tag: string # An identifying label for the message, which you can use to filter and report on messages you've sent later. Ideal for campaigns. A maximum of 280 characters. (e.g. SummerSpecial)
@@ -170,11 +180,11 @@ export def "batch-send post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/batch/send")
-  let body = {"content": $content, "deliveryreporturl": $deliveryreporturl, "destinations": $destinations, "schedule": $schedule, "sender": $sender, "tag": $tag, "ttl": $ttl, "validity": $validity} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"content": $content, "deliveryreporturl": $deliveryreporturl, "destinations": $destinations, "schedule": $schedule, "sender": $sender, "tag": $tag, "ttl": $ttl, "validity": $validity} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve all messages in a batch with the given batch ID
@@ -193,7 +203,7 @@ export def "batch get" [
 ]: nothing -> table<batchid: string, content: string, created: string, customerid: string, deliveryreporturl: string, destination: float, failurereason: record<code: float, details: string, permanent: bool>, id: string, identifier: string, keyword: string, messageid: string, modified: string, schedule: string, sender: string, status: string, tag: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({batchid: $batchid} | format pattern "/batch/{batchid}"))
+  let full_url = (build-url $base ({batchid: (encode-path-segment $batchid)} | format pattern "/batch/{batchid}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -215,7 +225,7 @@ export def "batches-schedule delete" [
 ]: nothing -> record<messageid: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({batchid: $batchid} | format pattern "/batches/schedule/{batchid}"))
+  let full_url = (build-url $base ({batchid: (encode-path-segment $batchid)} | format pattern "/batches/schedule/{batchid}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -259,7 +269,7 @@ export def "message-flash send" [
   --deliveryreporturl: string # The url to which we should POST delivery reports to for this message. If none is specified, we'll use the global delivery report URL that you've configured on your account page. (e.g. http://your.domain.com/delivery/report/path)
   destination: string # Telephone number of the recipient (e.g. 447777777777)
   --metadata: list # e.g. [{key: myKey1, value: myValue1}, {key: myKey2, value: myValue2}]
-  --responseemail: list # An optional list of email addresses to forward responses to this specific message to. An SMS Works Reply Number is required to use this feature. (e.g. [my.email@mycompany.co.uk, my.other.email@mycompany.co.uk])
+  --responseemail: list<string> # An optional list of email addresses to forward responses to this specific message to. An SMS Works Reply Number is required to use this feature. (e.g. [my.email@mycompany.co.uk, my.other.email@mycompany.co.uk])
   --schedule: string # Date at which to send the message. This is only used by the message/schedule service and can be left empty for other services. (e.g. Sun Sep 03 2020 15:34:23 GMT+0100 (BST))
   sender: string # The sender of the message. Should be no longer than 11 characters for alphanumeric or 15 characters for numeric sender ID's. No spaces or special characters. (e.g. YourCompany)
   --tag: string # An identifying label for the message, which you can use to filter and report on messages you've sent later. Ideal for campaigns. A maximum of 280 characters. (e.g. SummerSpecial)
@@ -270,17 +280,17 @@ export def "message-flash send" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/message/flash")
-  let body = {"content": $content, "deliveryreporturl": $deliveryreporturl, "destination": $destination, "metadata": $metadata, "responseemail": $responseemail, "schedule": $schedule, "sender": $sender, "tag": $tag, "ttl": $ttl, "validity": $validity} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"content": $content, "deliveryreporturl": $deliveryreporturl, "destination": $destination, "metadata": $metadata, "responseemail": $responseemail, "schedule": $schedule, "sender": $sender, "tag": $tag, "ttl": $ttl, "validity": $validity} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Schedules an SMS message to be sent at the date-time you specify
 #
 # POST /message/schedule
-export def "message-schedule post" [
+export def "message-schedule create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +303,7 @@ export def "message-schedule post" [
   --deliveryreporturl: string # The url to which we should POST delivery reports to for this message. If none is specified, we'll use the global delivery report URL that you've configured on your account page. (e.g. http://your.domain.com/delivery/report/path)
   destination: string # Telephone number of the recipient (e.g. 447777777777)
   --metadata: list # e.g. [{key: myKey1, value: myValue1}, {key: myKey2, value: myValue2}]
-  --responseemail: list # An optional list of email addresses to forward responses to this specific message to. An SMS Works Reply Number is required to use this feature. (e.g. [my.email@mycompany.co.uk, my.other.email@mycompany.co.uk])
+  --responseemail: list<string> # An optional list of email addresses to forward responses to this specific message to. An SMS Works Reply Number is required to use this feature. (e.g. [my.email@mycompany.co.uk, my.other.email@mycompany.co.uk])
   --schedule: string # Date at which to send the message. This is only used by the message/schedule service and can be left empty for other services. (e.g. Sun Sep 03 2020 15:34:23 GMT+0100 (BST))
   sender: string # The sender of the message. Should be no longer than 11 characters for alphanumeric or 15 characters for numeric sender ID's. No spaces or special characters. (e.g. YourCompany)
   --tag: string # An identifying label for the message, which you can use to filter and report on messages you've sent later. Ideal for campaigns. A maximum of 280 characters. (e.g. SummerSpecial)
@@ -304,17 +314,17 @@ export def "message-schedule post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/message/schedule")
-  let body = {"content": $content, "deliveryreporturl": $deliveryreporturl, "destination": $destination, "metadata": $metadata, "responseemail": $responseemail, "schedule": $schedule, "sender": $sender, "tag": $tag, "ttl": $ttl, "validity": $validity} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"content": $content, "deliveryreporturl": $deliveryreporturl, "destination": $destination, "metadata": $metadata, "responseemail": $responseemail, "schedule": $schedule, "sender": $sender, "tag": $tag, "ttl": $ttl, "validity": $validity} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Send an SMS Message
 #
 # POST /message/send
-export def "message-send post" [
+export def "message-send create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +337,7 @@ export def "message-send post" [
   --deliveryreporturl: string # The url to which we should POST delivery reports to for this message. If none is specified, we'll use the global delivery report URL that you've configured on your account page. (e.g. http://your.domain.com/delivery/report/path)
   destination: string # Telephone number of the recipient (e.g. 447777777777)
   --metadata: list # e.g. [{key: myKey1, value: myValue1}, {key: myKey2, value: myValue2}]
-  --responseemail: list # An optional list of email addresses to forward responses to this specific message to. An SMS Works Reply Number is required to use this feature. (e.g. [my.email@mycompany.co.uk, my.other.email@mycompany.co.uk])
+  --responseemail: list<string> # An optional list of email addresses to forward responses to this specific message to. An SMS Works Reply Number is required to use this feature. (e.g. [my.email@mycompany.co.uk, my.other.email@mycompany.co.uk])
   --schedule: string # Date at which to send the message. This is only used by the message/schedule service and can be left empty for other services. (e.g. Sun Sep 03 2020 15:34:23 GMT+0100 (BST))
   sender: string # The sender of the message. Should be no longer than 11 characters for alphanumeric or 15 characters for numeric sender ID's. No spaces or special characters. (e.g. YourCompany)
   --tag: string # An identifying label for the message, which you can use to filter and report on messages you've sent later. Ideal for campaigns. A maximum of 280 characters. (e.g. SummerSpecial)
@@ -338,17 +348,17 @@ export def "message-send post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/message/send")
-  let body = {"content": $content, "deliveryreporturl": $deliveryreporturl, "destination": $destination, "metadata": $metadata, "responseemail": $responseemail, "schedule": $schedule, "sender": $sender, "tag": $tag, "ttl": $ttl, "validity": $validity} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"content": $content, "deliveryreporturl": $deliveryreporturl, "destination": $destination, "metadata": $metadata, "responseemail": $responseemail, "schedule": $schedule, "sender": $sender, "tag": $tag, "ttl": $ttl, "validity": $validity} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve up to 1000 messages matching your search criteria
 #
 # POST /messages
-export def "messages post" [
+export def "messages create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,17 +383,17 @@ export def "messages post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages")
-  let body = {"credits": $credits, "destination": $destination, "from": $body_from, "keyword": $keyword, "limit": $limit, "metadata": $metadata, "sender": $sender, "skip": $skip, "status": $status, "to": $body_to, "unread": $unread} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"credits": $credits, "destination": $destination, "from": $body_from, "keyword": $keyword, "limit": $limit, "metadata": $metadata, "sender": $sender, "skip": $skip, "status": $status, "to": $body_to, "unread": $unread} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get failed messages matching your search criteria
 #
 # POST /messages/failed
-export def "messages-failed post" [
+export def "messages-failed create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,17 +418,17 @@ export def "messages-failed post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/failed")
-  let body = {"credits": $credits, "destination": $destination, "from": $body_from, "keyword": $keyword, "limit": $limit, "metadata": $metadata, "sender": $sender, "skip": $skip, "status": $status, "to": $body_to, "unread": $unread} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"credits": $credits, "destination": $destination, "from": $body_from, "keyword": $keyword, "limit": $limit, "metadata": $metadata, "sender": $sender, "skip": $skip, "status": $status, "to": $body_to, "unread": $unread} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get unread uncoming messages matching your search criteria
 #
 # POST /messages/inbox
-export def "messages-inbox post" [
+export def "messages-inbox create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,11 +453,11 @@ export def "messages-inbox post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/inbox")
-  let body = {"credits": $credits, "destination": $destination, "from": $body_from, "keyword": $keyword, "limit": $limit, "metadata": $metadata, "sender": $sender, "skip": $skip, "status": $status, "to": $body_to, "unread": $unread} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"credits": $credits, "destination": $destination, "from": $body_from, "keyword": $keyword, "limit": $limit, "metadata": $metadata, "sender": $sender, "skip": $skip, "status": $status, "to": $body_to, "unread": $unread} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a list of messages scheduled from your account, comprising any messages scheduled in the last 3 months and any scheduled to send in the future
@@ -487,7 +497,7 @@ export def "messages-schedule delete" [
 ]: nothing -> record<messageid: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({messageid: $messageid} | format pattern "/messages/schedule/{messageid}"))
+  let full_url = (build-url $base ({messageid: (encode-path-segment $messageid)} | format pattern "/messages/schedule/{messageid}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -509,7 +519,7 @@ export def "messages delete" [
 ]: nothing -> record<messageid: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({messageid: $messageid} | format pattern "/messages/{messageid}"))
+  let full_url = (build-url $base ({messageid: (encode-path-segment $messageid)} | format pattern "/messages/{messageid}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -531,7 +541,7 @@ export def "messages get" [
 ]: nothing -> record<batchid: string, content: string, created: string, customerid: string, deliveryreporturl: string, destination: float, failurereason: record<code: float, details: string, permanent: bool>, id: string, identifier: string, keyword: string, messageid: string, modified: string, schedule: string, sender: string, status: string, tag: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({messageid: $messageid} | format pattern "/messages/{messageid}"))
+  let full_url = (build-url $base ({messageid: (encode-path-segment $messageid)} | format pattern "/messages/{messageid}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -553,7 +563,7 @@ export def "utils-errors get" [
 ]: nothing -> record<message: string, errorCode: float, permanent: bool, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({errorcode: $errorcode} | format pattern "/utils/errors/{errorcode}"))
+  let full_url = (build-url $base ({errorcode: (encode-path-segment $errorcode)} | format pattern "/utils/errors/{errorcode}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

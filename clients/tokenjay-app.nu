@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ageusd-info get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ageusd-info get-age-usd" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /ageusd/info
 # operationId: getAgeUsdInfo
-export def "ageusd-info get" [
+export def "ageusd-info get-age-usd" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -113,7 +122,7 @@ export def "ageusd-info get" [
 # GET /cancelbabel/{boxId}
 #
 # operationId: ergoPayCreateBabelBox_1
-export def "cancelbabel ergoPayCreateBabelBox-by-boxId" [
+export def "cancelbabel create-ergo-pay-babel-box-by-boxId" [
   box_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -126,7 +135,7 @@ export def "cancelbabel ergoPayCreateBabelBox-by-boxId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({box_id: $box_id} | format pattern "/cancelbabel/{box_id}"))
+  let full_url = (build-url $base ({box_id: (encode-path-segment $box_id)} | format pattern "/cancelbabel/{box_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -135,7 +144,7 @@ export def "cancelbabel ergoPayCreateBabelBox-by-boxId" [
 # GET /createbabel/{address}
 #
 # operationId: ergoPayCreateBabelBox
-export def "createbabel ergoPayCreateBabelBox" [
+export def "createbabel create-ergo-pay-babel-box" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -152,7 +161,7 @@ export def "createbabel ergoPayCreateBabelBox" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tokenId" $token_id "scalar") (serialize-qp "ergAmount" $erg_amount "scalar") (serialize-qp "tokenAmount" $token_amount "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({address: $address} | format pattern "/createbabel/{address}") $qp)
+  let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/createbabel/{address}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -182,7 +191,7 @@ export def "mosaik-babelfee get-babel-fee-overview" [
 # GET /mosaik/babelfee/newoffer
 #
 # operationId: getBabelFeeNewOffer
-export def "mosaik-babelfee-newoffer get" [
+export def "mosaik-babelfee-newoffer get-babel-fee-new-offer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +212,7 @@ export def "mosaik-babelfee-newoffer get" [
 # POST /mosaik/babelfee/newoffer/doit
 #
 # operationId: doCreateBabelBox
-export def "mosaik-babelfee-newoffer-doit doCreateBabelBox" [
+export def "mosaik-babelfee-newoffer-doit create-do-babel-box" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,16 +227,17 @@ export def "mosaik-babelfee-newoffer-doit doCreateBabelBox" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mosaik/babelfee/newoffer/doit")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /mosaik/babelfee/newoffer/new-input
 #
 # operationId: replaceTokenAmountInputFields
-export def "mosaik-babelfee-newoffer-new-input update-token-amount-input-fields" [
+export def "mosaik-babelfee-newoffer-new-input update-token-amount-fields" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,10 +252,11 @@ export def "mosaik-babelfee-newoffer-new-input update-token-amount-input-fields"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mosaik/babelfee/newoffer/new-input")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /mosaik/babelfee/notificationcheck
@@ -272,7 +283,7 @@ export def "mosaik-babelfee-notificationcheck check-for-notifications" [
 # GET /mosaik/boxconsolidation/
 #
 # operationId: mainApp_1
-export def "mosaik-boxconsolidation mainApp-by-" [
+export def "mosaik-boxconsolidation get-main-app-by-" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +304,7 @@ export def "mosaik-boxconsolidation mainApp-by-" [
 # GET /mosaik/boxconsolidation/consolidate/{p2pkaddress}
 #
 # operationId: epConsolidate
-export def "mosaik-boxconsolidation-consolidate epConsolidate" [
+export def "mosaik-boxconsolidation-consolidate get-ep" [
   p2pkaddress: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -306,7 +317,7 @@ export def "mosaik-boxconsolidation-consolidate epConsolidate" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({p2pkaddress: $p2pkaddress} | format pattern "/mosaik/boxconsolidation/consolidate/{p2pkaddress}"))
+  let full_url = (build-url $base ({p2pkaddress: (encode-path-segment $p2pkaddress)} | format pattern "/mosaik/boxconsolidation/consolidate/{p2pkaddress}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -315,7 +326,7 @@ export def "mosaik-boxconsolidation-consolidate epConsolidate" [
 # GET /mosaik/tokenburn
 #
 # operationId: mainApp
-export def "mosaik-tokenburn mainApp" [
+export def "mosaik-tokenburn get-main-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -349,7 +360,7 @@ export def "mosaik-tokenburn-get get-burning-transaction" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/mosaik/tokenburn/get/{uuid}"))
+  let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/mosaik/tokenburn/get/{uuid}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -358,7 +369,7 @@ export def "mosaik-tokenburn-get get-burning-transaction" [
 # POST /mosaik/tokenburn/prepare
 #
 # operationId: prepareTransaction
-export def "mosaik-tokenburn-prepare prepareTransaction" [
+export def "mosaik-tokenburn-prepare create-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,17 +384,18 @@ export def "mosaik-tokenburn-prepare prepareTransaction" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mosaik/tokenburn/prepare")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a new payment request. Will return request id to check for transaction state and ergopay url to show the user as QR code
 #
 # POST /payment/addrequest
 # operationId: addPaymentRequest
-export def "payment-addrequest create-payment-request" [
+export def "payment-addrequest create-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,11 +415,11 @@ export def "payment-addrequest create-payment-request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment/addrequest")
-  let body = {"message": $message, "nanoErg": $nano_erg, "receiverAddress": $receiver_address, "senderAddress": $sender_address, "tokenId": $token_id, "tokenRawAmount": $token_raw_amount} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"message": $message, "nanoErg": $nano_erg, "receiverAddress": $receiver_address, "senderAddress": $sender_address, "tokenId": $token_id, "tokenRawAmount": $token_raw_amount} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the state of a payment request. Please note that payment requests are purged after some time, so persist the state at your side when needed
@@ -427,7 +439,7 @@ export def "payment-state get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({request_id: $request_id} | format pattern "/payment/state/{request_id}"))
+  let full_url = (build-url $base ({request_id: (encode-path-segment $request_id)} | format pattern "/payment/state/{request_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -463,7 +475,7 @@ export def "peers-list get" [
 #
 # GET /sigrsv/exchange/
 # operationId: doSigmaRsvExchange
-export def "sigrsv-exchange doSigmaRsvExchange" [
+export def "sigrsv-exchange get-do-sigma-rsv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -490,7 +502,7 @@ export def "sigrsv-exchange doSigmaRsvExchange" [
 #
 # GET /sigrsv/exchange/{amount}/info
 # operationId: calcSigmaRsvExchange
-export def "sigrsv-exchange-info calcSigmaRsvExchange" [
+export def "sigrsv-exchange-info get-calc-sigma-rsv" [
   amount: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -503,7 +515,7 @@ export def "sigrsv-exchange-info calcSigmaRsvExchange" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({amount: $amount} | format pattern "/sigrsv/exchange/{amount}/info"))
+  let full_url = (build-url $base ({amount: (encode-path-segment $amount)} | format pattern "/sigrsv/exchange/{amount}/info"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -535,7 +547,7 @@ export def "sigrsv-price get-sigma-rsv" [
 #
 # GET /sigusd/exchange/
 # operationId: doSigmaUsdExchange
-export def "sigusd-exchange doSigmaUsdExchange" [
+export def "sigusd-exchange get-do-sigma-usd" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,7 +574,7 @@ export def "sigusd-exchange doSigmaUsdExchange" [
 #
 # GET /sigusd/exchange/{amount}/info
 # operationId: calcSigmaUsdExchange
-export def "sigusd-exchange-info calcSigmaUsdExchange" [
+export def "sigusd-exchange-info get-calc-sigma-usd" [
   amount: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -575,7 +587,7 @@ export def "sigusd-exchange-info calcSigmaUsdExchange" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({amount: $amount} | format pattern "/sigusd/exchange/{amount}/info"))
+  let full_url = (build-url $base ({amount: (encode-path-segment $amount)} | format pattern "/sigusd/exchange/{amount}/info"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -621,7 +633,7 @@ export def "tokens-check check" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({token_id: $token_id, token_name: $token_name} | format pattern "/tokens/check/{token_id}/{token_name}"))
+  let full_url = (build-url $base ({token_id: (encode-path-segment $token_id), token_name: (encode-path-segment $token_name)} | format pattern "/tokens/check/{token_id}/{token_name}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -710,7 +722,7 @@ export def "tokens-prices get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({token_id: $token_id} | format pattern "/tokens/prices/{token_id}"))
+  let full_url = (build-url $base ({token_id: (encode-path-segment $token_id)} | format pattern "/tokens/prices/{token_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mobilesdk-stage-track-get-track tripsTripDetails" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mobilesdk-stage-track-get-track get-trips-trip-details" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /mobilesdk/stage/track/get_track/v1
 # operationId: tripsTripDetails
-export def "mobilesdk-stage-track-get-track tripsTripDetails" [
+export def "mobilesdk-stage-track-get-track get-trips-trip-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -116,7 +125,7 @@ export def "mobilesdk-stage-track-get-track tripsTripDetails" [
 #
 # GET /statistics/v1/Scorings/consolidated
 # operationId: /v1/scorings/consolidated
-export def "statistics-scorings-consolidated v1-scorings-consolidated" [
+export def "statistics-scorings-consolidated get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,7 +155,7 @@ export def "statistics-scorings-consolidated v1-scorings-consolidated" [
 #
 # GET /statistics/v1/Scorings/consolidated/daily
 # operationId: /v1/scorings/consolidated/daily
-export def "statistics-scorings-consolidated-daily v1-scorings-consolidated-daily" [
+export def "statistics-scorings-consolidated-daily get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +185,7 @@ export def "statistics-scorings-consolidated-daily v1-scorings-consolidated-dail
 #
 # GET /statistics/v1/Scorings/individual/
 # operationId: userSafeScoringAccumulatedValueV1/scorings/individual
-export def "statistics-scorings-individual userSafeScoringAccumulatedValueV1-scorings-individual" [
+export def "statistics-scorings-individual get-user-safe-accumulated-value" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +210,7 @@ export def "statistics-scorings-individual userSafeScoringAccumulatedValueV1-sco
 #
 # GET /statistics/v1/Scorings/individual/daily
 # operationId: userSafeScoringDailyValue/v1/scorings/individual/daily
-export def "statistics-scorings-individual-daily userSafeScoringDailyValue-v1-scorings-individual-daily" [
+export def "statistics-scorings-individual-daily get-user-safe-value" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,8 +220,8 @@ export def "statistics-scorings-individual-daily userSafeScoringDailyValue-v1-sc
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Optional (e.g. )
-  --start-date: string # (Required)  (e.g. 2021-01-01)
-  --end-date: string # (Required)  (e.g. 2021-01-20)
+  --start-date: string # (Required) (e.g. 2021-01-01)
+  --end-date: string # (Required) (e.g. 2021-01-20)
 ]: nothing -> record<Errors: list<any>, Result: table<AccelerationScore: float, AppId: string, BrakingScore: float, CalcDate: string, CompanyId: string, CorneringScore: float, DeviceToken: string, DistractedScore: float, InstanceId: string, OverallScore: float, SpeedingScore: float>, Status: float, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -227,7 +236,7 @@ export def "statistics-scorings-individual-daily userSafeScoringDailyValue-v1-sc
 #
 # GET /statistics/v1/Statistics/consolidated
 # operationId: /v1/statistics/consolidated
-export def "statistics-statistics-consolidated v1-statistics-consolidated" [
+export def "statistics-statistics-consolidated get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,7 +266,7 @@ export def "statistics-statistics-consolidated v1-statistics-consolidated" [
 #
 # GET /statistics/v1/Statistics/consolidated/daily
 # operationId: /v1/statistics/consolidated/daily
-export def "statistics-statistics-consolidated-daily v1-statistics-consolidated-daily" [
+export def "statistics-statistics-consolidated-daily get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,7 +296,7 @@ export def "statistics-statistics-consolidated-daily v1-statistics-consolidated-
 #
 # GET /statistics/v1/Statistics/individual/
 # operationId: userStatisticsAccumulatedValue/v1/statistics/individual
-export def "statistics-statistics-individual userStatisticsAccumulatedValue-v1-statistics-individual" [
+export def "statistics-statistics-individual get-user-accumulated-value" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +321,7 @@ export def "statistics-statistics-individual userStatisticsAccumulatedValue-v1-s
 #
 # GET /statistics/v1/Statistics/individual/daily/
 # operationId: userStatisticeDailyValueV1/statistics/individual/daily
-export def "statistics-statistics-individual-daily userStatisticeDailyValueV1-statistics-individual-daily" [
+export def "statistics-statistics-individual-daily get-user-statistice-value" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

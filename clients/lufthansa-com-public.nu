@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cargo-get-route get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cargo-get-route get-from-date-product-code-by-and" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # GET /cargo/getRoute/{origin}-{destination}/{fromDate}/{productCode}
 # operationId: CargoGetRouteFromDateProductCodeByOriginAndDestinationGet
-export def "cargo-get-route get" [
+export def "cargo-get-route get-from-date-product-code-by-and" [
   origin: string
   destination: string
   from_date: string
@@ -110,11 +119,11 @@ export def "cargo-get-route get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({origin: $origin, destination: $destination, from_date: $from_date, product_code: $product_code} | format pattern "/cargo/getRoute/{origin}-{destination}/{from_date}/{product_code}"))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({origin: (encode-path-segment $origin), destination: (encode-path-segment $destination), from_date: (encode-path-segment $from_date), product_code: (encode-path-segment $product_code)} | format pattern "/cargo/getRoute/{origin}-{destination}/{from_date}/{product_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -122,7 +131,7 @@ export def "cargo-get-route get" [
 #
 # GET /cargo/shipmentTracking/{aWBPrefix}-{aWBNumber}
 # operationId: CargoShipmentTrackingByAWBPrefixAndAWBNumberGet
-export def "cargo-shipment-tracking get" [
+export def "cargo-shipment-tracking get-by-awb-prefix-and-awb-number" [
   a_wb_prefix: string
   a_wb_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -137,11 +146,11 @@ export def "cargo-shipment-tracking get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({a_wb_prefix: $a_wb_prefix, a_wb_number: $a_wb_number} | format pattern "/cargo/shipmentTracking/{a_wb_prefix}-{a_wb_number}"))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({a_wb_prefix: (encode-path-segment $a_wb_prefix), a_wb_number: (encode-path-segment $a_wb_number)} | format pattern "/cargo/shipmentTracking/{a_wb_prefix}-{a_wb_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -149,7 +158,7 @@ export def "cargo-shipment-tracking get" [
 #
 # GET /offers/lounges/{location}
 # operationId: OffersLoungesByLocationGet
-export def "offers-lounges get" [
+export def "offers-lounges get-by" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -167,11 +176,11 @@ export def "offers-lounges get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cabinClass" $cabin_class "scalar") (serialize-qp "tierCode" $tier_code "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({location: $location} | format pattern "/offers/lounges/{location}") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({location: (encode-path-segment $location)} | format pattern "/offers/lounges/{location}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -179,7 +188,7 @@ export def "offers-lounges get" [
 #
 # GET /offers/seatmaps/{flightNumber}/{origin}/{destination}/{date}/{cabinClass}
 # operationId: OffersSeatmapsDestinationDateCabinClassByFlightNumberAndOriginGet
-export def "offers-seatmaps get" [
+export def "offers-seatmaps get-cabin-class-by-flight-number-and" [
   flight_number: string
   origin: string
   destination: string
@@ -197,11 +206,11 @@ export def "offers-seatmaps get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({flight_number: $flight_number, origin: $origin, destination: $destination, date: $date, cabin_class: $cabin_class} | format pattern "/offers/seatmaps/{flight_number}/{origin}/{destination}/{date}/{cabin_class}"))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({flight_number: (encode-path-segment $flight_number), origin: (encode-path-segment $origin), destination: (encode-path-segment $destination), date: (encode-path-segment $date), cabin_class: (encode-path-segment $cabin_class)} | format pattern "/offers/seatmaps/{flight_number}/{origin}/{destination}/{date}/{cabin_class}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -209,7 +218,7 @@ export def "offers-seatmaps get" [
 #
 # GET /operations/flightstatus/arrivals/{airportCode}/{fromDateTime}
 # operationId: OperationsFlightstatusArrivalsByAirportCodeAndFromDateTimeGet
-export def "operations-flightstatus-arrivals get" [
+export def "operations-flightstatus-arrivals get-by-airport-code-and-from-date-time" [
   airport_code: string
   from_date_time: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -227,11 +236,11 @@ export def "operations-flightstatus-arrivals get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({airport_code: $airport_code, from_date_time: $from_date_time} | format pattern "/operations/flightstatus/arrivals/{airport_code}/{from_date_time}") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({airport_code: (encode-path-segment $airport_code), from_date_time: (encode-path-segment $from_date_time)} | format pattern "/operations/flightstatus/arrivals/{airport_code}/{from_date_time}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -239,7 +248,7 @@ export def "operations-flightstatus-arrivals get" [
 #
 # GET /operations/flightstatus/departures/{airportCode}/{fromDateTime}
 # operationId: OperationsFlightstatusDeparturesByAirportCodeAndFromDateTimeGet
-export def "operations-flightstatus-departures get" [
+export def "operations-flightstatus-departures get-by-airport-code-and-from-date-time" [
   airport_code: string
   from_date_time: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -257,11 +266,11 @@ export def "operations-flightstatus-departures get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({airport_code: $airport_code, from_date_time: $from_date_time} | format pattern "/operations/flightstatus/departures/{airport_code}/{from_date_time}") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({airport_code: (encode-path-segment $airport_code), from_date_time: (encode-path-segment $from_date_time)} | format pattern "/operations/flightstatus/departures/{airport_code}/{from_date_time}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -269,7 +278,7 @@ export def "operations-flightstatus-departures get" [
 #
 # GET /operations/flightstatus/route/{origin}/{destination}/{date}
 # operationId: OperationsFlightstatusRouteDateByOriginAndDestinationGet
-export def "operations-flightstatus-route get" [
+export def "operations-flightstatus-route get-by-and" [
   origin: string
   destination: string
   date: string
@@ -288,11 +297,11 @@ export def "operations-flightstatus-route get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({origin: $origin, destination: $destination, date: $date} | format pattern "/operations/flightstatus/route/{origin}/{destination}/{date}") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({origin: (encode-path-segment $origin), destination: (encode-path-segment $destination), date: (encode-path-segment $date)} | format pattern "/operations/flightstatus/route/{origin}/{destination}/{date}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -300,7 +309,7 @@ export def "operations-flightstatus-route get" [
 #
 # GET /operations/flightstatus/{flightNumber}/{date}
 # operationId: OperationsFlightstatusByFlightNumberAndDateGet
-export def "operations-flightstatus get" [
+export def "operations-flightstatus get-by-flight-number-and" [
   flight_number: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -318,11 +327,11 @@ export def "operations-flightstatus get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({flight_number: $flight_number, date: $date} | format pattern "/operations/flightstatus/{flight_number}/{date}") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({flight_number: (encode-path-segment $flight_number), date: (encode-path-segment $date)} | format pattern "/operations/flightstatus/{flight_number}/{date}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -330,7 +339,7 @@ export def "operations-flightstatus get" [
 #
 # GET /operations/schedules/{origin}/{destination}/{fromDateTime}
 # operationId: OperationsSchedulesFromDateTimeByOriginAndDestinationGet
-export def "operations-schedules get" [
+export def "operations-schedules get-from-date-time-by-and" [
   origin: string
   destination: string
   from_date_time: string
@@ -350,11 +359,11 @@ export def "operations-schedules get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "directFlights" $direct_flights "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({origin: $origin, destination: $destination, from_date_time: $from_date_time} | format pattern "/operations/schedules/{origin}/{destination}/{from_date_time}") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({origin: (encode-path-segment $origin), destination: (encode-path-segment $destination), from_date_time: (encode-path-segment $from_date_time)} | format pattern "/operations/schedules/{origin}/{destination}/{from_date_time}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -362,7 +371,7 @@ export def "operations-schedules get" [
 #
 # GET /references/aircraft/{aircraftCode}
 # operationId: ReferencesAircraftByAircraftCodeGet
-export def "references-aircraft get" [
+export def "references-aircraft get-by-code" [
   aircraft_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -379,11 +388,11 @@ export def "references-aircraft get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({aircraft_code: $aircraft_code} | format pattern "/references/aircraft/{aircraft_code}") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({aircraft_code: (encode-path-segment $aircraft_code)} | format pattern "/references/aircraft/{aircraft_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -391,7 +400,7 @@ export def "references-aircraft get" [
 #
 # GET /references/airlines/{airlineCode}
 # operationId: ReferencesAirlinesByAirlineCodeGet
-export def "references-airlines get" [
+export def "references-airlines get-by-code" [
   airline_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -408,11 +417,11 @@ export def "references-airlines get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({airline_code: $airline_code} | format pattern "/references/airlines/{airline_code}") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({airline_code: (encode-path-segment $airline_code)} | format pattern "/references/airlines/{airline_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -420,7 +429,7 @@ export def "references-airlines get" [
 #
 # GET /references/airports/nearest/{latitude},{longitude}
 # operationId: ReferencesAirportsNearestByLatitudeAndLongitudeGet
-export def "references-airports-nearest get" [
+export def "references-airports-nearest get-by-and" [
   latitude: int
   longitude: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -437,11 +446,11 @@ export def "references-airports-nearest get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({latitude: $latitude, longitude: $longitude} | format pattern "/references/airports/nearest/{latitude},{longitude}") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({latitude: (encode-path-segment $latitude), longitude: (encode-path-segment $longitude)} | format pattern "/references/airports/nearest/{latitude},{longitude}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -449,7 +458,7 @@ export def "references-airports-nearest get" [
 #
 # GET /references/airports/{airportCode}
 # operationId: ReferencesAirportsByAirportCodeGet
-export def "references-airports get" [
+export def "references-airports get-by-code" [
   airport_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -468,11 +477,11 @@ export def "references-airports get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "LHoperated" $l_hoperated "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({airport_code: $airport_code} | format pattern "/references/airports/{airport_code}") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({airport_code: (encode-path-segment $airport_code)} | format pattern "/references/airports/{airport_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -480,7 +489,7 @@ export def "references-airports get" [
 #
 # GET /references/cities/{cityCode}
 # operationId: ReferencesCitiesByCityCodeGet
-export def "references-cities get" [
+export def "references-cities get-by-city-code" [
   city_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -498,11 +507,11 @@ export def "references-cities get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({city_code: $city_code} | format pattern "/references/cities/{city_code}") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({city_code: (encode-path-segment $city_code)} | format pattern "/references/cities/{city_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -510,7 +519,7 @@ export def "references-cities get" [
 #
 # GET /references/countries/{countryCode}
 # operationId: ReferencesCountriesByCountryCodeGet
-export def "references-countries get" [
+export def "references-countries get-by-country-code" [
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -528,10 +537,10 @@ export def "references-countries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({country_code: $country_code} | format pattern "/references/countries/{country_code}") $qp)
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({country_code: (encode-path-segment $country_code)} | format pattern "/references/countries/{country_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

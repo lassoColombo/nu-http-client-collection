@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "build post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "build create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -91,7 +100,7 @@ export def commands []: nothing -> table {
 # Build a Docker image from a Dockerfile
 #
 # POST /build
-export def "build post" [
+export def "build create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -100,7 +109,7 @@ export def "build post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --t: string # Tag the image with the full path to your private Bluemix registry in the following format: `t=registry.ng.bluemix.net/<namespace>/<image_name>:<tag>`. This path is used to push the image to the private Bluemix registry after it is built.
+  --t: string # Tag the image with the full path to your private Bluemix registry in the following format: `t=registry.ng.bluemix.net//<image_name>:`. This path is used to push the image to the private Bluemix registry after it is built.
   --q: oneof<nothing, bool> # You can choose whether or not to show the verbose build output to review every step during the container image build. If you set the query parameter to `q=false`, `q=False`, or `q=0`, the verbose build output is suppressed. To show the verbose build output, enter `q=true`, `q=True`, or `q=1`.
   --nocache: oneof<nothing, bool> # If you set the query parameter to `nocache=true`, `nocache=True`, or `nocache=1`, the cache will not be used to build your image. To use the cache, enter `nocache=false`, `nocache=False`, or `nocache=0`.
   --pull: oneof<nothing, bool> # If set to pull=true, pull=True, or pull=1, then a newer version of the image is always attempted to be pulled even though an older version of the image exists locally. If set to pull=false, pull=False, or pull=0, then the local image will be used if one exists.
@@ -113,19 +122,20 @@ export def "build post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "t" $t "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "nocache" $nocache "scalar") (serialize-qp "pull" $pull "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/build" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/tar" $body
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/tar" $req_body
 }
 
 # Create and start a single container
 #
 # POST /containers/create
-# --HostConfig shape: {Binds?: list, ExtraHosts?: list, Links?: list, PortBindings?: list}
-export def "containers-create post" [
+# --HostConfig shape: {Binds?: list<string>, ExtraHosts?: list<string>, Links?: list<string>, PortBindings?: list<string>}
+export def "containers-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,28 +148,28 @@ export def "containers-create post" [
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
   --bluemix-app: string # The name of the Cloud Foundry app that you want to bind to your container. The Cloud Foundry app must be created in the same space where you want to create your container.
-  --cmd: list # The command and arguments in this list are passed to the container to be executed when the container is started. This command must be a long-running command. Do not use a short-lived command, for example, /bin/date, because it might cause the container to crash. <br>Sample long-running commands:<br>["ping","localhost"]<br>["tail","-f","/dev/null"]<br>["sh","-c","while true; do date; sleep 20; done"]
+  --cmd: list<string> # The command and arguments in this list are passed to the container to be executed when the container is started. This command must be a long-running command. Do not use a short-lived command, for example, /bin/date, because it might cause the container to crash. Sample long-running commands:["ping","localhost"]["tail","-f","/dev/null"]["sh","-c","while true; do date; sleep 20; done"]
   --cpuset: string # Pins the container processes to a specific CPU core on the compute host. For example: 0 means that processes are executed on the first core only.
-  --body-env: list # A list of environment variables in the form of key=value pairs. All keys in this list have to be unique. List multiple keys separately and if you include quotation marks, include them around both the environment variable name and the value.
-  --exposed-ports: list # All public ports that need to be exposed for the container, so the container can be accessed from the Internet.
-  --host-config: record # shape: {Binds?: list, ExtraHosts?: list, Links?: list, PortBindings?: list}
-  image: string # Full path to the image in your private Bluemix registry in the format `registry.ng.bluemix.net/namespace/image`. 
+  --body-env: list<string> # A list of environment variables in the form of key=value pairs. All keys in this list have to be unique. List multiple keys separately and if you include quotation marks, include them around both the environment variable name and the value.
+  --exposed-ports: list<string> # All public ports that need to be exposed for the container, so the container can be accessed from the Internet.
+  --host-config: record # shape: {Binds?: list<string>, ExtraHosts?: list<string>, Links?: list<string>, PortBindings?: list<string>}
+  image: string # Full path to the image in your private Bluemix registry in the format `registry.ng.bluemix.net/namespace/image`.
   --memory: int # The container memory that is set for the container in Megabyte. Choose one of the following sizes: Pico 64 MB, Nano 128 MB, Micro 256 MB, Tiny 512 MB, Small 1 GB (1024 MB), Medium 2 GB (2048 MB), Large 4 GB (4096 MB) XLarge 8GB (8192 MB) and 2XLarge 16 GB (16384 MB). (format: int32)
   --number-cpus: int # Number of virtual CPUs that are allocated to the container. (format: int32)
-  --volumes: string # Mount a volume to a container by specifying the details in the following format: `VOLUME_NAME:/DIRECTORY_PATH[:ro]`. Example: testvolume:/volumedata/temp:rw. By default, all volumes will be set up with read-write access inside the container (rw). If you wish to set up your volume with read-only access, enter `ro`.  Note: To mount a volume to a container, you must create the volume in your space first by using the `cf ic volume-create` command, or calling the `POST /volumes/create endpoint`.
+  --volumes: string # Mount a volume to a container by specifying the details in the following format: `VOLUME_NAME:/DIRECTORY_PATH[:ro]`. Example: testvolume:/volumedata/temp:rw. By default, all volumes will be set up with read-write access inside the container (rw). If you wish to set up your volume with read-only access, enter `ro`. Note: To mount a volume to a container, you must create the volume in your space first by using the `cf ic volume-create` command, or calling the `POST /volumes/create endpoint`.
 ]: any -> record<Id: string, flavor_id: int, mem: int, vcpu: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/containers/create" $qp)
-  let body = {"BluemixApp": $bluemix_app, "Cmd": $cmd, "Cpuset": $cpuset, "Env": $body_env, "ExposedPorts": $exposed_ports, "HostConfig": $host_config, "Image": $image, "Memory": $memory, "NumberCpus": $number_cpus, "Volumes": $volumes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"BluemixApp": $bluemix_app, "Cmd": $cmd, "Cpuset": $cpuset, "Env": $body_env, "ExposedPorts": $exposed_ports, "HostConfig": $host_config, "Image": $image, "Memory": $memory, "NumberCpus": $number_cpus, "Volumes": $volumes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List available public IP addresses in a space
@@ -182,17 +192,17 @@ export def "containers-floating-ips get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "all" $all "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/containers/floating-ips" $qp)
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request a public IP address for a space
 #
 # POST /containers/floating-ips/request
-export def "containers-floating-ips-request post" [
+export def "containers-floating-ips-request create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,17 +217,17 @@ export def "containers-floating-ips-request post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/containers/floating-ips/request")
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Release public IP address
 #
 # POST /containers/floating-ips/{ip}/release
-export def "containers-floating-ips-release post" [
+export def "containers-floating-ips-release create" [
   ip: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,11 +242,11 @@ export def "containers-floating-ips-release post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ip: $ip} | format pattern "/containers/floating-ips/{ip}/release"))
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({ip: (encode-path-segment $ip)} | format pattern "/containers/floating-ips/{ip}/release"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -258,10 +268,10 @@ export def "containers-groups list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/containers/groups")
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -270,7 +280,7 @@ export def "containers-groups list" [
 # POST /containers/groups
 # --NumberInstances shape: {Desired?: int, Max?: int, Min?: int}
 # --Route shape: {domain?: string, host?: string}
-export def "containers-groups post" [
+export def "containers-groups create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,27 +293,27 @@ export def "containers-groups post" [
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
   --autorecovery: string # (Optional) Enable the Auto-recovery mode for your container group. If set to true, IBM Containers checks the health of each instance with an HTTP request to the port that is assigned. If the health check does not receive a TCP response from a container instance in two subsequent 90-second intervals, the instance is removed and replaced with a new instance. If set to false and container instances crash, they are not recovered by IBM Containers.
   --bluemix-app: string # (Optional) The name of the Cloud Foundry app that you created in your organization space.
-  --cmd: list # (Optional) Docker command that is passed to the container group to be run when the container instances are started. This command must be a long-running command. Do not use a short-lived command, for example, /bin/date, because it might cause the container to crash.
-  --body-env: list # (Optional) List of environmental variables. Every environment variable that is listed here needs to be a key=value pair. Every key that you use needs to be unique for this container group. Multiple environment variables are separated with comma (,).
+  --cmd: list<string> # (Optional) Docker command that is passed to the container group to be run when the container instances are started. This command must be a long-running command. Do not use a short-lived command, for example, /bin/date, because it might cause the container to crash.
+  --body-env: list<string> # (Optional) List of environmental variables. Every environment variable that is listed here needs to be a key=value pair. Every key that you use needs to be unique for this container group. Multiple environment variables are separated with comma (,).
   image: string # (Required) The full path to your private Bluemix repository. If you want to use an image in your private Bluemix repository, specify the image in the following format: registry.ng.bluemix.net/NAMESPACE/IMAGE. If you want to use an IBM Containers provided image, do not include your organization's namespace. Specify the image in the following format: registry.ng.bluemix.net/IMAGE
   --memory: int # (Optional) The size of each container instance in the container group. The size of each container instance in the group. Choose one of the following sizes and enter the size in MegaBytes: Pico 64 MB, Nano 128 MB, Micro 256 MB, Tiny 512 MB, Small 1 GB (1024 MB), Medium 2 GB (2048 MB), Large 4 GB (4096 MB) XLarge 8GB (8192 MB) and 2XLarge 16 GB (16384 MB). If you do not specify a size, all container instances in this group are created with 256 MB. (format: int32)
   name: string # (Required) Name of the container group that you want to create. The name needs to be unique in your organization space and must start with a letter. Then, you can include uppercase letters, lowercase letters, numbers, periods (.), underscores (_), or hyphens (-).
   --number-instances: record # shape: {Desired?: int, Max?: int, Min?: int}
   --port: int # (Optional) Expose a port for HTTP traffic to make your container group available from the Internet. Every container instance that is started for this group, listens on this port. Container groups cannot expose multiple ports. Note: You need to expose a port, when "Autorecovery" is set to true. (format: int32)
   --route: record # shape: {domain?: string, host?: string}
-  --volumes: list # (Optional) List of volumes to be mounted to the container instances of your container group. You need to create the volume first by using the cf ic volume-create command before you can mount a volume to a container group. When you specify a volume, use the following format: NAME:PATH:MODE. For NAME, use either the name or ID of the volume. For the PATH, enter the absolute path to the volume directory in the container. For MODE, enter either ro (read-only) or rw (read-write).
+  --volumes: list<string> # (Optional) List of volumes to be mounted to the container instances of your container group. You need to create the volume first by using the cf ic volume-create command before you can mount a volume to a container group. When you specify a volume, use the following format: NAME:PATH:MODE. For NAME, use either the name or ID of the volume. For the PATH, enter the absolute path to the volume directory in the container. For MODE, enter either ro (read-only) or rw (read-write).
 ]: any -> record<Id: string, Warnings: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/containers/groups")
-  let body = {"Autorecovery": $autorecovery, "BluemixApp": $bluemix_app, "Cmd": $cmd, "Env": $body_env, "Image": $image, "Memory": $memory, "Name": $name, "NumberInstances": $number_instances, "Port": $port, "Route": $route, "Volumes": $volumes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Autorecovery": $autorecovery, "BluemixApp": $bluemix_app, "Cmd": $cmd, "Env": $body_env, "Image": $image, "Memory": $memory, "Name": $name, "NumberInstances": $number_instances, "Port": $port, "Route": $route, "Volumes": $volumes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Stop and delete all container instances in a container group.
@@ -319,18 +329,18 @@ export def "containers-groups delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --force: string # If you want to force the deletion of a container group that has running container instances, use the force option. This parameter needs to be set to either true or false. If set to `force=true`, `force=True`, or `force=1`, running container instances are deleted. If set to `force=false`, `force=False`, or `force=0`, running container instances are not deleted. If you do not specify this paramater, running container instances are not deleted by default. 
+  --force: string # If you want to force the deletion of a container group that has running container instances, use the force option. This parameter needs to be set to either true or false. If set to `force=true`, `force=True`, or `force=1`, running container instances are deleted. If set to `force=false`, `force=False`, or `force=0`, running container instances are not deleted. If you do not specify this paramater, running container instances are not deleted by default.
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name_or_id: $name_or_id} | format pattern "/containers/groups/{name_or_id}") $qp)
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/groups/{name_or_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -352,11 +362,11 @@ export def "containers-groups get" [
 ]: nothing -> record<Anti_affinity: string, Autorecovery: string, AvailabilityZone: string, Cmd: list<string>, Creation_time: string, Env: list<string>, Id: string, Image: string, ImageName: string, Memory: int, Name: string, NumberInstances: record<CurrentSize: int, Desired: int, Max: int, Min: int>, Port: int, Route_Status: record<in_progress: bool, message: string, successful: bool>, Routes: list<string>, Status: string, UpdatedTime: string, Volumes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name_or_id: $name_or_id} | format pattern "/containers/groups/{name_or_id}"))
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/groups/{name_or_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -364,7 +374,7 @@ export def "containers-groups get" [
 #
 # PATCH /containers/groups/{name_or_id}
 # --NumberInstances shape: {Desired?: int, Max?: int, Min?: int}
-export def "containers-groups patch" [
+export def "containers-groups update" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -377,26 +387,26 @@ export def "containers-groups patch" [
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
   --autorecovery: string # Enable or disable the Autorecovery mode for your container group. To enable it, enter true. If you want to disable it, enter false. Note: You can only enable/ disable Autorecovery mode if your container group was initially created with Autorecovery mode enabled.
-  --environment: list # A list of environment variables that you want to add to your container group. Every environment variable needs to be a key=value pair. Every key that you use needs to be unique for this container group. Multiple environment variables are separated with comma (,)
+  --environment: list<string> # A list of environment variables that you want to add to your container group. Every environment variable needs to be a key=value pair. Every key that you use needs to be unique for this container group. Multiple environment variables are separated with comma (,)
   --number-instances: record # shape: {Desired?: int, Max?: int, Min?: int}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name_or_id: $name_or_id} | format pattern "/containers/groups/{name_or_id}"))
-  let body = {"Autorecovery": $autorecovery, "Environment": $environment, "NumberInstances": $number_instances} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/groups/{name_or_id}"))
+  let req_body = {"Autorecovery": $autorecovery, "Environment": $environment, "NumberInstances": $number_instances} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Map a public route to a container group.
 #
 # POST /containers/groups/{name_or_id}/maproute
-export def "containers-groups-maproute post" [
+export def "containers-groups-maproute create" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -414,20 +424,20 @@ export def "containers-groups-maproute post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name_or_id: $name_or_id} | format pattern "/containers/groups/{name_or_id}/maproute"))
-  let body = {"domain": $domain, "host": $host} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/groups/{name_or_id}/maproute"))
+  let req_body = {"domain": $domain, "host": $host} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unmap a public route from a container group
 #
 # POST /containers/groups/{name_or_id}/unmaproute
-export def "containers-groups-unmaproute post" [
+export def "containers-groups-unmaproute create" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -445,14 +455,14 @@ export def "containers-groups-unmaproute post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name_or_id: $name_or_id} | format pattern "/containers/groups/{name_or_id}/unmaproute"))
-  let body = {"domain": $domain, "host": $host} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/groups/{name_or_id}/unmaproute"))
+  let req_body = {"domain": $domain, "host": $host} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List single containers in a space.
@@ -467,8 +477,8 @@ export def "containers-json list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --all: string # By default, the `GET /containers/json` endpoint returns a list of all single containers in a space that are in a running state. To request a list of all containers independent of their current state, set the `all` query parameter to true. Allowed values are: `all=true`, `all=True`, and `all=1`. 
-  --filters: string # You can filter your containers by any environment variable key or value that is listed in the `Env` section of your CLI/ API response when you run the `cf ic inspect <container>` command, or call the `GET /containers/{id}/json` endpoint. Your search criteria does not need to be an exact match. It can also be a part of the key or value you are looking for. For example, to filter all containers with an environment variable that contains `id` in one of their environment variables, use `filter=id`.
+  --all: string # By default, the `GET /containers/json` endpoint returns a list of all single containers in a space that are in a running state. To request a list of all containers independent of their current state, set the `all` query parameter to true. Allowed values are: `all=true`, `all=True`, and `all=1`.
+  --filters: string # You can filter your containers by any environment variable key or value that is listed in the `Env` section of your CLI/ API response when you run the `cf ic inspect ` command, or call the `GET /containers/{id}/json` endpoint. Your search criteria does not need to be an exact match. It can also be a part of the key or value you are looking for. For example, to filter all containers with an environment variable that contains `id` in one of their environment variables, use `filter=id`.
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
 ]: nothing -> table<Command: string, ContainerState: string, Created: float, Env: list<string>, Group: record<Id: string, Name: string>, Id: string, Image: string, ImageId: string, Labels: record, Memory: int, Name: string, Names: list<string>, NetworkSettings: record<Bridge: string, Gateway: string, IpAddress: string, IpPrefixLen: int, MacAddress: string, Network: record, PortMapping: string, Ports: list, PublicIpAddress: string>, Ports: record<IP: string, PrivatePort: string, PublicPort: string, Type: string>, SizeRootFs: int, SizeRw: int, Started: float, Status: string, VCPU: int> {
@@ -476,10 +486,10 @@ export def "containers-json list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/containers/json" $qp)
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -496,15 +506,15 @@ export def "containers-messages get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
-  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. To retrieve your space ID, run `cf space <space_name> --guid` and replace `<space_name>` with the name of the space where you want to create or work with your container. 
+  --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. To retrieve your space ID, run `cf space <space_name> --guid` and replace `<space_name>` with the name of the space where you want to create or work with your container.
 ]: nothing -> record<created_date: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/containers/messages")
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -526,17 +536,17 @@ export def "containers-quota get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/containers/quota")
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update space quota
 #
 # PUT /containers/quota
-export def "containers-quota put" [
+export def "containers-quota update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -554,13 +564,13 @@ export def "containers-quota put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/containers/quota")
-  let body = {"floating_ips": $floating_ips, "ram": $ram} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"floating_ips": $floating_ips, "ram": $ram} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List container sizes and quota limits
@@ -581,10 +591,10 @@ export def "containers-usage get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/containers/usage")
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -627,11 +637,11 @@ export def "containers-status get" [
 ]: nothing -> record<NameOrId: string, Status: string, Transient: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/containers/{id}/status"))
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/containers/{id}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -655,18 +665,18 @@ export def "containers delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name_or_id: $name_or_id} | format pattern "/containers/{name_or_id}") $qp)
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bind a public IP address to a single container
 #
 # POST /containers/{name_or_id}/floating-ips/{ip}/bind
-export def "containers-floating-ips-bind post" [
+export def "containers-floating-ips-bind create" [
   name_or_id: string
   ip: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -682,18 +692,18 @@ export def "containers-floating-ips-bind post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name_or_id: $name_or_id, ip: $ip} | format pattern "/containers/{name_or_id}/floating-ips/{ip}/bind"))
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id), ip: (encode-path-segment $ip)} | format pattern "/containers/{name_or_id}/floating-ips/{ip}/bind"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unbind a public IP address from a container
 #
 # POST /containers/{name_or_id}/floating-ips/{ip}/unbind
-export def "containers-floating-ips-unbind post" [
+export def "containers-floating-ips-unbind create" [
   name_or_id: string
   ip: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -709,11 +719,11 @@ export def "containers-floating-ips-unbind post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name_or_id: $name_or_id, ip: $ip} | format pattern "/containers/{name_or_id}/floating-ips/{ip}/unbind"))
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id), ip: (encode-path-segment $ip)} | format pattern "/containers/{name_or_id}/floating-ips/{ip}/unbind"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -735,18 +745,18 @@ export def "containers-json get" [
 ]: nothing -> record<BluemixApp: string, BluemixServices: string, Config: record<ArgsEscaped: bool, AttachStderr: string, AttachStdin: string, AttachStdout: string, Cmd: list<string>, Domainname: string, Env: list<string>, ExposedPorts: list<string>, Hostname: string, Image: string, ImageArchitecture: string, Labels: list<string>, Memory: int, MemorySwap: string, OpenStdin: string, PortSpecs: string, StdinOnce: string, Tty: string, User: string, VCPU: int, VolumesFrom: string, WorkingDir: string>, ContainerState: string, Created: string, Group: record<Id: string, Name: string>, HostConfig: record<Binds: list<string>, ExtraHosts: list<string>, Links: list<string>, PortBindings: list<string>>, HostId: string, Human_Id: string, Id: string, Image: string, Mounts: list<string>, Name: string, NetworkSettings: record<Bridge: string, Gateway: string, IpAddress: string, IpPrefixLen: int, MacAddress: string, Network: record<Aliases: string, EndpointID: string, Gateway: string, GlobalIPv6Address: string, GlobalIPv6PrefixLen: int, IPAMConfig: string, IPPrefixLen: string, IPv6Gateway: string, Links: string, MacAddress: string, NetworkID: string>, PortMapping: string, Ports: list<string>, PublicIpAddress: string>, Path: string, ResolveConfPath: string, State: record<ExitCode: string, FinishedAt: string, Ghost: string, Pid: int, Running: bool, StartedAt: string, Status: string>, Volumes: record<fsID: string, hostPath: string, otherSpaceVisibility: list<string>, spaceGuid: string, volName: string>, VolumesRW: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name_or_id: $name_or_id} | format pattern "/containers/{name_or_id}/json"))
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pause a single container
 #
 # POST /containers/{name_or_id}/pause
-export def "containers-pause post" [
+export def "containers-pause create" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -761,18 +771,18 @@ export def "containers-pause post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name_or_id: $name_or_id} | format pattern "/containers/{name_or_id}/pause"))
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/pause"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Rename a single container
 #
 # POST /containers/{name_or_id}/rename
-export def "containers-rename post" [
+export def "containers-rename create" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -789,18 +799,18 @@ export def "containers-rename post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name_or_id: $name_or_id} | format pattern "/containers/{name_or_id}/rename") $qp)
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/rename") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Restart a single container
 #
 # POST /containers/{name_or_id}/restart
-export def "containers-restart post" [
+export def "containers-restart create" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -817,18 +827,18 @@ export def "containers-restart post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "t" $t "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name_or_id: $name_or_id} | format pattern "/containers/{name_or_id}/restart") $qp)
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/restart") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start a single container
 #
 # POST /containers/{name_or_id}/start
-export def "containers-start post" [
+export def "containers-start create" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -843,18 +853,18 @@ export def "containers-start post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name_or_id: $name_or_id} | format pattern "/containers/{name_or_id}/start"))
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stop a single container
 #
 # POST /containers/{name_or_id}/stop
-export def "containers-stop post" [
+export def "containers-stop create" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -871,18 +881,18 @@ export def "containers-stop post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "t" $t "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name_or_id: $name_or_id} | format pattern "/containers/{name_or_id}/stop") $qp)
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unpause a single container
 #
 # POST /containers/{name_or_id}/unpause
-export def "containers-unpause post" [
+export def "containers-unpause create" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -897,11 +907,11 @@ export def "containers-unpause post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name_or_id: $name_or_id} | format pattern "/containers/{name_or_id}/unpause"))
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/unpause"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -923,10 +933,10 @@ export def "images-json list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/images/json")
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -948,11 +958,11 @@ export def "images delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/images/{id}"))
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/images/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -974,11 +984,11 @@ export def "images-json get" [
 ]: nothing -> record<Architecture: string, Config: record<ArgsEscaped: bool, AttachStderr: bool, AttachStdin: bool, AttachStdout: bool, Cmd: list<string>, Domainmame: string, Entrypoint: string, Env: list<string>, ExposedPorts: list<string>, Hostname: string, Image: string, Labels: list<string>, OnBuild: list<string>, OpenStdin: bool, StdinOnce: bool, Tty: bool, User: string, Volumes: string, WorkingDir: string>, Container: string, ContainerConfig: record<ArgsEscaped: bool, AttachStderr: string, AttachStdin: string, AttachStdout: string, Cmd: list<string>, Domainname: string, Env: list<string>, ExposedPorts: list<string>, Hostname: string, Image: string, ImageArchitecture: string, Labels: list<string>, Memory: int, MemorySwap: string, OpenStdin: string, PortSpecs: string, StdinOnce: string, Tty: string, User: string, VCPU: int, VolumesFrom: string, WorkingDir: string>, Created: string, DockerVersion: string, Id: string, Os: string, Parent: string, Size: int, Tag: string, Throwaway: string, VirtualSize: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name_or_id: $name_or_id} | format pattern "/images/{name_or_id}/json"))
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/images/{name_or_id}/json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1000,10 +1010,10 @@ export def "registry-namespaces list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/registry/namespaces")
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1025,18 +1035,18 @@ export def "registry-namespaces get" [
 ]: nothing -> record<namespace: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/registry/namespaces/{namespace}"))
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/registry/namespaces/{namespace}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set a namespace for your private Bluemix registry.
 #
 # PUT /registry/namespaces/{namespace}
-export def "registry-namespaces put" [
+export def "registry-namespaces update" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1051,11 +1061,11 @@ export def "registry-namespaces put" [
 ]: nothing -> record<namespace: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/registry/namespaces/{namespace}"))
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/registry/namespaces/{namespace}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1077,17 +1087,17 @@ export def "tlskey get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tlskey")
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refresh the TLS Certificate
 #
 # PUT /tlskey/refresh
-export def "tlskey-refresh put" [
+export def "tlskey-refresh update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1096,23 +1106,23 @@ export def "tlskey-refresh put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. 
+  --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
 ]: nothing -> record<ca_cert: string, reg_host: string, server_cert: string, user_cert: string, user_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tlskey/refresh")
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a volume in a space
 #
 # POST /volumes/create
-export def "volumes-create post" [
+export def "volumes-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1130,17 +1140,17 @@ export def "volumes-create post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "fsName" $fs_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/volumes/create" $qp)
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a file share in a space
 #
 # POST /volumes/fs/create
-export def "volumes-fs-create post" [
+export def "volumes-fs-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1153,19 +1163,19 @@ export def "volumes-fs-create post" [
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
   fs_iops: float # The number of input/output transactions per second. Available values are 0.25, 2 or 4. (format: double)
   fs_name: string # The name of the new file share that you want to create. The name can contain uppercase letters, lowercase letters, numbers, underscores (_), and hyphens (-).
-  fs_size: int # The size of the file share in gigabyte. Run `cf ic volume fs-flavor-list` or call the GET /volumes/fs/flavors/json API endpoint to retrieve a list of available file share sizes. 
+  fs_size: int # The size of the file share in gigabyte. Run `cf ic volume fs-flavor-list` or call the GET /volumes/fs/flavors/json API endpoint to retrieve a list of available file share sizes.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/volumes/fs/create")
-  let body = {"fsIOPS": $fs_iops, "fsName": $fs_name, "fsSize": $fs_size} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"fsIOPS": $fs_iops, "fsName": $fs_name, "fsSize": $fs_size} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List available file share sizes
@@ -1186,10 +1196,10 @@ export def "volumes-fs-flavors-json get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/volumes/fs/flavors/json")
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1211,10 +1221,10 @@ export def "volumes-fs-json list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/volumes/fs/json")
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1236,11 +1246,11 @@ export def "volumes-fs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/volumes/fs/{name}"))
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/volumes/fs/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1262,11 +1272,11 @@ export def "volumes-fs-json get" [
 ]: nothing -> table<fs: list<record>, fsUsage: list<record>, volnames: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/volumes/fs/{name}/json"))
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/volumes/fs/{name}/json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1288,10 +1298,10 @@ export def "volumes-json list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/volumes/json")
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1313,18 +1323,18 @@ export def "volumes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/volumes/{name}"))
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/volumes/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Share a volume with another space
 #
 # POST /volumes/{name}
-export def "volumes post" [
+export def "volumes create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1336,23 +1346,23 @@ export def "volumes post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
-  --add-spaces: list # The name or ID of the space where you want to provision your existing volume. Run `cf spaces` to retrieve the name, or `cf space <space_name> --guid` to retrieve the space ID. 
-  --remove-spaces: list # The name or ID of the space from which you want to unprovision your existing volume. Run `cf spaces` to retrieve the name, or `cf space <space_name> --guid` to retrieve the space ID.
+  --add-spaces: list<string> # The name or ID of the space where you want to provision your existing volume. Run `cf spaces` to retrieve the name, or `cf space <space_name> --guid` to retrieve the space ID.
+  --remove-spaces: list<string> # The name or ID of the space from which you want to unprovision your existing volume. Run `cf spaces` to retrieve the name, or `cf space <space_name> --guid` to retrieve the space ID.
 ]: any -> record<fsID: string, hostPath: string, otherSpaceVisibility: list<string>, spaceGuid: string, volName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/volumes/{name}"))
-  let body = {"addSpaces": $add_spaces, "removeSpaces": $remove_spaces} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/volumes/{name}"))
+  let req_body = {"addSpaces": $add_spaces, "removeSpaces": $remove_spaces} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Retrieve detailed information about a volume. 
+# Retrieve detailed information about a volume.
 #
 # GET /volumes/{name}/json
 export def "volumes-json get" [
@@ -1370,10 +1380,10 @@ export def "volumes-json get" [
 ]: nothing -> record<fsID: string, hostPath: string, otherSpaceVisibility: list<string>, spaceGuid: string, volName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/volumes/{name}/json"))
-  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/volumes/{name}/json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

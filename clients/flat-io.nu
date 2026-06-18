@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -155,18 +164,18 @@ export def "classes create-class" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classes")
-  let body = {"name": $name, "section": $section} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "section": $section} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Join a class
 #
 # POST /classes/enroll/{enrollmentCode}
 # operationId: enrollClass
-export def "classes-enroll enrollClass" [
+export def "classes-enroll create-class" [
   enrollment_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -179,7 +188,7 @@ export def "classes-enroll enrollClass" [
 ]: nothing -> record<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list<record>>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({enrollment_code: $enrollment_code} | format pattern "/classes/enroll/{enrollment_code}"))
+  let full_url = (build-url $base ({enrollment_code: (encode-path-segment $enrollment_code)} | format pattern "/classes/enroll/{enrollment_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -202,7 +211,7 @@ export def "classes get" [
 ]: nothing -> record<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list<record>>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class} | format pattern "/classes/{class}"))
+  let full_url = (build-url $base ({class: (encode-path-segment $class)} | format pattern "/classes/{class}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -228,19 +237,19 @@ export def "classes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class} | format pattern "/classes/{class}"))
-  let body = {"name": $name, "section": $section} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({class: (encode-path-segment $class)} | format pattern "/classes/{class}"))
+  let req_body = {"name": $name, "section": $section} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Activate the class
 #
 # POST /classes/{class}/activate
 # operationId: activateClass
-export def "classes-activate activateClass" [
+export def "classes-activate create" [
   class: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -253,7 +262,7 @@ export def "classes-activate activateClass" [
 ]: nothing -> record<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list<record>>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class} | format pattern "/classes/{class}/activate"))
+  let full_url = (build-url $base ({class: (encode-path-segment $class)} | format pattern "/classes/{class}/activate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -276,7 +285,7 @@ export def "classes-archive unarchive" [
 ]: nothing -> record<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list<record>>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class} | format pattern "/classes/{class}/archive"))
+  let full_url = (build-url $base ({class: (encode-path-segment $class)} | format pattern "/classes/{class}/archive"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -299,7 +308,7 @@ export def "classes-archive archive" [
 ]: nothing -> record<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list<record>>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class} | format pattern "/classes/{class}/archive"))
+  let full_url = (build-url $base ({class: (encode-path-segment $class)} | format pattern "/classes/{class}/archive"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -322,7 +331,7 @@ export def "classes-assignments list" [
 ]: nothing -> table<attachments: list<record>, canvas: record<alternateLink: string, id: string>, classroom: string, cover: string, coverFile: string, creationDate: string, creator: string, description: string, dueDate: string, googleClassroom: record<alternateLink: string, id: string, state: string, topicId: string>, lti: record<id: string>, maxPoints: float, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<alternateLink: string, categories: list, id: string, state: string>, scheduledDate: string, state: string, submissions: list<record>, title: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class} | format pattern "/classes/{class}/assignments"))
+  let full_url = (build-url $base ({class: (encode-path-segment $class)} | format pattern "/classes/{class}/assignments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -334,7 +343,7 @@ export def "classes-assignments list" [
 # operationId: createAssignment
 # --attachments item shape: {googleDriveFileId?: string, lockScoreTemplate?: bool, score?: string, sharingMode?: "read"|"write"|"copy"|"performance", type?: "flat"|"link"|"googleDrive"|"worksheet", url?: string, worksheet?: string}
 # --googleClassroom shape: {topicId?: string}
-# --microsoftGraph shape: {categories?: list}
+# --microsoftGraph shape: {categories?: list<string>}
 export def "classes-assignments create" [
   class: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -345,18 +354,18 @@ export def "classes-assignments create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --assigned-students: list # Identifiers for the students that have access to the assignment
+  --assigned-students: list<string> # Identifiers for the students that have access to the assignment
   --assignee-mode: string@assignee-mode-completer # Possible modes of assigning assignments
   --attachments: list # item shape: {googleDriveFileId?: string, lockScoreTemplate?: bool, score?: string, sharingMode?: "read"|"write"|"copy"|"performance", type?: "flat"|"link"|"googleDrive"|"worksheet", url?: string, worksheet?: string}
   --cover: string # The URL of the cover to display (nullable)
   --cover-file: string # The id of the cover to display (nullable)
   --description: string # Description and content of the assignment
-  --due-date: string # The due date of this assignment, late submissions will be marked as paste due. If not set, the assignment won't have a due date.  (nullable, format: date-time)
+  --due-date: string # The due date of this assignment, late submissions will be marked as paste due. If not set, the assignment won't have a due date. (nullable, format: date-time)
   --google-classroom: record # Google Classroom options for this assignment — shape: {topicId?: string}
-  --max-points: float # If set, the grading will be enabled for the assignement with this value as the maximum of points  (nullable)
-  --microsoft-graph: record # Microsoft Graph options for this assignment — shape: {categories?: list}
+  --max-points: float # If set, the grading will be enabled for the assignement with this value as the maximum of points (nullable)
+  --microsoft-graph: record # Microsoft Graph options for this assignment — shape: {categories?: list<string>}
   --nb-playback-authorized: float # The number of playback authorized on the scores of the assignment. (nullable)
-  --scheduled-date: string # The publication (scheduled) date of the assignment. If this one is specified, the assignment will only be listed to the teachers of the class.  (nullable, format: date-time)
+  --scheduled-date: string # The publication (scheduled) date of the assignment. If this one is specified, the assignment will only be listed to the teachers of the class. (nullable, format: date-time)
   --state: string@state-completer-1 # State of the assignment
   --title: string # Title of the assignment
   --toolset: string # The id of the associated toolset (nullable)
@@ -365,12 +374,12 @@ export def "classes-assignments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class} | format pattern "/classes/{class}/assignments"))
-  let body = {"assignedStudents": $assigned_students, "assigneeMode": $assignee_mode, "attachments": $attachments, "cover": $cover, "coverFile": $cover_file, "description": $description, "dueDate": $due_date, "googleClassroom": $google_classroom, "maxPoints": $max_points, "microsoftGraph": $microsoft_graph, "nbPlaybackAuthorized": $nb_playback_authorized, "scheduledDate": $scheduled_date, "state": $state, "title": $title, "toolset": $toolset, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({class: (encode-path-segment $class)} | format pattern "/classes/{class}/assignments"))
+  let req_body = {"assignedStudents": $assigned_students, "assigneeMode": $assignee_mode, "attachments": $attachments, "cover": $cover, "coverFile": $cover_file, "description": $description, "dueDate": $due_date, "googleClassroom": $google_classroom, "maxPoints": $max_points, "microsoftGraph": $microsoft_graph, "nbPlaybackAuthorized": $nb_playback_authorized, "scheduledDate": $scheduled_date, "state": $state, "title": $title, "toolset": $toolset, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unarchive the assignment.
@@ -391,7 +400,7 @@ export def "classes-assignments-archive unarchive" [
 ]: nothing -> record<attachments: table<authorName: string, authorUrl: string, description: string, googleDriveFileId: string, html: string, htmlHeight: string, htmlWidth: string, iconUrl: string, lockScoreTemplate: bool, mimeType: string, revision: string, score: string, sharingMode: string, thumbnailHeight: int, thumbnailUrl: string, thumbnailWidth: int, title: string, track: string, type: string, url: string, worksheet: string>, canvas: record<alternateLink: string, id: string>, classroom: string, cover: string, coverFile: string, creationDate: string, creator: string, description: string, dueDate: string, googleClassroom: record<alternateLink: string, id: string, state: string, topicId: string>, lti: record<id: string>, maxPoints: float, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<alternateLink: string, categories: list<string>, id: string, state: string>, scheduledDate: string, state: string, submissions: table<assignment: string, attachments: list, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record, grade: float, id: string, maxPoints: float, microsoftGraph: record, returnCreator: string, returnDate: string, state: string, submissionDate: string>, title: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class, assignment: $assignment} | format pattern "/classes/{class}/assignments/{assignment}/archive"))
+  let full_url = (build-url $base ({class: (encode-path-segment $class), assignment: (encode-path-segment $assignment)} | format pattern "/classes/{class}/assignments/{assignment}/archive"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -415,7 +424,7 @@ export def "classes-assignments-archive archive" [
 ]: nothing -> record<attachments: table<authorName: string, authorUrl: string, description: string, googleDriveFileId: string, html: string, htmlHeight: string, htmlWidth: string, iconUrl: string, lockScoreTemplate: bool, mimeType: string, revision: string, score: string, sharingMode: string, thumbnailHeight: int, thumbnailUrl: string, thumbnailWidth: int, title: string, track: string, type: string, url: string, worksheet: string>, canvas: record<alternateLink: string, id: string>, classroom: string, cover: string, coverFile: string, creationDate: string, creator: string, description: string, dueDate: string, googleClassroom: record<alternateLink: string, id: string, state: string, topicId: string>, lti: record<id: string>, maxPoints: float, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<alternateLink: string, categories: list<string>, id: string, state: string>, scheduledDate: string, state: string, submissions: table<assignment: string, attachments: list, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record, grade: float, id: string, maxPoints: float, microsoftGraph: record, returnCreator: string, returnDate: string, state: string, submissionDate: string>, title: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class, assignment: $assignment} | format pattern "/classes/{class}/assignments/{assignment}/archive"))
+  let full_url = (build-url $base ({class: (encode-path-segment $class), assignment: (encode-path-segment $assignment)} | format pattern "/classes/{class}/assignments/{assignment}/archive"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -438,17 +447,17 @@ export def "classes-assignments-copy copy" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-assignment: string # An optional destination assignment where the original assignement will be copied. Must be a draft.
   --classroom: string # The destination classroom where the assignment will be copied
-  --scheduled-date: string # The publication (scheduled) date of the assignment. If this one is specified, the assignment will only be listed to the teachers of the class. Alternatively the existing `scheduledDate` from the copied assignment will be used.  (format: date-time)
+  --scheduled-date: string # The publication (scheduled) date of the assignment. If this one is specified, the assignment will only be listed to the teachers of the class. Alternatively the existing `scheduledDate` from the copied assignment will be used. (format: date-time)
 ]: any -> record<attachments: table<authorName: string, authorUrl: string, description: string, googleDriveFileId: string, html: string, htmlHeight: string, htmlWidth: string, iconUrl: string, lockScoreTemplate: bool, mimeType: string, revision: string, score: string, sharingMode: string, thumbnailHeight: int, thumbnailUrl: string, thumbnailWidth: int, title: string, track: string, type: string, url: string, worksheet: string>, canvas: record<alternateLink: string, id: string>, classroom: string, cover: string, coverFile: string, creationDate: string, creator: string, description: string, dueDate: string, googleClassroom: record<alternateLink: string, id: string, state: string, topicId: string>, lti: record<id: string>, maxPoints: float, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<alternateLink: string, categories: list<string>, id: string, state: string>, scheduledDate: string, state: string, submissions: table<assignment: string, attachments: list, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record, grade: float, id: string, maxPoints: float, microsoftGraph: record, returnCreator: string, returnDate: string, state: string, submissionDate: string>, title: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class, assignment: $assignment} | format pattern "/classes/{class}/assignments/{assignment}/copy"))
-  let body = {"assignment": $body_assignment, "classroom": $classroom, "scheduledDate": $scheduled_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({class: (encode-path-segment $class), assignment: (encode-path-segment $assignment)} | format pattern "/classes/{class}/assignments/{assignment}/copy"))
+  let req_body = {"assignment": $body_assignment, "classroom": $classroom, "scheduledDate": $scheduled_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List the students' submissions
@@ -469,7 +478,7 @@ export def "classes-assignments-submissions list" [
 ]: nothing -> table<assignment: string, attachments: list<record>, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record<alternateLink: string, id: string, state: string>, grade: float, id: string, maxPoints: float, microsoftGraph: record<alternateLink: string, id: string, state: string>, returnCreator: string, returnDate: string, state: string, submissionDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class, assignment: $assignment} | format pattern "/classes/{class}/assignments/{assignment}/submissions"))
+  let full_url = (build-url $base ({class: (encode-path-segment $class), assignment: (encode-path-segment $assignment)} | format pattern "/classes/{class}/assignments/{assignment}/submissions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -502,19 +511,19 @@ export def "classes-assignments-submissions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class, assignment: $assignment} | format pattern "/classes/{class}/assignments/{assignment}/submissions"))
-  let body = {"attachments": $attachments, "comments": $comments, "draftGrade": $draft_grade, "grade": $grade, "return": $body_return, "submit": $submit} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({class: (encode-path-segment $class), assignment: (encode-path-segment $assignment)} | format pattern "/classes/{class}/assignments/{assignment}/submissions"))
+  let req_body = {"attachments": $attachments, "comments": $comments, "draftGrade": $draft_grade, "grade": $grade, "return": $body_return, "submit": $submit} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # CSV Grades exports
 #
 # GET /classes/{class}/assignments/{assignment}/submissions/csv
 # operationId: exportSubmissionsReviewsAsCsv
-export def "classes-assignments-submissions-csv export-submissions-reviews-as" [
+export def "classes-assignments-submissions-csv export-reviews" [
   class: string
   assignment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -528,7 +537,7 @@ export def "classes-assignments-submissions-csv export-submissions-reviews-as" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class, assignment: $assignment} | format pattern "/classes/{class}/assignments/{assignment}/submissions/csv"))
+  let full_url = (build-url $base ({class: (encode-path-segment $class), assignment: (encode-path-segment $assignment)} | format pattern "/classes/{class}/assignments/{assignment}/submissions/csv"))
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -538,7 +547,7 @@ export def "classes-assignments-submissions-csv export-submissions-reviews-as" [
 #
 # GET /classes/{class}/assignments/{assignment}/submissions/excel
 # operationId: exportSubmissionsReviewsAsExcel
-export def "classes-assignments-submissions-excel export-submissions-reviews-as" [
+export def "classes-assignments-submissions-excel export-reviews" [
   class: string
   assignment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -552,7 +561,7 @@ export def "classes-assignments-submissions-excel export-submissions-reviews-as"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class, assignment: $assignment} | format pattern "/classes/{class}/assignments/{assignment}/submissions/excel"))
+  let full_url = (build-url $base ({class: (encode-path-segment $class), assignment: (encode-path-segment $assignment)} | format pattern "/classes/{class}/assignments/{assignment}/submissions/excel"))
   let accept_val = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -577,7 +586,7 @@ export def "classes-assignments-submissions delete" [
 ]: nothing -> record<code: string, id: string, message: string, param: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class, assignment: $assignment, submission: $submission} | format pattern "/classes/{class}/assignments/{assignment}/submissions/{submission}"))
+  let full_url = (build-url $base ({class: (encode-path-segment $class), assignment: (encode-path-segment $assignment), submission: (encode-path-segment $submission)} | format pattern "/classes/{class}/assignments/{assignment}/submissions/{submission}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -602,7 +611,7 @@ export def "classes-assignments-submissions get" [
 ]: nothing -> record<assignment: string, attachments: table<authorName: string, authorUrl: string, description: string, googleDriveFileId: string, html: string, htmlHeight: string, htmlWidth: string, iconUrl: string, lockScoreTemplate: bool, mimeType: string, revision: string, score: string, sharingMode: string, thumbnailHeight: int, thumbnailUrl: string, thumbnailWidth: int, title: string, track: string, type: string, url: string, worksheet: string>, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record<alternateLink: string, id: string, state: string>, grade: float, id: string, maxPoints: float, microsoftGraph: record<alternateLink: string, id: string, state: string>, returnCreator: string, returnDate: string, state: string, submissionDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class, assignment: $assignment, submission: $submission} | format pattern "/classes/{class}/assignments/{assignment}/submissions/{submission}"))
+  let full_url = (build-url $base ({class: (encode-path-segment $class), assignment: (encode-path-segment $assignment), submission: (encode-path-segment $submission)} | format pattern "/classes/{class}/assignments/{assignment}/submissions/{submission}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -614,7 +623,7 @@ export def "classes-assignments-submissions get" [
 # operationId: editSubmission
 # --attachments item shape: {googleDriveFileId?: string, lockScoreTemplate?: bool, score?: string, sharingMode?: "read"|"write"|"copy"|"performance", type?: "flat"|"link"|"googleDrive"|"worksheet", url?: string, worksheet?: string}
 # --comments shape: {total?: float, unread?: float}
-export def "classes-assignments-submissions editSubmission" [
+export def "classes-assignments-submissions update-edit" [
   class: string
   assignment: string
   submission: string
@@ -636,12 +645,12 @@ export def "classes-assignments-submissions editSubmission" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class, assignment: $assignment, submission: $submission} | format pattern "/classes/{class}/assignments/{assignment}/submissions/{submission}"))
-  let body = {"attachments": $attachments, "comments": $comments, "draftGrade": $draft_grade, "grade": $grade, "return": $body_return, "submit": $submit} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({class: (encode-path-segment $class), assignment: (encode-path-segment $assignment), submission: (encode-path-segment $submission)} | format pattern "/classes/{class}/assignments/{assignment}/submissions/{submission}"))
+  let req_body = {"attachments": $attachments, "comments": $comments, "draftGrade": $draft_grade, "grade": $grade, "return": $body_return, "submit": $submit} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List the feedback comments of a submission
@@ -663,7 +672,7 @@ export def "classes-assignments-submissions-comments get" [
 ]: nothing -> table<comment: string, date: string, id: string, modificationDate: string, submission: string, unread: bool, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class, assignment: $assignment, submission: $submission} | format pattern "/classes/{class}/assignments/{assignment}/submissions/{submission}/comments"))
+  let full_url = (build-url $base ({class: (encode-path-segment $class), assignment: (encode-path-segment $assignment), submission: (encode-path-segment $submission)} | format pattern "/classes/{class}/assignments/{assignment}/submissions/{submission}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -690,12 +699,12 @@ export def "classes-assignments-submissions-comments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class, assignment: $assignment, submission: $submission} | format pattern "/classes/{class}/assignments/{assignment}/submissions/{submission}/comments"))
-  let body = {"comment": $comment} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({class: (encode-path-segment $class), assignment: (encode-path-segment $assignment), submission: (encode-path-segment $submission)} | format pattern "/classes/{class}/assignments/{assignment}/submissions/{submission}/comments"))
+  let req_body = {"comment": $comment} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a feedback comment to a submission
@@ -718,7 +727,7 @@ export def "classes-assignments-submissions-comments delete" [
 ]: nothing -> record<code: string, id: string, message: string, param: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class, assignment: $assignment, submission: $submission, comment: $comment} | format pattern "/classes/{class}/assignments/{assignment}/submissions/{submission}/comments/{comment}"))
+  let full_url = (build-url $base ({class: (encode-path-segment $class), assignment: (encode-path-segment $assignment), submission: (encode-path-segment $submission), comment: (encode-path-segment $comment)} | format pattern "/classes/{class}/assignments/{assignment}/submissions/{submission}/comments/{comment}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -746,12 +755,12 @@ export def "classes-assignments-submissions-comments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class, assignment: $assignment, submission: $submission, comment: $comment} | format pattern "/classes/{class}/assignments/{assignment}/submissions/{submission}/comments/{comment}"))
-  let body = {"comment": $body_comment} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({class: (encode-path-segment $class), assignment: (encode-path-segment $assignment), submission: (encode-path-segment $submission), comment: (encode-path-segment $comment)} | format pattern "/classes/{class}/assignments/{assignment}/submissions/{submission}/comments/{comment}"))
+  let req_body = {"comment": $body_comment} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the history of the submission
@@ -773,7 +782,7 @@ export def "classes-assignments-submissions-history get" [
 ]: nothing -> table<attachment: record<revision: string, score: string>, date: string, draftGrade: float, grade: float, maxPoints: float, state: string, users: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class, assignment: $assignment, submission: $submission} | format pattern "/classes/{class}/assignments/{assignment}/submissions/{submission}/history"))
+  let full_url = (build-url $base ({class: (encode-path-segment $class), assignment: (encode-path-segment $assignment), submission: (encode-path-segment $submission)} | format pattern "/classes/{class}/assignments/{assignment}/submissions/{submission}/history"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -797,7 +806,7 @@ export def "classes-students-submissions list" [
 ]: nothing -> table<assignment: string, attachments: list<record>, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record<alternateLink: string, id: string, state: string>, grade: float, id: string, maxPoints: float, microsoftGraph: record<alternateLink: string, id: string, state: string>, returnCreator: string, returnDate: string, state: string, submissionDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class, user: $user} | format pattern "/classes/{class}/students/{user}/submissions"))
+  let full_url = (build-url $base ({class: (encode-path-segment $class), user: (encode-path-segment $user)} | format pattern "/classes/{class}/students/{user}/submissions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -821,7 +830,7 @@ export def "classes-users delete" [
 ]: nothing -> record<code: string, id: string, message: string, param: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class, user: $user} | format pattern "/classes/{class}/users/{user}"))
+  let full_url = (build-url $base ({class: (encode-path-segment $class), user: (encode-path-segment $user)} | format pattern "/classes/{class}/users/{user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -845,7 +854,7 @@ export def "classes-users create" [
 ]: nothing -> record<code: string, id: string, message: string, param: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({class: $class, user: $user} | format pattern "/classes/{class}/users/{user}"))
+  let full_url = (build-url $base ({class: (encode-path-segment $class), user: (encode-path-segment $user)} | format pattern "/classes/{class}/users/{user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -864,7 +873,7 @@ export def "collections list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --parent: string # List the collection contained in this `parent` collection.  This option doesn't provide a complete multi-level collection support. When sharing a collection with someone, this one will have as `parent` `sharedWithMe`.  (default: root)
+  --parent: string # List the collection contained in this `parent` collection. This option doesn't provide a complete multi-level collection support. When sharing a collection with someone, this one will have as `parent` `sharedWithMe`. (default: root)
   --qp-sort: string@sort-completer # Sort
   --direction: string@direction-completer # Sort direction
   --limit: int # This is the maximum number of objects that may be returned (default: 25)
@@ -900,11 +909,11 @@ export def "collections create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/collections")
-  let body = {"privacy": $privacy, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"privacy": $privacy, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete the collection
@@ -924,7 +933,7 @@ export def "collections delete" [
 ]: nothing -> record<code: string, id: string, message: string, param: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({collection: $collection} | format pattern "/collections/{collection}"))
+  let full_url = (build-url $base ({collection: (encode-path-segment $collection)} | format pattern "/collections/{collection}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -949,7 +958,7 @@ export def "collections get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sharingKey" $sharing_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({collection: $collection} | format pattern "/collections/{collection}") $qp)
+  let full_url = (build-url $base ({collection: (encode-path-segment $collection)} | format pattern "/collections/{collection}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -959,7 +968,7 @@ export def "collections get" [
 #
 # PUT /collections/{collection}
 # operationId: editCollection
-export def "collections editCollection" [
+export def "collections update-edit" [
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -975,12 +984,12 @@ export def "collections editCollection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({collection: $collection} | format pattern "/collections/{collection}"))
-  let body = {"privacy": $privacy, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({collection: (encode-path-segment $collection)} | format pattern "/collections/{collection}"))
+  let req_body = {"privacy": $privacy, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List the scores contained in a collection
@@ -1007,7 +1016,7 @@ export def "collections-scores list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sharingKey" $sharing_key "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "next" $next "scalar") (serialize-qp "previous" $previous "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({collection: $collection} | format pattern "/collections/{collection}/scores") $qp)
+  let full_url = (build-url $base ({collection: (encode-path-segment $collection)} | format pattern "/collections/{collection}/scores") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1017,7 +1026,7 @@ export def "collections-scores list" [
 #
 # DELETE /collections/{collection}/scores/{score}
 # operationId: deleteScoreFromCollection
-export def "collections-scores delete-from" [
+export def "collections-scores delete" [
   collection: string
   score: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1033,7 +1042,7 @@ export def "collections-scores delete-from" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sharingKey" $sharing_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({collection: $collection, score: $score} | format pattern "/collections/{collection}/scores/{score}") $qp)
+  let full_url = (build-url $base ({collection: (encode-path-segment $collection), score: (encode-path-segment $score)} | format pattern "/collections/{collection}/scores/{score}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1043,7 +1052,7 @@ export def "collections-scores delete-from" [
 #
 # PUT /collections/{collection}/scores/{score}
 # operationId: addScoreToCollection
-export def "collections-scores create-to" [
+export def "collections-scores create" [
   collection: string
   score: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1059,7 +1068,7 @@ export def "collections-scores create-to" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sharingKey" $sharing_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({collection: $collection, score: $score} | format pattern "/collections/{collection}/scores/{score}") $qp)
+  let full_url = (build-url $base ({collection: (encode-path-segment $collection), score: (encode-path-segment $score)} | format pattern "/collections/{collection}/scores/{score}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1069,7 +1078,7 @@ export def "collections-scores create-to" [
 #
 # POST /collections/{collection}/untrash
 # operationId: untrashCollection
-export def "collections-untrash untrashCollection" [
+export def "collections-untrash create" [
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1082,7 +1091,7 @@ export def "collections-untrash untrashCollection" [
 ]: nothing -> record<code: string, id: string, message: string, param: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({collection: $collection} | format pattern "/collections/{collection}/untrash"))
+  let full_url = (build-url $base ({collection: (encode-path-segment $collection)} | format pattern "/collections/{collection}/untrash"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1105,7 +1114,7 @@ export def "groups get-details" [
 ]: nothing -> record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group: $group} | format pattern "/groups/{group}"))
+  let full_url = (build-url $base ({group: (encode-path-segment $group)} | format pattern "/groups/{group}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1130,7 +1139,7 @@ export def "groups-scores get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "parent" $parent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group: $group} | format pattern "/groups/{group}/scores") $qp)
+  let full_url = (build-url $base ({group: (encode-path-segment $group)} | format pattern "/groups/{group}/scores") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1155,7 +1164,7 @@ export def "groups-users list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({group: $group} | format pattern "/groups/{group}/users") $qp)
+  let full_url = (build-url $base ({group: (encode-path-segment $group)} | format pattern "/groups/{group}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1232,11 +1241,11 @@ export def "organizations-invitations create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/organizations/invitations")
-  let body = {"email": $email, "organizationRole": $organization_role} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "organizationRole": $organization_role} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove an organization invitation
@@ -1256,7 +1265,7 @@ export def "organizations-invitations delete" [
 ]: nothing -> record<code: string, id: string, message: string, param: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({invitation: $invitation} | format pattern "/organizations/invitations/{invitation}"))
+  let full_url = (build-url $base ({invitation: (encode-path-segment $invitation)} | format pattern "/organizations/invitations/{invitation}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1304,11 +1313,11 @@ export def "organizations-lti-credentials create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/organizations/lti/credentials")
-  let body = {"lms": $lms, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"lms": $lms, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Revoke LTI 1.x credentials
@@ -1328,7 +1337,7 @@ export def "organizations-lti-credentials delete" [
 ]: nothing -> record<code: string, id: string, message: string, param: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({credentials: $credentials} | format pattern "/organizations/lti/credentials/{credentials}"))
+  let full_url = (build-url $base ({credentials: (encode-path-segment $credentials)} | format pattern "/organizations/lti/credentials/{credentials}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1351,11 +1360,11 @@ export def "organizations-users list" [
   --direction: string@direction-completer # Sort direction
   --next: string # An opaque string cursor to fetch the next page of data. The paginated API URLs are returned in the `Link` header when requesting the API. These URLs will contain a `next` and `previous` cursor based on the available data.
   --previous: string # An opaque string cursor to fetch the previous page of data. The paginated API URLs are returned in the `Link` header when requesting the API. These URLs will contain a `next` and `previous` cursor based on the available data.
-  --role: list # Filter users by role
+  --role: list<string> # Filter users by role
   --q: string # The query to search
-  --group: list # Filter users by group
+  --group: list<string> # Filter users by group
   --no-active-license: oneof<nothing, bool> # Filter users who don't have an active license
-  --license-expiration-date: list # Filter users by license expiration date or `active` / `notActive`
+  --license-expiration-date: list<string> # Filter users by license expiration date or `active` / `notActive`
   --only-ids: oneof<nothing, bool> # Return only user ids
   --limit: int # This is the maximum number of objects that may be returned (default: 25)
 ]: nothing -> table<email: string, lastActivityDate: string, license: record<active: bool, expirationDate: string, id: string, mode: string, source: string>> {
@@ -1392,18 +1401,18 @@ export def "organizations-users create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/organizations/users")
-  let body = {"email": $email, "firstname": $firstname, "lastname": $lastname, "locale": $locale, "password": $password, "username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "firstname": $firstname, "lastname": $lastname, "locale": $locale, "password": $password, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Count the organization users using the provided filters
 #
 # GET /organizations/users/count
 # operationId: countOrgaUsers
-export def "organizations-users-count countOrgaUsers" [
+export def "organizations-users-count get-orga" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1412,9 +1421,9 @@ export def "organizations-users-count countOrgaUsers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --role: list # Filter users by role
+  --role: list<string> # Filter users by role
   --q: string # The query to search
-  --group: list # Filter users by group
+  --group: list<string> # Filter users by group
   --no-active-license: oneof<nothing, bool> # Filter users who don't have an active license
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1445,7 +1454,7 @@ export def "organizations-users delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "convertToIndividual" $convert_to_individual "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user: $user} | format pattern "/organizations/users/{user}") $qp)
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/organizations/users/{user}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1475,12 +1484,12 @@ export def "organizations-users update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user: $user} | format pattern "/organizations/users/{user}"))
-  let body = {"email": $email, "firstname": $firstname, "lastname": $lastname, "organizationRole": $organization_role, "password": $password, "username": $username} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/organizations/users/{user}"))
+  let req_body = {"email": $email, "firstname": $firstname, "lastname": $lastname, "organizationRole": $organization_role, "password": $password, "username": $username} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a new score
@@ -1498,23 +1507,23 @@ export def "scores create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --collection: string # Unique identifier of a collection where the score will be created. If no collection identifier is provided, the score will be stored in the `root` directory.
-  --data: string # The data of the score file. It must be a MusicXML 3 file (`vnd.recordare.musicxml` or `vnd.recordare.musicxml+xml`), a MIDI file (`audio/midi`) or a Flat.json (aka Adagio.json) file. Binary payloads (`vnd.recordare.musicxml` and `audio/midi`) can be encoded in Base64, in this case the `dataEncoding` property must match the encoding used for the API request.  (e.g. <score-partwise version="3.0"></score-partwise>)
+  --data: string # The data of the score file. It must be a MusicXML 3 file (`vnd.recordare.musicxml` or `vnd.recordare.musicxml+xml`), a MIDI file (`audio/midi`) or a Flat.json (aka Adagio.json) file. Binary payloads (`vnd.recordare.musicxml` and `audio/midi`) can be encoded in Base64, in this case the `dataEncoding` property must match the encoding used for the API request. (e.g. <score-partwise version="3.0"></score-partwise>)
   --data-encoding: string@data-encoding-completer # The optional encoding of the score data. This property must match the encoding used for the `data` property.
   --filename: string # If this is an imported file, its filename
   --google-drive-folder: string # If the user uses Google Drive and this properties is specified, the file will be created in this directory. The currently user creating the file must be granted to write in this directory.
-  privacy: string@privacy-completer-1 # The score main privacy mode.  - `public`: The score is public on the Internet. This one can be accessible at the url `https://flat.io/score/{score}` and can be modified and administred by specified collaborators users. - `private`: The score is private and can be only accessed, modified and administred by specified collaborators users. - `privateLink`: The score is private but can be accessed using a private link `htmlUrl` or the private key in the property `sharingKey`. - `organizationPublic`: _Available only with [Flat for Education](https://flat.io/edu)._ The score is public in the organization: users of the same organization can access to this one. The score can be modified and administred by specified collaborators users.  The score can also be individually shared to a set of users or groups using the different collaborators API methods.  When a file is synchronized from an external source (e.g. Google Drive) and the sharing options are changed on the source, Flat will chose the best privacy mode for the file.  When using a [Flat for Education](https://flat.io/edu) account, some of the modes may not be available if disabled by an administrator of the organization (e.g. by default the `public` mode is not available).
+  privacy: string@privacy-completer-1 # The score main privacy mode. - `public`: The score is public on the Internet. This one can be accessible at the url `https://flat.io/score/{score}` and can be modified and administred by specified collaborators users. - `private`: The score is private and can be only accessed, modified and administred by specified collaborators users. - `privateLink`: The score is private but can be accessed using a private link `htmlUrl` or the private key in the property `sharingKey`. - `organizationPublic`: _Available only with [Flat for Education](https://flat.io/edu)._ The score is public in the organization: users of the same organization can access to this one. The score can be modified and administred by specified collaborators users. The score can also be individually shared to a set of users or groups using the different collaborators API methods. When a file is synchronized from an external source (e.g. Google Drive) and the sharing options are changed on the source, Flat will chose the best privacy mode for the file. When using a [Flat for Education](https://flat.io/edu) account, some of the modes may not be available if disabled by an administrator of the organization (e.g. by default the `public` mode is not available).
   --body-source: record # e.g. {googleDrive: 0B-0000000000000001} — shape: {googleDrive?: string}
-  --title: string # The title of the new score. If the title is too long, the API may trim this one.  If this title is not specified, the API will try to (in this order):   - Use the title contained in the file (e.g. [`movement-title`](https://usermanuals.musicxml.com/MusicXML/Content/EL-MusicXML-movement-title.htm) or [`credit-words`](https://usermanuals.musicxml.com/MusicXML/Content/EL-MusicXML-credit-words.htm) for [MusicXML](http://www.musicxml.com/) files).   - Use the name of the file for files from a specified `source` (e.g. Google Drive) or the one in the `filename` property   - Set a default title (e.g. "New Music Score")
+  --title: string # The title of the new score. If the title is too long, the API may trim this one. If this title is not specified, the API will try to (in this order): - Use the title contained in the file (e.g. [`movement-title`](https://usermanuals.musicxml.com/MusicXML/Content/EL-MusicXML-movement-title.htm) or [`credit-words`](https://usermanuals.musicxml.com/MusicXML/Content/EL-MusicXML-credit-words.htm) for [MusicXML](http://www.musicxml.com/) files). - Use the name of the file for files from a specified `source` (e.g. Google Drive) or the one in the `filename` property - Set a default title (e.g. "New Music Score")
 ]: any -> record<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record, id: string, invited: bool, score: string, user: record, userEmail: string>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/scores")
-  let body = {"collection": $collection, "data": $data, "dataEncoding": $data_encoding, "filename": $filename, "googleDriveFolder": $google_drive_folder, "privacy": $privacy, "source": $body_source, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"collection": $collection, "data": $data, "dataEncoding": $data_encoding, "filename": $filename, "googleDriveFolder": $google_drive_folder, "privacy": $privacy, "source": $body_source, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a score
@@ -1536,7 +1545,7 @@ export def "scores delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "now" $now "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({score: $score} | format pattern "/scores/{score}") $qp)
+  let full_url = (build-url $base ({score: (encode-path-segment $score)} | format pattern "/scores/{score}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1561,7 +1570,7 @@ export def "scores get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sharingKey" $sharing_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({score: $score} | format pattern "/scores/{score}") $qp)
+  let full_url = (build-url $base ({score: (encode-path-segment $score)} | format pattern "/scores/{score}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1571,7 +1580,7 @@ export def "scores get" [
 #
 # PUT /scores/{score}
 # operationId: editScore
-export def "scores editScore" [
+export def "scores update-edit" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1588,21 +1597,21 @@ export def "scores editScore" [
   --license: string@license-completer # License of the creation. Read more about the Creative Commons licenses on https://creativecommons.org/licenses/
   --license-text: string # The rights info written on the score
   --lyricist: string # The lyricist of the score
-  --privacy: string@privacy-completer-1 # The score main privacy mode.  - `public`: The score is public on the Internet. This one can be accessible at the url `https://flat.io/score/{score}` and can be modified and administred by specified collaborators users. - `private`: The score is private and can be only accessed, modified and administred by specified collaborators users. - `privateLink`: The score is private but can be accessed using a private link `htmlUrl` or the private key in the property `sharingKey`. - `organizationPublic`: _Available only with [Flat for Education](https://flat.io/edu)._ The score is public in the organization: users of the same organization can access to this one. The score can be modified and administred by specified collaborators users.  The score can also be individually shared to a set of users or groups using the different collaborators API methods.  When a file is synchronized from an external source (e.g. Google Drive) and the sharing options are changed on the source, Flat will chose the best privacy mode for the file.  When using a [Flat for Education](https://flat.io/edu) account, some of the modes may not be available if disabled by an administrator of the organization (e.g. by default the `public` mode is not available).
+  --privacy: string@privacy-completer-1 # The score main privacy mode. - `public`: The score is public on the Internet. This one can be accessible at the url `https://flat.io/score/{score}` and can be modified and administred by specified collaborators users. - `private`: The score is private and can be only accessed, modified and administred by specified collaborators users. - `privateLink`: The score is private but can be accessed using a private link `htmlUrl` or the private key in the property `sharingKey`. - `organizationPublic`: _Available only with [Flat for Education](https://flat.io/edu)._ The score is public in the organization: users of the same organization can access to this one. The score can be modified and administred by specified collaborators users. The score can also be individually shared to a set of users or groups using the different collaborators API methods. When a file is synchronized from an external source (e.g. Google Drive) and the sharing options are changed on the source, Flat will chose the best privacy mode for the file. When using a [Flat for Education](https://flat.io/edu) account, some of the modes may not be available if disabled by an administrator of the organization (e.g. by default the `public` mode is not available).
   --sharing-key: string # When using the `privacy` mode `privateLink`, this property can be used to set a custom sharing key, otherwise a new key will be generated.
   --subtitle: string # The subtitle of the score
-  --tags: list # Tags describing the score
+  --tags: list<string> # Tags describing the score
   --title: string # The title of the score
 ]: any -> record<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record, id: string, invited: bool, score: string, user: record, userEmail: string>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({score: $score} | format pattern "/scores/{score}"))
-  let body = {"arranger": $arranger, "composer": $composer, "creationType": $creation_type, "description": $description, "license": $license, "licenseText": $license_text, "lyricist": $lyricist, "privacy": $privacy, "sharingKey": $sharing_key, "subtitle": $subtitle, "tags": $tags, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({score: (encode-path-segment $score)} | format pattern "/scores/{score}"))
+  let req_body = {"arranger": $arranger, "composer": $composer, "creationType": $creation_type, "description": $description, "license": $license, "licenseText": $license_text, "lyricist": $lyricist, "privacy": $privacy, "sharingKey": $sharing_key, "subtitle": $subtitle, "tags": $tags, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List the collaborators
@@ -1624,7 +1633,7 @@ export def "scores-collaborators list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sharingKey" $sharing_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({score: $score} | format pattern "/scores/{score}/collaborators") $qp)
+  let full_url = (build-url $base ({score: (encode-path-segment $score)} | format pattern "/scores/{score}/collaborators") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1644,9 +1653,9 @@ export def "scores-collaborators create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --acl-admin: oneof<nothing, bool> # `True` if the related user can can manage the current document, i.e. changing the document permissions and deleting the document  (default: false)
-  --acl-read: oneof<nothing, bool> # `True` if the related user can read the score. (probably true if the user has a permission on the document).  (default: true)
-  --acl-write: oneof<nothing, bool> # `True` if the related user can modify the score.  (default: false)
+  --acl-admin: oneof<nothing, bool> # `True` if the related user can can manage the current document, i.e. changing the document permissions and deleting the document (default: false)
+  --acl-read: oneof<nothing, bool> # `True` if the related user can read the score. (probably true if the user has a permission on the document). (default: true)
+  --acl-write: oneof<nothing, bool> # `True` if the related user can modify the score. (default: false)
   --group: string # The unique identifier of a Flat group
   --user: string # The unique identifier of a Flat user
   --user-email: string # Fill this field to invite an individual user by email.
@@ -1655,12 +1664,12 @@ export def "scores-collaborators create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({score: $score} | format pattern "/scores/{score}/collaborators"))
-  let body = {"aclAdmin": $acl_admin, "aclRead": $acl_read, "aclWrite": $acl_write, "group": $group, "user": $user, "userEmail": $user_email, "userToken": $user_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({score: (encode-path-segment $score)} | format pattern "/scores/{score}/collaborators"))
+  let req_body = {"aclAdmin": $acl_admin, "aclRead": $acl_read, "aclWrite": $acl_write, "group": $group, "user": $user, "userEmail": $user_email, "userToken": $user_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a collaborator
@@ -1681,7 +1690,7 @@ export def "scores-collaborators delete" [
 ]: nothing -> record<code: string, id: string, message: string, param: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({score: $score, collaborator: $collaborator} | format pattern "/scores/{score}/collaborators/{collaborator}"))
+  let full_url = (build-url $base ({score: (encode-path-segment $score), collaborator: (encode-path-segment $collaborator)} | format pattern "/scores/{score}/collaborators/{collaborator}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1707,7 +1716,7 @@ export def "scores-collaborators get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sharingKey" $sharing_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({score: $score, collaborator: $collaborator} | format pattern "/scores/{score}/collaborators/{collaborator}") $qp)
+  let full_url = (build-url $base ({score: (encode-path-segment $score), collaborator: (encode-path-segment $collaborator)} | format pattern "/scores/{score}/collaborators/{collaborator}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1735,7 +1744,7 @@ export def "scores-comments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sharingKey" $sharing_key "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({score: $score} | format pattern "/scores/{score}/comments") $qp)
+  let full_url = (build-url $base ({score: (encode-path-segment $score)} | format pattern "/scores/{score}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1745,7 +1754,7 @@ export def "scores-comments get" [
 #
 # POST /scores/{score}/comments
 # operationId: postScoreComment
-# --context shape: {measureUuids: list, partUuid: string, staffIdx?: float, staffUuid?: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float}
+# --context shape: {measureUuids: list<string>, partUuid: string, staffIdx?: float, staffUuid?: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float}
 export def "scores-comments create" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1758,8 +1767,8 @@ export def "scores-comments create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --sharing-key: string # This sharing key must be specified to access to a score or collection with a `privacy` mode set to `privateLink` and the current user is not a collaborator of the document.
   comment: string # The comment text that can includes mentions using the following format: `@[id:username]`.
-  --context: record # The context of the comment (for inline/contextualized comments). A context will include all the information related to the location of the comment (i.e. score parts, range of measure, time position).  (e.g. {measureUuids: [e6a6a60b-8710-f819-9a49-e907b19c6f1f, da83d93c-e3a6-3c73-1bbe-15e5131d6437, 056ec5eb-9213-df56-6ae8-d9b99673dc48], partUuid: 91982db7-2e6d-285e-7a19-76b4bd005b8b, staffUuid: 9395d8f3-f42b-47b6-8c5d-6ba704961ec0, startDpq: 1, startTimePos: 2, stopDpq: 1, stopTimePos: 3}) — shape: {measureUuids: list, partUuid: string, staffIdx?: float, staffUuid?: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float}
-  --mentions: list # The list of user identifiers mentioned in this comment
+  --context: record # The context of the comment (for inline/contextualized comments). A context will include all the information related to the location of the comment (i.e. score parts, range of measure, time position). (e.g. {measureUuids: [e6a6a60b-8710-f819-9a49-e907b19c6f1f, da83d93c-e3a6-3c73-1bbe-15e5131d6437, 056ec5eb-9213-df56-6ae8-d9b99673dc48], partUuid: 91982db7-2e6d-285e-7a19-76b4bd005b8b, staffUuid: 9395d8f3-f42b-47b6-8c5d-6ba704961ec0, startDpq: 1, startTimePos: 2, stopDpq: 1, stopTimePos: 3}) — shape: {measureUuids: list<string>, partUuid: string, staffIdx?: float, staffUuid?: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float}
+  --mentions: list<string> # The list of user identifiers mentioned in this comment
   --raw-comment: string # A raw version of the comment, that can be displayed without the mentions. If you use mentions, this property must be set.
   --reply-to: string # When the comment is a reply to another comment, the unique identifier of the parent comment
   --revision: string # The unique indentifier of the revision of the score where the comment was added. If this property is unspecified or contains "last", the API will automatically take the last revision created.
@@ -1768,12 +1777,12 @@ export def "scores-comments create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sharingKey" $sharing_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({score: $score} | format pattern "/scores/{score}/comments") $qp)
-  let body = {"comment": $comment, "context": $context, "mentions": $mentions, "rawComment": $raw_comment, "replyTo": $reply_to, "revision": $revision} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({score: (encode-path-segment $score)} | format pattern "/scores/{score}/comments") $qp)
+  let req_body = {"comment": $comment, "context": $context, "mentions": $mentions, "rawComment": $raw_comment, "replyTo": $reply_to, "revision": $revision} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a comment
@@ -1796,7 +1805,7 @@ export def "scores-comments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sharingKey" $sharing_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({score: $score, comment: $comment} | format pattern "/scores/{score}/comments/{comment}") $qp)
+  let full_url = (build-url $base ({score: (encode-path-segment $score), comment: (encode-path-segment $comment)} | format pattern "/scores/{score}/comments/{comment}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1806,7 +1815,7 @@ export def "scores-comments delete" [
 #
 # PUT /scores/{score}/comments/{comment}
 # operationId: updateScoreComment
-# --context shape: {measureUuids: list, partUuid: string, staffIdx?: float, staffUuid?: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float}
+# --context shape: {measureUuids: list<string>, partUuid: string, staffIdx?: float, staffUuid?: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float}
 export def "scores-comments update" [
   score: string
   comment: string
@@ -1820,7 +1829,7 @@ export def "scores-comments update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --sharing-key: string # This sharing key must be specified to access to a score or collection with a `privacy` mode set to `privateLink` and the current user is not a collaborator of the document.
   --body-comment: string # The comment text that can includes mentions using the following format: `@[id:username]`.
-  --context: record # The context of the comment (for inline/contextualized comments). A context will include all the information related to the location of the comment (i.e. score parts, range of measure, time position).  (e.g. {measureUuids: [e6a6a60b-8710-f819-9a49-e907b19c6f1f, da83d93c-e3a6-3c73-1bbe-15e5131d6437, 056ec5eb-9213-df56-6ae8-d9b99673dc48], partUuid: 91982db7-2e6d-285e-7a19-76b4bd005b8b, staffUuid: 9395d8f3-f42b-47b6-8c5d-6ba704961ec0, startDpq: 1, startTimePos: 2, stopDpq: 1, stopTimePos: 3}) — shape: {measureUuids: list, partUuid: string, staffIdx?: float, staffUuid?: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float}
+  --context: record # The context of the comment (for inline/contextualized comments). A context will include all the information related to the location of the comment (i.e. score parts, range of measure, time position). (e.g. {measureUuids: [e6a6a60b-8710-f819-9a49-e907b19c6f1f, da83d93c-e3a6-3c73-1bbe-15e5131d6437, 056ec5eb-9213-df56-6ae8-d9b99673dc48], partUuid: 91982db7-2e6d-285e-7a19-76b4bd005b8b, staffUuid: 9395d8f3-f42b-47b6-8c5d-6ba704961ec0, startDpq: 1, startTimePos: 2, stopDpq: 1, stopTimePos: 3}) — shape: {measureUuids: list<string>, partUuid: string, staffIdx?: float, staffUuid?: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float}
   --raw-comment: string # A raw version of the comment, that can be displayed without the mentions. If you use mentions, this property must be set.
   --revision: string # The unique indentifier of the revision of the score where the comment was added. If this property is unspecified or contains "last", the API will automatically take the last revision created.
 ]: any -> record<comment: string, context: record<measureUuids: list<string>, partUuid: string, staffIdx: float, staffUuid: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float>, date: string, id: string, mentions: list<string>, modificationDate: string, rawComment: string, replyTo: string, resolved: bool, resolvedBy: string, revision: string, score: string, spam: bool, type: string, user: string> {
@@ -1828,19 +1837,19 @@ export def "scores-comments update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sharingKey" $sharing_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({score: $score, comment: $comment} | format pattern "/scores/{score}/comments/{comment}") $qp)
-  let body = {"comment": $body_comment, "context": $context, "rawComment": $raw_comment, "revision": $revision} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({score: (encode-path-segment $score), comment: (encode-path-segment $comment)} | format pattern "/scores/{score}/comments/{comment}") $qp)
+  let req_body = {"comment": $body_comment, "context": $context, "rawComment": $raw_comment, "revision": $revision} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Mark the comment as unresolved
 #
 # DELETE /scores/{score}/comments/{comment}/resolved
 # operationId: markScoreCommentUnresolved
-export def "scores-comments-resolved markScoreCommentUnresolved" [
+export def "scores-comments-resolved delete-mark-unresolved" [
   score: string
   comment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1856,7 +1865,7 @@ export def "scores-comments-resolved markScoreCommentUnresolved" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sharingKey" $sharing_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({score: $score, comment: $comment} | format pattern "/scores/{score}/comments/{comment}/resolved") $qp)
+  let full_url = (build-url $base ({score: (encode-path-segment $score), comment: (encode-path-segment $comment)} | format pattern "/scores/{score}/comments/{comment}/resolved") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1866,7 +1875,7 @@ export def "scores-comments-resolved markScoreCommentUnresolved" [
 #
 # PUT /scores/{score}/comments/{comment}/resolved
 # operationId: markScoreCommentResolved
-export def "scores-comments-resolved markScoreCommentResolved" [
+export def "scores-comments-resolved update-mark" [
   score: string
   comment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1882,7 +1891,7 @@ export def "scores-comments-resolved markScoreCommentResolved" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sharingKey" $sharing_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({score: $score, comment: $comment} | format pattern "/scores/{score}/comments/{comment}/resolved") $qp)
+  let full_url = (build-url $base ({score: (encode-path-segment $score), comment: (encode-path-segment $comment)} | format pattern "/scores/{score}/comments/{comment}/resolved") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1892,7 +1901,7 @@ export def "scores-comments-resolved markScoreCommentResolved" [
 #
 # POST /scores/{score}/fork
 # operationId: forkScore
-export def "scores-fork forkScore" [
+export def "scores-fork create" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1903,18 +1912,18 @@ export def "scores-fork forkScore" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --sharing-key: string # This sharing key must be specified to access to a score or collection with a `privacy` mode set to `privateLink` and the current user is not a collaborator of the document.
-  --collection: string # Unique identifier of a collection where the score will be copied. If no collection identifier is provided, the score will be stored in the `root` directory.  (default: root)
+  --collection: string # Unique identifier of a collection where the score will be copied. If no collection identifier is provided, the score will be stored in the `root` directory. (default: root)
 ]: any -> record<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record, id: string, invited: bool, score: string, user: record, userEmail: string>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sharingKey" $sharing_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({score: $score} | format pattern "/scores/{score}/fork") $qp)
-  let body = {"collection": $collection} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({score: (encode-path-segment $score)} | format pattern "/scores/{score}/fork") $qp)
+  let req_body = {"collection": $collection} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List the revisions
@@ -1936,7 +1945,7 @@ export def "scores-revisions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sharingKey" $sharing_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({score: $score} | format pattern "/scores/{score}/revisions") $qp)
+  let full_url = (build-url $base ({score: (encode-path-segment $score)} | format pattern "/scores/{score}/revisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1957,19 +1966,19 @@ export def "scores-revisions create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --autosave: oneof<nothing, bool> # Must be set to `true` if the revision was created automatically.
-  data: string # The data of the score file. It must be a MusicXML 3 file (`vnd.recordare.musicxml` or `vnd.recordare.musicxml+xml`), a MIDI file (`audio/midi`) or a Flat.json (aka Adagio.json) file. Binary payloads (`vnd.recordare.musicxml` and `audio/midi`) can be encoded in Base64, in this case the `dataEncoding` property must match the encoding used for the API request.  (e.g. <score-partwise version="3.0"></score-partwise>)
+  data: string # The data of the score file. It must be a MusicXML 3 file (`vnd.recordare.musicxml` or `vnd.recordare.musicxml+xml`), a MIDI file (`audio/midi`) or a Flat.json (aka Adagio.json) file. Binary payloads (`vnd.recordare.musicxml` and `audio/midi`) can be encoded in Base64, in this case the `dataEncoding` property must match the encoding used for the API request. (e.g. <score-partwise version="3.0"></score-partwise>)
   --data-encoding: string@data-encoding-completer # The optional encoding of the score data. This property must match the encoding used for the `data` property.
   --description: string # A description associated to the revision
 ]: any -> record<autosave: bool, collaborators: list<string>, creationDate: string, description: string, event: string, id: string, statistics: record<additions: float, deletions: float>, user: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({score: $score} | format pattern "/scores/{score}/revisions"))
-  let body = {"autosave": $autosave, "data": $data, "dataEncoding": $data_encoding, "description": $description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({score: (encode-path-segment $score)} | format pattern "/scores/{score}/revisions"))
+  let req_body = {"autosave": $autosave, "data": $data, "dataEncoding": $data_encoding, "description": $description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a score revision
@@ -1992,7 +2001,7 @@ export def "scores-revisions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sharingKey" $sharing_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({score: $score, revision: $revision} | format pattern "/scores/{score}/revisions/{revision}") $qp)
+  let full_url = (build-url $base ({score: (encode-path-segment $score), revision: (encode-path-segment $revision)} | format pattern "/scores/{score}/revisions/{revision}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2018,12 +2027,12 @@ export def "scores-revisions get-data" [
   --sharing-key: string # This sharing key must be specified to access to a score or collection with a `privacy` mode set to `privateLink` and the current user is not a collaborator of the document.
   --parts: string # An optional a set of parts uuid to be exported. This parameter must be composed of parts uuids separated by commas. For example "59df645f-bb1c-f1b4-b573-d2afc4491f94,34ef645f-1aef-f3bc-1564-34cca4492b87".
   --only-cached: oneof<nothing, bool> # Only return files already generated and cached in Flat's production cache. If the file is not availabe, a 404 will be returned
-  --qp-url: oneof<nothing, bool> # Returns a json with the `url` in it instead of redirecting
+  --url: oneof<nothing, bool> # Returns a json with the `url` in it instead of redirecting
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sharingKey" $sharing_key "scalar") (serialize-qp "parts" $parts "scalar") (serialize-qp "onlyCached" $only_cached "scalar") (serialize-qp "url" $qp_url "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({score: $score, revision: $revision, format: $format} | format pattern "/scores/{score}/revisions/{revision}/{format}") $qp)
+  let qp = [(serialize-qp "sharingKey" $sharing_key "scalar") (serialize-qp "parts" $parts "scalar") (serialize-qp "onlyCached" $only_cached "scalar") (serialize-qp "url" $url "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({score: (encode-path-segment $score), revision: (encode-path-segment $revision), format: (encode-path-segment $format)} | format pattern "/scores/{score}/revisions/{revision}/{format}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2046,7 +2055,7 @@ export def "scores-submissions get" [
 ]: nothing -> table<assignment: string, attachments: list<record>, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record<alternateLink: string, id: string, state: string>, grade: float, id: string, maxPoints: float, microsoftGraph: record<alternateLink: string, id: string, state: string>, returnCreator: string, returnDate: string, state: string, submissionDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({score: $score} | format pattern "/scores/{score}/submissions"))
+  let full_url = (build-url $base ({score: (encode-path-segment $score)} | format pattern "/scores/{score}/submissions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2073,7 +2082,7 @@ export def "scores-tracks list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sharingKey" $sharing_key "scalar") (serialize-qp "assignment" $assignment "scalar") (serialize-qp "listAutoTrack" $list_auto_track "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({score: $score} | format pattern "/scores/{score}/tracks") $qp)
+  let full_url = (build-url $base ({score: (encode-path-segment $score)} | format pattern "/scores/{score}/tracks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2098,17 +2107,17 @@ export def "scores-tracks create" [
   --state: string@state-completer-2 # State of the track (default: draft)
   --synchronization-points: list # item shape: {measureUuid?: string, time: float, type: "measure"|"end"}
   --title: string # Title of the track
-  --body-url: string # The URL of the track
+  --url: string # The URL of the track
 ]: any -> record<creationDate: string, creator: string, default: bool, id: string, mediaId: string, modificationDate: string, score: string, state: string, synchronizationPoints: table<measureUuid: string, time: float, type: string>, title: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({score: $score} | format pattern "/scores/{score}/tracks"))
-  let body = {"default": $default, "state": $state, "synchronizationPoints": $synchronization_points, "title": $title, "url": $body_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({score: (encode-path-segment $score)} | format pattern "/scores/{score}/tracks"))
+  let req_body = {"default": $default, "state": $state, "synchronizationPoints": $synchronization_points, "title": $title, "url": $url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Remove an audio or video track linked to the score
@@ -2129,7 +2138,7 @@ export def "scores-tracks delete" [
 ]: nothing -> record<code: string, id: string, message: string, param: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({score: $score, track: $track} | format pattern "/scores/{score}/tracks/{track}"))
+  let full_url = (build-url $base ({score: (encode-path-segment $score), track: (encode-path-segment $track)} | format pattern "/scores/{score}/tracks/{track}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2155,7 +2164,7 @@ export def "scores-tracks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sharingKey" $sharing_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({score: $score, track: $track} | format pattern "/scores/{score}/tracks/{track}") $qp)
+  let full_url = (build-url $base ({score: (encode-path-segment $score), track: (encode-path-segment $track)} | format pattern "/scores/{score}/tracks/{track}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2185,19 +2194,19 @@ export def "scores-tracks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({score: $score, track: $track} | format pattern "/scores/{score}/tracks/{track}"))
-  let body = {"default": $default, "state": $state, "synchronizationPoints": $synchronization_points, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({score: (encode-path-segment $score), track: (encode-path-segment $track)} | format pattern "/scores/{score}/tracks/{track}"))
+  let req_body = {"default": $default, "state": $state, "synchronizationPoints": $synchronization_points, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Untrash a score
 #
 # POST /scores/{score}/untrash
 # operationId: untrashScore
-export def "scores-untrash untrashScore" [
+export def "scores-untrash create" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2210,7 +2219,7 @@ export def "scores-untrash untrashScore" [
 ]: nothing -> record<code: string, id: string, message: string, param: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({score: $score} | format pattern "/scores/{score}/untrash"))
+  let full_url = (build-url $base ({score: (encode-path-segment $score)} | format pattern "/scores/{score}/untrash"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2233,7 +2242,7 @@ export def "users get" [
 ]: nothing -> record<bio: string, coverPicture: string, followersCount: int, followingCount: int, instruments: list<string>, likedScoresCount: int, ownedPublicScoresCount: int, profileTheme: string, registrationDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user: $user} | format pattern "/users/{user}"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/users/{user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2243,7 +2252,7 @@ export def "users get" [
 #
 # GET /users/{user}/likes
 # operationId: gerUserLikes
-export def "users-likes gerUserLikes" [
+export def "users-likes get-ger" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2258,7 +2267,7 @@ export def "users-likes gerUserLikes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user: $user} | format pattern "/users/{user}/likes") $qp)
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/users/{user}/likes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2283,7 +2292,7 @@ export def "users-scores get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "parent" $parent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({user: $user} | format pattern "/users/{user}/scores") $qp)
+  let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/users/{user}/scores") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

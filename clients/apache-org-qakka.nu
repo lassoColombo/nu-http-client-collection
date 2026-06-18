@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "queues get-list-of" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "queues get-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /queues
 # operationId: getListOfQueues
-export def "queues get-list-of" [
+export def "queues get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -151,7 +160,7 @@ export def "queues delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "confirm" $confirm "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({queue_name: $queue_name} | format pattern "/queues/{queue_name}") $qp)
+  let full_url = (build-url $base ({queue_name: (encode-path-segment $queue_name)} | format pattern "/queues/{queue_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -174,7 +183,7 @@ export def "queues-config get" [
 ]: nothing -> record<count: int, message: string, queueMessages: table<contentType: string, createDate: int, data: string, href: string, messageId: string, queueMessageId: string, queueName: string, receivingRegion: string, sendingRegion: string>, queues: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({queue_name: $queue_name} | format pattern "/queues/{queue_name}/config"))
+  let full_url = (build-url $base ({queue_name: (encode-path-segment $queue_name)} | format pattern "/queues/{queue_name}/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -197,7 +206,7 @@ export def "queues-config update" [
 ]: nothing -> record<count: int, message: string, queueMessages: table<contentType: string, createDate: int, data: string, href: string, messageId: string, queueMessageId: string, queueName: string, receivingRegion: string, sendingRegion: string>, queues: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({queue_name: $queue_name} | format pattern "/queues/{queue_name}/config"))
+  let full_url = (build-url $base ({queue_name: (encode-path-segment $queue_name)} | format pattern "/queues/{queue_name}/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -221,7 +230,7 @@ export def "queues-data get-message" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({queue_name: $queue_name, queue_message_id: $queue_message_id} | format pattern "/queues/{queue_name}/data/{queue_message_id}"))
+  let full_url = (build-url $base ({queue_name: (encode-path-segment $queue_name), queue_message_id: (encode-path-segment $queue_message_id)} | format pattern "/queues/{queue_name}/data/{queue_message_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -246,7 +255,7 @@ export def "queues-messages get-next" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({queue_name: $queue_name} | format pattern "/queues/{queue_name}/messages") $qp)
+  let full_url = (build-url $base ({queue_name: (encode-path-segment $queue_name)} | format pattern "/queues/{queue_name}/messages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -256,7 +265,7 @@ export def "queues-messages get-next" [
 #
 # POST /queues/{queueName}/messages
 # operationId: sendMessageBinary
-export def "queues-messages send-message-binary" [
+export def "queues-messages send-binary" [
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -276,18 +285,19 @@ export def "queues-messages send-message-binary" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "regions" $regions "scalar") (serialize-qp "delay" $delay "scalar") (serialize-qp "expiration" $expiration "scalar") (serialize-qp "contentType" $content_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({queue_name: $queue_name} | format pattern "/queues/{queue_name}/messages") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({queue_name: (encode-path-segment $queue_name)} | format pattern "/queues/{queue_name}/messages") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # Acknowledge that Queue Message has been processed.
 #
 # DELETE /queues/{queueName}/messages/{queueMessageId}
 # operationId: ackMessage
-export def "queues-messages ackMessage" [
+export def "queues-messages delete-ack" [
   queue_name: string
   queue_message_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -301,7 +311,7 @@ export def "queues-messages ackMessage" [
 ]: nothing -> record<count: int, message: string, queueMessages: table<contentType: string, createDate: int, data: string, href: string, messageId: string, queueMessageId: string, queueName: string, receivingRegion: string, sendingRegion: string>, queues: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({queue_name: $queue_name, queue_message_id: $queue_message_id} | format pattern "/queues/{queue_name}/messages/{queue_message_id}"))
+  let full_url = (build-url $base ({queue_name: (encode-path-segment $queue_name), queue_message_id: (encode-path-segment $queue_message_id)} | format pattern "/queues/{queue_name}/messages/{queue_message_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

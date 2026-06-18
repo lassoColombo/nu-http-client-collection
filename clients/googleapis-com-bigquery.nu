@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -76,7 +85,7 @@ def projection-completer [] { ["full" "minimal"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects bigqueryprojectslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -100,7 +109,7 @@ export def commands []: nothing -> table {
 #
 # GET /projects
 # operationId: bigquery.projects.list
-export def "projects bigqueryprojectslist" [
+export def "projects list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +141,7 @@ export def "projects bigqueryprojectslist" [
 #
 # GET /projects/{projectId}/datasets
 # operationId: bigquery.datasets.list
-export def "projects-datasets bigquerydatasetslist" [
+export def "projects-datasets list" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -150,14 +159,14 @@ export def "projects-datasets bigquerydatasetslist" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --all: oneof<nothing, bool> # Whether to list all datasets, including hidden ones
-  --filter: string # An expression for filtering the results of the request by label. The syntax is "labels.<name>[:<value>]". Multiple filters can be ANDed together by connecting with a space. Example: "labels.department:receiving labels.active". See Filtering datasets using labels for details.
+  --filter: string # An expression for filtering the results of the request by label. The syntax is "labels.[:]". Multiple filters can be ANDed together by connecting with a space. Example: "labels.department:receiving labels.active". See Filtering datasets using labels for details.
   --max-results: int # The maximum number of results to return
   --page-token: string # Page token, returned by a previous call, to request the next page of results
 ]: nothing -> record<datasets: table<datasetReference: record, friendlyName: string, id: string, kind: string, labels: record, location: string>, etag: string, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "all" $all "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/datasets") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/datasets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,7 +180,7 @@ export def "projects-datasets bigquerydatasetslist" [
 # --datasetReference shape: {datasetId?: string, projectId?: string}
 # --defaultEncryptionConfiguration shape: {kmsKeyName?: string}
 # --tags item shape: {tagKey?: string, tagValue?: string}
-export def "projects-datasets bigquerydatasetsinsert" [
+export def "projects-datasets create" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -215,19 +224,19 @@ export def "projects-datasets bigquerydatasetsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/datasets") $qp)
-  let body = {"access": $access, "creationTime": $creation_time, "datasetReference": $dataset_reference, "defaultCollation": $default_collation, "defaultEncryptionConfiguration": $default_encryption_configuration, "defaultPartitionExpirationMs": $default_partition_expiration_ms, "defaultRoundingMode": $default_rounding_mode, "defaultTableExpirationMs": $default_table_expiration_ms, "description": $description, "etag": $etag, "friendlyName": $friendly_name, "id": $id, "isCaseInsensitive": $is_case_insensitive, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "maxTimeTravelHours": $max_time_travel_hours, "satisfiesPzs": $satisfies_pzs, "selfLink": $self_link, "storageBillingModel": $storage_billing_model, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/datasets") $qp)
+  let req_body = {"access": $access, "creationTime": $creation_time, "datasetReference": $dataset_reference, "defaultCollation": $default_collation, "defaultEncryptionConfiguration": $default_encryption_configuration, "defaultPartitionExpirationMs": $default_partition_expiration_ms, "defaultRoundingMode": $default_rounding_mode, "defaultTableExpirationMs": $default_table_expiration_ms, "description": $description, "etag": $etag, "friendlyName": $friendly_name, "id": $id, "isCaseInsensitive": $is_case_insensitive, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "maxTimeTravelHours": $max_time_travel_hours, "satisfiesPzs": $satisfies_pzs, "selfLink": $self_link, "storageBillingModel": $storage_billing_model, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the dataset specified by the datasetId value. Before you can delete a dataset, you must delete all its tables, either manually or by specifying deleteContents. Immediately after deletion, you can create another dataset with the same name.
 #
 # DELETE /projects/{projectId}/datasets/{datasetId}
 # operationId: bigquery.datasets.delete
-export def "projects-datasets bigquerydatasetsdelete" [
+export def "projects-datasets delete" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -250,7 +259,7 @@ export def "projects-datasets bigquerydatasetsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "deleteContents" $delete_contents "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -260,7 +269,7 @@ export def "projects-datasets bigquerydatasetsdelete" [
 #
 # GET /projects/{projectId}/datasets/{datasetId}
 # operationId: bigquery.datasets.get
-export def "projects-datasets bigquerydatasetsget" [
+export def "projects-datasets get" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -282,7 +291,7 @@ export def "projects-datasets bigquerydatasetsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -296,7 +305,7 @@ export def "projects-datasets bigquerydatasetsget" [
 # --datasetReference shape: {datasetId?: string, projectId?: string}
 # --defaultEncryptionConfiguration shape: {kmsKeyName?: string}
 # --tags item shape: {tagKey?: string, tagValue?: string}
-export def "projects-datasets bigquerydatasetspatch" [
+export def "projects-datasets update-by-projectId-datasetId" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -341,12 +350,12 @@ export def "projects-datasets bigquerydatasetspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp)
-  let body = {"access": $access, "creationTime": $creation_time, "datasetReference": $dataset_reference, "defaultCollation": $default_collation, "defaultEncryptionConfiguration": $default_encryption_configuration, "defaultPartitionExpirationMs": $default_partition_expiration_ms, "defaultRoundingMode": $default_rounding_mode, "defaultTableExpirationMs": $default_table_expiration_ms, "description": $description, "etag": $etag, "friendlyName": $friendly_name, "id": $id, "isCaseInsensitive": $is_case_insensitive, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "maxTimeTravelHours": $max_time_travel_hours, "satisfiesPzs": $satisfies_pzs, "selfLink": $self_link, "storageBillingModel": $storage_billing_model, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp)
+  let req_body = {"access": $access, "creationTime": $creation_time, "datasetReference": $dataset_reference, "defaultCollation": $default_collation, "defaultEncryptionConfiguration": $default_encryption_configuration, "defaultPartitionExpirationMs": $default_partition_expiration_ms, "defaultRoundingMode": $default_rounding_mode, "defaultTableExpirationMs": $default_table_expiration_ms, "description": $description, "etag": $etag, "friendlyName": $friendly_name, "id": $id, "isCaseInsensitive": $is_case_insensitive, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "maxTimeTravelHours": $max_time_travel_hours, "satisfiesPzs": $satisfies_pzs, "selfLink": $self_link, "storageBillingModel": $storage_billing_model, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates information in an existing dataset. The update method replaces the entire dataset resource, whereas the patch method only replaces fields that are provided in the submitted dataset resource.
@@ -357,7 +366,7 @@ export def "projects-datasets bigquerydatasetspatch" [
 # --datasetReference shape: {datasetId?: string, projectId?: string}
 # --defaultEncryptionConfiguration shape: {kmsKeyName?: string}
 # --tags item shape: {tagKey?: string, tagValue?: string}
-export def "projects-datasets bigquerydatasetsupdate" [
+export def "projects-datasets update-by-projectId-datasetId-1" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -402,19 +411,19 @@ export def "projects-datasets bigquerydatasetsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp)
-  let body = {"access": $access, "creationTime": $creation_time, "datasetReference": $dataset_reference, "defaultCollation": $default_collation, "defaultEncryptionConfiguration": $default_encryption_configuration, "defaultPartitionExpirationMs": $default_partition_expiration_ms, "defaultRoundingMode": $default_rounding_mode, "defaultTableExpirationMs": $default_table_expiration_ms, "description": $description, "etag": $etag, "friendlyName": $friendly_name, "id": $id, "isCaseInsensitive": $is_case_insensitive, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "maxTimeTravelHours": $max_time_travel_hours, "satisfiesPzs": $satisfies_pzs, "selfLink": $self_link, "storageBillingModel": $storage_billing_model, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp)
+  let req_body = {"access": $access, "creationTime": $creation_time, "datasetReference": $dataset_reference, "defaultCollation": $default_collation, "defaultEncryptionConfiguration": $default_encryption_configuration, "defaultPartitionExpirationMs": $default_partition_expiration_ms, "defaultRoundingMode": $default_rounding_mode, "defaultTableExpirationMs": $default_table_expiration_ms, "description": $description, "etag": $etag, "friendlyName": $friendly_name, "id": $id, "isCaseInsensitive": $is_case_insensitive, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "maxTimeTravelHours": $max_time_travel_hours, "satisfiesPzs": $satisfies_pzs, "selfLink": $self_link, "storageBillingModel": $storage_billing_model, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all models in the specified dataset. Requires the READER dataset role. After retrieving the list of models, you can get information about a particular model by calling the models.get method.
 #
 # GET /projects/{projectId}/datasets/{datasetId}/models
 # operationId: bigquery.models.list
-export def "projects-datasets-models bigquerymodelslist" [
+export def "projects-datasets-models list" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -438,7 +447,7 @@ export def "projects-datasets-models bigquerymodelslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -448,7 +457,7 @@ export def "projects-datasets-models bigquerymodelslist" [
 #
 # DELETE /projects/{projectId}/datasets/{datasetId}/models/{modelId}
 # operationId: bigquery.models.delete
-export def "projects-datasets-models bigquerymodelsdelete" [
+export def "projects-datasets-models delete" [
   project_id: string
   dataset_id: string
   model_id: string
@@ -471,7 +480,7 @@ export def "projects-datasets-models bigquerymodelsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id, model_id: $model_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models/{model_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), model_id: (encode-path-segment $model_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models/{model_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -481,7 +490,7 @@ export def "projects-datasets-models bigquerymodelsdelete" [
 #
 # GET /projects/{projectId}/datasets/{datasetId}/models/{modelId}
 # operationId: bigquery.models.get
-export def "projects-datasets-models bigquerymodelsget" [
+export def "projects-datasets-models get" [
   project_id: string
   dataset_id: string
   model_id: string
@@ -504,7 +513,7 @@ export def "projects-datasets-models bigquerymodelsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id, model_id: $model_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models/{model_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), model_id: (encode-path-segment $model_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models/{model_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -521,7 +530,7 @@ export def "projects-datasets-models bigquerymodelsget" [
 # --labelColumns item shape: {name?: string, type?: record}
 # --modelReference shape: {datasetId?: string, modelId?: string, projectId?: string}
 # --trainingRuns item shape: {dataSplitResult?: record, evaluationMetrics?: record, modelLevelGlobalExplanation?: record, trainingOptions?: record, vertexAiModelId?: string}
-export def "projects-datasets-models bigquerymodelspatch" [
+export def "projects-datasets-models update" [
   project_id: string
   dataset_id: string
   model_id: string
@@ -554,19 +563,19 @@ export def "projects-datasets-models bigquerymodelspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id, model_id: $model_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models/{model_id}") $qp)
-  let body = {"bestTrialId": $best_trial_id, "description": $description, "encryptionConfiguration": $encryption_configuration, "expirationTime": $expiration_time, "friendlyName": $friendly_name, "hparamSearchSpaces": $hparam_search_spaces, "labels": $labels, "modelReference": $model_reference, "trainingRuns": $training_runs} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), model_id: (encode-path-segment $model_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models/{model_id}") $qp)
+  let req_body = {"bestTrialId": $best_trial_id, "description": $description, "encryptionConfiguration": $encryption_configuration, "expirationTime": $expiration_time, "friendlyName": $friendly_name, "hparamSearchSpaces": $hparam_search_spaces, "labels": $labels, "modelReference": $model_reference, "trainingRuns": $training_runs} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all routines in the specified dataset. Requires the READER dataset role.
 #
 # GET /projects/{projectId}/datasets/{datasetId}/routines
 # operationId: bigquery.routines.list
-export def "projects-datasets-routines bigqueryroutineslist" [
+export def "projects-datasets-routines list" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -592,7 +601,7 @@ export def "projects-datasets-routines bigqueryroutineslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -607,8 +616,8 @@ export def "projects-datasets-routines bigqueryroutineslist" [
 # --returnTableType shape: {columns?: list}
 # --returnType shape: {arrayElementType?: record, structType?: record, typeKind?: "TYPE_KIND_UNSPECIFIED"|"INT64"|"BOOL"|"FLOAT64"|"STRING"|"BYTES"|"TIMESTAMP"|"DATE"|"TIME"|"DATETIME"|"INTERVAL"|"GEOGRAPHY"|"NUMERIC"|"BIGNUMERIC"|"JSON"|"ARRAY"|"STRUCT"}
 # --routineReference shape: {datasetId?: string, projectId?: string, routineId?: string}
-# --sparkOptions shape: {archiveUris?: list, connection?: string, containerImage?: string, fileUris?: list, jarUris?: list, mainClass?: string, mainFileUri?: string, properties?: record, pyFileUris?: list, runtimeVersion?: string}
-export def "projects-datasets-routines bigqueryroutinesinsert" [
+# --sparkOptions shape: {archiveUris?: list<string>, connection?: string, containerImage?: string, fileUris?: list<string>, jarUris?: list<string>, mainClass?: string, mainFileUri?: string, properties?: record, pyFileUris?: list<string>, runtimeVersion?: string}
+export def "projects-datasets-routines create" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -630,33 +639,33 @@ export def "projects-datasets-routines bigqueryroutinesinsert" [
   --definition-body: string # Required. The body of the routine. For functions, this is the expression in the AS clause. If language=SQL, it is the substring inside (but excluding) the parentheses. For example, for the function created with the following statement: `CREATE FUNCTION JoinLines(x string, y string) as (concat(x, "\n", y))` The definition_body is `concat(x, "\n", y)` (\n is not replaced with linebreak). If language=JAVASCRIPT, it is the evaluated string in the AS clause. For example, for the function created with the following statement: `CREATE FUNCTION f() RETURNS STRING LANGUAGE js AS 'return "\n";\n'` The definition_body is `return "\n";\n` Note that both \n are replaced with linebreaks.
   --description: string # Optional. The description of the routine, if defined.
   --determinism-level: string@determinism-level-completer # Optional. The determinism level of the JavaScript UDF, if defined.
-  --imported-libraries: list # Optional. If language = "JAVASCRIPT", this field stores the path of the imported JAVASCRIPT libraries.
+  --imported-libraries: list<string> # Optional. If language = "JAVASCRIPT", this field stores the path of the imported JAVASCRIPT libraries.
   --language: string@language-completer # Optional. Defaults to "SQL" if remote_function_options field is absent, not set otherwise.
   --remote-function-options: record # Options for a remote user-defined function. — shape: {connection?: string, endpoint?: string, maxBatchingRows?: string, userDefinedContext?: record}
   --return-table-type: record # A table type — shape: {columns?: list}
   --return-type: record # The data type of a variable such as a function argument. Examples include: * INT64: `{"typeKind": "INT64"}` * ARRAY: { "typeKind": "ARRAY", "arrayElementType": {"typeKind": "STRING"} } * STRUCT>: { "typeKind": "STRUCT", "structType": { "fields": [ { "name": "x", "type": {"typeKind": "STRING"} }, { "name": "y", "type": { "typeKind": "ARRAY", "arrayElementType": {"typeKind": "DATE"} } } ] } } — shape: {arrayElementType?: record, structType?: record, typeKind?: "TYPE_KIND_UNSPECIFIED"|"INT64"|"BOOL"|"FLOAT64"|"STRING"|"BYTES"|"TIMESTAMP"|"DATE"|"TIME"|"DATETIME"|"INTERVAL"|"GEOGRAPHY"|"NUMERIC"|"BIGNUMERIC"|"JSON"|"ARRAY"|"STRUCT"}
   --routine-reference: record # shape: {datasetId?: string, projectId?: string, routineId?: string}
   --routine-type: string@routine-type-completer # Required. The type of routine.
-  --spark-options: record # Options for a user-defined Spark routine. — shape: {archiveUris?: list, connection?: string, containerImage?: string, fileUris?: list, jarUris?: list, mainClass?: string, mainFileUri?: string, properties?: record, pyFileUris?: list, runtimeVersion?: string}
+  --spark-options: record # Options for a user-defined Spark routine. — shape: {archiveUris?: list<string>, connection?: string, containerImage?: string, fileUris?: list<string>, jarUris?: list<string>, mainClass?: string, mainFileUri?: string, properties?: record, pyFileUris?: list<string>, runtimeVersion?: string}
   --strict-mode: oneof<nothing, bool> # Optional. Can be set for procedures only. If true (default), the definition body will be validated in the creation and the updates of the procedure. For procedures with an argument of ANY TYPE, the definition body validtion is not supported at creation/update time, and thus this field must be set to false explicitly.
 ]: any -> record<arguments: table<argumentKind: string, dataType: record, mode: string, name: string>, creationTime: string, definitionBody: string, description: string, determinismLevel: string, etag: string, importedLibraries: list<string>, language: string, lastModifiedTime: string, remoteFunctionOptions: record<connection: string, endpoint: string, maxBatchingRows: string, userDefinedContext: record>, returnTableType: record<columns: list<record>>, returnType: record<arrayElementType: any, structType: record<fields: list>, typeKind: string>, routineReference: record<datasetId: string, projectId: string, routineId: string>, routineType: string, sparkOptions: record<archiveUris: list<string>, connection: string, containerImage: string, fileUris: list<string>, jarUris: list<string>, mainClass: string, mainFileUri: string, properties: record, pyFileUris: list<string>, runtimeVersion: string>, strictMode: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines") $qp)
-  let body = {"arguments": $arguments, "definitionBody": $definition_body, "description": $description, "determinismLevel": $determinism_level, "importedLibraries": $imported_libraries, "language": $language, "remoteFunctionOptions": $remote_function_options, "returnTableType": $return_table_type, "returnType": $return_type, "routineReference": $routine_reference, "routineType": $routine_type, "sparkOptions": $spark_options, "strictMode": $strict_mode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines") $qp)
+  let req_body = {"arguments": $arguments, "definitionBody": $definition_body, "description": $description, "determinismLevel": $determinism_level, "importedLibraries": $imported_libraries, "language": $language, "remoteFunctionOptions": $remote_function_options, "returnTableType": $return_table_type, "returnType": $return_type, "routineReference": $routine_reference, "routineType": $routine_type, "sparkOptions": $spark_options, "strictMode": $strict_mode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the routine specified by routineId from the dataset.
 #
 # DELETE /projects/{projectId}/datasets/{datasetId}/routines/{routineId}
 # operationId: bigquery.routines.delete
-export def "projects-datasets-routines bigqueryroutinesdelete" [
+export def "projects-datasets-routines delete" [
   project_id: string
   dataset_id: string
   routine_id: string
@@ -679,7 +688,7 @@ export def "projects-datasets-routines bigqueryroutinesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id, routine_id: $routine_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines/{routine_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), routine_id: (encode-path-segment $routine_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines/{routine_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -689,7 +698,7 @@ export def "projects-datasets-routines bigqueryroutinesdelete" [
 #
 # GET /projects/{projectId}/datasets/{datasetId}/routines/{routineId}
 # operationId: bigquery.routines.get
-export def "projects-datasets-routines bigqueryroutinesget" [
+export def "projects-datasets-routines get" [
   project_id: string
   dataset_id: string
   routine_id: string
@@ -713,7 +722,7 @@ export def "projects-datasets-routines bigqueryroutinesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id, routine_id: $routine_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines/{routine_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), routine_id: (encode-path-segment $routine_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines/{routine_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -728,8 +737,8 @@ export def "projects-datasets-routines bigqueryroutinesget" [
 # --returnTableType shape: {columns?: list}
 # --returnType shape: {arrayElementType?: record, structType?: record, typeKind?: "TYPE_KIND_UNSPECIFIED"|"INT64"|"BOOL"|"FLOAT64"|"STRING"|"BYTES"|"TIMESTAMP"|"DATE"|"TIME"|"DATETIME"|"INTERVAL"|"GEOGRAPHY"|"NUMERIC"|"BIGNUMERIC"|"JSON"|"ARRAY"|"STRUCT"}
 # --routineReference shape: {datasetId?: string, projectId?: string, routineId?: string}
-# --sparkOptions shape: {archiveUris?: list, connection?: string, containerImage?: string, fileUris?: list, jarUris?: list, mainClass?: string, mainFileUri?: string, properties?: record, pyFileUris?: list, runtimeVersion?: string}
-export def "projects-datasets-routines bigqueryroutinesupdate" [
+# --sparkOptions shape: {archiveUris?: list<string>, connection?: string, containerImage?: string, fileUris?: list<string>, jarUris?: list<string>, mainClass?: string, mainFileUri?: string, properties?: record, pyFileUris?: list<string>, runtimeVersion?: string}
+export def "projects-datasets-routines update" [
   project_id: string
   dataset_id: string
   routine_id: string
@@ -752,33 +761,33 @@ export def "projects-datasets-routines bigqueryroutinesupdate" [
   --definition-body: string # Required. The body of the routine. For functions, this is the expression in the AS clause. If language=SQL, it is the substring inside (but excluding) the parentheses. For example, for the function created with the following statement: `CREATE FUNCTION JoinLines(x string, y string) as (concat(x, "\n", y))` The definition_body is `concat(x, "\n", y)` (\n is not replaced with linebreak). If language=JAVASCRIPT, it is the evaluated string in the AS clause. For example, for the function created with the following statement: `CREATE FUNCTION f() RETURNS STRING LANGUAGE js AS 'return "\n";\n'` The definition_body is `return "\n";\n` Note that both \n are replaced with linebreaks.
   --description: string # Optional. The description of the routine, if defined.
   --determinism-level: string@determinism-level-completer # Optional. The determinism level of the JavaScript UDF, if defined.
-  --imported-libraries: list # Optional. If language = "JAVASCRIPT", this field stores the path of the imported JAVASCRIPT libraries.
+  --imported-libraries: list<string> # Optional. If language = "JAVASCRIPT", this field stores the path of the imported JAVASCRIPT libraries.
   --language: string@language-completer # Optional. Defaults to "SQL" if remote_function_options field is absent, not set otherwise.
   --remote-function-options: record # Options for a remote user-defined function. — shape: {connection?: string, endpoint?: string, maxBatchingRows?: string, userDefinedContext?: record}
   --return-table-type: record # A table type — shape: {columns?: list}
   --return-type: record # The data type of a variable such as a function argument. Examples include: * INT64: `{"typeKind": "INT64"}` * ARRAY: { "typeKind": "ARRAY", "arrayElementType": {"typeKind": "STRING"} } * STRUCT>: { "typeKind": "STRUCT", "structType": { "fields": [ { "name": "x", "type": {"typeKind": "STRING"} }, { "name": "y", "type": { "typeKind": "ARRAY", "arrayElementType": {"typeKind": "DATE"} } } ] } } — shape: {arrayElementType?: record, structType?: record, typeKind?: "TYPE_KIND_UNSPECIFIED"|"INT64"|"BOOL"|"FLOAT64"|"STRING"|"BYTES"|"TIMESTAMP"|"DATE"|"TIME"|"DATETIME"|"INTERVAL"|"GEOGRAPHY"|"NUMERIC"|"BIGNUMERIC"|"JSON"|"ARRAY"|"STRUCT"}
   --routine-reference: record # shape: {datasetId?: string, projectId?: string, routineId?: string}
   --routine-type: string@routine-type-completer # Required. The type of routine.
-  --spark-options: record # Options for a user-defined Spark routine. — shape: {archiveUris?: list, connection?: string, containerImage?: string, fileUris?: list, jarUris?: list, mainClass?: string, mainFileUri?: string, properties?: record, pyFileUris?: list, runtimeVersion?: string}
+  --spark-options: record # Options for a user-defined Spark routine. — shape: {archiveUris?: list<string>, connection?: string, containerImage?: string, fileUris?: list<string>, jarUris?: list<string>, mainClass?: string, mainFileUri?: string, properties?: record, pyFileUris?: list<string>, runtimeVersion?: string}
   --strict-mode: oneof<nothing, bool> # Optional. Can be set for procedures only. If true (default), the definition body will be validated in the creation and the updates of the procedure. For procedures with an argument of ANY TYPE, the definition body validtion is not supported at creation/update time, and thus this field must be set to false explicitly.
 ]: any -> record<arguments: table<argumentKind: string, dataType: record, mode: string, name: string>, creationTime: string, definitionBody: string, description: string, determinismLevel: string, etag: string, importedLibraries: list<string>, language: string, lastModifiedTime: string, remoteFunctionOptions: record<connection: string, endpoint: string, maxBatchingRows: string, userDefinedContext: record>, returnTableType: record<columns: list<record>>, returnType: record<arrayElementType: any, structType: record<fields: list>, typeKind: string>, routineReference: record<datasetId: string, projectId: string, routineId: string>, routineType: string, sparkOptions: record<archiveUris: list<string>, connection: string, containerImage: string, fileUris: list<string>, jarUris: list<string>, mainClass: string, mainFileUri: string, properties: record, pyFileUris: list<string>, runtimeVersion: string>, strictMode: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id, routine_id: $routine_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines/{routine_id}") $qp)
-  let body = {"arguments": $arguments, "definitionBody": $definition_body, "description": $description, "determinismLevel": $determinism_level, "importedLibraries": $imported_libraries, "language": $language, "remoteFunctionOptions": $remote_function_options, "returnTableType": $return_table_type, "returnType": $return_type, "routineReference": $routine_reference, "routineType": $routine_type, "sparkOptions": $spark_options, "strictMode": $strict_mode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), routine_id: (encode-path-segment $routine_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines/{routine_id}") $qp)
+  let req_body = {"arguments": $arguments, "definitionBody": $definition_body, "description": $description, "determinismLevel": $determinism_level, "importedLibraries": $imported_libraries, "language": $language, "remoteFunctionOptions": $remote_function_options, "returnTableType": $return_table_type, "returnType": $return_type, "routineReference": $routine_reference, "routineType": $routine_type, "sparkOptions": $spark_options, "strictMode": $strict_mode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all tables in the specified dataset. Requires the READER dataset role.
 #
 # GET /projects/{projectId}/datasets/{datasetId}/tables
 # operationId: bigquery.tables.list
-export def "projects-datasets-tables bigquerytableslist" [
+export def "projects-datasets-tables list" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -802,7 +811,7 @@ export def "projects-datasets-tables bigquerytableslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -813,9 +822,9 @@ export def "projects-datasets-tables bigquerytableslist" [
 # POST /projects/{projectId}/datasets/{datasetId}/tables
 # operationId: bigquery.tables.insert
 # --cloneDefinition shape: {baseTableReference?: record, cloneTime?: string}
-# --clustering shape: {fields?: list}
+# --clustering shape: {fields?: list<string>}
 # --encryptionConfiguration shape: {kmsKeyName?: string}
-# --externalDataConfiguration shape: {autodetect?: bool, avroOptions?: record, bigtableOptions?: record, compression?: string, connectionId?: string, csvOptions?: record, decimalTargetTypes?: list, googleSheetsOptions?: record, hivePartitioningOptions?: record, ignoreUnknownValues?: bool, maxBadRecords?: int, metadataCacheMode?: string, objectMetadata?: string, parquetOptions?: record, referenceFileSchemaUri?: string, schema?: record, sourceFormat?: string, sourceUris?: list}
+# --externalDataConfiguration shape: {autodetect?: bool, avroOptions?: record, bigtableOptions?: record, compression?: string, connectionId?: string, csvOptions?: record, decimalTargetTypes?: list<string>, googleSheetsOptions?: record, hivePartitioningOptions?: record, ignoreUnknownValues?: bool, maxBadRecords?: int, metadataCacheMode?: string, objectMetadata?: string, parquetOptions?: record, referenceFileSchemaUri?: string, schema?: record, sourceFormat?: string, sourceUris?: list<string>}
 # --materializedView shape: {allow_non_incremental_definition?: bool, enableRefresh?: bool, lastRefreshTime?: string, maxStaleness?: string, query?: string, refreshIntervalMs?: string}
 # --model shape: {modelOptions?: record, trainingRuns?: list}
 # --rangePartitioning shape: {field?: string, range?: record}
@@ -825,7 +834,7 @@ export def "projects-datasets-tables bigquerytableslist" [
 # --tableReference shape: {datasetId?: string, projectId?: string, tableId?: string}
 # --timePartitioning shape: {expirationMs?: string, field?: string, requirePartitionFilter?: bool, type?: string}
 # --view shape: {query?: string, useExplicitColumnNames?: bool, useLegacySql?: bool, userDefinedFunctionResources?: list}
-export def "projects-datasets-tables bigquerytablesinsert" [
+export def "projects-datasets-tables create" [
   project_id: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -844,7 +853,7 @@ export def "projects-datasets-tables bigquerytablesinsert" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --clone-definition: record # shape: {baseTableReference?: record, cloneTime?: string}
-  --clustering: record # shape: {fields?: list}
+  --clustering: record # shape: {fields?: list<string>}
   --creation-time: string # [Output-only] The time when this table was created, in milliseconds since the epoch. (format: int64)
   --default-collation: string # [Output-only] The default collation of the table.
   --default-rounding-mode: string # [Output-only] The default rounding mode of the table.
@@ -852,7 +861,7 @@ export def "projects-datasets-tables bigquerytablesinsert" [
   --encryption-configuration: record # shape: {kmsKeyName?: string}
   --etag: string # [Output-only] A hash of the table metadata. Used to ensure there were no concurrent modifications to the resource when attempting an update. Not guaranteed to change when the table contents or the fields numRows, numBytes, numLongTermBytes or lastModifiedTime change.
   --expiration-time: string # [Optional] The time when this table expires, in milliseconds since the epoch. If not present, the table will persist indefinitely. Expired tables will be deleted and their storage reclaimed. The defaultTableExpirationMs property of the encapsulating dataset can be used to set a default expirationTime on newly created tables. (format: int64)
-  --external-data-configuration: record # shape: {autodetect?: bool, avroOptions?: record, bigtableOptions?: record, compression?: string, connectionId?: string, csvOptions?: record, decimalTargetTypes?: list, googleSheetsOptions?: record, hivePartitioningOptions?: record, ignoreUnknownValues?: bool, maxBadRecords?: int, metadataCacheMode?: string, objectMetadata?: string, parquetOptions?: record, referenceFileSchemaUri?: string, schema?: record, sourceFormat?: string, sourceUris?: list}
+  --external-data-configuration: record # shape: {autodetect?: bool, avroOptions?: record, bigtableOptions?: record, compression?: string, connectionId?: string, csvOptions?: record, decimalTargetTypes?: list<string>, googleSheetsOptions?: record, hivePartitioningOptions?: record, ignoreUnknownValues?: bool, maxBadRecords?: int, metadataCacheMode?: string, objectMetadata?: string, parquetOptions?: record, referenceFileSchemaUri?: string, schema?: record, sourceFormat?: string, sourceUris?: list<string>}
   --friendly-name: string # [Optional] A descriptive name for this table.
   --id: string # [Output-only] An opaque ID uniquely identifying the table.
   --kind: string # [Output-only] The type of the resource. (default: bigquery#table)
@@ -889,19 +898,19 @@ export def "projects-datasets-tables bigquerytablesinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables") $qp)
-  let body = {"cloneDefinition": $clone_definition, "clustering": $clustering, "creationTime": $creation_time, "defaultCollation": $default_collation, "defaultRoundingMode": $default_rounding_mode, "description": $description, "encryptionConfiguration": $encryption_configuration, "etag": $etag, "expirationTime": $expiration_time, "externalDataConfiguration": $external_data_configuration, "friendlyName": $friendly_name, "id": $id, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "materializedView": $materialized_view, "maxStaleness": $max_staleness, "model": $model, "numBytes": $num_bytes, "numLongTermBytes": $num_long_term_bytes, "numPhysicalBytes": $num_physical_bytes, "numRows": $num_rows, "num_active_logical_bytes": $num_active_logical_bytes, "num_active_physical_bytes": $num_active_physical_bytes, "num_long_term_logical_bytes": $num_long_term_logical_bytes, "num_long_term_physical_bytes": $num_long_term_physical_bytes, "num_partitions": $num_partitions, "num_time_travel_physical_bytes": $num_time_travel_physical_bytes, "num_total_logical_bytes": $num_total_logical_bytes, "num_total_physical_bytes": $num_total_physical_bytes, "rangePartitioning": $range_partitioning, "requirePartitionFilter": $require_partition_filter, "schema": $schema, "selfLink": $self_link, "snapshotDefinition": $snapshot_definition, "streamingBuffer": $streaming_buffer, "tableReference": $table_reference, "timePartitioning": $time_partitioning, "type": $type, "view": $view} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables") $qp)
+  let req_body = {"cloneDefinition": $clone_definition, "clustering": $clustering, "creationTime": $creation_time, "defaultCollation": $default_collation, "defaultRoundingMode": $default_rounding_mode, "description": $description, "encryptionConfiguration": $encryption_configuration, "etag": $etag, "expirationTime": $expiration_time, "externalDataConfiguration": $external_data_configuration, "friendlyName": $friendly_name, "id": $id, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "materializedView": $materialized_view, "maxStaleness": $max_staleness, "model": $model, "numBytes": $num_bytes, "numLongTermBytes": $num_long_term_bytes, "numPhysicalBytes": $num_physical_bytes, "numRows": $num_rows, "num_active_logical_bytes": $num_active_logical_bytes, "num_active_physical_bytes": $num_active_physical_bytes, "num_long_term_logical_bytes": $num_long_term_logical_bytes, "num_long_term_physical_bytes": $num_long_term_physical_bytes, "num_partitions": $num_partitions, "num_time_travel_physical_bytes": $num_time_travel_physical_bytes, "num_total_logical_bytes": $num_total_logical_bytes, "num_total_physical_bytes": $num_total_physical_bytes, "rangePartitioning": $range_partitioning, "requirePartitionFilter": $require_partition_filter, "schema": $schema, "selfLink": $self_link, "snapshotDefinition": $snapshot_definition, "streamingBuffer": $streaming_buffer, "tableReference": $table_reference, "timePartitioning": $time_partitioning, "type": $type, "view": $view} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the table specified by tableId from the dataset. If the table contains data, all the data will be deleted.
 #
 # DELETE /projects/{projectId}/datasets/{datasetId}/tables/{tableId}
 # operationId: bigquery.tables.delete
-export def "projects-datasets-tables bigquerytablesdelete" [
+export def "projects-datasets-tables delete" [
   project_id: string
   dataset_id: string
   table_id: string
@@ -924,7 +933,7 @@ export def "projects-datasets-tables bigquerytablesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id, table_id: $table_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -934,7 +943,7 @@ export def "projects-datasets-tables bigquerytablesdelete" [
 #
 # GET /projects/{projectId}/datasets/{datasetId}/tables/{tableId}
 # operationId: bigquery.tables.get
-export def "projects-datasets-tables bigquerytablesget" [
+export def "projects-datasets-tables get" [
   project_id: string
   dataset_id: string
   table_id: string
@@ -959,7 +968,7 @@ export def "projects-datasets-tables bigquerytablesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id, table_id: $table_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -970,9 +979,9 @@ export def "projects-datasets-tables bigquerytablesget" [
 # PATCH /projects/{projectId}/datasets/{datasetId}/tables/{tableId}
 # operationId: bigquery.tables.patch
 # --cloneDefinition shape: {baseTableReference?: record, cloneTime?: string}
-# --clustering shape: {fields?: list}
+# --clustering shape: {fields?: list<string>}
 # --encryptionConfiguration shape: {kmsKeyName?: string}
-# --externalDataConfiguration shape: {autodetect?: bool, avroOptions?: record, bigtableOptions?: record, compression?: string, connectionId?: string, csvOptions?: record, decimalTargetTypes?: list, googleSheetsOptions?: record, hivePartitioningOptions?: record, ignoreUnknownValues?: bool, maxBadRecords?: int, metadataCacheMode?: string, objectMetadata?: string, parquetOptions?: record, referenceFileSchemaUri?: string, schema?: record, sourceFormat?: string, sourceUris?: list}
+# --externalDataConfiguration shape: {autodetect?: bool, avroOptions?: record, bigtableOptions?: record, compression?: string, connectionId?: string, csvOptions?: record, decimalTargetTypes?: list<string>, googleSheetsOptions?: record, hivePartitioningOptions?: record, ignoreUnknownValues?: bool, maxBadRecords?: int, metadataCacheMode?: string, objectMetadata?: string, parquetOptions?: record, referenceFileSchemaUri?: string, schema?: record, sourceFormat?: string, sourceUris?: list<string>}
 # --materializedView shape: {allow_non_incremental_definition?: bool, enableRefresh?: bool, lastRefreshTime?: string, maxStaleness?: string, query?: string, refreshIntervalMs?: string}
 # --model shape: {modelOptions?: record, trainingRuns?: list}
 # --rangePartitioning shape: {field?: string, range?: record}
@@ -982,7 +991,7 @@ export def "projects-datasets-tables bigquerytablesget" [
 # --tableReference shape: {datasetId?: string, projectId?: string, tableId?: string}
 # --timePartitioning shape: {expirationMs?: string, field?: string, requirePartitionFilter?: bool, type?: string}
 # --view shape: {query?: string, useExplicitColumnNames?: bool, useLegacySql?: bool, userDefinedFunctionResources?: list}
-export def "projects-datasets-tables bigquerytablespatch" [
+export def "projects-datasets-tables update-by-projectId-datasetId-tableId" [
   project_id: string
   dataset_id: string
   table_id: string
@@ -1003,7 +1012,7 @@ export def "projects-datasets-tables bigquerytablespatch" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --autodetect-schema: oneof<nothing, bool> # When true will autodetect schema, else will keep original schema
   --clone-definition: record # shape: {baseTableReference?: record, cloneTime?: string}
-  --clustering: record # shape: {fields?: list}
+  --clustering: record # shape: {fields?: list<string>}
   --creation-time: string # [Output-only] The time when this table was created, in milliseconds since the epoch. (format: int64)
   --default-collation: string # [Output-only] The default collation of the table.
   --default-rounding-mode: string # [Output-only] The default rounding mode of the table.
@@ -1011,7 +1020,7 @@ export def "projects-datasets-tables bigquerytablespatch" [
   --encryption-configuration: record # shape: {kmsKeyName?: string}
   --etag: string # [Output-only] A hash of the table metadata. Used to ensure there were no concurrent modifications to the resource when attempting an update. Not guaranteed to change when the table contents or the fields numRows, numBytes, numLongTermBytes or lastModifiedTime change.
   --expiration-time: string # [Optional] The time when this table expires, in milliseconds since the epoch. If not present, the table will persist indefinitely. Expired tables will be deleted and their storage reclaimed. The defaultTableExpirationMs property of the encapsulating dataset can be used to set a default expirationTime on newly created tables. (format: int64)
-  --external-data-configuration: record # shape: {autodetect?: bool, avroOptions?: record, bigtableOptions?: record, compression?: string, connectionId?: string, csvOptions?: record, decimalTargetTypes?: list, googleSheetsOptions?: record, hivePartitioningOptions?: record, ignoreUnknownValues?: bool, maxBadRecords?: int, metadataCacheMode?: string, objectMetadata?: string, parquetOptions?: record, referenceFileSchemaUri?: string, schema?: record, sourceFormat?: string, sourceUris?: list}
+  --external-data-configuration: record # shape: {autodetect?: bool, avroOptions?: record, bigtableOptions?: record, compression?: string, connectionId?: string, csvOptions?: record, decimalTargetTypes?: list<string>, googleSheetsOptions?: record, hivePartitioningOptions?: record, ignoreUnknownValues?: bool, maxBadRecords?: int, metadataCacheMode?: string, objectMetadata?: string, parquetOptions?: record, referenceFileSchemaUri?: string, schema?: record, sourceFormat?: string, sourceUris?: list<string>}
   --friendly-name: string # [Optional] A descriptive name for this table.
   --id: string # [Output-only] An opaque ID uniquely identifying the table.
   --kind: string # [Output-only] The type of the resource. (default: bigquery#table)
@@ -1048,12 +1057,12 @@ export def "projects-datasets-tables bigquerytablespatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "autodetect_schema" $autodetect_schema "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id, table_id: $table_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp)
-  let body = {"cloneDefinition": $clone_definition, "clustering": $clustering, "creationTime": $creation_time, "defaultCollation": $default_collation, "defaultRoundingMode": $default_rounding_mode, "description": $description, "encryptionConfiguration": $encryption_configuration, "etag": $etag, "expirationTime": $expiration_time, "externalDataConfiguration": $external_data_configuration, "friendlyName": $friendly_name, "id": $id, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "materializedView": $materialized_view, "maxStaleness": $max_staleness, "model": $model, "numBytes": $num_bytes, "numLongTermBytes": $num_long_term_bytes, "numPhysicalBytes": $num_physical_bytes, "numRows": $num_rows, "num_active_logical_bytes": $num_active_logical_bytes, "num_active_physical_bytes": $num_active_physical_bytes, "num_long_term_logical_bytes": $num_long_term_logical_bytes, "num_long_term_physical_bytes": $num_long_term_physical_bytes, "num_partitions": $num_partitions, "num_time_travel_physical_bytes": $num_time_travel_physical_bytes, "num_total_logical_bytes": $num_total_logical_bytes, "num_total_physical_bytes": $num_total_physical_bytes, "rangePartitioning": $range_partitioning, "requirePartitionFilter": $require_partition_filter, "schema": $schema, "selfLink": $self_link, "snapshotDefinition": $snapshot_definition, "streamingBuffer": $streaming_buffer, "tableReference": $table_reference, "timePartitioning": $time_partitioning, "type": $type, "view": $view} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp)
+  let req_body = {"cloneDefinition": $clone_definition, "clustering": $clustering, "creationTime": $creation_time, "defaultCollation": $default_collation, "defaultRoundingMode": $default_rounding_mode, "description": $description, "encryptionConfiguration": $encryption_configuration, "etag": $etag, "expirationTime": $expiration_time, "externalDataConfiguration": $external_data_configuration, "friendlyName": $friendly_name, "id": $id, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "materializedView": $materialized_view, "maxStaleness": $max_staleness, "model": $model, "numBytes": $num_bytes, "numLongTermBytes": $num_long_term_bytes, "numPhysicalBytes": $num_physical_bytes, "numRows": $num_rows, "num_active_logical_bytes": $num_active_logical_bytes, "num_active_physical_bytes": $num_active_physical_bytes, "num_long_term_logical_bytes": $num_long_term_logical_bytes, "num_long_term_physical_bytes": $num_long_term_physical_bytes, "num_partitions": $num_partitions, "num_time_travel_physical_bytes": $num_time_travel_physical_bytes, "num_total_logical_bytes": $num_total_logical_bytes, "num_total_physical_bytes": $num_total_physical_bytes, "rangePartitioning": $range_partitioning, "requirePartitionFilter": $require_partition_filter, "schema": $schema, "selfLink": $self_link, "snapshotDefinition": $snapshot_definition, "streamingBuffer": $streaming_buffer, "tableReference": $table_reference, "timePartitioning": $time_partitioning, "type": $type, "view": $view} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Updates information in an existing table. The update method replaces the entire table resource, whereas the patch method only replaces fields that are provided in the submitted table resource.
@@ -1061,9 +1070,9 @@ export def "projects-datasets-tables bigquerytablespatch" [
 # PUT /projects/{projectId}/datasets/{datasetId}/tables/{tableId}
 # operationId: bigquery.tables.update
 # --cloneDefinition shape: {baseTableReference?: record, cloneTime?: string}
-# --clustering shape: {fields?: list}
+# --clustering shape: {fields?: list<string>}
 # --encryptionConfiguration shape: {kmsKeyName?: string}
-# --externalDataConfiguration shape: {autodetect?: bool, avroOptions?: record, bigtableOptions?: record, compression?: string, connectionId?: string, csvOptions?: record, decimalTargetTypes?: list, googleSheetsOptions?: record, hivePartitioningOptions?: record, ignoreUnknownValues?: bool, maxBadRecords?: int, metadataCacheMode?: string, objectMetadata?: string, parquetOptions?: record, referenceFileSchemaUri?: string, schema?: record, sourceFormat?: string, sourceUris?: list}
+# --externalDataConfiguration shape: {autodetect?: bool, avroOptions?: record, bigtableOptions?: record, compression?: string, connectionId?: string, csvOptions?: record, decimalTargetTypes?: list<string>, googleSheetsOptions?: record, hivePartitioningOptions?: record, ignoreUnknownValues?: bool, maxBadRecords?: int, metadataCacheMode?: string, objectMetadata?: string, parquetOptions?: record, referenceFileSchemaUri?: string, schema?: record, sourceFormat?: string, sourceUris?: list<string>}
 # --materializedView shape: {allow_non_incremental_definition?: bool, enableRefresh?: bool, lastRefreshTime?: string, maxStaleness?: string, query?: string, refreshIntervalMs?: string}
 # --model shape: {modelOptions?: record, trainingRuns?: list}
 # --rangePartitioning shape: {field?: string, range?: record}
@@ -1073,7 +1082,7 @@ export def "projects-datasets-tables bigquerytablespatch" [
 # --tableReference shape: {datasetId?: string, projectId?: string, tableId?: string}
 # --timePartitioning shape: {expirationMs?: string, field?: string, requirePartitionFilter?: bool, type?: string}
 # --view shape: {query?: string, useExplicitColumnNames?: bool, useLegacySql?: bool, userDefinedFunctionResources?: list}
-export def "projects-datasets-tables bigquerytablesupdate" [
+export def "projects-datasets-tables update-by-projectId-datasetId-tableId-1" [
   project_id: string
   dataset_id: string
   table_id: string
@@ -1094,7 +1103,7 @@ export def "projects-datasets-tables bigquerytablesupdate" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --autodetect-schema: oneof<nothing, bool> # When true will autodetect schema, else will keep original schema
   --clone-definition: record # shape: {baseTableReference?: record, cloneTime?: string}
-  --clustering: record # shape: {fields?: list}
+  --clustering: record # shape: {fields?: list<string>}
   --creation-time: string # [Output-only] The time when this table was created, in milliseconds since the epoch. (format: int64)
   --default-collation: string # [Output-only] The default collation of the table.
   --default-rounding-mode: string # [Output-only] The default rounding mode of the table.
@@ -1102,7 +1111,7 @@ export def "projects-datasets-tables bigquerytablesupdate" [
   --encryption-configuration: record # shape: {kmsKeyName?: string}
   --etag: string # [Output-only] A hash of the table metadata. Used to ensure there were no concurrent modifications to the resource when attempting an update. Not guaranteed to change when the table contents or the fields numRows, numBytes, numLongTermBytes or lastModifiedTime change.
   --expiration-time: string # [Optional] The time when this table expires, in milliseconds since the epoch. If not present, the table will persist indefinitely. Expired tables will be deleted and their storage reclaimed. The defaultTableExpirationMs property of the encapsulating dataset can be used to set a default expirationTime on newly created tables. (format: int64)
-  --external-data-configuration: record # shape: {autodetect?: bool, avroOptions?: record, bigtableOptions?: record, compression?: string, connectionId?: string, csvOptions?: record, decimalTargetTypes?: list, googleSheetsOptions?: record, hivePartitioningOptions?: record, ignoreUnknownValues?: bool, maxBadRecords?: int, metadataCacheMode?: string, objectMetadata?: string, parquetOptions?: record, referenceFileSchemaUri?: string, schema?: record, sourceFormat?: string, sourceUris?: list}
+  --external-data-configuration: record # shape: {autodetect?: bool, avroOptions?: record, bigtableOptions?: record, compression?: string, connectionId?: string, csvOptions?: record, decimalTargetTypes?: list<string>, googleSheetsOptions?: record, hivePartitioningOptions?: record, ignoreUnknownValues?: bool, maxBadRecords?: int, metadataCacheMode?: string, objectMetadata?: string, parquetOptions?: record, referenceFileSchemaUri?: string, schema?: record, sourceFormat?: string, sourceUris?: list<string>}
   --friendly-name: string # [Optional] A descriptive name for this table.
   --id: string # [Output-only] An opaque ID uniquely identifying the table.
   --kind: string # [Output-only] The type of the resource. (default: bigquery#table)
@@ -1139,19 +1148,19 @@ export def "projects-datasets-tables bigquerytablesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "autodetect_schema" $autodetect_schema "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id, table_id: $table_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp)
-  let body = {"cloneDefinition": $clone_definition, "clustering": $clustering, "creationTime": $creation_time, "defaultCollation": $default_collation, "defaultRoundingMode": $default_rounding_mode, "description": $description, "encryptionConfiguration": $encryption_configuration, "etag": $etag, "expirationTime": $expiration_time, "externalDataConfiguration": $external_data_configuration, "friendlyName": $friendly_name, "id": $id, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "materializedView": $materialized_view, "maxStaleness": $max_staleness, "model": $model, "numBytes": $num_bytes, "numLongTermBytes": $num_long_term_bytes, "numPhysicalBytes": $num_physical_bytes, "numRows": $num_rows, "num_active_logical_bytes": $num_active_logical_bytes, "num_active_physical_bytes": $num_active_physical_bytes, "num_long_term_logical_bytes": $num_long_term_logical_bytes, "num_long_term_physical_bytes": $num_long_term_physical_bytes, "num_partitions": $num_partitions, "num_time_travel_physical_bytes": $num_time_travel_physical_bytes, "num_total_logical_bytes": $num_total_logical_bytes, "num_total_physical_bytes": $num_total_physical_bytes, "rangePartitioning": $range_partitioning, "requirePartitionFilter": $require_partition_filter, "schema": $schema, "selfLink": $self_link, "snapshotDefinition": $snapshot_definition, "streamingBuffer": $streaming_buffer, "tableReference": $table_reference, "timePartitioning": $time_partitioning, "type": $type, "view": $view} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp)
+  let req_body = {"cloneDefinition": $clone_definition, "clustering": $clustering, "creationTime": $creation_time, "defaultCollation": $default_collation, "defaultRoundingMode": $default_rounding_mode, "description": $description, "encryptionConfiguration": $encryption_configuration, "etag": $etag, "expirationTime": $expiration_time, "externalDataConfiguration": $external_data_configuration, "friendlyName": $friendly_name, "id": $id, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "materializedView": $materialized_view, "maxStaleness": $max_staleness, "model": $model, "numBytes": $num_bytes, "numLongTermBytes": $num_long_term_bytes, "numPhysicalBytes": $num_physical_bytes, "numRows": $num_rows, "num_active_logical_bytes": $num_active_logical_bytes, "num_active_physical_bytes": $num_active_physical_bytes, "num_long_term_logical_bytes": $num_long_term_logical_bytes, "num_long_term_physical_bytes": $num_long_term_physical_bytes, "num_partitions": $num_partitions, "num_time_travel_physical_bytes": $num_time_travel_physical_bytes, "num_total_logical_bytes": $num_total_logical_bytes, "num_total_physical_bytes": $num_total_physical_bytes, "rangePartitioning": $range_partitioning, "requirePartitionFilter": $require_partition_filter, "schema": $schema, "selfLink": $self_link, "snapshotDefinition": $snapshot_definition, "streamingBuffer": $streaming_buffer, "tableReference": $table_reference, "timePartitioning": $time_partitioning, "type": $type, "view": $view} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves table data from a specified set of rows. Requires the READER dataset role.
 #
 # GET /projects/{projectId}/datasets/{datasetId}/tables/{tableId}/data
 # operationId: bigquery.tabledata.list
-export def "projects-datasets-tables-data bigquerytabledatalist" [
+export def "projects-datasets-tables-data list" [
   project_id: string
   dataset_id: string
   table_id: string
@@ -1178,7 +1187,7 @@ export def "projects-datasets-tables-data bigquerytabledatalist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id, table_id: $table_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}/data") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}/data") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1189,7 +1198,7 @@ export def "projects-datasets-tables-data bigquerytabledatalist" [
 # POST /projects/{projectId}/datasets/{datasetId}/tables/{tableId}/insertAll
 # operationId: bigquery.tabledata.insertAll
 # --rows item shape: {insertId?: string, json?: record}
-export def "projects-datasets-tables-insert-all bigquerytabledatainsertAll" [
+export def "projects-datasets-tables-insert-all create" [
   project_id: string
   dataset_id: string
   table_id: string
@@ -1218,19 +1227,19 @@ export def "projects-datasets-tables-insert-all bigquerytabledatainsertAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id, table_id: $table_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}/insertAll") $qp)
-  let body = {"ignoreUnknownValues": $ignore_unknown_values, "kind": $kind, "rows": $rows, "skipInvalidRows": $skip_invalid_rows, "templateSuffix": $template_suffix} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}/insertAll") $qp)
+  let req_body = {"ignoreUnknownValues": $ignore_unknown_values, "kind": $kind, "rows": $rows, "skipInvalidRows": $skip_invalid_rows, "templateSuffix": $template_suffix} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists all row access policies on the specified table.
 #
 # GET /projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies
 # operationId: bigquery.rowAccessPolicies.list
-export def "projects-datasets-tables-row-access-policies bigqueryrowAccessPolicieslist" [
+export def "projects-datasets-tables-row-access-policies list" [
   project_id: string
   dataset_id: string
   table_id: string
@@ -1255,7 +1264,7 @@ export def "projects-datasets-tables-row-access-policies bigqueryrowAccessPolici
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, dataset_id: $dataset_id, table_id: $table_id} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}/rowAccessPolicies") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}/rowAccessPolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1265,7 +1274,7 @@ export def "projects-datasets-tables-row-access-policies bigqueryrowAccessPolici
 #
 # GET /projects/{projectId}/jobs
 # operationId: bigquery.jobs.list
-export def "projects-jobs bigqueryjobslist" [
+export def "projects-jobs list" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1289,12 +1298,12 @@ export def "projects-jobs bigqueryjobslist" [
   --page-token: string # Page token, returned by a previous call, to request the next page of results
   --parent-job-id: string # If set, retrieves only jobs whose parent is this job. Otherwise, retrieves only jobs which have no parent
   --projection: string@projection-completer # Restrict information returned to a set of selected fields
-  --state-filter: list # Filter for job state
+  --state-filter: list<string> # Filter for job state
 ]: nothing -> record<etag: string, jobs: table<configuration: record, errorResult: record, id: string, jobReference: record, kind: string, state: string, statistics: record, status: record, user_email: string>, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "allUsers" $all_users "scalar") (serialize-qp "maxCreationTime" $max_creation_time "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "minCreationTime" $min_creation_time "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "parentJobId" $parent_job_id "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "stateFilter" $state_filter "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/jobs") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1304,7 +1313,7 @@ export def "projects-jobs bigqueryjobslist" [
 #
 # POST /projects/{projectId}/jobs
 # operationId: bigquery.jobs.insert
-export def "projects-jobs bigqueryjobsinsert" [
+export def "projects-jobs create" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1327,18 +1336,19 @@ export def "projects-jobs bigqueryjobsinsert" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/jobs") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/jobs") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $req_body
 }
 
 # Returns information about a specific job. Job information is available for a six month period after creation. Requires that you're the person who ran the job, or have the Is Owner project role.
 #
 # GET /projects/{projectId}/jobs/{jobId}
 # operationId: bigquery.jobs.get
-export def "projects-jobs bigqueryjobsget" [
+export def "projects-jobs get" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1361,7 +1371,7 @@ export def "projects-jobs bigqueryjobsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, job_id: $job_id} | format pattern "/projects/{project_id}/jobs/{job_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/projects/{project_id}/jobs/{job_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1371,7 +1381,7 @@ export def "projects-jobs bigqueryjobsget" [
 #
 # POST /projects/{projectId}/jobs/{jobId}/cancel
 # operationId: bigquery.jobs.cancel
-export def "projects-jobs-cancel bigqueryjobscancel" [
+export def "projects-jobs-cancel cancel" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1394,7 +1404,7 @@ export def "projects-jobs-cancel bigqueryjobscancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, job_id: $job_id} | format pattern "/projects/{project_id}/jobs/{job_id}/cancel") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/projects/{project_id}/jobs/{job_id}/cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1404,7 +1414,7 @@ export def "projects-jobs-cancel bigqueryjobscancel" [
 #
 # DELETE /projects/{projectId}/jobs/{jobId}/delete
 # operationId: bigquery.jobs.delete
-export def "projects-jobs-delete bigqueryjobsdelete" [
+export def "projects-jobs-delete delete" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1427,7 +1437,7 @@ export def "projects-jobs-delete bigqueryjobsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, job_id: $job_id} | format pattern "/projects/{project_id}/jobs/{job_id}/delete") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/projects/{project_id}/jobs/{job_id}/delete") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1440,7 +1450,7 @@ export def "projects-jobs-delete bigqueryjobsdelete" [
 # --connectionProperties item shape: {key?: string, value?: string}
 # --defaultDataset shape: {datasetId?: string, projectId?: string}
 # --queryParameters item shape: {name?: string, parameterType?: record, parameterValue?: record}
-export def "projects-queries bigqueryjobsquery" [
+export def "projects-queries list" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1480,19 +1490,19 @@ export def "projects-queries bigqueryjobsquery" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/queries") $qp)
-  let body = {"connectionProperties": $connection_properties, "continuous": $continuous, "createSession": $create_session, "defaultDataset": $default_dataset, "dryRun": $body_dry_run, "kind": $kind, "labels": $labels, "location": $location, "maxResults": $max_results, "maximumBytesBilled": $maximum_bytes_billed, "parameterMode": $parameter_mode, "preserveNulls": $preserve_nulls, "query": $query, "queryParameters": $query_parameters, "requestId": $request_id, "timeoutMs": $timeout_ms, "useLegacySql": $use_legacy_sql, "useQueryCache": $use_query_cache} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/queries") $qp)
+  let req_body = {"connectionProperties": $connection_properties, "continuous": $continuous, "createSession": $create_session, "defaultDataset": $default_dataset, "dryRun": $body_dry_run, "kind": $kind, "labels": $labels, "location": $location, "maxResults": $max_results, "maximumBytesBilled": $maximum_bytes_billed, "parameterMode": $parameter_mode, "preserveNulls": $preserve_nulls, "query": $query, "queryParameters": $query_parameters, "requestId": $request_id, "timeoutMs": $timeout_ms, "useLegacySql": $use_legacy_sql, "useQueryCache": $use_query_cache} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves the results of a query job.
 #
 # GET /projects/{projectId}/queries/{jobId}
 # operationId: bigquery.jobs.getQueryResults
-export def "projects-queries bigqueryjobsgetQueryResults" [
+export def "projects-queries get-list-results" [
   project_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1519,7 +1529,7 @@ export def "projects-queries bigqueryjobsgetQueryResults" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "timeoutMs" $timeout_ms "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, job_id: $job_id} | format pattern "/projects/{project_id}/queries/{job_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/projects/{project_id}/queries/{job_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1529,7 +1539,7 @@ export def "projects-queries bigqueryjobsgetQueryResults" [
 #
 # GET /projects/{projectId}/serviceAccount
 # operationId: bigquery.projects.getServiceAccount
-export def "projects-service-account bigqueryprojectsgetServiceAccount" [
+export def "projects-service-account get" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1550,7 +1560,7 @@ export def "projects-service-account bigqueryprojectsgetServiceAccount" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/serviceAccount") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/serviceAccount") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1561,7 +1571,7 @@ export def "projects-service-account bigqueryprojectsgetServiceAccount" [
 # POST /{resource}:getIamPolicy
 # operationId: bigquery.tables.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "tables bigquerytablesgetIamPolicy" [
+export def "tables get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1584,12 +1594,12 @@ export def "tables bigquerytablesgetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/{resource}:getIamPolicy") $qp)
-  let body = {"options": $options} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/{resource}:getIamPolicy") $qp)
+  let req_body = {"options": $options} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sets the access control policy on the specified resource. Replaces any existing policy. Can return `NOT_FOUND`, `INVALID_ARGUMENT`, and `PERMISSION_DENIED` errors.
@@ -1597,7 +1607,7 @@ export def "tables bigquerytablesgetIamPolicy" [
 # POST /{resource}:setIamPolicy
 # operationId: bigquery.tables.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "tables bigquerytablessetIamPolicy" [
+export def "tables update-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1621,19 +1631,19 @@ export def "tables bigquerytablessetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/{resource}:setIamPolicy") $qp)
-  let body = {"policy": $policy, "updateMask": $update_mask} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/{resource}:setIamPolicy") $qp)
+  let req_body = {"policy": $policy, "updateMask": $update_mask} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns permissions that a caller has on the specified resource. If the resource does not exist, this will return an empty set of permissions, not a `NOT_FOUND` error. Note: This operation is designed to be used for building permission-aware UIs and command-line tools, not for authorization checking. This operation may "fail open" without warning.
 #
 # POST /{resource}:testIamPermissions
 # operationId: bigquery.tables.testIamPermissions
-export def "tables bigquerytablestestIamPermissions" [
+export def "tables test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1650,16 +1660,16 @@ export def "tables bigquerytablestestIamPermissions" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --permissions: list # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
+  --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/{resource}:testIamPermissions") $qp)
-  let body = {"permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/{resource}:testIamPermissions") $qp)
+  let req_body = {"permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

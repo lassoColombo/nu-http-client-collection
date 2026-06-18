@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://proxy.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def geo-match-level-completer [] { ["area-code" "country" "overlay" "radius"] }
@@ -146,11 +156,12 @@ export def "services create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   let full_url = (build-url $base "/v1/Services")
-  let body = {"CallbackUrl": $callback_url, "ChatInstanceSid": $chat_instance_sid, "DefaultTtl": $default_ttl, "GeoMatchLevel": $geo_match_level, "InterceptCallbackUrl": $intercept_callback_url, "NumberSelectionBehavior": $number_selection_behavior, "OutOfSessionCallbackUrl": $out_of_session_callback_url, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CallbackUrl": $callback_url, "ChatInstanceSid": $chat_instance_sid, "DefaultTtl": $default_ttl, "GeoMatchLevel": $geo_match_level, "InterceptCallbackUrl": $intercept_callback_url, "NumberSelectionBehavior": $number_selection_behavior, "OutOfSessionCallbackUrl": $out_of_session_callback_url, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Phone Numbers in the Proxy Number Pool for a Service. A maximum of 100 records will be returned per page.
@@ -174,7 +185,7 @@ export def "services-phone-numbers list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/PhoneNumbers") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/PhoneNumbers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,18 +206,19 @@ export def "services-phone-numbers create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-reserved: oneof<nothing, bool> # Whether the new phone number should be reserved and not be assigned to a participant using proxy pool logic. See [Reserved Phone Numbers](https://www.twilio.com/docs/proxy/reserved-phone-numbers) for more information.
-  --phone-number: string # The phone number in [E.164](https://www.twilio.com/docs/glossary/what-e164) format.  E.164 phone numbers consist of a + followed by the country code and subscriber number without punctuation characters. For example, +14155551234. (format: phone-number)
+  --phone-number: string # The phone number in [E.164](https://www.twilio.com/docs/glossary/what-e164) format. E.164 phone numbers consist of a + followed by the country code and subscriber number without punctuation characters. For example, +14155551234. (format: phone-number)
   --sid: string # The SID of a Twilio [IncomingPhoneNumber](https://www.twilio.com/docs/phone-numbers/api/incomingphonenumber-resource) resource that represents the Twilio Number you would like to assign to your Proxy Service.
 ]: any -> record<account_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, friendly_name: string, in_use: int, is_reserved: bool, iso_country: string, phone_number: string, service_sid: string, sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/PhoneNumbers"))
-  let body = {"IsReserved": $is_reserved, "PhoneNumber": $phone_number, "Sid": $sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/PhoneNumbers"))
+  let req_body = {"IsReserved": $is_reserved, "PhoneNumber": $phone_number, "Sid": $sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific Phone Number from a Service.
@@ -227,7 +239,7 @@ export def "services-phone-numbers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/PhoneNumbers/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/PhoneNumbers/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -251,7 +263,7 @@ export def "services-phone-numbers get" [
 ]: nothing -> record<account_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, friendly_name: string, in_use: int, is_reserved: bool, iso_country: string, phone_number: string, service_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/PhoneNumbers/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/PhoneNumbers/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -277,12 +289,13 @@ export def "services-phone-numbers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/PhoneNumbers/{sid}"))
-  let body = {"IsReserved": $is_reserved} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/PhoneNumbers/{sid}"))
+  let req_body = {"IsReserved": $is_reserved} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Sessions for the Service. A maximum of 100 records will be returned per page.
@@ -306,7 +319,7 @@ export def "services-sessions list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Sessions") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/Sessions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -336,12 +349,13 @@ export def "services-sessions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Sessions"))
-  let body = {"DateExpiry": $date_expiry, "Mode": $mode, "Participants": $participants, "Status": $status, "Ttl": $ttl, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/Sessions"))
+  let req_body = {"DateExpiry": $date_expiry, "Mode": $mode, "Participants": $participants, "Status": $status, "Ttl": $ttl, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Interactions for a Session. A maximum of 100 records will be returned per page.
@@ -366,7 +380,7 @@ export def "services-sessions-interactions list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid, session_sid: $session_sid} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Interactions") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), session_sid: (encode-path-segment $session_sid)} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Interactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -391,7 +405,7 @@ export def "services-sessions-interactions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, session_sid: $session_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Interactions/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), session_sid: (encode-path-segment $session_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Interactions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -416,7 +430,7 @@ export def "services-sessions-interactions get" [
 ]: nothing -> record<account_sid: string, data: string, date_created: string, date_updated: string, inbound_participant_sid: string, inbound_resource_sid: string, inbound_resource_status: string, inbound_resource_type: string, inbound_resource_url: string, outbound_participant_sid: string, outbound_resource_sid: string, outbound_resource_status: string, outbound_resource_type: string, outbound_resource_url: string, service_sid: string, session_sid: string, sid: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, session_sid: $session_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Interactions/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), session_sid: (encode-path-segment $session_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Interactions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -444,7 +458,7 @@ export def "services-sessions-participants list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid, session_sid: $session_sid} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Participants") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), session_sid: (encode-path-segment $session_sid)} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Participants") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -473,12 +487,13 @@ export def "services-sessions-participants create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, session_sid: $session_sid} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Participants"))
-  let body = {"FriendlyName": $friendly_name, "Identifier": $identifier, "ProxyIdentifier": $proxy_identifier, "ProxyIdentifierSid": $proxy_identifier_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), session_sid: (encode-path-segment $session_sid)} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Participants"))
+  let req_body = {"FriendlyName": $friendly_name, "Identifier": $identifier, "ProxyIdentifier": $proxy_identifier, "ProxyIdentifierSid": $proxy_identifier_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Services/{ServiceSid}/Sessions/{SessionSid}/Participants/{ParticipantSid}/MessageInteractions
@@ -503,13 +518,13 @@ export def "services-sessions-participants-message-interactions list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid, session_sid: $session_sid, participant_sid: $participant_sid} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Participants/{participant_sid}/MessageInteractions") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), session_sid: (encode-path-segment $session_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Participants/{participant_sid}/MessageInteractions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Create a new message Interaction to send directly from your system to one [Participant](https://www.twilio.com/docs/proxy/api/participant).  The `inbound` properties for the Interaction will always be empty.
+# Create a new message Interaction to send directly from your system to one [Participant](https://www.twilio.com/docs/proxy/api/participant). The `inbound` properties for the Interaction will always be empty.
 #
 # POST /v1/Services/{ServiceSid}/Sessions/{SessionSid}/Participants/{ParticipantSid}/MessageInteractions
 # operationId: CreateMessageInteraction
@@ -525,18 +540,19 @@ export def "services-sessions-participants-message-interactions create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-body: string # The message to send to the participant
-  --media-url: list # Reserved. Not currently supported.
+  --body: string # The message to send to the participant
+  --media-url: list<string> # Reserved. Not currently supported.
 ]: any -> record<account_sid: string, data: string, date_created: string, date_updated: string, inbound_participant_sid: string, inbound_resource_sid: string, inbound_resource_status: string, inbound_resource_type: string, inbound_resource_url: string, outbound_participant_sid: string, outbound_resource_sid: string, outbound_resource_status: string, outbound_resource_type: string, outbound_resource_url: string, participant_sid: string, service_sid: string, session_sid: string, sid: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, session_sid: $session_sid, participant_sid: $participant_sid} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Participants/{participant_sid}/MessageInteractions"))
-  let body = {"Body": $body_body, "MediaUrl": $media_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), session_sid: (encode-path-segment $session_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Participants/{participant_sid}/MessageInteractions"))
+  let req_body = {"Body": $body, "MediaUrl": $media_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Services/{ServiceSid}/Sessions/{SessionSid}/Participants/{ParticipantSid}/MessageInteractions/{Sid}
@@ -558,7 +574,7 @@ export def "services-sessions-participants-message-interactions get" [
 ]: nothing -> record<account_sid: string, data: string, date_created: string, date_updated: string, inbound_participant_sid: string, inbound_resource_sid: string, inbound_resource_status: string, inbound_resource_type: string, inbound_resource_url: string, outbound_participant_sid: string, outbound_resource_sid: string, outbound_resource_status: string, outbound_resource_type: string, outbound_resource_url: string, participant_sid: string, service_sid: string, session_sid: string, sid: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, session_sid: $session_sid, participant_sid: $participant_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Participants/{participant_sid}/MessageInteractions/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), session_sid: (encode-path-segment $session_sid), participant_sid: (encode-path-segment $participant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Participants/{participant_sid}/MessageInteractions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -583,7 +599,7 @@ export def "services-sessions-participants delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, session_sid: $session_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Participants/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), session_sid: (encode-path-segment $session_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Participants/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -608,7 +624,7 @@ export def "services-sessions-participants get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_deleted: string, date_updated: string, friendly_name: string, identifier: string, links: record, proxy_identifier: string, proxy_identifier_sid: string, service_sid: string, session_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, session_sid: $session_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Participants/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), session_sid: (encode-path-segment $session_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Sessions/{session_sid}/Participants/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -632,7 +648,7 @@ export def "services-sessions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Sessions/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Sessions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -656,7 +672,7 @@ export def "services-sessions get" [
 ]: nothing -> record<account_sid: string, closed_reason: string, date_created: string, date_ended: string, date_expiry: string, date_last_interaction: string, date_started: string, date_updated: string, links: record, mode: string, service_sid: string, sid: string, status: string, ttl: int, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Sessions/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Sessions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -684,12 +700,13 @@ export def "services-sessions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Sessions/{sid}"))
-  let body = {"DateExpiry": $date_expiry, "Status": $status, "Ttl": $ttl} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/Sessions/{sid}"))
+  let req_body = {"DateExpiry": $date_expiry, "Status": $status, "Ttl": $ttl} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Retrieve a list of all Short Codes in the Proxy Number Pool for the Service. A maximum of 100 records will be returned per page.
@@ -713,7 +730,7 @@ export def "services-short-codes list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/ShortCodes") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/ShortCodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -738,12 +755,13 @@ export def "services-short-codes create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/ShortCodes"))
-  let body = {"Sid": $sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/ShortCodes"))
+  let req_body = {"Sid": $sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific Short Code from a Service.
@@ -764,7 +782,7 @@ export def "services-short-codes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/ShortCodes/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/ShortCodes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -788,7 +806,7 @@ export def "services-short-codes get" [
 ]: nothing -> record<account_sid: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, date_created: string, date_updated: string, is_reserved: bool, iso_country: string, service_sid: string, short_code: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/ShortCodes/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/ShortCodes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -814,12 +832,13 @@ export def "services-short-codes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/ShortCodes/{sid}"))
-  let body = {"IsReserved": $is_reserved} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/ShortCodes/{sid}"))
+  let req_body = {"IsReserved": $is_reserved} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Delete a specific Service.
@@ -839,7 +858,7 @@ export def "services delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Services/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -862,7 +881,7 @@ export def "services get" [
 ]: nothing -> record<account_sid: string, callback_url: string, chat_instance_sid: string, date_created: string, date_updated: string, default_ttl: int, geo_match_level: string, intercept_callback_url: string, links: record, number_selection_behavior: string, out_of_session_callback_url: string, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Services/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -894,10 +913,11 @@ export def "services update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://proxy.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Services/{sid}"))
-  let body = {"CallbackUrl": $callback_url, "ChatInstanceSid": $chat_instance_sid, "DefaultTtl": $default_ttl, "GeoMatchLevel": $geo_match_level, "InterceptCallbackUrl": $intercept_callback_url, "NumberSelectionBehavior": $number_selection_behavior, "OutOfSessionCallbackUrl": $out_of_session_callback_url, "UniqueName": $unique_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{sid}"))
+  let req_body = {"CallbackUrl": $callback_url, "ChatInstanceSid": $chat_instance_sid, "DefaultTtl": $default_ttl, "GeoMatchLevel": $geo_match_level, "InterceptCallbackUrl": $intercept_callback_url, "NumberSelectionBehavior": $number_selection_behavior, "OutOfSessionCallbackUrl": $out_of_session_callback_url, "UniqueName": $unique_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }

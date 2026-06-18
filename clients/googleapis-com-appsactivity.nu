@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def grouping-strategy-completer [] { ["driveUi" "none"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activities appsactivityactivitieslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activities list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # GET /activities
 # operationId: appsactivity.activities.list
-export def "activities appsactivityactivitieslist" [
+export def "activities list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,7 +126,7 @@ export def "activities appsactivityactivitieslist" [
   --grouping-strategy: string@grouping-strategy-completer # Indicates the strategy to use when grouping singleEvents items in the associated combinedEvent object.
   --page-size: int # The maximum number of events to return on a page. The response includes a continuation token if there are more events.
   --page-token: string # A token to retrieve a specific page of results.
-  --qp-source: string # The Google service from which to return activities. Possible values of source are:  - drive.google.com
+  --qp-source: string # The Google service from which to return activities. Possible values of source are: - drive.google.com
   --user-id: string # The ID used for ACL checks (does not filter the resulting event list by the assigned value). Use the special value me to indicate the currently authenticated user.
 ]: nothing -> record<activities: table<combinedEvent: record, singleEvents: list>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

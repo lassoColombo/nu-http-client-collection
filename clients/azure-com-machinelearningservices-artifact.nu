@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def accept-completer [] { ["application/json" "application/octet-stream"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "artifact-v20-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-batch-metadata post-by-subscriptionId-resourceGroupName-workspaceName" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-batch-metadata get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # POST /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/batch/metadata
 # operationId: Artifacts_BatchGetById
-export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-batch-metadata post-by-subscriptionId-resourceGroupName-workspaceName" [
+export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-batch-metadata get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -107,17 +116,17 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  artifact_ids: list # List of Artifacts Ids.
+  artifact_ids: list<string> # List of Artifacts Ids.
 ]: any -> record<artifactContentInformation: record, artifacts: record, errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/batch/metadata"))
-  let body = {"artifactIds": $artifact_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/batch/metadata"))
+  let req_body = {"artifactIds": $artifact_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create Artifact.
@@ -125,7 +134,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
 # POST /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/metadata
 # operationId: Artifacts_Create
 # --dataPath shape: {dataStoreName?: string, relativePath?: string, sqlDataPath?: record}
-export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-metadata create" [
+export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-metadata create" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -146,12 +155,12 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/metadata"))
-  let body = {"artifactId": $artifact_id, "container": $container, "dataPath": $data_path, "origin": $origin, "path": $path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/metadata"))
+  let req_body = {"artifactId": $artifact_id, "container": $container, "dataPath": $data_path, "origin": $origin, "path": $path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create an Artifact for an existing data location.
@@ -159,7 +168,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
 # POST /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/register
 # operationId: Artifacts_Register
 # --dataPath shape: {dataStoreName?: string, relativePath?: string, sqlDataPath?: record}
-export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-register create" [
+export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-register create" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -180,19 +189,19 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/register"))
-  let body = {"artifactId": $artifact_id, "container": $container, "dataPath": $data_path, "origin": $origin, "path": $path} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/register"))
+  let req_body = {"artifactId": $artifact_id, "container": $container, "dataPath": $data_path, "origin": $origin, "path": $path} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Batch Artifacts storage by Ids.
 #
 # POST /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/storageuri/batch/metadata
 # operationId: Artifacts_BatchGetStorageById
-export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-storageuri-batch-metadata post" [
+export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-storageuri-batch-metadata get-storage" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -204,24 +213,24 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  artifact_ids: list # List of Artifacts Ids.
+  artifact_ids: list<string> # List of Artifacts Ids.
 ]: any -> record<artifactContentInformation: record, artifacts: record, errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/storageuri/batch/metadata"))
-  let body = {"artifactIds": $artifact_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/storageuri/batch/metadata"))
+  let req_body = {"artifactIds": $artifact_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Artifacts metadata in a container or path.
 #
 # GET /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}
 # operationId: Artifacts_ListInContainer
-export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts list-in" [
+export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts list" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -241,7 +250,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "continuationToken" $continuation_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, origin: $origin, container: $container} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), origin: (encode-path-segment $origin), container: (encode-path-segment $container)} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -251,7 +260,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
 #
 # DELETE /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/batch
 # operationId: Artifacts_DeleteMetaDataInContainer
-export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-batch delete-meta-data-in" [
+export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-batch delete-meta-data" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -270,7 +279,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hardDelete" $hard_delete "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, origin: $origin, container: $container} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/batch") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), origin: (encode-path-segment $origin), container: (encode-path-segment $container)} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/batch") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -280,7 +289,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
 #
 # POST /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/batch/ingest/containersas
 # operationId: Artifacts_BatchIngestFromSas
-export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-batch-ingest-containersas post" [
+export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-batch-ingest-containersas create-from-sas" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -302,12 +311,12 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, origin: $origin, container: $container} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/batch/ingest/containersas"))
-  let body = {"artifactPrefix": $artifact_prefix, "containerSas": $container_sas, "containerUri": $container_uri, "prefix": $prefix} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), origin: (encode-path-segment $origin), container: (encode-path-segment $container)} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/batch/ingest/containersas"))
+  let req_body = {"artifactPrefix": $artifact_prefix, "containerSas": $container_sas, "containerUri": $container_uri, "prefix": $prefix} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create a batch of empty Artifacts.
@@ -315,7 +324,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
 # POST /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/batch/metadata
 # operationId: Artifacts_BatchCreateEmptyArtifacts
 # --paths item shape: {path: string}
-export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-batch-metadata post-by-subscriptionId-resourceGroupName-workspaceName-origin-container" [
+export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-batch-metadata create-empty" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -334,12 +343,12 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, origin: $origin, container: $container} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/batch/metadata"))
-  let body = {"paths": $paths} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), origin: (encode-path-segment $origin), container: (encode-path-segment $container)} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/batch/metadata"))
+  let req_body = {"paths": $paths} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Batch of Artifact Metadata.
@@ -347,7 +356,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
 # POST /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/batch/metadata:delete
 # operationId: Artifacts_DeleteBatchMetaData
 # --paths item shape: {path: string}
-export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-batch-metadata-delete delete" [
+export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-batch-metadata-delete delete-meta-data" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -368,19 +377,19 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hardDelete" $hard_delete "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, origin: $origin, container: $container} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/batch/metadata:delete") $qp)
-  let body = {"paths": $paths} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), origin: (encode-path-segment $origin), container: (encode-path-segment $container)} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/batch/metadata:delete") $qp)
+  let req_body = {"paths": $paths} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Artifact content by Id.
 #
 # GET /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/content
 # operationId: Artifacts_Download
-export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-content download" [
+export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-content download" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -400,7 +409,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, origin: $origin, container: $container} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/content") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), origin: (encode-path-segment $origin), container: (encode-path-segment $container)} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/content") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -410,7 +419,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
 #
 # POST /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/content
 # operationId: Artifacts_Upload
-export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-content upload" [
+export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-content upload" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -434,18 +443,19 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "index" $index "scalar") (serialize-qp "append" $append "scalar") (serialize-qp "allowOverwrite" $allow_overwrite "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, origin: $origin, container: $container} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/content") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), origin: (encode-path-segment $origin), container: (encode-path-segment $container)} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/content") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Artifact content information.
 #
 # GET /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/contentinfo
 # operationId: Artifacts_GetContentInformation
-export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-contentinfo get-content-information" [
+export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-contentinfo get-content-information" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -464,7 +474,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, origin: $origin, container: $container} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/contentinfo") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), origin: (encode-path-segment $origin), container: (encode-path-segment $container)} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/contentinfo") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -474,7 +484,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
 #
 # GET /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/contentinfo/storageuri
 # operationId: Artifacts_GetStorageContentInformation
-export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-contentinfo-storageuri get-storage-content-information" [
+export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-contentinfo-storageuri get-storage-content-information" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -493,7 +503,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, origin: $origin, container: $container} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/contentinfo/storageuri") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), origin: (encode-path-segment $origin), container: (encode-path-segment $container)} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/contentinfo/storageuri") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -503,7 +513,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
 #
 # DELETE /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/metadata
 # operationId: Artifacts_DeleteMetaData
-export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-metadata delete" [
+export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-metadata delete-meta-data" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -523,7 +533,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "hardDelete" $hard_delete "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, origin: $origin, container: $container} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/metadata") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), origin: (encode-path-segment $origin), container: (encode-path-segment $container)} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -533,7 +543,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
 #
 # GET /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/metadata
 # operationId: Artifacts_Get
-export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-metadata get" [
+export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-metadata get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -552,7 +562,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, origin: $origin, container: $container} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/metadata") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), origin: (encode-path-segment $origin), container: (encode-path-segment $container)} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -562,7 +572,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
 #
 # GET /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/prefix/contentinfo
 # operationId: Artifacts_ListSasByPrefix
-export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-prefix-contentinfo list-sas" [
+export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-prefix-contentinfo list-sas" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -582,7 +592,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "continuationToken" $continuation_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, origin: $origin, container: $container} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/prefix/contentinfo") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), origin: (encode-path-segment $origin), container: (encode-path-segment $container)} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/prefix/contentinfo") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -592,7 +602,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
 #
 # GET /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/prefix/contentinfo/storageuri
 # operationId: Artifacts_ListStorageUriByPrefix
-export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-prefix-contentinfo-storageuri list" [
+export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-prefix-contentinfo-storageuri list-storage-uri" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -612,7 +622,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "continuationToken" $continuation_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, origin: $origin, container: $container} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/prefix/contentinfo/storageuri") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), origin: (encode-path-segment $origin), container: (encode-path-segment $container)} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/prefix/contentinfo/storageuri") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -622,7 +632,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
 #
 # GET /artifact/v2.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/artifacts/{origin}/{container}/write
 # operationId: Artifacts_GetSas
-export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-write get-sas" [
+export def "artifact-v2-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-artifacts-write get-sas" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -641,7 +651,7 @@ export def "artifact-v20-subscriptions-resource-groups-providers-microsoft-machi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, origin: $origin, container: $container} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/write") $qp)
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), origin: (encode-path-segment $origin), container: (encode-path-segment $container)} | format pattern "/artifact/v2.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/artifacts/{origin}/{container}/write") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

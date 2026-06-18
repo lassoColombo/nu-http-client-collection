@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -106,10 +115,10 @@ export def "iatu-balance get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/iatu/balance")
-  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -134,17 +143,17 @@ export def "iatu-charges-reports-all get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/iatu/charges/reports/all" $qp)
-  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List of account charges in CSV
 #
 # GET /iatu/charges/reports/all.csv
-export def "iatu-charges-reports-allcsv get" [
+export def "iatu-charges-reports-all-csv get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,10 +171,10 @@ export def "iatu-charges-reports-allcsv get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/iatu/charges/reports/all.csv" $qp)
-  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -190,10 +199,10 @@ export def "iatu-number-validator get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country_code" $country_code "scalar") (serialize-qp "mobile_number" $mobile_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/iatu/number-validator" $qp)
-  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -215,10 +224,10 @@ export def "iatu-products-promotions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/iatu/products/promotions")
-  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -240,17 +249,17 @@ export def "iatu-products-reports-all get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/iatu/products/reports/all")
-  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of products in CSV format
 #
 # GET /iatu/products/reports/all.csv
-export def "iatu-products-reports-allcsv get" [
+export def "iatu-products-reports-all-csv get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,10 +274,10 @@ export def "iatu-products-reports-allcsv get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/iatu/products/reports/all.csv")
-  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -295,17 +304,17 @@ export def "iatu-products-reports-local-value get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country_code" $country_code "scalar") (serialize-qp "carrier_code" $carrier_code "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "currency_code" $currency_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/iatu/products/reports/local-value" $qp)
-  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Topup a mobile phone
 #
 # POST /iatu/topups
-export def "iatu-topups post" [
+export def "iatu-topups create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,19 +338,19 @@ export def "iatu-topups post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/iatu/topups")
-  let body = {"amount": $amount, "carrier_code": $carrier_code, "client_transaction_id": $client_transaction_id, "country_code": $country_code, "mobile_number": $mobile_number, "plan": $plan, "product_code": $product_code, "terminal_id": $terminal_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"amount": $amount, "carrier_code": $carrier_code, "client_transaction_id": $client_transaction_id, "country_code": $country_code, "mobile_number": $mobile_number, "plan": $plan, "product_code": $product_code, "terminal_id": $terminal_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Search topups transactions
 #
 # POST /iatu/topups/reports
-export def "iatu-topups-reports post" [
+export def "iatu-topups-reports create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,13 +371,13 @@ export def "iatu-topups-reports post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/iatu/topups/reports")
-  let body = {"client_transaction_id": $client_transaction_id, "date_from": $date_from, "date_to": $date_to, "to_service_number": $to_service_number, "type_of_report": $type_of_report} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"client_transaction_id": $client_transaction_id, "date_from": $date_from, "date_to": $date_to, "to_service_number": $to_service_number, "type_of_report": $type_of_report} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List of account topups in JSON
@@ -392,17 +401,17 @@ export def "iatu-topups-reports-all get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/iatu/topups/reports/all" $qp)
-  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List of account topups in CSV
 #
 # GET /iatu/topups/reports/all.csv
-export def "iatu-topups-reports-allcsv get" [
+export def "iatu-topups-reports-all-csv get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,10 +429,10 @@ export def "iatu-topups-reports-allcsv get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/iatu/topups/reports/all.csv" $qp)
-  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -448,17 +457,17 @@ export def "iatu-topups-reports-totals get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/iatu/topups/reports/totals" $qp)
-  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reversal of a Topup
 #
 # POST /iatu/topups/reverse
-export def "iatu-topups-reverse post" [
+export def "iatu-topups-reverse create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -476,13 +485,13 @@ export def "iatu-topups-reverse post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/iatu/topups/reverse")
-  let body = {"client_transaction_id": $client_transaction_id, "to_service_number": $to_service_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"client_transaction_id": $client_transaction_id, "to_service_number": $to_service_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Status check
@@ -503,9 +512,9 @@ export def "status get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/status")
-  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

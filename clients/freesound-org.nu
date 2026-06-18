@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -107,7 +116,7 @@ export def "search-text list" [
   --accept: string@accept-completer # Response content type
   --query: string # The query! The query is the main parameter used to define a query. You can type several terms separated by spaces or phrases wrapped inside quote ‘”’ characters. For every term, you can also use ‘+’ and ‘-‘ modifier characters to indicate that a term is “mandatory” or “prohibited” (by default, terms are considered to be “mandatory”). For example, in a query such as query=term_a -term_b, sounds including term_b will not match the search criteria. The query does a weighted search over some sound properties including sound tags, the sound name, its description, pack name and the sound id. Therefore, searching for query=123 will find you sounds with id 1234, sounds that have 1234 in the description, in the tags, etc. You’ll find some examples below. Using an empty query (query= or query="") will return all Freeosund sounds.
   --filter: string # Allows filtering query results. See below for more information.
-  --qp-sort: string@sort-completer # Indicates how query results should be sorted. See below for a list of the sorting options. By default `sort=score`. <p> <table>   <tr>     <th>Option</th>     <th>Explanation</th>   </tr>   <tr>     <td>score</td>     <td>Sort by a relevance score returned by our search engine (default).</td>   </tr>   <tr>     <td>duration_desc     <td>Sort by the duration of the sounds, longest sounds first.   </tr>   <tr>     <td>duration_asc     <td>Same as above, but shortest sounds first.   </tr>   <tr>     <td>created_desc     <td>Sort by the date of when the sound was added. newest sounds first.   </tr>   <tr>     <td>created_asc     <td>Same as above, but oldest sounds first.   </tr>   <tr>     <td>downloads_desc     <td>Sort by the number of downloads, most downloaded sounds first.   </tr>   <tr>     <td>downloads_asc     <td>Same as above, but least downloaded sounds first.   </tr>   <tr>     <td>rating_desc     <td>Sort by the average rating given to the sounds, highest rated first.   </tr>   <tr>     <td>rating_asc     <td>Same as above, but lowest rated sounds first.   </tr> </table> </p>
+  --qp-sort: string@sort-completer # Indicates how query results should be sorted. See below for a list of the sorting options. By default `sort=score`. Option Explanation score Sort by a relevance score returned by our search engine (default). duration_desc Sort by the duration of the sounds, longest sounds first. duration_asc Same as above, but shortest sounds first. created_desc Sort by the date of when the sound was added. newest sounds first. created_asc Same as above, but oldest sounds first. downloads_desc Sort by the number of downloads, most downloaded sounds first. downloads_asc Same as above, but least downloaded sounds first. rating_desc Sort by the average rating given to the sounds, highest rated first. rating_asc Same as above, but lowest rated sounds first.
   --group-by-pack: int # This parameter represents a boolean option to indicate whether to collapse results belonging to sounds of the same pack into single entries in the results list. If `group_by_pack=1` and search results contain more than one sound that belongs to the same pack, only one sound for each distinct pack is returned (sounds with no packs are returned as well). However, the returned sound will feature two extra properties to access these other sounds omitted from the results list: `n_from_same_pack`: indicates how many other results belong to the same pack (and have not been returned) `more_from_same_pack`: uri pointing to the list of omitted sound results of the same pack (also including the result which has already been returned). See examples below. By default `group_by_pack=0`.
   --page: int # Query results are paginated, this parameter indicates what page should be returned. By default `page=1`. (default: 1)
   --page-size: int # Indicates the number of sounds per page to include in the result. By default `page_size=15`, and the maximum is `page_size=150`. Not that with bigger `page_size`, more data will need to be transferred. (default: 15)
@@ -139,7 +148,7 @@ export def "sounds get" [
 ]: nothing -> record<id: int, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({sound_id: $sound_id} | format pattern "/sounds/{sound_id}"))
+  let full_url = (build-url $base ({sound_id: (encode-path-segment $sound_id)} | format pattern "/sounds/{sound_id}"))
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

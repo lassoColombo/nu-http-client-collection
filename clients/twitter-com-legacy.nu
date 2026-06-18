@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def display-coordinates-completer [] { ["" "false" "true"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-settingsjson accountsettingsget" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-settings-json get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 # GET /account/settings.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/account/settings
 # operationId: account.settings.get
-export def "account-settingsjson accountsettingsget" [
+export def "account-settings-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,12 +114,12 @@ export def "account-settingsjson accountsettingsget" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --trend-location-woeid: string # The Yahoo! Where On Earth ID to use as the user's default trend location. Global information is available by using 1 as the WOEID. The woeid must be one of the locations returned by GET trends/available.  Example Values: 1
-  --sleep-time-enabled: string # When set to true, t or 1, will enable sleep time for the user. Sleep time is the time when push or SMS notifications should not be sent to the user.  Example Values: true
-  --start-sleep-time: string # The hour that sleep time should begin if it is enabled. The value for this parameter should be provided in ISO8601 format (i.e. 00-23). The time is considered to be in the same timezone as the user's time_zone setting.  Example Values: 13
-  --end-sleep-time: string # The hour that sleep time should end if it is enabled. The value for this parameter should be provided in ISO8601 format (i.e. 00-23). The time is considered to be in the same timezone as the user's time_zone setting.  Example Values: 13
-  --time-zone: string # The timezone dates and times should be displayed in for the user. The timezone must be one of the Rails TimeZone names.  Example Values: Europe/Copenhagen, Pacific/Tongatapu
-  --lang: string # The language which Twitter should render in for this user. The language must be specified by the appropriate two letter ISO 639-1 representation. Currently supported languages are provided by GET help/languages.  Example Values: it, en, es
+  --trend-location-woeid: string # The Yahoo! Where On Earth ID to use as the user's default trend location. Global information is available by using 1 as the WOEID. The woeid must be one of the locations returned by GET trends/available. Example Values: 1
+  --sleep-time-enabled: string # When set to true, t or 1, will enable sleep time for the user. Sleep time is the time when push or SMS notifications should not be sent to the user. Example Values: true
+  --start-sleep-time: string # The hour that sleep time should begin if it is enabled. The value for this parameter should be provided in ISO8601 format (i.e. 00-23). The time is considered to be in the same timezone as the user's time_zone setting. Example Values: 13
+  --end-sleep-time: string # The hour that sleep time should end if it is enabled. The value for this parameter should be provided in ISO8601 format (i.e. 00-23). The time is considered to be in the same timezone as the user's time_zone setting. Example Values: 13
+  --time-zone: string # The timezone dates and times should be displayed in for the user. The timezone must be one of the Rails TimeZone names. Example Values: Europe/Copenhagen, Pacific/Tongatapu
+  --lang: string # The language which Twitter should render in for this user. The language must be specified by the appropriate two letter ISO 639-1 representation. Currently supported languages are provided by GET help/languages. Example Values: it, en, es
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -126,7 +135,7 @@ export def "account-settingsjson accountsettingsget" [
 # POST /account/settings.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/account/settings
 # operationId: account.settings.post
-export def "account-settingsjson accountsettingspost" [
+export def "account-settings-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,12 +144,12 @@ export def "account-settingsjson accountsettingspost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --trend-location-woeid: string # The Yahoo! Where On Earth ID to use as the user's default trend location. Global information is available by using 1 as the WOEID. The woeid must be one of the locations returned by GET trends/available.  Example Values: 1
-  --sleep-time-enabled: string # When set to true, t or 1, will enable sleep time for the user. Sleep time is the time when push or SMS notifications should not be sent to the user.  Example Values: true
-  --start-sleep-time: string # The hour that sleep time should begin if it is enabled. The value for this parameter should be provided in ISO8601 format (i.e. 00-23). The time is considered to be in the same timezone as the user's time_zone setting.  Example Values: 13
-  --end-sleep-time: string # The hour that sleep time should end if it is enabled. The value for this parameter should be provided in ISO8601 format (i.e. 00-23). The time is considered to be in the same timezone as the user's time_zone setting.  Example Values: 13
-  --time-zone: string # The timezone dates and times should be displayed in for the user. The timezone must be one of the Rails TimeZone names.  Example Values: Europe/Copenhagen, Pacific/Tongatapu
-  --lang: string # The language which Twitter should render in for this user. The language must be specified by the appropriate two letter ISO 639-1 representation. Currently supported languages are provided by GET help/languages.  Example Values: it, en, es
+  --trend-location-woeid: string # The Yahoo! Where On Earth ID to use as the user's default trend location. Global information is available by using 1 as the WOEID. The woeid must be one of the locations returned by GET trends/available. Example Values: 1
+  --sleep-time-enabled: string # When set to true, t or 1, will enable sleep time for the user. Sleep time is the time when push or SMS notifications should not be sent to the user. Example Values: true
+  --start-sleep-time: string # The hour that sleep time should begin if it is enabled. The value for this parameter should be provided in ISO8601 format (i.e. 00-23). The time is considered to be in the same timezone as the user's time_zone setting. Example Values: 13
+  --end-sleep-time: string # The hour that sleep time should end if it is enabled. The value for this parameter should be provided in ISO8601 format (i.e. 00-23). The time is considered to be in the same timezone as the user's time_zone setting. Example Values: 13
+  --time-zone: string # The timezone dates and times should be displayed in for the user. The timezone must be one of the Rails TimeZone names. Example Values: Europe/Copenhagen, Pacific/Tongatapu
+  --lang: string # The language which Twitter should render in for this user. The language must be specified by the appropriate two letter ISO 639-1 representation. Currently supported languages are provided by GET help/languages. Example Values: it, en, es
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -156,7 +165,7 @@ export def "account-settingsjson accountsettingspost" [
 # POST /account/update_delivery_device.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/account/update_delivery_device
 # operationId: account.update_delivery_device
-export def "account-update-delivery-devicejson device" [
+export def "account-update-delivery-device-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,8 +174,8 @@ export def "account-update-delivery-devicejson device" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --device: string # Must be one of: sms, none.  Example Values: sms
-  --include-entities: string # When set to either true, t or 1, each tweet will include a node called "entities,". This node offers a variety of metadata about the tweet in a discreet structure, including: user_mentions, urls, and hashtags. While entities are opt-in on timelines at present, they will be made a default component of output in the future. See Tweet Entities for more detail on entities.  Example Values: true
+  --device: string # Must be one of: sms, none. Example Values: sms
+  --include-entities: string # When set to either true, t or 1, each tweet will include a node called "entities,". This node offers a variety of metadata about the tweet in a discreet structure, including: user_mentions, urls, and hashtags. While entities are opt-in on timelines at present, they will be made a default component of output in the future. See Tweet Entities for more detail on entities. Example Values: true
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -182,7 +191,7 @@ export def "account-update-delivery-devicejson device" [
 # POST /account/update_profile.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/account/update_profile
 # operationId: account.update_profile
-export def "account-update-profilejson profile" [
+export def "account-update-profile-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,16 +200,16 @@ export def "account-update-profilejson profile" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # Full name associated with the profile. Maximum of 20 characters.  Example Values: Marcel Molina
-  --qp-url: string # URL associated with the profile. Will be prepended with "http://" if not present. Maximum of 100 characters.  Example Values: http://project.ioni.st
-  --location: string # The city or country describing where the user of the account is located. The contents are not normalized or geocoded in any way. Maximum of 30 characters.  Example Values: San Francisco, CA
-  --description: string # A description of the user owning the account. Maximum of 160 characters.  Example Values: Flipped my wig at age 22 and it never grew back. Also: I work at Twitter.
-  --include-entities: string # The entities node will not be included when set to false.  Example Values: false
+  --name: string # Full name associated with the profile. Maximum of 20 characters. Example Values: Marcel Molina
+  --url: string # URL associated with the profile. Will be prepended with "http://" if not present. Maximum of 100 characters. Example Values: http://project.ioni.st
+  --location: string # The city or country describing where the user of the account is located. The contents are not normalized or geocoded in any way. Maximum of 30 characters. Example Values: San Francisco, CA
+  --description: string # A description of the user owning the account. Maximum of 160 characters. Example Values: Flipped my wig at age 22 and it never grew back. Also: I work at Twitter.
+  --include-entities: string # The entities node will not be included when set to false. Example Values: false
   --skip-status: string # When set to either true, t or 1 statuses will not be included in the returned user objects.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "include_entities" $include_entities "scalar") (serialize-qp "skip_status" $skip_status "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "include_entities" $include_entities "scalar") (serialize-qp "skip_status" $skip_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/update_profile.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -212,7 +221,7 @@ export def "account-update-profilejson profile" [
 # POST /account/update_profile_background_image.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/account/update_profile_background_image
 # operationId: accounts.update_profile_background_image
-export def "account-update-profile-background-imagejson image" [
+export def "account-update-profile-background-image-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +232,7 @@ export def "account-update-profile-background-imagejson image" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --tile: string # Whether or not to tile the background image. If set to true, t or 1 the background image will be displayed tiled. The image will not be tiled otherwise.
   --qp-use: string # Determines whether to display the profile background image or not. When set to true, t or 1 the background image will be displayed if an image is being uploaded with the request, or has been uploaded previously. An error will be returned if you try to use a background image when one is not being uploaded or does not exist. If this parameter is defined but set to anything other than true, t or 1, the background image will stop being used.
-  --include-entities: string # The entities node will not be included when set to false.  Example Values: false
+  --include-entities: string # The entities node will not be included when set to false. Example Values: false
   --skip-status: string # When set to either true, t or 1 statuses will not be included in the returned user objects.
   --content-type: string # Content type header
 ]: nothing -> any {
@@ -231,10 +240,10 @@ export def "account-update-profile-background-imagejson image" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tile" $tile "scalar") (serialize-qp "use" $qp_use "scalar") (serialize-qp "include_entities" $include_entities "scalar") (serialize-qp "skip_status" $skip_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/update_profile_background_image.json" $qp)
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -243,7 +252,7 @@ export def "account-update-profile-background-imagejson image" [
 # POST /account/update_profile_colors.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/account/update_profile_colors
 # operationId: accounts.update_profile_colors
-export def "account-update-profile-colorsjson colors" [
+export def "account-update-profile-colors-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,7 +283,7 @@ export def "account-update-profile-colorsjson colors" [
 # POST /account/update_profile_image.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/account/update_profile_image
 # operationId: accounts.update_profile_image
-export def "account-update-profile-imagejson image" [
+export def "account-update-profile-image-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,19 +299,19 @@ export def "account-update-profile-imagejson image" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip_status" $skip_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/update_profile_image.json" $qp)
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns the current rate limits for methods belonging to the specified resource families.  Each 1.1 API resource belongs to a "resource family" which is indicated in its method documentation. You can typically determine a method's resource family from the first component of the path after the resource version.  This method responds with a map of methods belonging to the families specified by the resources parameter, the current remaining uses for each of those resources within the current rate limiting window, and its expiration time in epoch time. It also includes a rate_limit_context field that indicates the current access token context.  You may also issue requests to this method without any parameters to receive a map of all rate limited GET methods. If your application only uses a few of methods, please explicitly provide a resources parameter with the specified resource families you work with.
+# Returns the current rate limits for methods belonging to the specified resource families. Each 1.1 API resource belongs to a "resource family" which is indicated in its method documentation. You can typically determine a method's resource family from the first component of the path after the resource version. This method responds with a map of methods belonging to the families specified by the resources parameter, the current remaining uses for each of those resources within the current rate limiting window, and its expiration time in epoch time. It also includes a rate_limit_context field that indicates the current access token context. You may also issue requests to this method without any parameters to receive a map of all rate limited GET methods. If your application only uses a few of methods, please explicitly provide a resources parameter with the specified resource families you work with.
 #
 # GET /application/rate_limit_status.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/application/rate_limit_status
 # operationId: application.rate_limit_status
-export def "application-rate-limit-statusjson status" [
+export def "application-rate-limit-status-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +336,7 @@ export def "application-rate-limit-statusjson status" [
 # POST /blocks/create.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/blocks/create
 # operationId: blocks.create
-export def "blocks-createjson blockscreate" [
+export def "blocks-create-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,7 +345,7 @@ export def "blocks-createjson blockscreate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --include-entities: string # The entities node will not be included when set to false.  Example Values: false
+  --include-entities: string # The entities node will not be included when set to false. Example Values: false
   --skip-status: string # When set to either true, t or 1 statuses will not be included in the returned user objects.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -353,7 +362,7 @@ export def "blocks-createjson blockscreate" [
 # POST /blocks/destroy.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/blocks/destroy
 # operationId: blocks.destroy
-export def "blocks-destroyjson blocksdestroy" [
+export def "blocks-destroy-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,7 +371,7 @@ export def "blocks-destroyjson blocksdestroy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --include-entities: string # The entities node will not be included when set to false.  Example Values: false
+  --include-entities: string # The entities node will not be included when set to false. Example Values: false
   --skip-status: string # When set to either true, t or 1 statuses will not be included in the returned user objects.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -379,7 +388,7 @@ export def "blocks-destroyjson blocksdestroy" [
 # GET /blocks/ids.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/blocks/ids
 # operationId: blocks.ids
-export def "blocks-idsjson blocksids" [
+export def "blocks-ids-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,8 +397,8 @@ export def "blocks-idsjson blocksids" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stringify-ids: string # Many programming environments will not consume our ids due to their size. Provide this option to have ids returned as strings instead. Read more about Twitter IDs, JSON and Snowflake.  Example Values: true
-  --cursor: string # Causes the list of blocked users to be broken into pages of no more than 5000 IDs at a time. The number of IDs returned is not guaranteed to be 5000 as suspended users are filtered out after connections are queried. If no cursor is provided, a value of -1 will be assumed, which is the first "page."  The response from the API will include a previous_cursor and next_cursor to allow paging back and forth. See Using cursors to navigate collections for more information.  Example Values: 12893764510938
+  --stringify-ids: string # Many programming environments will not consume our ids due to their size. Provide this option to have ids returned as strings instead. Read more about Twitter IDs, JSON and Snowflake. Example Values: true
+  --cursor: string # Causes the list of blocked users to be broken into pages of no more than 5000 IDs at a time. The number of IDs returned is not guaranteed to be 5000 as suspended users are filtered out after connections are queried. If no cursor is provided, a value of -1 will be assumed, which is the first "page." The response from the API will include a previous_cursor and next_cursor to allow paging back and forth. See Using cursors to navigate collections for more information. Example Values: 12893764510938
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -405,7 +414,7 @@ export def "blocks-idsjson blocksids" [
 # GET /blocks/list.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/blocks/list
 # operationId: blocks.list
-export def "blocks-listjson blockslist" [
+export def "blocks-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,7 +425,7 @@ export def "blocks-listjson blockslist" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-entities: string # The entities node will not be included when set to false. Example Values: false
   --skip-status: string # When set to either true, t or 1 statuses will not be included in the returned user objects.
-  --cursor: string # Causes the list of blocked users to be broken into pages of no more than 5000 IDs at a time. The number of IDs returned is not guaranteed to be 5000 as suspended users are filtered out after connections are queried. If no cursor is provided, a value of -1 will be assumed, which is the first "page."  The response from the API will include a previous_cursor and next_cursor to allow paging back and forth. See Using cursors to navigate collections for more information.  Example Values: 12893764510938
+  --cursor: string # Causes the list of blocked users to be broken into pages of no more than 5000 IDs at a time. The number of IDs returned is not guaranteed to be 5000 as suspended users are filtered out after connections are queried. If no cursor is provided, a value of -1 will be assumed, which is the first "page." The response from the API will include a previous_cursor and next_cursor to allow paging back and forth. See Using cursors to navigate collections for more information. Example Values: 12893764510938
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -427,12 +436,12 @@ export def "blocks-listjson blockslist" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns the 20 most recent direct messages sent to the authenticating user. Includes detailed information about the sender and recipient user. You can request up to 200 direct messages per call, up to a maximum of 800 incoming DMs.  Important: This method requires an access token with RWD (read, write and direct message) permissions. Consult The Application Permission Model for more information.
+# Returns the 20 most recent direct messages sent to the authenticating user. Includes detailed information about the sender and recipient user. You can request up to 200 direct messages per call, up to a maximum of 800 incoming DMs. Important: This method requires an access token with RWD (read, write and direct message) permissions. Consult The Application Permission Model for more information.
 #
 # GET /direct_messages.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/direct_messages
 # operationId: direct_messages
-export def "direct-messagesjson messages" [
+export def "direct-messages-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,11 +450,11 @@ export def "direct-messagesjson messages" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --count: string # Specifies the number of direct messages to try and retrieve, up to a maximum of 200. The value of count is best thought of as a limit to the number of Tweets to return because suspended or deleted content is removed after the count has been applied.  Example Values: 5
+  --count: string # Specifies the number of direct messages to try and retrieve, up to a maximum of 200. The value of count is best thought of as a limit to the number of Tweets to return because suspended or deleted content is removed after the count has been applied. Example Values: 5
   --since-id: string # Returns results with an ID greater than (that is, more recent than) the specified ID. There are limits to the number of Tweets which can be accessed through the API. If the limit of Tweets has occured since the since_id, the since_id will be forced to the oldest ID available. Example Values: 12345
-  --max-id: string # Returns results with an ID less than (that is, older than) or equal to the specified ID.  Example Values: 54321
-  --include-entities: string # The entities node will not be included when set to false.  Example Values: false
-  --page: string # Specifies the page of results to retrieve.  Example Values: 3
+  --max-id: string # Returns results with an ID less than (that is, older than) or equal to the specified ID. Example Values: 54321
+  --include-entities: string # The entities node will not be included when set to false. Example Values: false
+  --page: string # Specifies the page of results to retrieve. Example Values: 3
   --skip-status: string # When set to either true, t or 1 statuses will not be included in the returned user objects.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -457,12 +466,12 @@ export def "direct-messagesjson messages" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Destroys the direct message specified in the required ID parameter. The authenticating user must be the recipient of the specified direct message.  Important: This method requires an access token with RWD (read, write and direct message) permissions. Consult The Application Permission Model for more information.
+# Destroys the direct message specified in the required ID parameter. The authenticating user must be the recipient of the specified direct message. Important: This method requires an access token with RWD (read, write and direct message) permissions. Consult The Application Permission Model for more information.
 #
 # POST /direct_messages/destroy.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/direct_messages/destroy
 # operationId: direct_messages.destroy
-export def "direct-messages-destroyjson messagesdestroy" [
+export def "direct-messages-destroy-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,8 +480,8 @@ export def "direct-messages-destroyjson messagesdestroy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The ID of the direct message to delete.  Example Values: 1270516771
-  --include-entities: string # The entities node will not be included when set to false.  Example Values: false
+  --id: string # The ID of the direct message to delete. Example Values: 1270516771
+  --include-entities: string # The entities node will not be included when set to false. Example Values: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -488,7 +497,7 @@ export def "direct-messages-destroyjson messagesdestroy" [
 # POST /direct_messages/new.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/direct_messages/new
 # operationId: direct_messages.new
-export def "direct-messages-newjson messagesnew" [
+export def "direct-messages-new-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -497,7 +506,7 @@ export def "direct-messages-newjson messagesnew" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --text: string # The text of your direct message. Be sure to URL encode as necessary, and keep the message under 140 characters.  Example Values: Meet me behind the cafeteria after school
+  --text: string # The text of your direct message. Be sure to URL encode as necessary, and keep the message under 140 characters. Example Values: Meet me behind the cafeteria after school
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -508,12 +517,12 @@ export def "direct-messages-newjson messagesnew" [
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns the 20 most recent direct messages sent by the authenticating user. Includes detailed information about the sender and recipient user. You can request up to 200 direct messages per call, up to a maximum of 800 outgoing DMs.  Important: This method requires an access token with RWD (read, write and direct message) permissions. Consult The Application Permission Model for more information.
+# Returns the 20 most recent direct messages sent by the authenticating user. Includes detailed information about the sender and recipient user. You can request up to 200 direct messages per call, up to a maximum of 800 outgoing DMs. Important: This method requires an access token with RWD (read, write and direct message) permissions. Consult The Application Permission Model for more information.
 #
 # GET /direct_messages/sent.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/direct_messages/sent
 # operationId: direct_messages.sent
-export def "direct-messages-sentjson messagessent" [
+export def "direct-messages-sent-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,11 +531,11 @@ export def "direct-messages-sentjson messagessent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --count: string # Specifies the number of direct messages to try and retrieve, up to a maximum of 200. The value of count is best thought of as a limit to the number of Tweets to return because suspended or deleted content is removed after the count has been applied.  Example Values: 5
-  --since-id: string # Returns results with an ID greater than (that is, more recent than) the specified ID. There are limits to the number of Tweets which can be accessed through the API. If the limit of Tweets has occured since the since_id, the since_id will be forced to the oldest ID available.  Example Values: 12345
-  --max-id: string # Returns results with an ID less than (that is, older than) or equal to the specified ID.  Example Values: 54321
-  --include-entities: string # The entities node will not be included when set to false.  Example Values: false
-  --page: string # Specifies the page of results to retrieve.  Example Values: 3
+  --count: string # Specifies the number of direct messages to try and retrieve, up to a maximum of 200. The value of count is best thought of as a limit to the number of Tweets to return because suspended or deleted content is removed after the count has been applied. Example Values: 5
+  --since-id: string # Returns results with an ID greater than (that is, more recent than) the specified ID. There are limits to the number of Tweets which can be accessed through the API. If the limit of Tweets has occured since the since_id, the since_id will be forced to the oldest ID available. Example Values: 12345
+  --max-id: string # Returns results with an ID less than (that is, older than) or equal to the specified ID. Example Values: 54321
+  --include-entities: string # The entities node will not be included when set to false. Example Values: false
+  --page: string # Specifies the page of results to retrieve. Example Values: 3
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -537,12 +546,12 @@ export def "direct-messages-sentjson messagessent" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns a single direct message, specified by an id parameter. Like the /1.1/direct_messages.format request, this method will include the user objects of the sender and recipient.  Important: This method requires an access token with RWD (read, write and direct message) permissions. Consult The Application Permission Model for more information.
+# Returns a single direct message, specified by an id parameter. Like the /1.1/direct_messages.format request, this method will include the user objects of the sender and recipient. Important: This method requires an access token with RWD (read, write and direct message) permissions. Consult The Application Permission Model for more information.
 #
 # GET /direct_messages/show.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/direct_messages/show
 # operationId: direct_messages.show
-export def "direct-messages-showjson messagesshow" [
+export def "direct-messages-show-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -551,7 +560,7 @@ export def "direct-messages-showjson messagesshow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The ID of the direct message.  Example Values: 587424932
+  --id: string # The ID of the direct message. Example Values: 587424932
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -562,12 +571,12 @@ export def "direct-messages-showjson messagesshow" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Favorites the status specified in the ID parameter as the authenticating user. Returns the favorite status when successful.  This process invoked by this method is asynchronous. The immediately returned status may not indicate the resultant favorited status of the tweet. A 200 OK response from this method will indicate whether the intended action was successful or not.
+# Favorites the status specified in the ID parameter as the authenticating user. Returns the favorite status when successful. This process invoked by this method is asynchronous. The immediately returned status may not indicate the resultant favorited status of the tweet. A 200 OK response from this method will indicate whether the intended action was successful or not.
 #
 # POST /favorites/create.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/favorites/create
 # operationId: favorites.create
-export def "favorites-createjson favoritescreate" [
+export def "favorites-create-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -576,8 +585,8 @@ export def "favorites-createjson favoritescreate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The numerical ID of the desired status.  Example Values: 123
-  --include-entities: string # The entities node will be omitted when set to false.  Example Values: false
+  --id: string # The numerical ID of the desired status. Example Values: 123
+  --include-entities: string # The entities node will be omitted when set to false. Example Values: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -588,12 +597,12 @@ export def "favorites-createjson favoritescreate" [
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Un-favorites the status specified in the ID parameter as the authenticating user. Returns the un-favorited status in the requested format when successful.  This process invoked by this method is asynchronous. The immediately returned status may not indicate the resultant favorited status of the tweet. A 200 OK response from this method will indicate whether the intended action was successful or not.
+# Un-favorites the status specified in the ID parameter as the authenticating user. Returns the un-favorited status in the requested format when successful. This process invoked by this method is asynchronous. The immediately returned status may not indicate the resultant favorited status of the tweet. A 200 OK response from this method will indicate whether the intended action was successful or not.
 #
 # POST /favorites/destroy.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/favorites/destroy
 # operationId: favorites.destroy
-export def "favorites-destroyjson favoritesdestroy" [
+export def "favorites-destroy-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -602,8 +611,8 @@ export def "favorites-destroyjson favoritesdestroy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: string # The numerical ID of the desired status.  Example Values: 123
-  --include-entities: string # The entities node will be omitted when set to false.  Example Values: false
+  --id: string # The numerical ID of the desired status. Example Values: 123
+  --include-entities: string # The entities node will be omitted when set to false. Example Values: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -619,7 +628,7 @@ export def "favorites-destroyjson favoritesdestroy" [
 # GET /favorites/list.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/favorites/list
 # operationId: favorites.list
-export def "favorites-listjson favoriteslist" [
+export def "favorites-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -628,10 +637,10 @@ export def "favorites-listjson favoriteslist" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --count: string # Specifies the number of records to retrieve. Must be less than or equal to 200. Defaults to 20.  Example Values: 5
-  --since-id: string # Returns results with an ID greater than (that is, more recent than) the specified ID. There are limits to the number of Tweets which can be accessed through the API. If the limit of Tweets has occured since the since_id, the since_id will be forced to the oldest ID available.  Example Values: 12345
-  --max-id: string # Returns results with an ID less than (that is, older than) or equal to the specified ID.  Example Values: 54321
-  --include-entities: string # The entities node will be omitted when set to false.  Example Values: false
+  --count: string # Specifies the number of records to retrieve. Must be less than or equal to 200. Defaults to 20. Example Values: 5
+  --since-id: string # Returns results with an ID greater than (that is, more recent than) the specified ID. There are limits to the number of Tweets which can be accessed through the API. If the limit of Tweets has occured since the since_id, the since_id will be forced to the oldest ID available. Example Values: 12345
+  --max-id: string # Returns results with an ID less than (that is, older than) or equal to the specified ID. Example Values: 54321
+  --include-entities: string # The entities node will be omitted when set to false. Example Values: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -642,12 +651,12 @@ export def "favorites-listjson favoriteslist" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns a cursored collection of user IDs for every user following the specified user.  At this time, results are ordered with the most recent following first — however, this ordering is subject to unannounced change and eventual consistency issues. Results are given in groups of 5,000 user IDs and multiple "pages" of results can be navigated through using the next_cursor value in subsequent requests. See Using cursors to navigate collections for more information.  This method is especially powerful when used in conjunction with GET users/lookup, a method that allows you to convert user IDs into full user objects in bulk.
+# Returns a cursored collection of user IDs for every user following the specified user. At this time, results are ordered with the most recent following first — however, this ordering is subject to unannounced change and eventual consistency issues. Results are given in groups of 5,000 user IDs and multiple "pages" of results can be navigated through using the next_cursor value in subsequent requests. See Using cursors to navigate collections for more information. This method is especially powerful when used in conjunction with GET users/lookup, a method that allows you to convert user IDs into full user objects in bulk.
 #
 # GET /followers/ids.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/followers/ids
 # operationId: followers.ids
-export def "followers-idsjson followersids" [
+export def "followers-ids-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -657,7 +666,7 @@ export def "followers-idsjson followersids" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --stringify-ids: string # Many programming environments will not consume our Tweet ids due to their size. Provide this option to have ids returned as strings instead. Example Values: true
-  --cursor: string # Causes the list of connections to be broken into pages of no more than 5000 IDs at a time. The number of IDs returned is not guaranteed to be 5000 as suspended users are filtered out after connections are queried. If no cursor is provided, a value of -1 will be assumed, which is the first "page."  The response from the API will include a previous_cursor and next_cursor to allow paging back and forth.Example Values: 12893764510938
+  --cursor: string # Causes the list of connections to be broken into pages of no more than 5000 IDs at a time. The number of IDs returned is not guaranteed to be 5000 as suspended users are filtered out after connections are queried. If no cursor is provided, a value of -1 will be assumed, which is the first "page." The response from the API will include a previous_cursor and next_cursor to allow paging back and forth.Example Values: 12893764510938
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -668,12 +677,12 @@ export def "followers-idsjson followersids" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns a cursored collection of user IDs for every user the specified user is following (otherwise known as their "friends").  At this time, results are ordered with the most recent following first — however, this ordering is subject to unannounced change and eventual consistency issues. Results are given in groups of 5,000 user IDs and multiple "pages" of results can be navigated through using the next_cursor value in subsequent requests. See Using cursors to navigate collections for more information.  This method is especially powerful when used in conjunction with GET users/lookup, a method that allows you to convert user IDs into full user objects in bulk.
+# Returns a cursored collection of user IDs for every user the specified user is following (otherwise known as their "friends"). At this time, results are ordered with the most recent following first — however, this ordering is subject to unannounced change and eventual consistency issues. Results are given in groups of 5,000 user IDs and multiple "pages" of results can be navigated through using the next_cursor value in subsequent requests. See Using cursors to navigate collections for more information. This method is especially powerful when used in conjunction with GET users/lookup, a method that allows you to convert user IDs into full user objects in bulk.
 #
 # GET /friends/ids.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/friends/ids
 # operationId: friends.ids
-export def "friends-idsjson friendsids" [
+export def "friends-ids-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -683,7 +692,7 @@ export def "friends-idsjson friendsids" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --stringify-ids: string # Many programming environments will not consume our Tweet ids due to their size. Provide this option to have ids returned as strings instead. Example Values: true
-  --cursor: string # Causes the list of connections to be broken into pages of no more than 5000 IDs at a time. The number of IDs returned is not guaranteed to be 5000 as suspended users are filtered out after connections are queried. If no cursor is provided, a value of -1 will be assumed, which is the first "page."  The response from the API will include a previous_cursor and next_cursor to allow paging back and forth.Example Values: 12893764510938
+  --cursor: string # Causes the list of connections to be broken into pages of no more than 5000 IDs at a time. The number of IDs returned is not guaranteed to be 5000 as suspended users are filtered out after connections are queried. If no cursor is provided, a value of -1 will be assumed, which is the first "page." The response from the API will include a previous_cursor and next_cursor to allow paging back and forth.Example Values: 12893764510938
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -694,12 +703,12 @@ export def "friends-idsjson friendsids" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Allows the authenticating users to follow the user specified in the ID parameter.  Returns the befriended user in the requested format when successful. Returns a string describing the failure condition when unsuccessful. If you are already friends with the user a HTTP 403 may be returned, though for performance reasons you may get a 200 OK message even if the friendship already exists.  Actions taken in this method are asynchronous and changes will be eventually consistent.
+# Allows the authenticating users to follow the user specified in the ID parameter. Returns the befriended user in the requested format when successful. Returns a string describing the failure condition when unsuccessful. If you are already friends with the user a HTTP 403 may be returned, though for performance reasons you may get a 200 OK message even if the friendship already exists. Actions taken in this method are asynchronous and changes will be eventually consistent.
 #
 # POST /friendships/create.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/friendships/create
 # operationId: friendships.create
-export def "friendships-createjson friendshipscreate" [
+export def "friendships-create-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -719,12 +728,12 @@ export def "friendships-createjson friendshipscreate" [
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Allows the authenticating user to unfollow the user specified in the ID parameter.  Returns the unfollowed user in the requested format when successful. Returns a string describing the failure condition when unsuccessful.  Actions taken in this method are asynchronous and changes will be eventually consistent.
+# Allows the authenticating user to unfollow the user specified in the ID parameter. Returns the unfollowed user in the requested format when successful. Returns a string describing the failure condition when unsuccessful. Actions taken in this method are asynchronous and changes will be eventually consistent.
 #
 # POST /friendships/destroy.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/friendships/destroy
 # operationId: friendships.destroy
-export def "friendships-destroyjson friendshipsdestroy" [
+export def "friendships-destroy-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -747,7 +756,7 @@ export def "friendships-destroyjson friendshipsdestroy" [
 # GET /friendships/incoming.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/friendships/incoming
 # operationId: friendships.incoming
-export def "friendships-incomingjson friendshipsincoming" [
+export def "friendships-incoming-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -757,7 +766,7 @@ export def "friendships-incomingjson friendshipsincoming" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --stringify-ids: string # Many programming environments will not consume our Tweet ids due to their size. Provide this option to have ids returned as strings instead. Example Values: true
-  --cursor: string # Causes the list of connections to be broken into pages of no more than 5000 IDs at a time. The number of IDs returned is not guaranteed to be 5000 as suspended users are filtered out after connections are queried. If no cursor is provided, a value of -1 will be assumed, which is the first "page."  The response from the API will include a previous_cursor and next_cursor to allow paging back and forth.Example Values: 12893764510938
+  --cursor: string # Causes the list of connections to be broken into pages of no more than 5000 IDs at a time. The number of IDs returned is not guaranteed to be 5000 as suspended users are filtered out after connections are queried. If no cursor is provided, a value of -1 will be assumed, which is the first "page." The response from the API will include a previous_cursor and next_cursor to allow paging back and forth.Example Values: 12893764510938
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -773,7 +782,7 @@ export def "friendships-incomingjson friendshipsincoming" [
 # GET /friendships/lookup.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/friendships/lookup
 # operationId: friendships.lookup
-export def "friendships-lookupjson friendshipslookup" [
+export def "friendships-lookup-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,7 +805,7 @@ export def "friendships-lookupjson friendshipslookup" [
 # GET /friendships/outgoing.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/friendships/outgoing
 # operationId: friendships.outgoing
-export def "friendships-outgoingjson friendshipsoutgoing" [
+export def "friendships-outgoing-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -806,7 +815,7 @@ export def "friendships-outgoingjson friendshipsoutgoing" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --stringify-ids: string # Many programming environments will not consume our Tweet ids due to their size. Provide this option to have ids returned as strings instead. Example Values: true
-  --cursor: string # Causes the list of connections to be broken into pages of no more than 5000 IDs at a time. The number of IDs returned is not guaranteed to be 5000 as suspended users are filtered out after connections are queried. If no cursor is provided, a value of -1 will be assumed, which is the first "page."  The response from the API will include a previous_cursor and next_cursor to allow paging back and forth.Example Values: 12893764510938
+  --cursor: string # Causes the list of connections to be broken into pages of no more than 5000 IDs at a time. The number of IDs returned is not guaranteed to be 5000 as suspended users are filtered out after connections are queried. If no cursor is provided, a value of -1 will be assumed, which is the first "page." The response from the API will include a previous_cursor and next_cursor to allow paging back and forth.Example Values: 12893764510938
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -822,7 +831,7 @@ export def "friendships-outgoingjson friendshipsoutgoing" [
 # GET /friendships/show.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/friendships/show
 # operationId: friendships.show
-export def "friendships-showjson friendshipsshow" [
+export def "friendships-show-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -831,10 +840,10 @@ export def "friendships-showjson friendshipsshow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --source-id: string # The user_id of the subject user.  Example Values: 3191321
-  --source-screen-name: string # The screen_name of the subject user.  Example Values: raffi
-  --target-id: string # The user_id of the target user.  Example Values: 20
-  --target-screen-name: string # The screen_name of the target user.  Example Values: noradio
+  --source-id: string # The user_id of the subject user. Example Values: 3191321
+  --source-screen-name: string # The screen_name of the subject user. Example Values: raffi
+  --target-id: string # The user_id of the target user. Example Values: 20
+  --target-screen-name: string # The screen_name of the target user. Example Values: noradio
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -850,7 +859,7 @@ export def "friendships-showjson friendshipsshow" [
 # POST /friendships/update.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/friendships/update
 # operationId: friendships.update
-export def "friendships-updatejson friendshipsupdate" [
+export def "friendships-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -876,7 +885,7 @@ export def "friendships-updatejson friendshipsupdate" [
 # GET /geo/id/{place_id}.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/geo/id/%3Aplace_id
 # operationId: geo.place_id
-export def "geo-id id" [
+export def "geo-id get" [
   place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -889,18 +898,18 @@ export def "geo-id id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({place_id: $place_id} | format pattern "/geo/id/{place_id}.json"))
+  let full_url = (build-url $base ({place_id: (encode-path-segment $place_id)} | format pattern "/geo/id/{place_id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Creates a new place object at the given latitude and longitude.  Before creating a place you need to query GET geo/similar_places with the latitude, longitude and name of the place you wish to create. The query will return an array of places which are similar to the one you wish to create, and a token. If the place you wish to create isn't in the returned array you can use the token with this method to create a new one.
+# Creates a new place object at the given latitude and longitude. Before creating a place you need to query GET geo/similar_places with the latitude, longitude and name of the place you wish to create. The query will return an array of places which are similar to the one you wish to create, and a token. If the place you wish to create isn't in the returned array you can use the token with this method to create a new one.
 #
 # POST /geo/places.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/geo/place
 # operationId: geo.places
-export def "geo-placesjson geoplaces" [
+export def "geo-places-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -909,7 +918,7 @@ export def "geo-placesjson geoplaces" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --attribute-street-address: string # This parameter searches for places which have this given street address. There are other well-known, and application specific attributes available. Custom attributes are also permitted. Learn more about Place Attributes.  Example Values: 795%20Folsom%20St
+  --attribute-street-address: string # This parameter searches for places which have this given street address. There are other well-known, and application specific attributes available. Custom attributes are also permitted. Learn more about Place Attributes. Example Values: 795%20Folsom%20St
   --callback: string # If supplied, the response will use the JSONP format with a callback of the given name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -921,12 +930,12 @@ export def "geo-placesjson geoplaces" [
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Given a latitude and a longitude, searches for up to 20 places that can be used as a place_id when updating a status.  This request is an informative call and will deliver generalized results about geography
+# Given a latitude and a longitude, searches for up to 20 places that can be used as a place_id when updating a status. This request is an informative call and will deliver generalized results about geography
 #
 # GET /geo/reverse_geocode.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/geo/reverse_geocode
 # operationId: geo.reverse_geocode
-export def "geo-reverse-geocodejson geocode" [
+export def "geo-reverse-geocode-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -935,11 +944,11 @@ export def "geo-reverse-geocodejson geocode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lat: string # The latitude to search around. This parameter will be ignored unless it is inside the range -90.0 to +90.0 (North is positive) inclusive. It will also be ignored if there isn't a corresponding long parameter.  Example Values: 37.7821120598956
-  --long: string # The longitude to search around. The valid ranges for longitude is -180.0 to +180.0 (East is positive) inclusive. This parameter will be ignored if outside that range, if it is not a number, if geo_enabled is disabled, or if there not a corresponding lat parameter.  Example Values: -122.400612831116
-  --accuracy: string # A hint on the "region" in which to search. If a number, then this is a radius in meters, but it can also take a string that is suffixed with ft to specify feet. If this is not passed in, then it is assumed to be 0m. If coming from a device, in practice, this value is whatever accuracy the device has measuring its location (whether it be coming from a GPS, WiFi triangulation, etc.).  Example Values: 5ft
-  --granularity: string # This is the minimal granularity of place types to return and must be one of: poi, neighborhood, city, admin or country. If no granularity is provided for the request neighborhood is assumed. Setting this to city, for example, will find places which have a type of city, admin or country.  Example Values: city
-  --max-results: string # A hint as to the number of results to return. This does not guarantee that the number of results returned will equal max_results, but instead informs how many "nearby" results to return. Ideally, only pass in the number of places you intend to display to the user here.  Example Values: 3
+  --lat: string # The latitude to search around. This parameter will be ignored unless it is inside the range -90.0 to +90.0 (North is positive) inclusive. It will also be ignored if there isn't a corresponding long parameter. Example Values: 37.7821120598956
+  --long: string # The longitude to search around. The valid ranges for longitude is -180.0 to +180.0 (East is positive) inclusive. This parameter will be ignored if outside that range, if it is not a number, if geo_enabled is disabled, or if there not a corresponding lat parameter. Example Values: -122.400612831116
+  --accuracy: string # A hint on the "region" in which to search. If a number, then this is a radius in meters, but it can also take a string that is suffixed with ft to specify feet. If this is not passed in, then it is assumed to be 0m. If coming from a device, in practice, this value is whatever accuracy the device has measuring its location (whether it be coming from a GPS, WiFi triangulation, etc.). Example Values: 5ft
+  --granularity: string # This is the minimal granularity of place types to return and must be one of: poi, neighborhood, city, admin or country. If no granularity is provided for the request neighborhood is assumed. Setting this to city, for example, will find places which have a type of city, admin or country. Example Values: city
+  --max-results: string # A hint as to the number of results to return. This does not guarantee that the number of results returned will equal max_results, but instead informs how many "nearby" results to return. Ideally, only pass in the number of places you intend to display to the user here. Example Values: 3
   --callback: string # If supplied, the response will use the JSONP format with a callback of the given name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -951,12 +960,12 @@ export def "geo-reverse-geocodejson geocode" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Search for places that can be attached to a statuses/update. Given a latitude and a longitude pair, an IP address, or a name, this request will return a list of all the valid places that can be used as the place_id when updating a status.  Conceptually, a query can be made from the user's location, retrieve a list of places, have the user validate the location he or she is at, and then send the ID of this location with a call to POST statuses/update.  This is the recommended method to use find places that can be attached to statuses/update. Unlike GET geo/reverse_geocode which provides raw data access, this endpoint can potentially re-order places with regards to the user who is authenticated. This approach is also preferred for interactive place matching with the user.
+# Search for places that can be attached to a statuses/update. Given a latitude and a longitude pair, an IP address, or a name, this request will return a list of all the valid places that can be used as the place_id when updating a status. Conceptually, a query can be made from the user's location, retrieve a list of places, have the user validate the location he or she is at, and then send the ID of this location with a call to POST statuses/update. This is the recommended method to use find places that can be attached to statuses/update. Unlike GET geo/reverse_geocode which provides raw data access, this endpoint can potentially re-order places with regards to the user who is authenticated. This approach is also preferred for interactive place matching with the user.
 #
 # GET /geo/search.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/geo/search
 # operationId: geo.search
-export def "geo-searchjson geosearch" [
+export def "geo-search-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -965,10 +974,10 @@ export def "geo-searchjson geosearch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accuracy: string # A hint on the "region" in which to search. If a number, then this is a radius in meters, but it can also take a string that is suffixed with ft to specify feet. If this is not passed in, then it is assumed to be 0m. If coming from a device, in practice, this value is whatever accuracy the device has measuring its location (whether it be coming from a GPS, WiFi triangulation, etc.).  Example Values: 5ft
-  --granularity: string # This is the minimal granularity of place types to return and must be one of: poi, neighborhood, city, admin or country. If no granularity is provided for the request neighborhood is assumed. Setting this to city, for example, will find places which have a type of city, admin or country.  Example Values: city
-  --contained-within: string # This is the place_id which you would like to restrict the search results to. Setting this value means only places within the given place_id will be found.  Specify a place_id. For example, to scope all results to places within "San Francisco, CA USA", you would specify a place_id of "5a110d312052166f"  Example Values: 247f43d441defc03
-  --attribute-street-address: string # This parameter searches for places which have this given street address. There are other well-known, and application specific attributes available. Custom attributes are also permitted. Learn more about Place Attributes.  Example Values: 795%20Folsom%20St
+  --accuracy: string # A hint on the "region" in which to search. If a number, then this is a radius in meters, but it can also take a string that is suffixed with ft to specify feet. If this is not passed in, then it is assumed to be 0m. If coming from a device, in practice, this value is whatever accuracy the device has measuring its location (whether it be coming from a GPS, WiFi triangulation, etc.). Example Values: 5ft
+  --granularity: string # This is the minimal granularity of place types to return and must be one of: poi, neighborhood, city, admin or country. If no granularity is provided for the request neighborhood is assumed. Setting this to city, for example, will find places which have a type of city, admin or country. Example Values: city
+  --contained-within: string # This is the place_id which you would like to restrict the search results to. Setting this value means only places within the given place_id will be found. Specify a place_id. For example, to scope all results to places within "San Francisco, CA USA", you would specify a place_id of "5a110d312052166f" Example Values: 247f43d441defc03
+  --attribute-street-address: string # This parameter searches for places which have this given street address. There are other well-known, and application specific attributes available. Custom attributes are also permitted. Learn more about Place Attributes. Example Values: 795%20Folsom%20St
   --callback: string # If supplied, the response will use the JSONP format with a callback of the given name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -980,12 +989,12 @@ export def "geo-searchjson geosearch" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Locates places near the given coordinates which are similar in name.  Conceptually you would use this method to get a list of known places to choose from first. Then, if the desired place doesn't exist, make a request to POST geo/place to create a new one.  The token contained in the response is the token needed to be able to create a new place.
+# Locates places near the given coordinates which are similar in name. Conceptually you would use this method to get a list of known places to choose from first. Then, if the desired place doesn't exist, make a request to POST geo/place to create a new one. The token contained in the response is the token needed to be able to create a new place.
 #
 # GET /geo/similar_places.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/geo/similar_places
 # operationId: geo.similar_places
-export def "geo-similar-placesjson places" [
+export def "geo-similar-places-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -994,8 +1003,8 @@ export def "geo-similar-placesjson places" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contained-within: string # This is the place_id which you would like to restrict the search results to. Setting this value means only places within the given place_id will be found.  Specify a place_id. For example, to scope all results to places within "San Francisco, CA USA", you would specify a place_id of "5a110d312052166f"  Example Values: 247f43d441defc03
-  --attribute-street-address: string # This parameter searches for places which have this given street address. There are other well-known, and application specific attributes available. Custom attributes are also permitted. Learn more about Place Attributes.  Example Values: 795%20Folsom%20St
+  --contained-within: string # This is the place_id which you would like to restrict the search results to. Setting this value means only places within the given place_id will be found. Specify a place_id. For example, to scope all results to places within "San Francisco, CA USA", you would specify a place_id of "5a110d312052166f" Example Values: 247f43d441defc03
+  --attribute-street-address: string # This parameter searches for places which have this given street address. There are other well-known, and application specific attributes available. Custom attributes are also permitted. Learn more about Place Attributes. Example Values: 795%20Folsom%20St
   --callback: string # If supplied, the response will use the JSONP format with a callback of the given name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1007,12 +1016,12 @@ export def "geo-similar-placesjson places" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns the current configuration used by Twitter including twitter.com slugs which are not usernames, maximum photo resolutions, and t.co URL lengths.  It is recommended applications request this endpoint when they are loaded, but no more than once a day.
+# Returns the current configuration used by Twitter including twitter.com slugs which are not usernames, maximum photo resolutions, and t.co URL lengths. It is recommended applications request this endpoint when they are loaded, but no more than once a day.
 #
 # GET /help/configuration.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/help/configuration
 # operationId: help.configurations
-export def "help-configurationjson helpconfigurations" [
+export def "help-configuration-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1035,7 +1044,7 @@ export def "help-configurationjson helpconfigurations" [
 # GET /help/languages.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/help/languages
 # operationId: help.languages
-export def "help-languagesjson helplanguages" [
+export def "help-languages-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1058,7 +1067,7 @@ export def "help-languagesjson helplanguages" [
 # GET /help/privacy.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/help/privacy
 # operationId: help.privacy
-export def "help-privacyjson helpprivacy" [
+export def "help-privacy-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1081,7 +1090,7 @@ export def "help-privacyjson helpprivacy" [
 # GET /help/tos.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/help/tos
 # operationId: help.tos
-export def "help-tosjson helptos" [
+export def "help-tos-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1104,7 +1113,7 @@ export def "help-tosjson helptos" [
 # POST /lists/create.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/create
 # operationId: lists.create
-export def "lists-createjson list-s-create" [
+export def "lists-create-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1131,7 +1140,7 @@ export def "lists-createjson list-s-create" [
 # POST /lists/destroy.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/destroy
 # operationId: lists.destroy
-export def "lists-destroyjson list-s-destroy" [
+export def "lists-destroy-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1152,12 +1161,12 @@ export def "lists-destroyjson list-s-destroy" [
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns all lists the authenticating or specified user subscribes to, including their own. The user is specified using the user_id or screen_name parameters. If no user is given, the authenticating user is used.  This method used to be GET lists in version 1.0 of the API and has been renamed for consistency with other call.
+# Returns all lists the authenticating or specified user subscribes to, including their own. The user is specified using the user_id or screen_name parameters. If no user is given, the authenticating user is used. This method used to be GET lists in version 1.0 of the API and has been renamed for consistency with other call.
 #
 # GET /lists/list.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/list
 # operationId: lists.list
-export def "lists-listjson list-s" [
+export def "lists-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1166,8 +1175,8 @@ export def "lists-listjson list-s" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --screen-name: string # The screen name of the user for whom to return results for. Helpful for disambiguating when a valid screen name is also a user ID.  Example Values: noradio
-  --user-id: string # The ID of the user for whom to return results for. Helpful for disambiguating when a valid user ID is also a valid screen name.  Example Values: 12345  Note:: Specifies the ID of the user to get lists from. Helpful for disambiguating when a valid user ID is also a valid screen name.
+  --screen-name: string # The screen name of the user for whom to return results for. Helpful for disambiguating when a valid screen name is also a user ID. Example Values: noradio
+  --user-id: string # The ID of the user for whom to return results for. Helpful for disambiguating when a valid user ID is also a valid screen name. Example Values: 12345 Note:: Specifies the ID of the user to get lists from. Helpful for disambiguating when a valid user ID is also a valid screen name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1183,7 +1192,7 @@ export def "lists-listjson list-s" [
 # GET /lists/members.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/members
 # operationId: lists.members
-export def "lists-membersjson list-s-members" [
+export def "lists-members-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1194,9 +1203,9 @@ export def "lists-membersjson list-s-members" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --owner-screen-name: string # The screen name of the user who owns the list being requested by a slug.
   --owner-id: string # The user ID of the user who owns the list being requested by a slug.
-  --include-entities: string # The entities node will be disincluded when set to false.  Example Values: false
+  --include-entities: string # The entities node will be disincluded when set to false. Example Values: false
   --skip-status: string # When set to either true, t or 1 statuses will not be included in the returned user objects.
-  --cursor: string # Causes the collection of list members to be broken into "pages" of somewhat consistent size. If no cursor is provided, a value of -1 will be assumed, which is the first "page."  The response from the API will include a previous_cursor and next_cursor to allow paging back and forth. See Using cursors to navigate collections for more information.  Example Values: 12893764510938
+  --cursor: string # Causes the collection of list members to be broken into "pages" of somewhat consistent size. If no cursor is provided, a value of -1 will be assumed, which is the first "page." The response from the API will include a previous_cursor and next_cursor to allow paging back and forth. See Using cursors to navigate collections for more information. Example Values: 12893764510938
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1212,7 +1221,7 @@ export def "lists-membersjson list-s-members" [
 # POST /lists/members/create.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/members/create
 # operationId: lists.members.create
-export def "lists-members-createjson list-s-members-create" [
+export def "lists-members-create-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1233,12 +1242,12 @@ export def "lists-members-createjson list-s-members-create" [
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Adds multiple members to a list, by specifying a comma-separated list of member ids or screen names. The authenticated user must own the list to be able to add members to it. Note that lists can't have more than 500 members, and you are limited to adding up to 100 members to a list at a time with this method.  Please note that there can be issues with lists that rapidly remove and add memberships. Take care when using these methods such that you are not too rapidly switching between removals and adds on the same list.
+# Adds multiple members to a list, by specifying a comma-separated list of member ids or screen names. The authenticated user must own the list to be able to add members to it. Note that lists can't have more than 500 members, and you are limited to adding up to 100 members to a list at a time with this method. Please note that there can be issues with lists that rapidly remove and add memberships. Take care when using these methods such that you are not too rapidly switching between removals and adds on the same list.
 #
 # POST /lists/members/create_all.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/members/create_all
 # operationId: lists.members.create_all
-export def "lists-members-create-alljson all" [
+export def "lists-members-create-all-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1266,7 +1275,7 @@ export def "lists-members-create-alljson all" [
 # POST /lists/members/destroy.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/members/destroy
 # operationId: lists.members.destroy
-export def "lists-members-destroyjson list-s-members-destroy" [
+export def "lists-members-destroy-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1291,12 +1300,12 @@ export def "lists-members-destroyjson list-s-members-destroy" [
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Removes multiple members from a list, by specifying a comma-separated list of member ids or screen names. The authenticated user must own the list to be able to remove members from it. Note that lists can't have more than 500 members, and you are limited to removing up to 100 members to a list at a time with this method.  Please note that there can be issues with lists that rapidly remove and add memberships. Take care when using these methods such that you are not too rapidly switching between removals and adds on the same list.
+# Removes multiple members from a list, by specifying a comma-separated list of member ids or screen names. The authenticated user must own the list to be able to remove members from it. Note that lists can't have more than 500 members, and you are limited to removing up to 100 members to a list at a time with this method. Please note that there can be issues with lists that rapidly remove and add memberships. Take care when using these methods such that you are not too rapidly switching between removals and adds on the same list.
 #
 # POST /lists/members/destroy_all.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/members/destroy_all
 # operationId: lists.members.destroy_all
-export def "lists-members-destroy-alljson all" [
+export def "lists-members-destroy-all-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1324,7 +1333,7 @@ export def "lists-members-destroy-alljson all" [
 # GET /lists/members/show.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/members/show
 # operationId: lists.members.show
-export def "lists-members-showjson list-s-members-show" [
+export def "lists-members-show-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1352,7 +1361,7 @@ export def "lists-members-showjson list-s-members-show" [
 # GET /lists/memberships.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/memberships
 # operationId: lists.memberships
-export def "lists-membershipsjson list-s-memberships" [
+export def "lists-memberships-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1380,7 +1389,7 @@ export def "lists-membershipsjson list-s-memberships" [
 # GET /lists/show.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/show
 # operationId: lists.show
-export def "lists-showjson list-s-show" [
+export def "lists-show-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1406,7 +1415,7 @@ export def "lists-showjson list-s-show" [
 # GET /lists/statuses.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/statuses
 # operationId: lists.statuses
-export def "lists-statusesjson list-s-statuses" [
+export def "lists-statuses-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1437,7 +1446,7 @@ export def "lists-statusesjson list-s-statuses" [
 # GET /lists/subscribers.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/subscribers
 # operationId: lists.subscribers
-export def "lists-subscribersjson list-s-subscribers" [
+export def "lists-subscribers-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1466,7 +1475,7 @@ export def "lists-subscribersjson list-s-subscribers" [
 # POST /lists/subscribers/create.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/subscribers/create
 # operationId: lists.subscribers.create
-export def "lists-subscribers-createjson list-s-subscribers-create" [
+export def "lists-subscribers-create-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1492,7 +1501,7 @@ export def "lists-subscribers-createjson list-s-subscribers-create" [
 # POST /lists/subscribers/destroy.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/subscribers/destroy
 # operationId: lists.subscribers.destroy
-export def "lists-subscribers-destroyjson list-s-subscribers-destroy" [
+export def "lists-subscribers-destroy-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1518,7 +1527,7 @@ export def "lists-subscribers-destroyjson list-s-subscribers-destroy" [
 # GET /lists/subscribers/show.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/subscribers/show
 # operationId: lists.subscribers.show
-export def "lists-subscribers-showjson list-s-subscribers-show" [
+export def "lists-subscribers-show-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1546,7 +1555,7 @@ export def "lists-subscribers-showjson list-s-subscribers-show" [
 # GET /lists/subscriptions.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/lists/subscriptions
 # operationId: lists.subscriptions
-export def "lists-subscriptionsjson list-s-subscriptions" [
+export def "lists-subscriptions-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1572,7 +1581,7 @@ export def "lists-subscriptionsjson list-s-subscriptions" [
 # POST /lists/update.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/lists/update
 # operationId: lists.update
-export def "lists-updatejson list-s-update" [
+export def "lists-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1601,7 +1610,7 @@ export def "lists-updatejson list-s-update" [
 # POST /saved_searches/create.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/saved_searches/create
 # operationId: saved_searches.create
-export def "saved-searches-createjson list-es-create" [
+export def "saved-searches-create-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1626,7 +1635,7 @@ export def "saved-searches-createjson list-es-create" [
 # POST /saved_searches/destroy/{id}.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/saved_searches/destroy/%3Aid
 # operationId: saved_searches.destroy
-export def "saved-searches-destroy list-es" [
+export def "saved-searches-destroy delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1639,7 +1648,7 @@ export def "saved-searches-destroy list-es" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/saved_searches/destroy/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/saved_searches/destroy/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1650,7 +1659,7 @@ export def "saved-searches-destroy list-es" [
 # GET /saved_searches/list.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/saved_searches/list
 # operationId: saved_searches.list
-export def "saved-searches-listjson list-es-list" [
+export def "saved-searches-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1673,7 +1682,7 @@ export def "saved-searches-listjson list-es-list" [
 # GET /saved_searches/show/{id}.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/saved_searches/show/%3Aid
 # operationId: savedsearchesid
-export def "saved-searches-show savedsearchesid" [
+export def "saved-searches-show get-savedsearchesid" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1686,18 +1695,18 @@ export def "saved-searches-show savedsearchesid" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/saved_searches/show/{id}.json"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/saved_searches/show/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns a collection of relevant Tweets matching a specified query.  Please note that Twitter's search service and, by extension, the Search API is not meant to be an exhaustive source of Tweets. Not all Tweets will be indexed or made available via the search interface.  In API v1.1, the response format of the Search API has been improved to return Tweet objects more similar to the objects you'll find across the REST API and platform. You may need to tolerate some inconsistencies and variance in perspectival values (fields that pertain to the perspective of the authenticating user) and embedded user objects.
+# Returns a collection of relevant Tweets matching a specified query. Please note that Twitter's search service and, by extension, the Search API is not meant to be an exhaustive source of Tweets. Not all Tweets will be indexed or made available via the search interface. In API v1.1, the response format of the Search API has been improved to return Tweet objects more similar to the objects you'll find across the REST API and platform. You may need to tolerate some inconsistencies and variance in perspectival values (fields that pertain to the perspective of the authenticating user) and embedded user objects.
 #
 # GET /search/tweets.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/search/tweets
 # operationId: search.tweets
-export def "search-tweetsjson searchtweets" [
+export def "search-tweets-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1732,7 +1741,7 @@ export def "search-tweetsjson searchtweets" [
 # POST /statuses/destroy/{id}.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/statuses/destroy/:id
 # operationId: statuses.destroy
-export def "statuses-destroy statusesdestroy" [
+export def "statuses-destroy delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1747,18 +1756,18 @@ export def "statuses-destroy statusesdestroy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "trim_user" $trim_user "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/statuses/destroy/{id}.json") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/statuses/destroy/{id}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns a collection of the most recent Tweets and retweets posted by the authenticating user and the users they follow. The home timeline is central to how most users interact with the Twitter service.  Up to 800 Tweets are obtainable on the home timeline. It is more volatile for users that follow many users or follow users who tweet frequently.
+# Returns a collection of the most recent Tweets and retweets posted by the authenticating user and the users they follow. The home timeline is central to how most users interact with the Twitter service. Up to 800 Tweets are obtainable on the home timeline. It is more volatile for users that follow many users or follow users who tweet frequently.
 #
 # GET /statuses/home_timeline.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/statuses/home_timeline
 # operationId: statuses.home_timeline
-export def "statuses-home-timelinejson timeline" [
+export def "statuses-home-timeline-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1788,7 +1797,7 @@ export def "statuses-home-timelinejson timeline" [
 # GET /statuses/mentions_timeline.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/statuses/mentions_timeline
 # operationId: statuses.mentions.timeline
-export def "statuses-mentions-timelinejson statusesmentionstimeline" [
+export def "statuses-mentions-timeline-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1818,7 +1827,7 @@ export def "statuses-mentions-timelinejson statusesmentionstimeline" [
 # GET /statuses/oembed.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/statuses/oembed
 # operationId: statuses.oembed
-export def "statuses-oembedjson statusesoembed" [
+export def "statuses-oembed-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1849,7 +1858,7 @@ export def "statuses-oembedjson statusesoembed" [
 # POST /statuses/retweet/{id}.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/statuses/retweet/:id
 # operationId: statusesretweetid
-export def "statuses-retweet statusesretweetid" [
+export def "statuses-retweet create-statusesretweetid" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1864,7 +1873,7 @@ export def "statuses-retweet statusesretweetid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "trim_user" $trim_user "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/statuses/retweet/{id}.json") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/statuses/retweet/{id}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1875,7 +1884,7 @@ export def "statuses-retweet statusesretweetid" [
 # GET /statuses/retweets/{id}.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/statuses/retweets/:id
 # operationId: statuses.retweets
-export def "statuses-retweets statusesretweets" [
+export def "statuses-retweets get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1891,7 +1900,7 @@ export def "statuses-retweets statusesretweets" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "trim_user" $trim_user "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/statuses/retweets/{id}.json") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/statuses/retweets/{id}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1902,7 +1911,7 @@ export def "statuses-retweets statusesretweets" [
 # GET /statuses/show/{id}.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/statuses/show/:id
 # operationId: statuses.show
-export def "statuses-show statusesshow" [
+export def "statuses-show get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1919,7 +1928,7 @@ export def "statuses-show statusesshow" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "trim_user" $trim_user "scalar") (serialize-qp "include_my_retweet" $include_my_retweet "scalar") (serialize-qp "include_entities" $include_entities "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/statuses/show/{id}.json") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/statuses/show/{id}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1930,7 +1939,7 @@ export def "statuses-show statusesshow" [
 # POST /statuses/update.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/statuses/update
 # operationId: statuses.update
-export def "statuses-updatejson statusesupdate" [
+export def "statuses-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1961,7 +1970,7 @@ export def "statuses-updatejson statusesupdate" [
 # POST /statuses/update_with_media.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/statuses/update_with_media
 # operationId: statuses.update_with_media
-export def "statuses-update-with-mediajson media" [
+export def "statuses-update-with-media-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1984,10 +1993,10 @@ export def "statuses-update-with-mediajson media" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "media" $media "scalar") (serialize-qp "possibly_sensitive" $possibly_sensitive "scalar") (serialize-qp "in_reply_to_status_id" $in_reply_to_status_id "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "long" $long "scalar") (serialize-qp "place_id" $place_id "scalar") (serialize-qp "display_coordinates" $display_coordinates "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/statuses/update_with_media.json" $qp)
-  let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1996,7 +2005,7 @@ export def "statuses-update-with-mediajson media" [
 # GET /statuses/user_timeline.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/statuses/user_timeline
 # operationId: statuses.user_timeline
-export def "statuses-user-timelinejson timeline" [
+export def "statuses-user-timeline-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2022,12 +2031,12 @@ export def "statuses-user-timelinejson timeline" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns the locations that Twitter has trending topic information for.  The response is an array of "locations" that encode the location's WOEID and some other human-readable information such as a canonical name and country the location belongs in.  A WOEID is a Yahoo! Where On Earth ID.
+# Returns the locations that Twitter has trending topic information for. The response is an array of "locations" that encode the location's WOEID and some other human-readable information such as a canonical name and country the location belongs in. A WOEID is a Yahoo! Where On Earth ID.
 #
 # GET /trends/available.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/trends/available
 # operationId: trends.available
-export def "trends-availablejson trendsavailable" [
+export def "trends-available-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2045,12 +2054,12 @@ export def "trends-availablejson trendsavailable" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns the locations that Twitter has trending topic information for, closest to a specified location.  The response is an array of "locations" that encode the location's WOEID and some other human-readable information such as a canonical name and country the location belongs in.  A WOEID is a Yahoo! Where On Earth ID.
+# Returns the locations that Twitter has trending topic information for, closest to a specified location. The response is an array of "locations" that encode the location's WOEID and some other human-readable information such as a canonical name and country the location belongs in. A WOEID is a Yahoo! Where On Earth ID.
 #
 # GET /trends/closest.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/trends/closest
 # operationId: trends.closest
-export def "trends-closestjson trendsclosest" [
+export def "trends-closest-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2059,8 +2068,8 @@ export def "trends-closestjson trendsclosest" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --lat: string # If provided with a long parameter the available trend locations will be sorted by distance, nearest to furthest, to the co-ordinate pair. The valid ranges for longitude is -180.0 to +180.0 (West is negative, East is positive) inclusive.  Example Values: 37.781157
-  --long: string # If provided with a lat parameter the available trend locations will be sorted by distance, nearest to furthest, to the co-ordinate pair. The valid ranges for longitude is -180.0 to +180.0 (West is negative, East is positive) inclusive.  Example Values: -122.400612831116
+  --lat: string # If provided with a long parameter the available trend locations will be sorted by distance, nearest to furthest, to the co-ordinate pair. The valid ranges for longitude is -180.0 to +180.0 (West is negative, East is positive) inclusive. Example Values: 37.781157
+  --long: string # If provided with a lat parameter the available trend locations will be sorted by distance, nearest to furthest, to the co-ordinate pair. The valid ranges for longitude is -180.0 to +180.0 (West is negative, East is positive) inclusive. Example Values: -122.400612831116
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2071,12 +2080,12 @@ export def "trends-closestjson trendsclosest" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns the top 10 trending topics for a specific WOEID, if trending information is available for it.  The response is an array of "trend" objects that encode the name of the trending topic, the query parameter that can be used to search for the topic on Twitter Search, and the Twitter Search URL.  This information is cached for 5 minutes. Requesting more frequently than that will not return any more data, and will count against your rate limit usage.
+# Returns the top 10 trending topics for a specific WOEID, if trending information is available for it. The response is an array of "trend" objects that encode the name of the trending topic, the query parameter that can be used to search for the topic on Twitter Search, and the Twitter Search URL. This information is cached for 5 minutes. Requesting more frequently than that will not return any more data, and will count against your rate limit usage.
 #
 # GET /trends/place.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/trends/place
 # operationId: trends.place
-export def "trends-placejson trendsplace" [
+export def "trends-place-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2102,7 +2111,7 @@ export def "trends-placejson trendsplace" [
 # GET /users/contributees.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/users/contributees
 # operationId: users.contributees
-export def "users-contributeesjson userscontributees" [
+export def "users-contributees-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2128,7 +2137,7 @@ export def "users-contributeesjson userscontributees" [
 # GET /users/contributors.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/users/contributors
 # operationId: users.contributors
-export def "users-contributorsjson userscontributors" [
+export def "users-contributors-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2149,12 +2158,12 @@ export def "users-contributorsjson userscontributors" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns fully-hydrated user objects for up to 100 users per request, as specified by comma-separated values passed to the user_id and/or screen_name parameters.  This method is especially useful when used in conjunction with collections of user IDs returned from GET friends/ids and GET followers/ids.  GET users/show is used to retrieve a single user object.
+# Returns fully-hydrated user objects for up to 100 users per request, as specified by comma-separated values passed to the user_id and/or screen_name parameters. This method is especially useful when used in conjunction with collections of user IDs returned from GET friends/ids and GET followers/ids. GET users/show is used to retrieve a single user object.
 #
 # GET /users/lookup.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/users/lookup
 # operationId: users.lookup
-export def "users-lookupjson userslookup" [
+export def "users-lookup-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2163,9 +2172,9 @@ export def "users-lookupjson userslookup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --screen-name: string # A comma separated list of screen names, up to 100 are allowed in a single request. You are strongly encouraged to use a POST for larger (up to 100 screen names) requests.  Example Values: twitterapi,twitter
-  --user-id: string # A comma separated list of user IDs, up to 100 are allowed in a single request. You are strongly encouraged to use a POST for larger requests.  Example Values: 783214,6253282
-  --include-entities: string # The entities node that may appear within embedded statuses will be disincluded when set to false.  Example Values: false
+  --screen-name: string # A comma separated list of screen names, up to 100 are allowed in a single request. You are strongly encouraged to use a POST for larger (up to 100 screen names) requests. Example Values: twitterapi,twitter
+  --user-id: string # A comma separated list of user IDs, up to 100 are allowed in a single request. You are strongly encouraged to use a POST for larger requests. Example Values: 783214,6253282
+  --include-entities: string # The entities node that may appear within embedded statuses will be disincluded when set to false. Example Values: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2181,7 +2190,7 @@ export def "users-lookupjson userslookup" [
 # POST /users/report_spam.json
 # Docs: https://dev.twitter.com/docs/api/1.1/post/report_spam
 # operationId: users.report_spam
-export def "users-report-spamjson spam" [
+export def "users-report-spam-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2199,12 +2208,12 @@ export def "users-report-spamjson spam" [
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Provides a simple, relevance-based search interface to public user accounts on Twitter. Try querying by topical interest, full name, company name, location, or other criteria. Exact match searches are not supported.  Only the first 1,000 matching results are available.
+# Provides a simple, relevance-based search interface to public user accounts on Twitter. Try querying by topical interest, full name, company name, location, or other criteria. Exact match searches are not supported. Only the first 1,000 matching results are available.
 #
 # GET /users/search.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/users/search
 # operationId: users.search
-export def "users-searchjson userssearch" [
+export def "users-search-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2213,10 +2222,10 @@ export def "users-searchjson userssearch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # The search query to run against people search.  Example Values: Twitter%20API
-  --page: string # Specifies the page of results to retrieve.  Example Values: 3
-  --count: string # The number of potential user results to retrieve per page. This value has a maximum of 20.  Example Values: 5
-  --include-entities: string # The entities node will be disincluded when set to false.  Example Values: false
+  --q: string # The search query to run against people search. Example Values: Twitter%20API
+  --page: string # Specifies the page of results to retrieve. Example Values: 3
+  --count: string # The number of potential user results to retrieve per page. This value has a maximum of 20. Example Values: 5
+  --include-entities: string # The entities node will be disincluded when set to false. Example Values: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2227,12 +2236,12 @@ export def "users-searchjson userssearch" [
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns a variety of information about the user specified by the required user_id or screen_name parameter. The author's most recent Tweet will be returned inline when possible.  GET users/lookup is used to retrieve a bulk collection of user objects.
+# Returns a variety of information about the user specified by the required user_id or screen_name parameter. The author's most recent Tweet will be returned inline when possible. GET users/lookup is used to retrieve a bulk collection of user objects.
 #
 # GET /users/show.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/users/show
 # operationId: users.show
-export def "users-showjson usersshow" [
+export def "users-show-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2241,9 +2250,9 @@ export def "users-showjson usersshow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --screen-name: string # The screen name of the user for whom to return results for. Either a id or screen_name is required for this method.  Example Values: noradio
-  --user-id: string # The ID of the user for whom to return results for. Either an id or screen_name is required for this method.  Example Values: 12345
-  --include-entities: string # The entities node will be disincluded when set to false.  Example Values: false
+  --screen-name: string # The screen name of the user for whom to return results for. Either a id or screen_name is required for this method. Example Values: noradio
+  --user-id: string # The ID of the user for whom to return results for. Either an id or screen_name is required for this method. Example Values: 12345
+  --include-entities: string # The entities node will be disincluded when set to false. Example Values: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2259,7 +2268,7 @@ export def "users-showjson usersshow" [
 # GET /users/suggestions.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/users/suggestions
 # operationId: users.suggestions
-export def "users-suggestionsjson userssuggestions" [
+export def "users-suggestions-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2284,7 +2293,7 @@ export def "users-suggestionsjson userssuggestions" [
 # GET /users/suggestions/{slug}.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/users/suggestions/%3Aslug
 # operationId: users.suggestions.slug
-export def "users-suggestions userssuggestionsslug" [
+export def "users-suggestions get" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2299,7 +2308,7 @@ export def "users-suggestions userssuggestionsslug" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({slug: $slug} | format pattern "/users/suggestions/{slug}.json") $qp)
+  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/users/suggestions/{slug}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2310,7 +2319,7 @@ export def "users-suggestions userssuggestionsslug" [
 # GET /users/suggestions/{slug}/members.json
 # Docs: https://dev.twitter.com/docs/api/1.1/get/users/suggestions/%3Aslug/members
 # operationId: users.suggestionsslugmembers
-export def "users-suggestions-membersjson userssuggestionsslugmembers" [
+export def "users-suggestions-members-json get-suggestionsslugmembers" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2323,7 +2332,7 @@ export def "users-suggestions-membersjson userssuggestionsslugmembers" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({slug: $slug} | format pattern "/users/suggestions/{slug}/members.json"))
+  let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/users/suggestions/{slug}/members.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

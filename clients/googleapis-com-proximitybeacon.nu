@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -76,7 +85,7 @@ def serving-visibility-completer [] { ["PUBLIC" "UNLISTED" "VISIBILITY_UNSPECIFI
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1-beaconinfo-getforobserved proximitybeaconbeaconinfogetforobserved" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1-beaconinfo-getforobserved create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +110,7 @@ export def commands []: nothing -> table {
 # POST /v1beta1/beaconinfo:getforobserved
 # operationId: proximitybeacon.beaconinfo.getforobserved
 # --observations item shape: {advertisedId?: record, telemetry?: string, timestampMs?: string}
-export def "v1beta1-beaconinfo-getforobserved proximitybeaconbeaconinfogetforobserved" [
+export def "v1beta1-beaconinfo-getforobserved create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -121,7 +130,7 @@ export def "v1beta1-beaconinfo-getforobserved proximitybeaconbeaconinfogetforobs
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --namespaced-types: list # Specifies what kind of attachments to include in the response. When given, the response will include only attachments of the given types. When empty, no attachments will be returned. Must be in the format namespace/type. Accepts `*` to specify all types in all namespaces owned by the client. Optional.
+  --namespaced-types: list<string> # Specifies what kind of attachments to include in the response. When given, the response will include only attachments of the given types. When empty, no attachments will be returned. Must be in the format namespace/type. Accepts `*` to specify all types in all namespaces owned by the client. Optional.
   --observations: list # The beacons that the client has encountered. At least one must be given. — item shape: {advertisedId?: record, telemetry?: string, timestampMs?: string}
 ]: any -> record<beacons: table<advertisedId: record, attachments: list, beaconName: string>> {
   let input = $in
@@ -129,18 +138,18 @@ export def "v1beta1-beaconinfo-getforobserved proximitybeaconbeaconinfogetforobs
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/beaconinfo:getforobserved" $qp)
-  let body = {"namespacedTypes": $namespaced_types, "observations": $observations} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"namespacedTypes": $namespaced_types, "observations": $observations} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Searches the beacon registry for beacons that match the given search criteria. Only those beacons that the client has permission to list will be returned. Authenticate using an [OAuth access token](https://developers.google.com/identity/protocols/OAuth2) from a signed-in user with **viewer**, **Is owner** or **Can edit** permissions in the Google Developers Console project.
 #
 # GET /v1beta1/beacons
 # operationId: proximitybeacon.beacons.list
-export def "v1beta1-beacons proximitybeaconbeaconslist" [
+export def "v1beta1-beacons list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +191,7 @@ export def "v1beta1-beacons proximitybeaconbeaconslist" [
 # --ephemeralIdRegistration shape: {beaconEcdhPublicKey?: string, beaconIdentityKey?: string, initialClockValue?: string, initialEid?: string, rotationPeriodExponent?: int, serviceEcdhPublicKey?: string}
 # --indoorLevel shape: {name?: string}
 # --latLng shape: {latitude?: float, longitude?: float}
-export def "v1beta1-beacons-register proximitybeaconbeaconsregister" [
+export def "v1beta1-beacons-register create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,18 +229,18 @@ export def "v1beta1-beacons-register proximitybeaconbeaconsregister" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/beacons:register" $qp)
-  let body = {"advertisedId": $advertised_id, "beaconName": $beacon_name, "description": $description, "ephemeralIdRegistration": $ephemeral_id_registration, "expectedStability": $expected_stability, "indoorLevel": $indoor_level, "latLng": $lat_lng, "placeId": $place_id, "properties": $properties, "provisioningKey": $provisioning_key, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"advertisedId": $advertised_id, "beaconName": $beacon_name, "description": $description, "ephemeralIdRegistration": $ephemeral_id_registration, "expectedStability": $expected_stability, "indoorLevel": $indoor_level, "latLng": $lat_lng, "placeId": $place_id, "properties": $properties, "provisioningKey": $provisioning_key, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the Proximity Beacon API's current public key and associated parameters used to initiate the Diffie-Hellman key exchange required to register a beacon that broadcasts the Eddystone-EID format. This key changes periodically; clients may cache it and re-use the same public key to provision and register multiple beacons. However, clients should be prepared to refresh this key when they encounter an error registering an Eddystone-EID beacon.
 #
 # GET /v1beta1/eidparams
 # operationId: proximitybeacon.getEidparams
-export def "v1beta1-eidparams proximitybeacongetEidparams" [
+export def "v1beta1-eidparams get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +274,7 @@ export def "v1beta1-eidparams proximitybeacongetEidparams" [
 #
 # GET /v1beta1/namespaces
 # operationId: proximitybeacon.namespaces.list
-export def "v1beta1-namespaces proximitybeaconnamespaceslist" [
+export def "v1beta1-namespaces list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,7 +309,7 @@ export def "v1beta1-namespaces proximitybeaconnamespaceslist" [
 #
 # DELETE /v1beta1/{attachmentName}
 # operationId: proximitybeacon.beacons.attachments.delete
-export def "v1beta1 proximitybeaconbeaconsattachmentsdelete" [
+export def "v1beta1 delete-by-attachmentName" [
   attachment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -326,7 +335,7 @@ export def "v1beta1 proximitybeaconbeaconsattachmentsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({attachment_name: $attachment_name} | format pattern "/v1beta1/{attachment_name}") $qp)
+  let full_url = (build-url $base ({attachment_name: (encode-path-segment $attachment_name)} | format pattern "/v1beta1/{attachment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -336,7 +345,7 @@ export def "v1beta1 proximitybeaconbeaconsattachmentsdelete" [
 #
 # DELETE /v1beta1/{beaconName}
 # operationId: proximitybeacon.beacons.delete
-export def "v1beta1 proximitybeaconbeaconsdelete" [
+export def "v1beta1 delete-by-beaconName" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -362,7 +371,7 @@ export def "v1beta1 proximitybeaconbeaconsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({beacon_name: $beacon_name} | format pattern "/v1beta1/{beacon_name}") $qp)
+  let full_url = (build-url $base ({beacon_name: (encode-path-segment $beacon_name)} | format pattern "/v1beta1/{beacon_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -372,7 +381,7 @@ export def "v1beta1 proximitybeaconbeaconsdelete" [
 #
 # GET /v1beta1/{beaconName}
 # operationId: proximitybeacon.beacons.get
-export def "v1beta1 proximitybeaconbeaconsget" [
+export def "v1beta1 get" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -398,7 +407,7 @@ export def "v1beta1 proximitybeaconbeaconsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({beacon_name: $beacon_name} | format pattern "/v1beta1/{beacon_name}") $qp)
+  let full_url = (build-url $base ({beacon_name: (encode-path-segment $beacon_name)} | format pattern "/v1beta1/{beacon_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -412,7 +421,7 @@ export def "v1beta1 proximitybeaconbeaconsget" [
 # --ephemeralIdRegistration shape: {beaconEcdhPublicKey?: string, beaconIdentityKey?: string, initialClockValue?: string, initialEid?: string, rotationPeriodExponent?: int, serviceEcdhPublicKey?: string}
 # --indoorLevel shape: {name?: string}
 # --latLng shape: {latitude?: float, longitude?: float}
-export def "v1beta1 proximitybeaconbeaconsupdate" [
+export def "v1beta1 update-by-beaconName" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -450,19 +459,19 @@ export def "v1beta1 proximitybeaconbeaconsupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({beacon_name: $beacon_name} | format pattern "/v1beta1/{beacon_name}") $qp)
-  let body = {"advertisedId": $advertised_id, "beaconName": $body_beacon_name, "description": $description, "ephemeralIdRegistration": $ephemeral_id_registration, "expectedStability": $expected_stability, "indoorLevel": $indoor_level, "latLng": $lat_lng, "placeId": $place_id, "properties": $properties, "provisioningKey": $provisioning_key, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({beacon_name: (encode-path-segment $beacon_name)} | format pattern "/v1beta1/{beacon_name}") $qp)
+  let req_body = {"advertisedId": $advertised_id, "beaconName": $body_beacon_name, "description": $description, "ephemeralIdRegistration": $ephemeral_id_registration, "expectedStability": $expected_stability, "indoorLevel": $indoor_level, "latLng": $lat_lng, "placeId": $place_id, "properties": $properties, "provisioningKey": $provisioning_key, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the attachments for the specified beacon that match the specified namespaced-type pattern. To control which namespaced types are returned, you add the `namespacedType` query parameter to the request. You must either use `*/*`, to return all attachments, or the namespace must be one of the ones returned from the `namespaces` endpoint. Authenticate using an [OAuth access token](https://developers.google.com/identity/protocols/OAuth2) from a signed-in user with **viewer**, **Is owner** or **Can edit** permissions in the Google Developers Console project.
 #
 # GET /v1beta1/{beaconName}/attachments
 # operationId: proximitybeacon.beacons.attachments.list
-export def "v1beta1-attachments proximitybeaconbeaconsattachmentslist" [
+export def "v1beta1-attachments list" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -489,7 +498,7 @@ export def "v1beta1-attachments proximitybeaconbeaconsattachmentslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "namespacedType" $namespaced_type "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({beacon_name: $beacon_name} | format pattern "/v1beta1/{beacon_name}/attachments") $qp)
+  let full_url = (build-url $base ({beacon_name: (encode-path-segment $beacon_name)} | format pattern "/v1beta1/{beacon_name}/attachments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -499,7 +508,7 @@ export def "v1beta1-attachments proximitybeaconbeaconsattachmentslist" [
 #
 # POST /v1beta1/{beaconName}/attachments
 # operationId: proximitybeacon.beacons.attachments.create
-export def "v1beta1-attachments proximitybeaconbeaconsattachmentscreate" [
+export def "v1beta1-attachments create" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -531,19 +540,19 @@ export def "v1beta1-attachments proximitybeaconbeaconsattachmentscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({beacon_name: $beacon_name} | format pattern "/v1beta1/{beacon_name}/attachments") $qp)
-  let body = {"attachmentName": $attachment_name, "creationTimeMs": $creation_time_ms, "data": $data, "maxDistanceMeters": $max_distance_meters, "namespacedType": $namespaced_type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({beacon_name: (encode-path-segment $beacon_name)} | format pattern "/v1beta1/{beacon_name}/attachments") $qp)
+  let req_body = {"attachmentName": $attachment_name, "creationTimeMs": $creation_time_ms, "data": $data, "maxDistanceMeters": $max_distance_meters, "namespacedType": $namespaced_type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes multiple attachments on a given beacon. This operation is permanent and cannot be undone. You can optionally specify `namespacedType` to choose which attachments should be deleted. If you do not specify `namespacedType`, all your attachments on the given beacon will be deleted. You also may explicitly specify `*/*` to delete all. Authenticate using an [OAuth access token](https://developers.google.com/identity/protocols/OAuth2) from a signed-in user with **Is owner** or **Can edit** permissions in the Google Developers Console project.
 #
 # POST /v1beta1/{beaconName}/attachments:batchDelete
 # operationId: proximitybeacon.beacons.attachments.batchDelete
-export def "v1beta1-attachments-batch-delete proximitybeaconbeaconsattachmentsbatchDelete" [
+export def "v1beta1-attachments-batch-delete delete" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -570,7 +579,7 @@ export def "v1beta1-attachments-batch-delete proximitybeaconbeaconsattachmentsba
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "namespacedType" $namespaced_type "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({beacon_name: $beacon_name} | format pattern "/v1beta1/{beacon_name}/attachments:batchDelete") $qp)
+  let full_url = (build-url $base ({beacon_name: (encode-path-segment $beacon_name)} | format pattern "/v1beta1/{beacon_name}/attachments:batchDelete") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -580,7 +589,7 @@ export def "v1beta1-attachments-batch-delete proximitybeaconbeaconsattachmentsba
 #
 # GET /v1beta1/{beaconName}/diagnostics
 # operationId: proximitybeacon.beacons.diagnostics.list
-export def "v1beta1-diagnostics proximitybeaconbeaconsdiagnosticslist" [
+export def "v1beta1-diagnostics list" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -609,7 +618,7 @@ export def "v1beta1-diagnostics proximitybeaconbeaconsdiagnosticslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "alertFilter" $alert_filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({beacon_name: $beacon_name} | format pattern "/v1beta1/{beacon_name}/diagnostics") $qp)
+  let full_url = (build-url $base ({beacon_name: (encode-path-segment $beacon_name)} | format pattern "/v1beta1/{beacon_name}/diagnostics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -619,7 +628,7 @@ export def "v1beta1-diagnostics proximitybeaconbeaconsdiagnosticslist" [
 #
 # POST /v1beta1/{beaconName}:activate
 # operationId: proximitybeacon.beacons.activate
-export def "v1beta1 proximitybeaconbeaconsactivate" [
+export def "v1beta1 create-activate" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -645,7 +654,7 @@ export def "v1beta1 proximitybeaconbeaconsactivate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({beacon_name: $beacon_name} | format pattern "/v1beta1/{beacon_name}:activate") $qp)
+  let full_url = (build-url $base ({beacon_name: (encode-path-segment $beacon_name)} | format pattern "/v1beta1/{beacon_name}:activate") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -655,7 +664,7 @@ export def "v1beta1 proximitybeaconbeaconsactivate" [
 #
 # POST /v1beta1/{beaconName}:deactivate
 # operationId: proximitybeacon.beacons.deactivate
-export def "v1beta1 proximitybeaconbeaconsdeactivate" [
+export def "v1beta1 create-deactivate" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -681,7 +690,7 @@ export def "v1beta1 proximitybeaconbeaconsdeactivate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({beacon_name: $beacon_name} | format pattern "/v1beta1/{beacon_name}:deactivate") $qp)
+  let full_url = (build-url $base ({beacon_name: (encode-path-segment $beacon_name)} | format pattern "/v1beta1/{beacon_name}:deactivate") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -691,7 +700,7 @@ export def "v1beta1 proximitybeaconbeaconsdeactivate" [
 #
 # POST /v1beta1/{beaconName}:decommission
 # operationId: proximitybeacon.beacons.decommission
-export def "v1beta1 proximitybeaconbeaconsdecommission" [
+export def "v1beta1 create-decommission" [
   beacon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -717,7 +726,7 @@ export def "v1beta1 proximitybeaconbeaconsdecommission" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({beacon_name: $beacon_name} | format pattern "/v1beta1/{beacon_name}:decommission") $qp)
+  let full_url = (build-url $base ({beacon_name: (encode-path-segment $beacon_name)} | format pattern "/v1beta1/{beacon_name}:decommission") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -727,7 +736,7 @@ export def "v1beta1 proximitybeaconbeaconsdecommission" [
 #
 # PUT /v1beta1/{namespaceName}
 # operationId: proximitybeacon.namespaces.update
-export def "v1beta1 proximitybeaconnamespacesupdate" [
+export def "v1beta1 update-by-namespaceName" [
   namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -756,10 +765,10 @@ export def "v1beta1 proximitybeaconnamespacesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace_name: $namespace_name} | format pattern "/v1beta1/{namespace_name}") $qp)
-  let body = {"namespaceName": $body_namespace_name, "servingVisibility": $serving_visibility} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({namespace_name: (encode-path-segment $namespace_name)} | format pattern "/v1beta1/{namespace_name}") $qp)
+  let req_body = {"namespaceName": $body_namespace_name, "servingVisibility": $serving_visibility} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

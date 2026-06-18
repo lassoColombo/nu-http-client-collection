@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -74,7 +83,7 @@ def status-completer [] { ["CANCELLED" "FAILED" "FAILED_ROLLED_BACK" "IN_PROGRES
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations servicemanagementoperationslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/operations
 # operationId: servicemanagement.operations.list
-export def "operations servicemanagementoperationslist" [
+export def "operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,7 +145,7 @@ export def "operations servicemanagementoperationslist" [
 #
 # GET /v1/services
 # operationId: servicemanagement.services.list
-export def "services servicemanagementserviceslist" [
+export def "services list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +183,7 @@ export def "services servicemanagementserviceslist" [
 #
 # POST /v1/services
 # operationId: servicemanagement.services.create
-export def "services servicemanagementservicescreate" [
+export def "services create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,18 +211,18 @@ export def "services servicemanagementservicescreate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/services" $qp)
-  let body = {"producerProjectId": $producer_project_id, "serviceName": $service_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"producerProjectId": $producer_project_id, "serviceName": $service_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a managed service. This method will change the service to the `Soft-Delete` state for 30 days. Within this period, service producers may call UndeleteService to restore the service. After 30 days, the service will be permanently deleted. Operation
 #
 # DELETE /v1/services/{serviceName}
 # operationId: servicemanagement.services.delete
-export def "services servicemanagementservicesdelete" [
+export def "services delete" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -238,7 +247,7 @@ export def "services servicemanagementservicesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: $service_name} | format pattern "/v1/services/{service_name}") $qp)
+  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/v1/services/{service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -248,7 +257,7 @@ export def "services servicemanagementservicesdelete" [
 #
 # GET /v1/services/{serviceName}
 # operationId: servicemanagement.services.get
-export def "services servicemanagementservicesget" [
+export def "services get" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -273,7 +282,7 @@ export def "services servicemanagementservicesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: $service_name} | format pattern "/v1/services/{service_name}") $qp)
+  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/v1/services/{service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -283,7 +292,7 @@ export def "services servicemanagementservicesget" [
 #
 # GET /v1/services/{serviceName}/config
 # operationId: servicemanagement.services.getConfig
-export def "services-config servicemanagementservicesgetConfig" [
+export def "services-config get" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -310,7 +319,7 @@ export def "services-config servicemanagementservicesgetConfig" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "configId" $config_id "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: $service_name} | format pattern "/v1/services/{service_name}/config") $qp)
+  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/v1/services/{service_name}/config") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -320,7 +329,7 @@ export def "services-config servicemanagementservicesgetConfig" [
 #
 # GET /v1/services/{serviceName}/configs
 # operationId: servicemanagement.services.configs.list
-export def "services-configs servicemanagementservicesconfigslist" [
+export def "services-configs list" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +356,7 @@ export def "services-configs servicemanagementservicesconfigslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: $service_name} | format pattern "/v1/services/{service_name}/configs") $qp)
+  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/v1/services/{service_name}/configs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -363,24 +372,24 @@ export def "services-configs servicemanagementservicesconfigslist" [
 # --billing shape: {consumerDestinations?: list}
 # --context shape: {rules?: list}
 # --control shape: {environment?: string}
-# --customError shape: {rules?: list, types?: list}
+# --customError shape: {rules?: list, types?: list<string>}
 # --documentation shape: {documentationRootUrl?: string, overview?: string, pages?: list, rules?: list, serviceRootUrl?: string, summary?: string}
-# --endpoints item shape: {aliases?: list, allowCors?: bool, name?: string, target?: string}
+# --endpoints item shape: {aliases?: list<string>, allowCors?: bool, name?: string, target?: string}
 # --enums item shape: {edition?: string, enumvalue?: list, name?: string, options?: list, sourceContext?: record, syntax?: "SYNTAX_PROTO2"|"SYNTAX_PROTO3"|"SYNTAX_EDITIONS"}
 # --http shape: {fullyDecodeReservedExpansion?: bool, rules?: list}
 # --logging shape: {consumerDestinations?: list, producerDestinations?: list}
 # --logs item shape: {description?: string, displayName?: string, labels?: list, name?: string}
-# --metrics item shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", metadata?: record, metricKind?: "METRIC_KIND_UNSPECIFIED"|"GAUGE"|"DELTA"|"CUMULATIVE", monitoredResourceTypes?: list, name?: string, type?: string, unit?: string, valueType?: "VALUE_TYPE_UNSPECIFIED"|"BOOL"|"INT64"|"DOUBLE"|"STRING"|"DISTRIBUTION"|"MONEY"}
+# --metrics item shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", metadata?: record, metricKind?: "METRIC_KIND_UNSPECIFIED"|"GAUGE"|"DELTA"|"CUMULATIVE", monitoredResourceTypes?: list<string>, name?: string, type?: string, unit?: string, valueType?: "VALUE_TYPE_UNSPECIFIED"|"BOOL"|"INT64"|"DOUBLE"|"STRING"|"DISTRIBUTION"|"MONEY"}
 # --monitoredResources item shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", name?: string, type?: string}
 # --monitoring shape: {consumerDestinations?: list, producerDestinations?: list}
-# --publishing shape: {apiShortName?: string, codeownerGithubTeams?: list, docTagPrefix?: string, documentationUri?: string, githubLabel?: string, librarySettings?: list, methodSettings?: list, newIssueUri?: string, organization?: "CLIENT_LIBRARY_ORGANIZATION_UNSPECIFIED"|"CLOUD"|"ADS"|"PHOTOS"|"STREET_VIEW"|"SHOPPING", protoReferenceDocumentationUri?: string}
+# --publishing shape: {apiShortName?: string, codeownerGithubTeams?: list<string>, docTagPrefix?: string, documentationUri?: string, githubLabel?: string, librarySettings?: list, methodSettings?: list, newIssueUri?: string, organization?: "CLIENT_LIBRARY_ORGANIZATION_UNSPECIFIED"|"CLOUD"|"ADS"|"PHOTOS"|"STREET_VIEW"|"SHOPPING", protoReferenceDocumentationUri?: string}
 # --quota shape: {limits?: list, metricRules?: list}
 # --sourceInfo shape: {sourceFiles?: list}
 # --systemParameters shape: {rules?: list}
-# --systemTypes item shape: {edition?: string, fields?: list, name?: string, oneofs?: list, options?: list, sourceContext?: record, syntax?: "SYNTAX_PROTO2"|"SYNTAX_PROTO3"|"SYNTAX_EDITIONS"}
-# --types item shape: {edition?: string, fields?: list, name?: string, oneofs?: list, options?: list, sourceContext?: record, syntax?: "SYNTAX_PROTO2"|"SYNTAX_PROTO3"|"SYNTAX_EDITIONS"}
-# --usage shape: {producerNotificationChannel?: string, requirements?: list, rules?: list}
-export def "services-configs servicemanagementservicesconfigscreate" [
+# --systemTypes item shape: {edition?: string, fields?: list, name?: string, oneofs?: list<string>, options?: list, sourceContext?: record, syntax?: "SYNTAX_PROTO2"|"SYNTAX_PROTO3"|"SYNTAX_EDITIONS"}
+# --types item shape: {edition?: string, fields?: list, name?: string, oneofs?: list<string>, options?: list, sourceContext?: record, syntax?: "SYNTAX_PROTO2"|"SYNTAX_PROTO3"|"SYNTAX_EDITIONS"}
+# --usage shape: {producerNotificationChannel?: string, requirements?: list<string>, rules?: list}
+export def "services-configs create" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -408,45 +417,45 @@ export def "services-configs servicemanagementservicesconfigscreate" [
   --config-version: int # Obsolete. Do not use. This field has no semantic meaning. The service config compiler always sets this field to `3`. (format: uint32)
   --context: record # `Context` defines which contexts an API requests. Example: context: rules: - selector: "*" requested: - google.rpc.context.ProjectContext - google.rpc.context.OriginContext The above specifies that all methods in the API request `google.rpc.context.ProjectContext` and `google.rpc.context.OriginContext`. Available context types are defined in package `google.rpc.context`. This also provides mechanism to allowlist any protobuf message extension that can be sent in grpc metadata using “x-goog-ext--bin” and “x-goog-ext--jspb” format. For example, list any service specific protobuf types that can appear in grpc metadata as follows in your yaml file: Example: context: rules: - selector: "google.example.library.v1.LibraryService.CreateBook" allowed_request_extensions: - google.foo.v1.NewExtension allowed_response_extensions: - google.foo.v1.NewExtension You can also specify extension ID instead of fully qualified extension name here. — shape: {rules?: list}
   --control: record # Selects and configures the service controller used by the service. Example: control: environment: servicecontrol.googleapis.com — shape: {environment?: string}
-  --custom-error: record # Customize service error responses. For example, list any service specific protobuf types that can appear in error detail lists of error responses. Example: custom_error: types: - google.foo.v1.CustomError - google.foo.v1.AnotherError — shape: {rules?: list, types?: list}
+  --custom-error: record # Customize service error responses. For example, list any service specific protobuf types that can appear in error detail lists of error responses. Example: custom_error: types: - google.foo.v1.CustomError - google.foo.v1.AnotherError — shape: {rules?: list, types?: list<string>}
   --documentation: record # `Documentation` provides the information for describing a service. Example: documentation: summary: > The Google Calendar API gives access to most calendar features. pages: - name: Overview content: (== include google/foo/overview.md ==) - name: Tutorial content: (== include google/foo/tutorial.md ==) subpages; - name: Java content: (== include google/foo/tutorial_java.md ==) rules: - selector: google.calendar.Calendar.Get description: > ... - selector: google.calendar.Calendar.Put description: > ... Documentation is provided in markdown syntax. In addition to standard markdown features, definition lists, tables and fenced code blocks are supported. Section headers can be provided and are interpreted relative to the section nesting of the context where a documentation fragment is embedded. Documentation from the IDL is merged with documentation defined via the config at normalization time, where documentation provided by config rules overrides IDL provided. A number of constructs specific to the API platform are supported in documentation text. In order to reference a proto element, the following notation can be used: [fully.qualified.proto.name][] To override the display text used for the link, this can be used: [display text][fully.qualified.proto.name] Text can be excluded from doc using the following notation: (-- internal comment --) A few directives are available in documentation. Note that directives must appear on a single line to be properly identified. The `include` directive includes a markdown file from an external source: (== include path/to/file ==) The `resource_for` directive marks a message to be the resource of a collection in REST view. If it is not specified, tools attempt to infer the resource from the operations in a collection: (== resource_for v1.shelves.books ==) The directive `suppress_warning` does not directly affect documentation and is documented together with service config validation. — shape: {documentationRootUrl?: string, overview?: string, pages?: list, rules?: list, serviceRootUrl?: string, summary?: string}
-  --endpoints: list # Configuration for network endpoints. If this is empty, then an endpoint with the same name as the service is automatically generated to service all defined APIs. — item shape: {aliases?: list, allowCors?: bool, name?: string, target?: string}
+  --endpoints: list # Configuration for network endpoints. If this is empty, then an endpoint with the same name as the service is automatically generated to service all defined APIs. — item shape: {aliases?: list<string>, allowCors?: bool, name?: string, target?: string}
   --enums: list # A list of all enum types included in this API service. Enums referenced directly or indirectly by the `apis` are automatically included. Enums which are not referenced but shall be included should be listed here by name by the configuration author. Example: enums: - name: google.someapi.v1.SomeEnum — item shape: {edition?: string, enumvalue?: list, name?: string, options?: list, sourceContext?: record, syntax?: "SYNTAX_PROTO2"|"SYNTAX_PROTO3"|"SYNTAX_EDITIONS"}
   --http: record # Defines the HTTP configuration for an API service. It contains a list of HttpRule, each specifying the mapping of an RPC method to one or more HTTP REST API methods. — shape: {fullyDecodeReservedExpansion?: bool, rules?: list}
   --id: string # A unique ID for a specific instance of this message, typically assigned by the client for tracking purpose. Must be no longer than 63 characters and only lower case letters, digits, '.', '_' and '-' are allowed. If empty, the server may choose to generate one instead.
   --logging: record # Logging configuration of the service. The following example shows how to configure logs to be sent to the producer and consumer projects. In the example, the `activity_history` log is sent to both the producer and consumer projects, whereas the `purchase_history` log is only sent to the producer project. monitored_resources: - type: library.googleapis.com/branch labels: - key: /city description: The city where the library branch is located in. - key: /name description: The name of the branch. logs: - name: activity_history labels: - key: /customer_id - name: purchase_history logging: producer_destinations: - monitored_resource: library.googleapis.com/branch logs: - activity_history - purchase_history consumer_destinations: - monitored_resource: library.googleapis.com/branch logs: - activity_history — shape: {consumerDestinations?: list, producerDestinations?: list}
   --logs: list # Defines the logs used by this service. — item shape: {description?: string, displayName?: string, labels?: list, name?: string}
-  --metrics: list # Defines the metrics used by this service. — item shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", metadata?: record, metricKind?: "METRIC_KIND_UNSPECIFIED"|"GAUGE"|"DELTA"|"CUMULATIVE", monitoredResourceTypes?: list, name?: string, type?: string, unit?: string, valueType?: "VALUE_TYPE_UNSPECIFIED"|"BOOL"|"INT64"|"DOUBLE"|"STRING"|"DISTRIBUTION"|"MONEY"}
+  --metrics: list # Defines the metrics used by this service. — item shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", metadata?: record, metricKind?: "METRIC_KIND_UNSPECIFIED"|"GAUGE"|"DELTA"|"CUMULATIVE", monitoredResourceTypes?: list<string>, name?: string, type?: string, unit?: string, valueType?: "VALUE_TYPE_UNSPECIFIED"|"BOOL"|"INT64"|"DOUBLE"|"STRING"|"DISTRIBUTION"|"MONEY"}
   --monitored-resources: list # Defines the monitored resources used by this service. This is required by the Service.monitoring and Service.logging configurations. — item shape: {description?: string, displayName?: string, labels?: list, launchStage?: "LAUNCH_STAGE_UNSPECIFIED"|"UNIMPLEMENTED"|"PRELAUNCH"|"EARLY_ACCESS"|"ALPHA"|"BETA"|"GA"|"DEPRECATED", name?: string, type?: string}
   --monitoring: record # Monitoring configuration of the service. The example below shows how to configure monitored resources and metrics for monitoring. In the example, a monitored resource and two metrics are defined. The `library.googleapis.com/book/returned_count` metric is sent to both producer and consumer projects, whereas the `library.googleapis.com/book/num_overdue` metric is only sent to the consumer project. monitored_resources: - type: library.googleapis.com/Branch display_name: "Library Branch" description: "A branch of a library." launch_stage: GA labels: - key: resource_container description: "The Cloud container (ie. project id) for the Branch." - key: location description: "The location of the library branch." - key: branch_id description: "The id of the branch." metrics: - name: library.googleapis.com/book/returned_count display_name: "Books Returned" description: "The count of books that have been returned." launch_stage: GA metric_kind: DELTA value_type: INT64 unit: "1" labels: - key: customer_id description: "The id of the customer." - name: library.googleapis.com/book/num_overdue display_name: "Books Overdue" description: "The current number of overdue books." launch_stage: GA metric_kind: GAUGE value_type: INT64 unit: "1" labels: - key: customer_id description: "The id of the customer." monitoring: producer_destinations: - monitored_resource: library.googleapis.com/Branch metrics: - library.googleapis.com/book/returned_count consumer_destinations: - monitored_resource: library.googleapis.com/Branch metrics: - library.googleapis.com/book/returned_count - library.googleapis.com/book/num_overdue — shape: {consumerDestinations?: list, producerDestinations?: list}
   --name: string # The service name, which is a DNS-like logical identifier for the service, such as `calendar.googleapis.com`. The service name typically goes through DNS verification to make sure the owner of the service also owns the DNS name.
   --producer-project-id: string # The Google project that owns this service.
-  --publishing: record # This message configures the settings for publishing [Google Cloud Client libraries](https://cloud.google.com/apis/docs/cloud-client-libraries) generated from the service config. — shape: {apiShortName?: string, codeownerGithubTeams?: list, docTagPrefix?: string, documentationUri?: string, githubLabel?: string, librarySettings?: list, methodSettings?: list, newIssueUri?: string, organization?: "CLIENT_LIBRARY_ORGANIZATION_UNSPECIFIED"|"CLOUD"|"ADS"|"PHOTOS"|"STREET_VIEW"|"SHOPPING", protoReferenceDocumentationUri?: string}
-  --quota: record # Quota configuration helps to achieve fairness and budgeting in service usage. The metric based quota configuration works this way: - The service configuration defines a set of metrics. - For API calls, the quota.metric_rules maps methods to metrics with corresponding costs. - The quota.limits defines limits on the metrics, which will be used for quota checks at runtime. An example quota configuration in yaml format: quota: limits: - name: apiWriteQpsPerProject metric: library.googleapis.com/write_calls unit: "1/min/{project}" # rate limit for consumer projects values: STANDARD: 10000 (The metric rules bind all methods to the read_calls metric, except for the UpdateBook and DeleteBook methods. These two methods are mapped to the write_calls metric, with the UpdateBook method consuming at twice rate as the DeleteBook method.) metric_rules: - selector: "*" metric_costs: library.googleapis.com/read_calls: 1 - selector: google.example.library.v1.LibraryService.UpdateBook metric_costs: library.googleapis.com/write_calls: 2 - selector: google.example.library.v1.LibraryService.DeleteBook metric_costs: library.googleapis.com/write_calls: 1 Corresponding Metric definition: metrics: - name: library.googleapis.com/read_calls display_name: Read requests metric_kind: DELTA value_type: INT64 - name: library.googleapis.com/write_calls display_name: Write requests metric_kind: DELTA value_type: INT64  — shape: {limits?: list, metricRules?: list}
+  --publishing: record # This message configures the settings for publishing [Google Cloud Client libraries](https://cloud.google.com/apis/docs/cloud-client-libraries) generated from the service config. — shape: {apiShortName?: string, codeownerGithubTeams?: list<string>, docTagPrefix?: string, documentationUri?: string, githubLabel?: string, librarySettings?: list, methodSettings?: list, newIssueUri?: string, organization?: "CLIENT_LIBRARY_ORGANIZATION_UNSPECIFIED"|"CLOUD"|"ADS"|"PHOTOS"|"STREET_VIEW"|"SHOPPING", protoReferenceDocumentationUri?: string}
+  --quota: record # Quota configuration helps to achieve fairness and budgeting in service usage. The metric based quota configuration works this way: - The service configuration defines a set of metrics. - For API calls, the quota.metric_rules maps methods to metrics with corresponding costs. - The quota.limits defines limits on the metrics, which will be used for quota checks at runtime. An example quota configuration in yaml format: quota: limits: - name: apiWriteQpsPerProject metric: library.googleapis.com/write_calls unit: "1/min/{project}" # rate limit for consumer projects values: STANDARD: 10000 (The metric rules bind all methods to the read_calls metric, except for the UpdateBook and DeleteBook methods. These two methods are mapped to the write_calls metric, with the UpdateBook method consuming at twice rate as the DeleteBook method.) metric_rules: - selector: "*" metric_costs: library.googleapis.com/read_calls: 1 - selector: google.example.library.v1.LibraryService.UpdateBook metric_costs: library.googleapis.com/write_calls: 2 - selector: google.example.library.v1.LibraryService.DeleteBook metric_costs: library.googleapis.com/write_calls: 1 Corresponding Metric definition: metrics: - name: library.googleapis.com/read_calls display_name: Read requests metric_kind: DELTA value_type: INT64 - name: library.googleapis.com/write_calls display_name: Write requests metric_kind: DELTA value_type: INT64 — shape: {limits?: list, metricRules?: list}
   --source-info: record # Source information used to create a Service Config — shape: {sourceFiles?: list}
   --system-parameters: record # ### System parameter configuration A system parameter is a special kind of parameter defined by the API system, not by an individual API. It is typically mapped to an HTTP header and/or a URL query parameter. This configuration specifies which methods change the names of the system parameters. — shape: {rules?: list}
-  --system-types: list # A list of all proto message types included in this API service. It serves similar purpose as [google.api.Service.types], except that these types are not needed by user-defined APIs. Therefore, they will not show up in the generated discovery doc. This field should only be used to define system APIs in ESF. — item shape: {edition?: string, fields?: list, name?: string, oneofs?: list, options?: list, sourceContext?: record, syntax?: "SYNTAX_PROTO2"|"SYNTAX_PROTO3"|"SYNTAX_EDITIONS"}
+  --system-types: list # A list of all proto message types included in this API service. It serves similar purpose as [google.api.Service.types], except that these types are not needed by user-defined APIs. Therefore, they will not show up in the generated discovery doc. This field should only be used to define system APIs in ESF. — item shape: {edition?: string, fields?: list, name?: string, oneofs?: list<string>, options?: list, sourceContext?: record, syntax?: "SYNTAX_PROTO2"|"SYNTAX_PROTO3"|"SYNTAX_EDITIONS"}
   --title: string # The product title for this service, it is the name displayed in Google Cloud Console.
-  --types: list # A list of all proto message types included in this API service. Types referenced directly or indirectly by the `apis` are automatically included. Messages which are not referenced but shall be included, such as types used by the `google.protobuf.Any` type, should be listed here by name by the configuration author. Example: types: - name: google.protobuf.Int32 — item shape: {edition?: string, fields?: list, name?: string, oneofs?: list, options?: list, sourceContext?: record, syntax?: "SYNTAX_PROTO2"|"SYNTAX_PROTO3"|"SYNTAX_EDITIONS"}
-  --usage: record # Configuration controlling usage of a service. — shape: {producerNotificationChannel?: string, requirements?: list, rules?: list}
+  --types: list # A list of all proto message types included in this API service. Types referenced directly or indirectly by the `apis` are automatically included. Messages which are not referenced but shall be included, such as types used by the `google.protobuf.Any` type, should be listed here by name by the configuration author. Example: types: - name: google.protobuf.Int32 — item shape: {edition?: string, fields?: list, name?: string, oneofs?: list<string>, options?: list, sourceContext?: record, syntax?: "SYNTAX_PROTO2"|"SYNTAX_PROTO3"|"SYNTAX_EDITIONS"}
+  --usage: record # Configuration controlling usage of a service. — shape: {producerNotificationChannel?: string, requirements?: list<string>, rules?: list}
 ]: any -> record<apis: table<methods: list, mixins: list, name: string, options: list, sourceContext: record, syntax: string, version: string>, authentication: record<providers: list<record>, rules: list<record>>, backend: record<rules: list<record>>, billing: record<consumerDestinations: list<record>>, configVersion: int, context: record<rules: list<record>>, control: record<environment: string>, customError: record<rules: list<record>, types: list<string>>, documentation: record<documentationRootUrl: string, overview: string, pages: list<record>, rules: list<record>, serviceRootUrl: string, summary: string>, endpoints: table<aliases: list, allowCors: bool, name: string, target: string>, enums: table<edition: string, enumvalue: list, name: string, options: list, sourceContext: record, syntax: string>, http: record<fullyDecodeReservedExpansion: bool, rules: list<record>>, id: string, logging: record<consumerDestinations: list<record>, producerDestinations: list<record>>, logs: table<description: string, displayName: string, labels: list, name: string>, metrics: table<description: string, displayName: string, labels: list, launchStage: string, metadata: record, metricKind: string, monitoredResourceTypes: list, name: string, type: string, unit: string, valueType: string>, monitoredResources: table<description: string, displayName: string, labels: list, launchStage: string, name: string, type: string>, monitoring: record<consumerDestinations: list<record>, producerDestinations: list<record>>, name: string, producerProjectId: string, publishing: record<apiShortName: string, codeownerGithubTeams: list<string>, docTagPrefix: string, documentationUri: string, githubLabel: string, librarySettings: list<record>, methodSettings: list<record>, newIssueUri: string, organization: string, protoReferenceDocumentationUri: string>, quota: record<limits: list<record>, metricRules: list<record>>, sourceInfo: record<sourceFiles: list<record>>, systemParameters: record<rules: list<record>>, systemTypes: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, title: string, types: table<edition: string, fields: list, name: string, oneofs: list, options: list, sourceContext: record, syntax: string>, usage: record<producerNotificationChannel: string, requirements: list<string>, rules: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: $service_name} | format pattern "/v1/services/{service_name}/configs") $qp)
-  let body = {"apis": $apis, "authentication": $authentication, "backend": $backend, "billing": $billing, "configVersion": $config_version, "context": $context, "control": $control, "customError": $custom_error, "documentation": $documentation, "endpoints": $endpoints, "enums": $enums, "http": $http, "id": $id, "logging": $logging, "logs": $logs, "metrics": $metrics, "monitoredResources": $monitored_resources, "monitoring": $monitoring, "name": $name, "producerProjectId": $producer_project_id, "publishing": $publishing, "quota": $quota, "sourceInfo": $source_info, "systemParameters": $system_parameters, "systemTypes": $system_types, "title": $title, "types": $types, "usage": $usage} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/v1/services/{service_name}/configs") $qp)
+  let req_body = {"apis": $apis, "authentication": $authentication, "backend": $backend, "billing": $billing, "configVersion": $config_version, "context": $context, "control": $control, "customError": $custom_error, "documentation": $documentation, "endpoints": $endpoints, "enums": $enums, "http": $http, "id": $id, "logging": $logging, "logs": $logs, "metrics": $metrics, "monitoredResources": $monitored_resources, "monitoring": $monitoring, "name": $name, "producerProjectId": $producer_project_id, "publishing": $publishing, "quota": $quota, "sourceInfo": $source_info, "systemParameters": $system_parameters, "systemTypes": $system_types, "title": $title, "types": $types, "usage": $usage} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a service configuration (version) for a managed service.
 #
 # GET /v1/services/{serviceName}/configs/{configId}
 # operationId: servicemanagement.services.configs.get
-export def "services-configs servicemanagementservicesconfigsget" [
+export def "services-configs get" [
   service_name: string
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -473,7 +482,7 @@ export def "services-configs servicemanagementservicesconfigsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: $service_name, config_id: $config_id} | format pattern "/v1/services/{service_name}/configs/{config_id}") $qp)
+  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), config_id: (encode-path-segment $config_id)} | format pattern "/v1/services/{service_name}/configs/{config_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -484,7 +493,7 @@ export def "services-configs servicemanagementservicesconfigsget" [
 # POST /v1/services/{serviceName}/configs:submit
 # operationId: servicemanagement.services.configs.submit
 # --configSource shape: {files?: list, id?: string}
-export def "services-configs-submit servicemanagementservicesconfigssubmit" [
+export def "services-configs-submit submit" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,19 +521,19 @@ export def "services-configs-submit servicemanagementservicesconfigssubmit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: $service_name} | format pattern "/v1/services/{service_name}/configs:submit") $qp)
-  let body = {"configSource": $config_source, "validateOnly": $validate_only} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/v1/services/{service_name}/configs:submit") $qp)
+  let req_body = {"configSource": $config_source, "validateOnly": $validate_only} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the history of the service configuration rollouts for a managed service, from the newest to the oldest.
 #
 # GET /v1/services/{serviceName}/rollouts
 # operationId: servicemanagement.services.rollouts.list
-export def "services-rollouts servicemanagementservicesrolloutslist" [
+export def "services-rollouts list" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -552,7 +561,7 @@ export def "services-rollouts servicemanagementservicesrolloutslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: $service_name} | format pattern "/v1/services/{service_name}/rollouts") $qp)
+  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/v1/services/{service_name}/rollouts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -563,7 +572,7 @@ export def "services-rollouts servicemanagementservicesrolloutslist" [
 # POST /v1/services/{serviceName}/rollouts
 # operationId: servicemanagement.services.rollouts.create
 # --trafficPercentStrategy shape: {percentages?: record}
-export def "services-rollouts servicemanagementservicesrolloutscreate" [
+export def "services-rollouts create" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -596,19 +605,19 @@ export def "services-rollouts servicemanagementservicesrolloutscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: $service_name} | format pattern "/v1/services/{service_name}/rollouts") $qp)
-  let body = {"createTime": $create_time, "createdBy": $created_by, "deleteServiceStrategy": $delete_service_strategy, "rolloutId": $rollout_id, "serviceName": $body_service_name, "status": $status, "trafficPercentStrategy": $traffic_percent_strategy} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/v1/services/{service_name}/rollouts") $qp)
+  let req_body = {"createTime": $create_time, "createdBy": $created_by, "deleteServiceStrategy": $delete_service_strategy, "rolloutId": $rollout_id, "serviceName": $body_service_name, "status": $status, "trafficPercentStrategy": $traffic_percent_strategy} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets a service configuration rollout.
 #
 # GET /v1/services/{serviceName}/rollouts/{rolloutId}
 # operationId: servicemanagement.services.rollouts.get
-export def "services-rollouts servicemanagementservicesrolloutsget" [
+export def "services-rollouts get" [
   service_name: string
   rollout_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -634,7 +643,7 @@ export def "services-rollouts servicemanagementservicesrolloutsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: $service_name, rollout_id: $rollout_id} | format pattern "/v1/services/{service_name}/rollouts/{rollout_id}") $qp)
+  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), rollout_id: (encode-path-segment $rollout_id)} | format pattern "/v1/services/{service_name}/rollouts/{rollout_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -644,7 +653,7 @@ export def "services-rollouts servicemanagementservicesrolloutsget" [
 #
 # POST /v1/services/{serviceName}:undelete
 # operationId: servicemanagement.services.undelete
-export def "services servicemanagementservicesundelete" [
+export def "services create-undelete" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -669,7 +678,7 @@ export def "services servicemanagementservicesundelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_name: $service_name} | format pattern "/v1/services/{service_name}:undelete") $qp)
+  let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/v1/services/{service_name}:undelete") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -679,7 +688,7 @@ export def "services servicemanagementservicesundelete" [
 #
 # POST /v1/services:generateConfigReport
 # operationId: servicemanagement.services.generateConfigReport
-export def "services-generate-config-report servicemanagementservicesgenerateConfigReport" [
+export def "services-generate-config-report generate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -707,18 +716,18 @@ export def "services-generate-config-report servicemanagementservicesgenerateCon
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/services:generateConfigReport" $qp)
-  let body = {"newConfig": $new_config, "oldConfig": $old_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"newConfig": $new_config, "oldConfig": $old_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the latest state of a long-running operation. Clients can use this method to poll the operation result at intervals as recommended by the API service.
 #
 # GET /v1/{name}
 # operationId: servicemanagement.operations.get
-export def "operations servicemanagementoperationsget" [
+export def "operations get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -743,7 +752,7 @@ export def "operations servicemanagementoperationsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -754,7 +763,7 @@ export def "operations servicemanagementoperationsget" [
 # POST /v1/{resource}:getIamPolicy
 # operationId: servicemanagement.services.consumers.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "services servicemanagementservicesconsumersgetIamPolicy" [
+export def "services get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -781,12 +790,12 @@ export def "services servicemanagementservicesconsumersgetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:getIamPolicy") $qp)
-  let body = {"options": $options} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:getIamPolicy") $qp)
+  let req_body = {"options": $options} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sets the access control policy on the specified resource. Replaces any existing policy. Can return `NOT_FOUND`, `INVALID_ARGUMENT`, and `PERMISSION_DENIED` errors.
@@ -794,7 +803,7 @@ export def "services servicemanagementservicesconsumersgetIamPolicy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: servicemanagement.services.consumers.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "services servicemanagementservicesconsumerssetIamPolicy" [
+export def "services update-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -822,19 +831,19 @@ export def "services servicemanagementservicesconsumerssetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:setIamPolicy") $qp)
-  let body = {"policy": $policy, "updateMask": $update_mask} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:setIamPolicy") $qp)
+  let req_body = {"policy": $policy, "updateMask": $update_mask} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns permissions that a caller has on the specified resource. If the resource does not exist, this will return an empty set of permissions, not a `NOT_FOUND` error. Note: This operation is designed to be used for building permission-aware UIs and command-line tools, not for authorization checking. This operation may "fail open" without warning.
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: servicemanagement.services.consumers.testIamPermissions
-export def "services servicemanagementservicesconsumerstestIamPermissions" [
+export def "services test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -855,16 +864,16 @@ export def "services servicemanagementservicesconsumerstestIamPermissions" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --permissions: list # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
+  --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:testIamPermissions") $qp)
-  let body = {"permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:testIamPermissions") $qp)
+  let req_body = {"permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

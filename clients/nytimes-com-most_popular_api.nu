@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -71,7 +80,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mostemailed mostemailed-section-time-period-json" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mostemailed get-json" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # GET /mostemailed/{section}/{time-period}.json
 # operationId: GET_mostemailed-section-time-period-json
-export def "mostemailed mostemailed-section-time-period-json" [
+export def "mostemailed get-json" [
   section: string
   time_period: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -110,7 +119,7 @@ export def "mostemailed mostemailed-section-time-period-json" [
 ]: nothing -> record<copyright: string, num_results: int, results: table<abstract: string, byline: string, column: string, count_type: string, des_facet: any, geo_facet: any, media: list, org_facet: list, per_facet: list, published_date: string, section: string, source: string, title: string, url: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({section: $section, time_period: $time_period} | format pattern "/mostemailed/{section}/{time_period}.json"))
+  let full_url = (build-url $base ({section: (encode-path-segment $section), time_period: (encode-path-segment $time_period)} | format pattern "/mostemailed/{section}/{time_period}.json"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,7 +129,7 @@ export def "mostemailed mostemailed-section-time-period-json" [
 #
 # GET /mostshared/{section}/{time-period}.json
 # operationId: GET_mostshared-section-time-period-json
-export def "mostshared mostshared-section-time-period-json" [
+export def "mostshared get-json" [
   section: string
   time_period: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -134,7 +143,7 @@ export def "mostshared mostshared-section-time-period-json" [
 ]: nothing -> record<copyright: string, num_results: int, results: table<abstract: string, byline: string, column: string, des_facet: any, geo_facet: any, media: any, org_facet: list, per_facet: list, published_date: string, section: string, source: string, title: string, url: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({section: $section, time_period: $time_period} | format pattern "/mostshared/{section}/{time_period}.json"))
+  let full_url = (build-url $base ({section: (encode-path-segment $section), time_period: (encode-path-segment $time_period)} | format pattern "/mostshared/{section}/{time_period}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,7 +153,7 @@ export def "mostshared mostshared-section-time-period-json" [
 #
 # GET /mostviewed/{section}/{time-period}.json
 # operationId: GET_mostviewed-section-time-period-json
-export def "mostviewed mostviewed-section-time-period-json" [
+export def "mostviewed get-json" [
   section: string
   time_period: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -158,7 +167,7 @@ export def "mostviewed mostviewed-section-time-period-json" [
 ]: nothing -> record<copyright: string, num_results: int, results: table<abstract: string, byline: string, column: string, des_facet: any, geo_facet: any, media: any, org_facet: list, per_facet: list, published_date: string, section: string, source: string, title: string, url: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({section: $section, time_period: $time_period} | format pattern "/mostviewed/{section}/{time_period}.json"))
+  let full_url = (build-url $base ({section: (encode-path-segment $section), time_period: (encode-path-segment $time_period)} | format pattern "/mostviewed/{section}/{time_period}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

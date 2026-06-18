@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "report-report-status get-reportstatusby" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "report-report-status get-getreportstatusby" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /report/reportStatus/{reportId}
 # operationId: GetreportstatusbyID
-export def "report-report-status get-reportstatusby" [
+export def "report-report-status get-getreportstatusby" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -109,11 +118,11 @@ export def "report-report-status get-reportstatusby" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({report_id: $report_id} | format pattern "/report/reportStatus/{report_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/report/reportStatus/{report_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -121,7 +130,7 @@ export def "report-report-status get-reportstatusby" [
 #
 # GET /report/subscriptionsByDate
 # operationId: Requestreportbydate
-export def "report-subscriptions-by-date request-reportbydate" [
+export def "report-subscriptions-by-date get-requestreportbydate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,10 +149,10 @@ export def "report-subscriptions-by-date request-reportbydate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "requesterEmail" $requester_email "scalar") (serialize-qp "beginDate" $begin_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/report/subscriptionsByDate" $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -151,7 +160,7 @@ export def "report-subscriptions-by-date request-reportbydate" [
 #
 # GET /report/subscriptionsByStatus
 # operationId: RequestreportbyStatus
-export def "report-subscriptions-by-status request-reportby" [
+export def "report-subscriptions-by-status get-requestreportby" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,10 +178,10 @@ export def "report-subscriptions-by-status request-reportby" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "requesterEmail" $requester_email "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/report/subscriptionsByStatus" $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -180,7 +189,7 @@ export def "report-subscriptions-by-status request-reportby" [
 #
 # GET /report/subscriptionsOrderByDate
 # operationId: Requestreportbyorderdate
-export def "report-subscriptions-order-by-date request-reportbyorderdate" [
+export def "report-subscriptions-order-by-date get-requestreportbyorderdate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,10 +208,10 @@ export def "report-subscriptions-order-by-date request-reportbyorderdate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "requesterEmail" $requester_email "scalar") (serialize-qp "beginDate" $begin_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/report/subscriptionsOrderByDate" $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -210,7 +219,7 @@ export def "report-subscriptions-order-by-date request-reportbyorderdate" [
 #
 # GET /report/subscriptionsScheduled
 # operationId: Requestreportbyschedule
-export def "report-subscriptions-scheduled request-reportbyschedule" [
+export def "report-subscriptions-scheduled get-requestreportbyschedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,10 +238,10 @@ export def "report-subscriptions-scheduled request-reportbyschedule" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "requesterEmail" $requester_email "scalar") (serialize-qp "beginDate" $begin_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/report/subscriptionsScheduled" $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -240,7 +249,7 @@ export def "report-subscriptions-scheduled request-reportbyschedule" [
 #
 # GET /report/subscriptionsUpdated
 # operationId: Requestreportbyupdate
-export def "report-subscriptions-updated request-reportbyupdate" [
+export def "report-subscriptions-updated get-requestreportbyupdate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,10 +268,10 @@ export def "report-subscriptions-updated request-reportbyupdate" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "requesterEmail" $requester_email "scalar") (serialize-qp "beginDate" $begin_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/report/subscriptionsUpdated" $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -285,10 +294,10 @@ export def "settings get" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/settings")
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -296,7 +305,7 @@ export def "settings get" [
 #
 # POST /settings
 # operationId: EditSettings
-export def "settings post" [
+export def "settings create-edit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +317,7 @@ export def "settings post" [
   --content-type: string # Type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
   --default-sla: string # Default delivery method. (nullable)
-  delivery_channels: list # Array containing delivery channels. (default: [], e.g. delivery)
+  delivery_channels: list<string> # Array containing delivery channels. (default: [], e.g. delivery)
   execution_hour_in_utc: int # Indicates the time future subscription orders will be generated. (default: 0, e.g. 9)
   --is-multiple-installments-enabled-on-creation: oneof<nothing, bool> # Defines whether or not multiple installments are enabled when a subscription is created. (default: false, e.g. false)
   --is-multiple-installments-enabled-on-update: oneof<nothing, bool> # Defines whether or not multiple installments are enabled when a subscription is updated. (default: false, e.g. false)
@@ -326,20 +335,22 @@ export def "settings post" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/settings")
-  let body = {"defaultSla": $default_sla, "deliveryChannels": $delivery_channels, "executionHourInUtc": $execution_hour_in_utc, "isMultipleInstallmentsEnabledOnCreation": $is_multiple_installments_enabled_on_creation, "isMultipleInstallmentsEnabledOnUpdate": $is_multiple_installments_enabled_on_update, "isUsingV3": $is_using_v3, "manualPriceAllowed": $manual_price_allowed, "onMigrationProcess": $on_migration_process, "orderCustomDataAppId": $order_custom_data_app_id, "postponeExpiration": $postpone_expiration, "randomIdGeneration": $random_id_generation, "slaOption": $sla_option, "useItemPriceFromOriginalOrder": $use_item_price_from_original_order, "workflowVersion": $workflow_version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"defaultSla": $default_sla, "deliveryChannels": $delivery_channels, "executionHourInUtc": $execution_hour_in_utc, "isMultipleInstallmentsEnabledOnCreation": $is_multiple_installments_enabled_on_creation, "isMultipleInstallmentsEnabledOnUpdate": $is_multiple_installments_enabled_on_update, "isUsingV3": $is_using_v3, "manualPriceAllowed": $manual_price_allowed, "onMigrationProcess": $on_migration_process, "orderCustomDataAppId": $order_custom_data_app_id, "postponeExpiration": $postpone_expiration, "randomIdGeneration": $random_id_generation, "slaOption": $sla_option, "useItemPriceFromOriginalOrder": $use_item_price_from_original_order, "workflowVersion": $workflow_version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Retrieve customer's subscriptions
 #
 # GET /subscriptions
 # operationId: Getsubscriptionstocustomer
-export def "subscriptions get-subscriptionstocustomer" [
+export def "subscriptions get-getsubscriptionstocustomer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,10 +367,10 @@ export def "subscriptions get-subscriptionstocustomer" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "customerId" $customer_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subscriptions" $qp)
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -382,10 +393,10 @@ export def "subscriptions-group get-allsubscriptiongroup" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions-group")
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -393,7 +404,7 @@ export def "subscriptions-group get-allsubscriptiongroup" [
 #
 # GET /subscriptions-group/list
 # operationId: Getsubscriptiongrouplist
-export def "subscriptions-group-list get-subscriptiongrouplist" [
+export def "subscriptions-group-list get-getsubscriptiongrouplist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,10 +419,10 @@ export def "subscriptions-group-list get-subscriptiongrouplist" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions-group/list")
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -434,11 +445,11 @@ export def "subscriptions-group-next-purchase get-nextpurchase" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({date_str: $date_str} | format pattern "/subscriptions-group/nextPurchase/{date_str}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({date_str: (encode-path-segment $date_str)} | format pattern "/subscriptions-group/nextPurchase/{date_str}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -461,11 +472,11 @@ export def "subscriptions-group-simulate get-simulatebysubscription" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/subscriptions-group/simulate/{group_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/simulate/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -488,11 +499,11 @@ export def "subscriptions-group get-subscriptionbygroup" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/subscriptions-group/{group_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -504,7 +515,7 @@ export def "subscriptions-group get-subscriptionbygroup" [
 # --metadata item shape: {name: string, properties: record}
 # --plan shape: {frequency: record, type: string, validity: record}
 # --purchaseSettings shape: {currencyCode: string, paymentMethod: record, purchaseDay: string, salesChannel: string, selectedSla: string, seller: string}
-# --shippingAddress shape: {additionalComponents: list, addressId: string, addressName: string, addressType: string, city: string, complement: string, country: string, formattedAddress: string, geoCoordinate: list, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string}
+# --shippingAddress shape: {additionalComponents: list, addressId: string, addressName: string, addressType: string, city: string, complement: string, country: string, formattedAddress: string, geoCoordinate: list<int>, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string}
 export def "subscriptions-group update-subscriptionbygroup" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -520,18 +531,18 @@ export def "subscriptions-group update-subscriptionbygroup" [
   metadata: list # item shape: {name: string, properties: record}
   plan: record # e.g. {frequency: {interval: 0, periodicity: string}, type: string, validity: {begin: 2019-07-04T14:40:30.819Z, end: 2019-07-04T14:40:30.819Z}} — shape: {frequency: record, type: string, validity: record}
   purchase_settings: record # e.g. {currencyCode: string, paymentMethod: {paymentAccountId: string, paymentSystem: string}, purchaseDay: string, salesChannel: string, selectedSla: string, seller: string} — shape: {currencyCode: string, paymentMethod: record, purchaseDay: string, salesChannel: string, selectedSla: string, seller: string}
-  shipping_address: record # e.g. {additionalComponents: [{longName: string, shortName: string, types: [string]}], addressId: string, addressName: string, addressType: string, city: string, complement: string, country: string, formattedAddress: string, geoCoordinate: [0], neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string} — shape: {additionalComponents: list, addressId: string, addressName: string, addressType: string, city: string, complement: string, country: string, formattedAddress: string, geoCoordinate: list, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string}
+  shipping_address: record # e.g. {additionalComponents: [{longName: string, shortName: string, types: [string]}], addressId: string, addressName: string, addressType: string, city: string, complement: string, country: string, formattedAddress: string, geoCoordinate: [0], neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string} — shape: {additionalComponents: list, addressId: string, addressName: string, addressType: string, city: string, complement: string, country: string, formattedAddress: string, geoCoordinate: list<int>, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string}
   status: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/subscriptions-group/{group_id}"))
-  let body = {"isSkipped": $is_skipped, "item": $item, "metadata": $metadata, "plan": $plan, "purchaseSettings": $purchase_settings, "shippingAddress": $shipping_address, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}"))
+  let req_body = {"isSkipped": $is_skipped, "item": $item, "metadata": $metadata, "plan": $plan, "purchaseSettings": $purchase_settings, "shippingAddress": $shipping_address, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Add Subscription item by groupId
@@ -539,7 +550,7 @@ export def "subscriptions-group update-subscriptionbygroup" [
 # POST /subscriptions-group/{groupId}/additem
 # operationId: Additemsubscription-groupId
 # --sku shape: {detailUrl: string, id: string, imageUrl: string, name: string, nameComplete: string, productName: string}
-export def "subscriptions-group-additem create-itemsubscription" [
+export def "subscriptions-group-additem create-additemsubscription" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -560,21 +571,23 @@ export def "subscriptions-group-additem create-itemsubscription" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/subscriptions-group/{group_id}/additem"))
-  let body = {"endpoint": $endpoint, "priceAtSubscriptionDate": $price_at_subscription_date, "quantity": $quantity, "sellingPrice": $selling_price, "sku": $sku} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}/additem"))
+  let req_body = {"endpoint": $endpoint, "priceAtSubscriptionDate": $price_at_subscription_date, "quantity": $quantity, "sellingPrice": $selling_price, "sku": $sku} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get addresses by groupId
 #
 # GET /subscriptions-group/{groupId}/addresses
 # operationId: GetaddressesbygroupId
-export def "subscriptions-group-addresses get-addressesbygroup" [
+export def "subscriptions-group-addresses get-getaddressesbygroup" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -589,11 +602,11 @@ export def "subscriptions-group-addresses get-addressesbygroup" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/subscriptions-group/{group_id}/addresses"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}/addresses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -601,7 +614,7 @@ export def "subscriptions-group-addresses get-addressesbygroup" [
 #
 # POST /subscriptions-group/{groupId}/addresses
 # operationId: InsertAddressesbygroupId
-# --additionalComponents item shape: {longName: string, shortName: string, types: list}
+# --additionalComponents item shape: {longName: string, shortName: string, types: list<string>}
 export def "subscriptions-group-addresses create-addressesbygroup" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -614,7 +627,7 @@ export def "subscriptions-group-addresses create-addressesbygroup" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
   --content-type: string # Type of the content being sent.
-  additional_components: list # item shape: {longName: string, shortName: string, types: list}
+  additional_components: list # item shape: {longName: string, shortName: string, types: list<string>}
   address_id: string
   address_name: string
   address_type: string
@@ -622,7 +635,7 @@ export def "subscriptions-group-addresses create-addressesbygroup" [
   complement: string
   country: string
   formatted_address: string
-  geo_coordinate: list
+  geo_coordinate: list<int>
   neighborhood: string
   number: string
   postal_code: string
@@ -634,14 +647,16 @@ export def "subscriptions-group-addresses create-addressesbygroup" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/subscriptions-group/{group_id}/addresses"))
-  let body = {"additionalComponents": $additional_components, "addressId": $address_id, "addressName": $address_name, "addressType": $address_type, "city": $city, "complement": $complement, "country": $country, "formattedAddress": $formatted_address, "geoCoordinate": $geo_coordinate, "neighborhood": $neighborhood, "number": $number, "postalCode": $postal_code, "receiverName": $receiver_name, "reference": $reference, "state": $state, "street": $street} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}/addresses"))
+  let req_body = {"additionalComponents": $additional_components, "addressId": $address_id, "addressName": $address_name, "addressType": $address_type, "city": $city, "complement": $complement, "country": $country, "formattedAddress": $formatted_address, "geoCoordinate": $geo_coordinate, "neighborhood": $neighborhood, "number": $number, "postalCode": $postal_code, "receiverName": $receiver_name, "reference": $reference, "state": $state, "street": $street} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Cancel Subscription by groupId
@@ -663,11 +678,11 @@ export def "subscriptions-group-cancel cancel-subscriptionbygroup" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/subscriptions-group/{group_id}/cancel"))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -690,11 +705,11 @@ export def "subscriptions-group-config get-configsubscriptionsgroup" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/subscriptions-group/{group_id}/config"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -702,7 +717,7 @@ export def "subscriptions-group-config get-configsubscriptionsgroup" [
 #
 # GET /subscriptions-group/{groupId}/conversation-message
 # operationId: GetConversationMessagebygroupId
-export def "subscriptions-group-conversation-message get-conversation-messagebygroup" [
+export def "subscriptions-group-conversation-message get-messagebygroup" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -717,11 +732,11 @@ export def "subscriptions-group-conversation-message get-conversation-messagebyg
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/subscriptions-group/{group_id}/conversation-message"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}/conversation-message"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -729,7 +744,7 @@ export def "subscriptions-group-conversation-message get-conversation-messagebyg
 #
 # GET /subscriptions-group/{groupId}/frequency-options
 # operationId: GetfrequencyoptionsbygroupId
-export def "subscriptions-group-frequency-options get-frequencyoptionsbygroup" [
+export def "subscriptions-group-frequency-options get-getfrequencyoptionsbygroup" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -744,11 +759,11 @@ export def "subscriptions-group-frequency-options get-frequencyoptionsbygroup" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/subscriptions-group/{group_id}/frequency-options"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}/frequency-options"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -756,7 +771,7 @@ export def "subscriptions-group-frequency-options get-frequencyoptionsbygroup" [
 #
 # GET /subscriptions-group/{groupId}/payment-systems
 # operationId: GetpaymentSystembygroupId
-export def "subscriptions-group-payment-systems get-payment-systembygroup" [
+export def "subscriptions-group-payment-systems get-getpayment-systembygroup" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -771,11 +786,11 @@ export def "subscriptions-group-payment-systems get-payment-systembygroup" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/subscriptions-group/{group_id}/payment-systems"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}/payment-systems"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -783,7 +798,7 @@ export def "subscriptions-group-payment-systems get-payment-systembygroup" [
 #
 # GET /subscriptions-group/{groupId}/will-create
 # operationId: GetwillcreatebygroupId
-export def "subscriptions-group-will-create get-willcreatebygroup" [
+export def "subscriptions-group-will-create get-getwillcreatebygroup" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -798,11 +813,11 @@ export def "subscriptions-group-will-create get-willcreatebygroup" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/subscriptions-group/{group_id}/will-create"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}/will-create"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -810,7 +825,7 @@ export def "subscriptions-group-will-create get-willcreatebygroup" [
 #
 # POST /subscriptions-group/{groupid}/instances/{instanceId}/retry
 # operationId: RetrysubscriptionbygroupId
-export def "subscriptions-group-instances-retry post" [
+export def "subscriptions-group-instances-retry create-retrysubscriptionbygroup" [
   groupid: string
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -826,11 +841,11 @@ export def "subscriptions-group-instances-retry post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({groupid: $groupid, instance_id: $instance_id} | format pattern "/subscriptions-group/{groupid}/instances/{instance_id}/retry"))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({groupid: (encode-path-segment $groupid), instance_id: (encode-path-segment $instance_id)} | format pattern "/subscriptions-group/{groupid}/instances/{instance_id}/retry"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -853,10 +868,10 @@ export def "subscriptions-list get" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions/list")
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -864,7 +879,7 @@ export def "subscriptions-list get" [
 #
 # GET /subscriptions/{subscriptionId}
 # operationId: GetsubscriptionbyId
-export def "subscriptions get-subscriptionby" [
+export def "subscriptions get-getsubscriptionby" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -879,11 +894,11 @@ export def "subscriptions get-subscriptionby" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -895,7 +910,7 @@ export def "subscriptions get-subscriptionby" [
 # --metadata item shape: {name: string, properties: record}
 # --plan shape: {frequency: record, type: string, validity: record}
 # --purchaseSettings shape: {currencyCode: string, paymentMethod: record, purchaseDay: string, salesChannel: string, selectedSla: string, seller: string}
-# --shippingAddress shape: {additionalComponents: list, addressId: string, addressName: string, addressType: string, city: string, complement: string, country: string, formattedAddress: string, geoCoordinate: list, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string}
+# --shippingAddress shape: {additionalComponents: list, addressId: string, addressName: string, addressType: string, city: string, complement: string, country: string, formattedAddress: string, geoCoordinate: list<int>, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string}
 export def "subscriptions update-subscriptionsby" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -913,20 +928,22 @@ export def "subscriptions update-subscriptionsby" [
   metadata: list # item shape: {name: string, properties: record}
   plan: record # e.g. {frequency: {interval: 0, periodicity: string}, type: string, validity: {begin: 2019-07-04T14:40:30.819Z, end: 2019-07-04T14:40:30.819Z}} — shape: {frequency: record, type: string, validity: record}
   purchase_settings: record # e.g. {currencyCode: string, paymentMethod: {paymentAccountId: string, paymentSystem: string}, purchaseDay: string, salesChannel: string, selectedSla: string, seller: string} — shape: {currencyCode: string, paymentMethod: record, purchaseDay: string, salesChannel: string, selectedSla: string, seller: string}
-  shipping_address: record # e.g. {additionalComponents: [{longName: string, shortName: string, types: [string]}], addressId: string, addressName: string, addressType: string, city: string, complement: string, country: string, formattedAddress: string, geoCoordinate: [0], neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string} — shape: {additionalComponents: list, addressId: string, addressName: string, addressType: string, city: string, complement: string, country: string, formattedAddress: string, geoCoordinate: list, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string}
+  shipping_address: record # e.g. {additionalComponents: [{longName: string, shortName: string, types: [string]}], addressId: string, addressName: string, addressType: string, city: string, complement: string, country: string, formattedAddress: string, geoCoordinate: [0], neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string} — shape: {additionalComponents: list, addressId: string, addressName: string, addressType: string, city: string, complement: string, country: string, formattedAddress: string, geoCoordinate: list<int>, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string}
   status: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}"))
-  let body = {"isSkipped": $is_skipped, "item": $item, "metadata": $metadata, "plan": $plan, "purchaseSettings": $purchase_settings, "shippingAddress": $shipping_address, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}"))
+  let req_body = {"isSkipped": $is_skipped, "item": $item, "metadata": $metadata, "plan": $plan, "purchaseSettings": $purchase_settings, "shippingAddress": $shipping_address, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Insert Addresses for Subscription
@@ -950,13 +967,16 @@ export def "subscriptions-addresses create-addressesfor" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/addresses"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/addresses"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Cancel Subscriptions by SubscriptionId
@@ -978,11 +998,11 @@ export def "subscriptions-cancel cancel-subscriptionsby" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/cancel"))
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -990,7 +1010,7 @@ export def "subscriptions-cancel cancel-subscriptionsby" [
 #
 # GET /subscriptions/{subscriptionId}/frequency-options
 # operationId: GetfrequencyoptionsbysubscriptionId
-export def "subscriptions-frequency-options get-frequencyoptionsbysubscription" [
+export def "subscriptions-frequency-options get-getfrequencyoptionsbysubscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1005,10 +1025,10 @@ export def "subscriptions-frequency-options get-frequencyoptionsbysubscription" 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/frequency-options"))
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/frequency-options"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

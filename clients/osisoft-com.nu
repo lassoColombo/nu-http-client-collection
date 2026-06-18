@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -117,7 +126,7 @@ export def "home get" [
 #
 # GET /analyses
 # operationId: Analysis_GetByPath
-export def "analyses get-by-path" [
+export def "analyses get-analysis-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -144,7 +153,7 @@ export def "analyses get-by-path" [
 #
 # GET /analyses/search
 # operationId: Analysis_GetAnalysesQuery
-export def "analyses-search get-analyses-query" [
+export def "analyses-search get-analysis-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +183,7 @@ export def "analyses-search get-analyses-query" [
 #
 # DELETE /analyses/{webId}
 # operationId: Analysis_Delete
-export def "analyses delete" [
+export def "analyses delete-analysis" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -188,7 +197,7 @@ export def "analyses delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analyses/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analyses/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,7 +207,7 @@ export def "analyses delete" [
 #
 # GET /analyses/{webId}
 # operationId: Analysis_Get
-export def "analyses get" [
+export def "analyses get-analysis" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -215,7 +224,7 @@ export def "analyses get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analyses/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analyses/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -226,8 +235,8 @@ export def "analyses get" [
 # PATCH /analyses/{webId}
 # operationId: Analysis_Update
 # --Links shape: {AnalysisRule?: string, AnalysisRulePlugIn?: string, Categories?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Target?: string, Template?: string, TimeRule?: string, TimeRulePlugIn?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analyses update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "analyses update-analysis" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +249,7 @@ export def "analyses update" [
   --accept: string@accept-completer # Response content type
   --analysis-rule-plug-in-name: string # e.g. PerformanceEquation
   --auto-created: oneof<nothing, bool> # e.g. false
-  --category-names: list # e.g. [MyAnalysisCategory]
+  --category-names: list<string> # e.g. [MyAnalysisCategory]
   --description: string # e.g. 
   --group-id: int # format: int32, e.g. 0
   --has-notification: oneof<nothing, bool> # e.g. false
@@ -260,25 +269,25 @@ export def "analyses update" [
   --target-web-id: string # format: webid, e.g. I1ETDqD5loBNH0erqeqJodtALAjFPVfUpY-02A8uioGDSgIg
   --template-name: string # e.g. 
   --time-rule-plug-in-name: string # e.g. Periodic
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1XsDqD5loBNH0erqeqJodtALAWDOFEb-U5xGEQwAVXYTCAA
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analyses/{web_id}"))
-  let body = {"AnalysisRulePlugInName": $analysis_rule_plug_in_name, "AutoCreated": $auto_created, "CategoryNames": $category_names, "Description": $description, "GroupId": $group_id, "HasNotification": $has_notification, "HasTarget": $has_target, "HasTemplate": $has_template, "Id": $id, "IsConfigured": $is_configured, "IsTimeRuleDefinedByTemplate": $is_time_rule_defined_by_template, "Links": $links, "MaximumQueueSize": $maximum_queue_size, "Name": $name, "OutputTime": $output_time, "Path": $path, "Priority": $priority, "PublishResults": $publish_results, "Status": $status, "TargetWebId": $target_web_id, "TemplateName": $template_name, "TimeRulePlugInName": $time_rule_plug_in_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analyses/{web_id}"))
+  let req_body = {"AnalysisRulePlugInName": $analysis_rule_plug_in_name, "AutoCreated": $auto_created, "CategoryNames": $category_names, "Description": $description, "GroupId": $group_id, "HasNotification": $has_notification, "HasTarget": $has_target, "HasTemplate": $has_template, "Id": $id, "IsConfigured": $is_configured, "IsTimeRuleDefinedByTemplate": $is_time_rule_defined_by_template, "Links": $links, "MaximumQueueSize": $maximum_queue_size, "Name": $name, "OutputTime": $output_time, "Path": $path, "Priority": $priority, "PublishResults": $publish_results, "Status": $status, "TargetWebId": $target_web_id, "TemplateName": $template_name, "TimeRulePlugInName": $time_rule_plug_in_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get an Analysis' categories.
 #
 # GET /analyses/{webId}/categories
 # operationId: Analysis_GetCategories
-export def "analyses-categories get" [
+export def "analyses-categories get-analysis" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -295,7 +304,7 @@ export def "analyses-categories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analyses/{web_id}/categories") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analyses/{web_id}/categories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -305,7 +314,7 @@ export def "analyses-categories get" [
 #
 # GET /analyses/{webId}/security
 # operationId: Analysis_GetSecurity
-export def "analyses-security get" [
+export def "analyses-security get-analysis" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -316,7 +325,7 @@ export def "analyses-security get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -324,7 +333,7 @@ export def "analyses-security get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analyses/{web_id}/security") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analyses/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -334,7 +343,7 @@ export def "analyses-security get" [
 #
 # GET /analyses/{webId}/securityentries
 # operationId: Analysis_GetSecurityEntries
-export def "analyses-securityentries get" [
+export def "analyses-securityentries get-analysis-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -352,7 +361,7 @@ export def "analyses-securityentries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analyses/{web_id}/securityentries") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analyses/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -363,8 +372,8 @@ export def "analyses-securityentries get" [
 # POST /analyses/{webId}/securityentries
 # operationId: Analysis_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analyses-securityentries create-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "analyses-securityentries create-analysis-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -377,30 +386,30 @@ export def "analyses-securityentries create-security-entry" [
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analyses/{web_id}/securityentries") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analyses/{web_id}/securityentries") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a security entry owned by the analysis.
 #
 # DELETE /analyses/{webId}/securityentries/{name}
 # operationId: Analysis_DeleteSecurityEntry
-export def "analyses-securityentries delete-security-entry" [
+export def "analyses-securityentries delete-analysis-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -417,7 +426,7 @@ export def "analyses-securityentries delete-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/analyses/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/analyses/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -427,7 +436,7 @@ export def "analyses-securityentries delete-security-entry" [
 #
 # GET /analyses/{webId}/securityentries/{name}
 # operationId: Analysis_GetSecurityEntryByName
-export def "analyses-securityentries get-security-entry" [
+export def "analyses-securityentries get-analysis-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -445,7 +454,7 @@ export def "analyses-securityentries get-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/analyses/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/analyses/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -456,8 +465,8 @@ export def "analyses-securityentries get-security-entry" [
 # PUT /analyses/{webId}/securityentries/{name}
 # operationId: Analysis_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analyses-securityentries update-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "analyses-securityentries update-analysis-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -470,30 +479,30 @@ export def "analyses-securityentries update-security-entry" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --body-name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/analyses/{web_id}/securityentries/{name}") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/analyses/{web_id}/securityentries/{name}") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve an analysis category by path.
 #
 # GET /analysiscategories
 # operationId: AnalysisCategory_GetByPath
-export def "analysiscategories get-by-path" [
+export def "analysiscategories get-analysis-category-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -520,7 +529,7 @@ export def "analysiscategories get-by-path" [
 #
 # DELETE /analysiscategories/{webId}
 # operationId: AnalysisCategory_Delete
-export def "analysiscategories delete" [
+export def "analysiscategories delete-analysis-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -534,7 +543,7 @@ export def "analysiscategories delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analysiscategories/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysiscategories/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -544,7 +553,7 @@ export def "analysiscategories delete" [
 #
 # GET /analysiscategories/{webId}
 # operationId: AnalysisCategory_Get
-export def "analysiscategories get" [
+export def "analysiscategories get-analysis-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -561,7 +570,7 @@ export def "analysiscategories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analysiscategories/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysiscategories/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -572,8 +581,8 @@ export def "analysiscategories get" [
 # PATCH /analysiscategories/{webId}
 # operationId: AnalysisCategory_Update
 # --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analysiscategories update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "analysiscategories update-analysis-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -589,25 +598,25 @@ export def "analysiscategories update" [
   --links: record # shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
   --name: string # e.g. CategoryName
   --path: string # format: path, e.g. \\MyAssetServer\Database\CategoriesAnalysis[CategoryName]
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1XCDqD5loBNH0erqeqJodtALAoko2-UoOVEibhTWQCk1MDw
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analysiscategories/{web_id}"))
-  let body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysiscategories/{web_id}"))
+  let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the security information of the specified security item associated with the analysis category for a specified user.
 #
 # GET /analysiscategories/{webId}/security
 # operationId: AnalysisCategory_GetSecurity
-export def "analysiscategories-security get" [
+export def "analysiscategories-security get-analysis-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -618,7 +627,7 @@ export def "analysiscategories-security get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -626,7 +635,7 @@ export def "analysiscategories-security get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analysiscategories/{web_id}/security") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysiscategories/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -636,7 +645,7 @@ export def "analysiscategories-security get" [
 #
 # GET /analysiscategories/{webId}/securityentries
 # operationId: AnalysisCategory_GetSecurityEntries
-export def "analysiscategories-securityentries get" [
+export def "analysiscategories-securityentries get-analysis-category-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -654,7 +663,7 @@ export def "analysiscategories-securityentries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analysiscategories/{web_id}/securityentries") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysiscategories/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -665,8 +674,8 @@ export def "analysiscategories-securityentries get" [
 # POST /analysiscategories/{webId}/securityentries
 # operationId: AnalysisCategory_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analysiscategories-securityentries create-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "analysiscategories-securityentries create-analysis-category-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -679,30 +688,30 @@ export def "analysiscategories-securityentries create-security-entry" [
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analysiscategories/{web_id}/securityentries") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysiscategories/{web_id}/securityentries") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a security entry owned by the analysis category.
 #
 # DELETE /analysiscategories/{webId}/securityentries/{name}
 # operationId: AnalysisCategory_DeleteSecurityEntry
-export def "analysiscategories-securityentries delete-security-entry" [
+export def "analysiscategories-securityentries delete-analysis-category-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -719,7 +728,7 @@ export def "analysiscategories-securityentries delete-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/analysiscategories/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/analysiscategories/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -729,7 +738,7 @@ export def "analysiscategories-securityentries delete-security-entry" [
 #
 # GET /analysiscategories/{webId}/securityentries/{name}
 # operationId: AnalysisCategory_GetSecurityEntryByName
-export def "analysiscategories-securityentries get-security-entry" [
+export def "analysiscategories-securityentries get-analysis-category-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -747,7 +756,7 @@ export def "analysiscategories-securityentries get-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/analysiscategories/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/analysiscategories/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -758,8 +767,8 @@ export def "analysiscategories-securityentries get-security-entry" [
 # PUT /analysiscategories/{webId}/securityentries/{name}
 # operationId: AnalysisCategory_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analysiscategories-securityentries update-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "analysiscategories-securityentries update-analysis-category-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -772,30 +781,30 @@ export def "analysiscategories-securityentries update-security-entry" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --body-name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/analysiscategories/{web_id}/securityentries/{name}") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/analysiscategories/{web_id}/securityentries/{name}") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve an Analysis Rule Plug-in by path.
 #
 # GET /analysisruleplugins
 # operationId: AnalysisRulePlugIn_GetByPath
-export def "analysisruleplugins get-by-path" [
+export def "analysisruleplugins get-analysis-rule-plug-in-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,7 +831,7 @@ export def "analysisruleplugins get-by-path" [
 #
 # GET /analysisruleplugins/{webId}
 # operationId: AnalysisRulePlugIn_Get
-export def "analysisruleplugins get" [
+export def "analysisruleplugins get-analysis-rule-plug-in" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -839,7 +848,7 @@ export def "analysisruleplugins get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analysisruleplugins/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysisruleplugins/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -849,7 +858,7 @@ export def "analysisruleplugins get" [
 #
 # GET /analysisrules
 # operationId: AnalysisRule_GetByPath
-export def "analysisrules get-by-path" [
+export def "analysisrules get-analysis-rule-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -876,7 +885,7 @@ export def "analysisrules get-by-path" [
 #
 # DELETE /analysisrules/{webId}
 # operationId: AnalysisRule_Delete
-export def "analysisrules delete" [
+export def "analysisrules delete-analysis-rule" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -890,7 +899,7 @@ export def "analysisrules delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analysisrules/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysisrules/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -900,7 +909,7 @@ export def "analysisrules delete" [
 #
 # GET /analysisrules/{webId}
 # operationId: AnalysisRule_Get
-export def "analysisrules get" [
+export def "analysisrules get-analysis-rule" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -917,7 +926,7 @@ export def "analysisrules get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analysisrules/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysisrules/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -928,8 +937,8 @@ export def "analysisrules get" [
 # PATCH /analysisrules/{webId}
 # operationId: AnalysisRule_Update
 # --Links shape: {Analysis?: string, AnalysisRules?: string, AnalysisTemplate?: string, Parent?: string, PlugIn?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analysisrules update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "analysisrules update-analysis-rule" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -952,27 +961,27 @@ export def "analysisrules update" [
   --name: string # e.g. PerformanceEquation
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\MyElement\Analyses[MyAnalysis]\AnalysisRule
   --plug-in-name: string # e.g. PerformanceEquation
-  --supported-behaviors: list # e.g. [SupportsRunningCase, SupportStatePassing, OutputCorrectAfterSkipping]
+  --supported-behaviors: list<string> # e.g. [SupportsRunningCase, SupportStatePassing, OutputCorrectAfterSkipping]
   --variable-mapping: string # e.g. b||Attribute1;c||Attribute2
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1XRXDqD5loBNH0erqeqJodtALAfyWdysKU5xGEQwAVXYTCAAfyWdysKU5xGEQwAVXYTCAA
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analysisrules/{web_id}"))
-  let body = {"ConfigString": $config_string, "Description": $description, "DisplayString": $display_string, "EditorType": $editor_type, "HasChildren": $has_children, "Id": $id, "IsConfigured": $is_configured, "IsInitializing": $is_initializing, "Links": $links, "Name": $name, "Path": $path, "PlugInName": $plug_in_name, "SupportedBehaviors": $supported_behaviors, "VariableMapping": $variable_mapping, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysisrules/{web_id}"))
+  let req_body = {"ConfigString": $config_string, "Description": $description, "DisplayString": $display_string, "EditorType": $editor_type, "HasChildren": $has_children, "Id": $id, "IsConfigured": $is_configured, "IsInitializing": $is_initializing, "Links": $links, "Name": $name, "Path": $path, "PlugInName": $plug_in_name, "SupportedBehaviors": $supported_behaviors, "VariableMapping": $variable_mapping, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the child Analysis Rules of the Analysis Rule.
 #
 # GET /analysisrules/{webId}/analysisrules
 # operationId: AnalysisRule_GetAnalysisRules
-export def "analysisrules-analysisrules get-analysis-rules" [
+export def "analysisrules-analysisrules get-analysis-rule-analysis-rules" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -995,7 +1004,7 @@ export def "analysisrules-analysisrules get-analysis-rules" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analysisrules/{web_id}/analysisrules") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysisrules/{web_id}/analysisrules") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1006,8 +1015,8 @@ export def "analysisrules-analysisrules get-analysis-rules" [
 # POST /analysisrules/{webId}/analysisrules
 # operationId: AnalysisRule_CreateAnalysisRule
 # --Links shape: {Analysis?: string, AnalysisRules?: string, AnalysisTemplate?: string, Parent?: string, PlugIn?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analysisrules-analysisrules create-analysis-rule" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "analysisrules-analysisrules create-analysis-rule-analysis-rule" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1031,28 +1040,28 @@ export def "analysisrules-analysisrules create-analysis-rule" [
   --name: string # e.g. PerformanceEquation
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\MyElement\Analyses[MyAnalysis]\AnalysisRule
   --plug-in-name: string # e.g. PerformanceEquation
-  --supported-behaviors: list # e.g. [SupportsRunningCase, SupportStatePassing, OutputCorrectAfterSkipping]
+  --supported-behaviors: list<string> # e.g. [SupportsRunningCase, SupportStatePassing, OutputCorrectAfterSkipping]
   --variable-mapping: string # e.g. b||Attribute1;c||Attribute2
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1XRXDqD5loBNH0erqeqJodtALAfyWdysKU5xGEQwAVXYTCAAfyWdysKU5xGEQwAVXYTCAA
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analysisrules/{web_id}/analysisrules") $qp)
-  let body = {"ConfigString": $config_string, "Description": $description, "DisplayString": $display_string, "EditorType": $editor_type, "HasChildren": $has_children, "Id": $id, "IsConfigured": $is_configured, "IsInitializing": $is_initializing, "Links": $links, "Name": $name, "Path": $path, "PlugInName": $plug_in_name, "SupportedBehaviors": $supported_behaviors, "VariableMapping": $variable_mapping, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysisrules/{web_id}/analysisrules") $qp)
+  let req_body = {"ConfigString": $config_string, "Description": $description, "DisplayString": $display_string, "EditorType": $editor_type, "HasChildren": $has_children, "Id": $id, "IsConfigured": $is_configured, "IsInitializing": $is_initializing, "Links": $links, "Name": $name, "Path": $path, "PlugInName": $plug_in_name, "SupportedBehaviors": $supported_behaviors, "VariableMapping": $variable_mapping, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve an analysis template by path.
 #
 # GET /analysistemplates
 # operationId: AnalysisTemplate_GetByPath
-export def "analysistemplates get-by-path" [
+export def "analysistemplates get-analysis-template-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1079,7 +1088,7 @@ export def "analysistemplates get-by-path" [
 #
 # POST /analysistemplates
 # operationId: AnalysisTemplate_CreateFromAnalysis
-export def "analysistemplates create-from-analysis" [
+export def "analysistemplates create-analysis-template-from-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1106,7 +1115,7 @@ export def "analysistemplates create-from-analysis" [
 #
 # GET /analysistemplates/search
 # operationId: AnalysisTemplate_GetAnalysisTemplatesQuery
-export def "analysistemplates-search get-analysis-templates-query" [
+export def "analysistemplates-search get-analysis-template-analysis-templates-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1136,7 +1145,7 @@ export def "analysistemplates-search get-analysis-templates-query" [
 #
 # DELETE /analysistemplates/{webId}
 # operationId: AnalysisTemplate_Delete
-export def "analysistemplates delete" [
+export def "analysistemplates delete-analysis-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1150,7 +1159,7 @@ export def "analysistemplates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analysistemplates/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysistemplates/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1160,7 +1169,7 @@ export def "analysistemplates delete" [
 #
 # GET /analysistemplates/{webId}
 # operationId: AnalysisTemplate_Get
-export def "analysistemplates get" [
+export def "analysistemplates get-analysis-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1177,7 +1186,7 @@ export def "analysistemplates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analysistemplates/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysistemplates/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1188,8 +1197,8 @@ export def "analysistemplates get" [
 # PATCH /analysistemplates/{webId}
 # operationId: AnalysisTemplate_Update
 # --Links shape: {AnalysisRule?: string, AnalysisRulePlugIn?: string, Categories?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Target?: string, TimeRule?: string, TimeRulePlugIn?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analysistemplates update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "analysistemplates update-analysis-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1201,7 +1210,7 @@ export def "analysistemplates update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --analysis-rule-plug-in-name: string # e.g. PerformanceEquation
-  --category-names: list # e.g. [MyAnalysisCategory]
+  --category-names: list<string> # e.g. [MyAnalysisCategory]
   --create-enabled: oneof<nothing, bool> # e.g. true
   --description: string # e.g. 
   --group-id: int # format: int32, e.g. 0
@@ -1214,25 +1223,25 @@ export def "analysistemplates update" [
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\AnalysisTemplates[MyAnalysisTemplate]
   --target-name: string # e.g. MyElementTemplate
   --time-rule-plug-in-name: string # e.g. Periodic
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1XTG_auSSsvuECG8ad_p8b25QEZgtYQY_J06YnELl5cALiA
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analysistemplates/{web_id}"))
-  let body = {"AnalysisRulePlugInName": $analysis_rule_plug_in_name, "CategoryNames": $category_names, "CreateEnabled": $create_enabled, "Description": $description, "GroupId": $group_id, "HasNotificationTemplate": $has_notification_template, "HasTarget": $has_target, "Id": $id, "Links": $links, "Name": $name, "OutputTime": $output_time, "Path": $path, "TargetName": $target_name, "TimeRulePlugInName": $time_rule_plug_in_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysistemplates/{web_id}"))
+  let req_body = {"AnalysisRulePlugInName": $analysis_rule_plug_in_name, "CategoryNames": $category_names, "CreateEnabled": $create_enabled, "Description": $description, "GroupId": $group_id, "HasNotificationTemplate": $has_notification_template, "HasTarget": $has_target, "Id": $id, "Links": $links, "Name": $name, "OutputTime": $output_time, "Path": $path, "TargetName": $target_name, "TimeRulePlugInName": $time_rule_plug_in_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get an analysis template's categories.
 #
 # GET /analysistemplates/{webId}/categories
 # operationId: AnalysisTemplate_GetCategories
-export def "analysistemplates-categories get" [
+export def "analysistemplates-categories get-analysis-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1249,7 +1258,7 @@ export def "analysistemplates-categories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analysistemplates/{web_id}/categories") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysistemplates/{web_id}/categories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1259,7 +1268,7 @@ export def "analysistemplates-categories get" [
 #
 # GET /analysistemplates/{webId}/security
 # operationId: AnalysisTemplate_GetSecurity
-export def "analysistemplates-security get" [
+export def "analysistemplates-security get-analysis-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1270,7 +1279,7 @@ export def "analysistemplates-security get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -1278,7 +1287,7 @@ export def "analysistemplates-security get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analysistemplates/{web_id}/security") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysistemplates/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1288,7 +1297,7 @@ export def "analysistemplates-security get" [
 #
 # GET /analysistemplates/{webId}/securityentries
 # operationId: AnalysisTemplate_GetSecurityEntries
-export def "analysistemplates-securityentries get" [
+export def "analysistemplates-securityentries get-analysis-template-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1306,7 +1315,7 @@ export def "analysistemplates-securityentries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analysistemplates/{web_id}/securityentries") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysistemplates/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1317,8 +1326,8 @@ export def "analysistemplates-securityentries get" [
 # POST /analysistemplates/{webId}/securityentries
 # operationId: AnalysisTemplate_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analysistemplates-securityentries create-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "analysistemplates-securityentries create-analysis-template-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1331,30 +1340,30 @@ export def "analysistemplates-securityentries create-security-entry" [
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/analysistemplates/{web_id}/securityentries") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysistemplates/{web_id}/securityentries") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a security entry owned by the analysis template.
 #
 # DELETE /analysistemplates/{webId}/securityentries/{name}
 # operationId: AnalysisTemplate_DeleteSecurityEntry
-export def "analysistemplates-securityentries delete-security-entry" [
+export def "analysistemplates-securityentries delete-analysis-template-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1371,7 +1380,7 @@ export def "analysistemplates-securityentries delete-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/analysistemplates/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/analysistemplates/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1381,7 +1390,7 @@ export def "analysistemplates-securityentries delete-security-entry" [
 #
 # GET /analysistemplates/{webId}/securityentries/{name}
 # operationId: AnalysisTemplate_GetSecurityEntryByName
-export def "analysistemplates-securityentries get-security-entry" [
+export def "analysistemplates-securityentries get-analysis-template-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1399,7 +1408,7 @@ export def "analysistemplates-securityentries get-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/analysistemplates/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/analysistemplates/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1410,8 +1419,8 @@ export def "analysistemplates-securityentries get-security-entry" [
 # PUT /analysistemplates/{webId}/securityentries/{name}
 # operationId: AnalysisTemplate_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "analysistemplates-securityentries update-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "analysistemplates-securityentries update-analysis-template-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1424,30 +1433,30 @@ export def "analysistemplates-securityentries update-security-entry" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --body-name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/analysistemplates/{web_id}/securityentries/{name}") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/analysistemplates/{web_id}/securityentries/{name}") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve an Asset Database by path.
 #
 # GET /assetdatabases
 # operationId: AssetDatabase_GetByPath
-export def "assetdatabases get-by-path" [
+export def "assetdatabases get-asset-database-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1474,7 +1483,7 @@ export def "assetdatabases get-by-path" [
 #
 # DELETE /assetdatabases/{webId}
 # operationId: AssetDatabase_Delete
-export def "assetdatabases delete" [
+export def "assetdatabases delete-asset-database" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1488,7 +1497,7 @@ export def "assetdatabases delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1498,7 +1507,7 @@ export def "assetdatabases delete" [
 #
 # GET /assetdatabases/{webId}
 # operationId: AssetDatabase_Get
-export def "assetdatabases get" [
+export def "assetdatabases get-asset-database" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1515,7 +1524,7 @@ export def "assetdatabases get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1526,8 +1535,8 @@ export def "assetdatabases get" [
 # PATCH /assetdatabases/{webId}
 # operationId: AssetDatabase_Update
 # --Links shape: {AnalysisCategories?: string, AnalysisTemplates?: string, AssetServer?: string, AttributeCategories?: string, ElementCategories?: string, ElementTemplates?: string, Elements?: string, EnumerationSets?: string, EventFrames?: string, Security?: string, SecurityEntries?: string, Self?: string, TableCategories?: string, Tables?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetdatabases update-asset-database" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1544,25 +1553,25 @@ export def "assetdatabases update" [
   --links: record # shape: {AnalysisCategories?: string, AnalysisTemplates?: string, AssetServer?: string, AttributeCategories?: string, ElementCategories?: string, ElementTemplates?: string, Elements?: string, EnumerationSets?: string, EventFrames?: string, Security?: string, SecurityEntries?: string, Self?: string, TableCategories?: string, Tables?: string}
   --name: string # e.g. MyDatabase
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1RDDqD5loBNH0erqeqJodtALAquulo6433EKdHra7fsmL0g
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}"))
-  let body = {"Description": $description, "ExtendedProperties": $extended_properties, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}"))
+  let req_body = {"Description": $description, "ExtendedProperties": $extended_properties, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve analyses based on the specified conditions.
 #
 # GET /assetdatabases/{webId}/analyses
 # operationId: AssetDatabase_FindAnalyses
-export def "assetdatabases-analyses get" [
+export def "assetdatabases-analyses find-asset-database" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1573,7 +1582,7 @@ export def "assetdatabases-analyses get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --field: list # Specifies which of the object's properties are searched. Multiple search fields may be specified with multiple instances of the parameter. The default is 'Name'.
+  --field: list<string> # Specifies which of the object's properties are searched. Multiple search fields may be specified with multiple instances of the parameter. The default is 'Name'.
   --max-count: int # The maximum number of objects to be returned per call (page size). The default is 1000.
   --query: string # The query string used for finding analyses. The default is null.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
@@ -1585,7 +1594,7 @@ export def "assetdatabases-analyses get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "field" $field "multi") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/analyses") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/analyses") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1595,7 +1604,7 @@ export def "assetdatabases-analyses get" [
 #
 # GET /assetdatabases/{webId}/analysiscategories
 # operationId: AssetDatabase_GetAnalysisCategories
-export def "assetdatabases-analysiscategories get-analysis-categories" [
+export def "assetdatabases-analysiscategories get-asset-database-analysis-categories" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1612,7 +1621,7 @@ export def "assetdatabases-analysiscategories get-analysis-categories" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/analysiscategories") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/analysiscategories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1623,8 +1632,8 @@ export def "assetdatabases-analysiscategories get-analysis-categories" [
 # POST /assetdatabases/{webId}/analysiscategories
 # operationId: AssetDatabase_CreateAnalysisCategory
 # --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-analysiscategories create-analysis-category" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetdatabases-analysiscategories create-asset-database-analysis-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1641,26 +1650,26 @@ export def "assetdatabases-analysiscategories create-analysis-category" [
   --links: record # shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
   --name: string # e.g. CategoryName
   --path: string # format: path, e.g. \\MyAssetServer\Database\CategoriesAnalysis[CategoryName]
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1XCDqD5loBNH0erqeqJodtALAoko2-UoOVEibhTWQCk1MDw
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/analysiscategories") $qp)
-  let body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/analysiscategories") $qp)
+  let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve analysis templates based on the specified criteria. By default, all analysis templates in the specified Asset Database are returned.
 #
 # GET /assetdatabases/{webId}/analysistemplates
 # operationId: AssetDatabase_GetAnalysisTemplates
-export def "assetdatabases-analysistemplates get-analysis-templates" [
+export def "assetdatabases-analysistemplates get-asset-database-analysis-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1671,7 +1680,7 @@ export def "assetdatabases-analysistemplates get-analysis-templates" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --field: list # Specifies which of the object's properties are searched. Multiple search fields may be specified with multiple instances of the parameter. The default is 'Name'.
+  --field: list<string> # Specifies which of the object's properties are searched. Multiple search fields may be specified with multiple instances of the parameter. The default is 'Name'.
   --max-count: int # The maximum number of objects to be returned per call (page size). The default is 1000.
   --query: string # The query string used for finding objects. The default is no query string.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
@@ -1682,7 +1691,7 @@ export def "assetdatabases-analysistemplates get-analysis-templates" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "field" $field "multi") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/analysistemplates") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/analysistemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1693,8 +1702,8 @@ export def "assetdatabases-analysistemplates get-analysis-templates" [
 # POST /assetdatabases/{webId}/analysistemplates
 # operationId: AssetDatabase_CreateAnalysisTemplate
 # --Links shape: {AnalysisRule?: string, AnalysisRulePlugIn?: string, Categories?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Target?: string, TimeRule?: string, TimeRulePlugIn?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-analysistemplates create-analysis-template" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetdatabases-analysistemplates create-asset-database-analysis-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1707,7 +1716,7 @@ export def "assetdatabases-analysistemplates create-analysis-template" [
   --accept: string@accept-completer # Response content type
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
   --analysis-rule-plug-in-name: string # e.g. PerformanceEquation
-  --category-names: list # e.g. [MyAnalysisCategory]
+  --category-names: list<string> # e.g. [MyAnalysisCategory]
   --create-enabled: oneof<nothing, bool> # e.g. true
   --description: string # e.g. 
   --group-id: int # format: int32, e.g. 0
@@ -1720,26 +1729,26 @@ export def "assetdatabases-analysistemplates create-analysis-template" [
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\AnalysisTemplates[MyAnalysisTemplate]
   --target-name: string # e.g. MyElementTemplate
   --time-rule-plug-in-name: string # e.g. Periodic
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1XTG_auSSsvuECG8ad_p8b25QEZgtYQY_J06YnELl5cALiA
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/analysistemplates") $qp)
-  let body = {"AnalysisRulePlugInName": $analysis_rule_plug_in_name, "CategoryNames": $category_names, "CreateEnabled": $create_enabled, "Description": $description, "GroupId": $group_id, "HasNotificationTemplate": $has_notification_template, "HasTarget": $has_target, "Id": $id, "Links": $links, "Name": $name, "OutputTime": $output_time, "Path": $path, "TargetName": $target_name, "TimeRulePlugInName": $time_rule_plug_in_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/analysistemplates") $qp)
+  let req_body = {"AnalysisRulePlugInName": $analysis_rule_plug_in_name, "CategoryNames": $category_names, "CreateEnabled": $create_enabled, "Description": $description, "GroupId": $group_id, "HasNotificationTemplate": $has_notification_template, "HasTarget": $has_target, "Id": $id, "Links": $links, "Name": $name, "OutputTime": $output_time, "Path": $path, "TargetName": $target_name, "TimeRulePlugInName": $time_rule_plug_in_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve attribute categories for a given Asset Database.
 #
 # GET /assetdatabases/{webId}/attributecategories
 # operationId: AssetDatabase_GetAttributeCategories
-export def "assetdatabases-attributecategories get" [
+export def "assetdatabases-attributecategories get-asset-database-attribute-categories" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1756,7 +1765,7 @@ export def "assetdatabases-attributecategories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/attributecategories") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/attributecategories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1767,8 +1776,8 @@ export def "assetdatabases-attributecategories get" [
 # POST /assetdatabases/{webId}/attributecategories
 # operationId: AssetDatabase_CreateAttributeCategory
 # --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-attributecategories create-attribute-category" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetdatabases-attributecategories create-asset-database-attribute-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1785,26 +1794,26 @@ export def "assetdatabases-attributecategories create-attribute-category" [
   --links: record # shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
   --name: string # e.g. CategoryName
   --path: string # format: path, e.g. \\MyAssetServer\Database\CategoriesAttribute[CategoryName]
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1ACDqD5loBNH0erqeqJodtALAofQgBVRE3E-0dk03Hqa1ng
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/attributecategories") $qp)
-  let body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/attributecategories") $qp)
+  let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a list of element attributes matching the specified filters from the specified asset database.
 #
 # GET /assetdatabases/{webId}/elementattributes
 # operationId: AssetDatabase_FindElementAttributes
-export def "assetdatabases-elementattributes get" [
+export def "assetdatabases-elementattributes find-asset-database-element-attributes" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1836,7 +1845,7 @@ export def "assetdatabases-elementattributes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "attributeCategory" $attribute_category "scalar") (serialize-qp "attributeDescriptionFilter" $attribute_description_filter "scalar") (serialize-qp "attributeNameFilter" $attribute_name_filter "scalar") (serialize-qp "attributeType" $attribute_type "scalar") (serialize-qp "elementCategory" $element_category "scalar") (serialize-qp "elementDescriptionFilter" $element_description_filter "scalar") (serialize-qp "elementNameFilter" $element_name_filter "scalar") (serialize-qp "elementTemplate" $element_template "scalar") (serialize-qp "elementType" $element_type "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/elementattributes") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/elementattributes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1846,7 +1855,7 @@ export def "assetdatabases-elementattributes get" [
 #
 # GET /assetdatabases/{webId}/elementcategories
 # operationId: AssetDatabase_GetElementCategories
-export def "assetdatabases-elementcategories get" [
+export def "assetdatabases-elementcategories get-asset-database-element-categories" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1863,7 +1872,7 @@ export def "assetdatabases-elementcategories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/elementcategories") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/elementcategories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1874,8 +1883,8 @@ export def "assetdatabases-elementcategories get" [
 # POST /assetdatabases/{webId}/elementcategories
 # operationId: AssetDatabase_CreateElementCategory
 # --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-elementcategories create-element-category" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetdatabases-elementcategories create-asset-database-element-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1892,26 +1901,26 @@ export def "assetdatabases-elementcategories create-element-category" [
   --links: record # shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
   --name: string # e.g. CategoryName
   --path: string # format: path, e.g. \\MyAssetServer\Database\CategoriesElement[CategoryName]
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1ECDqD5loBNH0erqeqJodtALAQ_lRME1-QUKrnEUKhMgEUA
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/elementcategories") $qp)
-  let body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/elementcategories") $qp)
+  let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve elements based on the specified conditions. By default, this method selects immediate children of the specified asset database.
 #
 # GET /assetdatabases/{webId}/elements
 # operationId: AssetDatabase_GetElements
-export def "assetdatabases-elements get" [
+export def "assetdatabases-elements get-asset-database" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1939,7 +1948,7 @@ export def "assetdatabases-elements get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "descriptionFilter" $description_filter "scalar") (serialize-qp "elementType" $element_type "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/elements") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/elements") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1949,10 +1958,10 @@ export def "assetdatabases-elements get" [
 #
 # POST /assetdatabases/{webId}/elements
 # operationId: AssetDatabase_CreateElement
-# --Errors item shape: {FieldName?: string, Message?: list}
+# --Errors item shape: {FieldName?: string, Message?: list<string>}
 # --Links shape: {Analyses?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, Elements?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, NotificationRules?: string, Parent?: string, PlotData?: string, RecordedData?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-elements create" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetdatabases-elements create-asset-database" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1964,37 +1973,37 @@ export def "assetdatabases-elements create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --category-names: list # e.g. [Equipment Assets]
+  --category-names: list<string> # e.g. [Equipment Assets]
   --description: string # e.g. Manufacturing Equipment MachineName
-  --errors: list # item shape: {FieldName?: string, Message?: list}
+  --errors: list # item shape: {FieldName?: string, Message?: list<string>}
   --extended-properties: record
   --has-children: oneof<nothing, bool> # e.g. false
   --id: string # format: uuid, e.g. cbb28260-853d-11e4-80c5-00155d844304
   --links: record # shape: {Analyses?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, Elements?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, NotificationRules?: string, Parent?: string, PlotData?: string, RecordedData?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
   --name: string # e.g. MachineName
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\CityName\EngineeringProcess\Equipment\MachineName
-  --paths: list
+  --paths: list<string>
   --template-name: string # e.g. MachineName
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1EmDqD5loBNH0erqeqJodtALAYIKyyz2F5BGAxQAVXYRDBA
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/elements") $qp)
-  let body = {"CategoryNames": $category_names, "Description": $description, "Errors": $errors, "ExtendedProperties": $extended_properties, "HasChildren": $has_children, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/elements") $qp)
+  let req_body = {"CategoryNames": $category_names, "Description": $description, "Errors": $errors, "ExtendedProperties": $extended_properties, "HasChildren": $has_children, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve element templates based on the specified criteria. Only templates of instance type "Element" and "EventFrame" are returned. By default, all element and event frame templates in the specified Asset Database are returned.
 #
 # GET /assetdatabases/{webId}/elementtemplates
 # operationId: AssetDatabase_GetElementTemplates
-export def "assetdatabases-elementtemplates get" [
+export def "assetdatabases-elementtemplates get-asset-database-element-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2005,7 +2014,7 @@ export def "assetdatabases-elementtemplates get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --field: list # Specifies which of the object's properties are searched. Multiple search fields may be specified with multiple instances of the parameter. The default is 'Name'.
+  --field: list<string> # Specifies which of the object's properties are searched. Multiple search fields may be specified with multiple instances of the parameter. The default is 'Name'.
   --max-count: int # The maximum number of objects to be returned per call (page size). The default is 1000.
   --query: string # The query string used for finding objects. The default is no query string.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
@@ -2016,7 +2025,7 @@ export def "assetdatabases-elementtemplates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "field" $field "multi") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/elementtemplates") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/elementtemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2027,8 +2036,8 @@ export def "assetdatabases-elementtemplates get" [
 # POST /assetdatabases/{webId}/elementtemplates
 # operationId: AssetDatabase_CreateElementTemplate
 # --Links shape: {AnalysisTemplates?: string, AttributeTemplates?: string, BaseTemplate?: string, BaseTemplates?: string, Categories?: string, Database?: string, DefaultAttribute?: string, DerivedTemplates?: string, NotificationRuleTemplates?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-elementtemplates create" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetdatabases-elementtemplates create-asset-database-element-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2043,7 +2052,7 @@ export def "assetdatabases-elementtemplates create" [
   --allow-element-to-extend: oneof<nothing, bool> # e.g. false
   --base-template: string # e.g. Equipment
   --can-be-acknowledged: oneof<nothing, bool> # e.g. false
-  --category-names: list # e.g. [Equipment Assets]
+  --category-names: list<string> # e.g. [Equipment Assets]
   --description: string # e.g. Manufacturing Machine MachineName
   --extended-properties: record
   --id: string # format: uuid, e.g. a7989492-b2ab-4d90-8abb-4c8284353dd6
@@ -2053,26 +2062,26 @@ export def "assetdatabases-elementtemplates create" [
   --naming-pattern: string # e.g. %TEMPLATE%
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\ElementTemplates[Boiler]
   --severity: string # e.g. None
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1ETDqD5loBNH0erqeqJodtALAkpSYp6uykE2Ku0yChDU91g
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/elementtemplates") $qp)
-  let body = {"AllowElementToExtend": $allow_element_to_extend, "BaseTemplate": $base_template, "CanBeAcknowledged": $can_be_acknowledged, "CategoryNames": $category_names, "Description": $description, "ExtendedProperties": $extended_properties, "Id": $id, "InstanceType": $instance_type, "Links": $links, "Name": $name, "NamingPattern": $naming_pattern, "Path": $path, "Severity": $severity, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/elementtemplates") $qp)
+  let req_body = {"AllowElementToExtend": $allow_element_to_extend, "BaseTemplate": $base_template, "CanBeAcknowledged": $can_be_acknowledged, "CategoryNames": $category_names, "Description": $description, "ExtendedProperties": $extended_properties, "Id": $id, "InstanceType": $instance_type, "Links": $links, "Name": $name, "NamingPattern": $naming_pattern, "Path": $path, "Severity": $severity, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve enumeration sets for given asset database.
 #
 # GET /assetdatabases/{webId}/enumerationsets
 # operationId: AssetDatabase_GetEnumerationSets
-export def "assetdatabases-enumerationsets get" [
+export def "assetdatabases-enumerationsets get-asset-database-enumeration-sets" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2089,7 +2098,7 @@ export def "assetdatabases-enumerationsets get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/enumerationsets") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/enumerationsets") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2100,8 +2109,8 @@ export def "assetdatabases-enumerationsets get" [
 # POST /assetdatabases/{webId}/enumerationsets
 # operationId: AssetDatabase_CreateEnumerationSet
 # --Links shape: {DataServer?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Values?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-enumerationsets create" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetdatabases-enumerationsets create-asset-database-enumeration-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2119,26 +2128,26 @@ export def "assetdatabases-enumerationsets create" [
   --name: string # e.g. Model Number
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\EnumerationSets[Model Number]
   --serialize-description: oneof<nothing, bool>
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1MSRDqD5loBNH0erqeqJodtALAT_x3jpGsKUCB1vtmvQHUMQ
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/enumerationsets") $qp)
-  let body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "SerializeDescription": $serialize_description, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/enumerationsets") $qp)
+  let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "SerializeDescription": $serialize_description, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves a list of event frame attributes matching the specified filters from the specified asset database.
 #
 # GET /assetdatabases/{webId}/eventframeattributes
 # operationId: AssetDatabase_FindEventFrameAttributes
-export def "assetdatabases-eventframeattributes get" [
+export def "assetdatabases-eventframeattributes find-asset-database-event-frame-attributes" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2173,7 +2182,7 @@ export def "assetdatabases-eventframeattributes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "attributeCategory" $attribute_category "scalar") (serialize-qp "attributeDescriptionFilter" $attribute_description_filter "scalar") (serialize-qp "attributeNameFilter" $attribute_name_filter "scalar") (serialize-qp "attributeType" $attribute_type "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "eventFrameCategory" $event_frame_category "scalar") (serialize-qp "eventFrameDescriptionFilter" $event_frame_description_filter "scalar") (serialize-qp "eventFrameNameFilter" $event_frame_name_filter "scalar") (serialize-qp "eventFrameTemplate" $event_frame_template "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "referencedElementNameFilter" $referenced_element_name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "searchMode" $search_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/eventframeattributes") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/eventframeattributes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2183,7 +2192,7 @@ export def "assetdatabases-eventframeattributes get" [
 #
 # GET /assetdatabases/{webId}/eventframes
 # operationId: AssetDatabase_GetEventFrames
-export def "assetdatabases-eventframes get" [
+export def "assetdatabases-eventframes get-asset-database-event-frames" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2205,7 +2214,7 @@ export def "assetdatabases-eventframes get" [
   --search-full-hierarchy: oneof<nothing, bool> # Specifies whether the search should include objects nested further than the immediate children of the search root. The default is 'false'.
   --search-mode: string # Determines how the startTime and endTime parameters are treated when searching for event frame objects to be included in the returned collection. If this parameter is one of the 'Backward*' or 'Forward*' values, none of endTime, sortField, or sortOrder may be specified. The default is 'Overlapped'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
-  --severity: list # Specify that returned event frames must have this severity. Multiple severity values may be specified with multiple instances of the parameter. The default is no severity filter.
+  --severity: list<string> # Specify that returned event frames must have this severity. Multiple severity values may be specified with multiple instances of the parameter. The default is no severity filter.
   --sort-field: string # The field or property of the object used to sort the returned collection. The default is 'Name' if searchMode is not one of the 'Backward*' or 'Forward*' values.
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending' if searchMode is not one of the 'Backward*' or 'Forward*' values.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
@@ -2216,7 +2225,7 @@ export def "assetdatabases-eventframes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "canBeAcknowledged" $can_be_acknowledged "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "isAcknowledged" $is_acknowledged "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "referencedElementNameFilter" $referenced_element_name_filter "scalar") (serialize-qp "referencedElementTemplateName" $referenced_element_template_name "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "searchMode" $search_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "severity" $severity "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/eventframes") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/eventframes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2227,9 +2236,9 @@ export def "assetdatabases-eventframes get" [
 # POST /assetdatabases/{webId}/eventframes
 # operationId: AssetDatabase_CreateEventFrame
 # --Links shape: {Annotations?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, PrimaryReferencedElement?: string, RecordedData?: string, ReferencedElements?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
-# --Security shape: {CanAnnotate?: bool, CanDelete?: bool, CanExecute?: bool, CanRead?: bool, CanReadData?: bool, CanSubscribe?: bool, CanSubscribeOthers?: bool, CanWrite?: bool, CanWriteData?: bool, HasAdmin?: bool, Rights?: list, WebException?: record}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-eventframes create" [
+# --Security shape: {CanAnnotate?: bool, CanDelete?: bool, CanExecute?: bool, CanRead?: bool, CanReadData?: bool, CanSubscribe?: bool, CanSubscribeOthers?: bool, CanWrite?: bool, CanWriteData?: bool, HasAdmin?: bool, Rights?: list<string>, WebException?: record}
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetdatabases-eventframes create-asset-database-event-frame" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2245,7 +2254,7 @@ export def "assetdatabases-eventframes create" [
   --acknowledged-date: string # format: date-time, e.g. 2014-07-30T11:04:23Z
   --are-values-captured: oneof<nothing, bool> # e.g. false
   --can-be-acknowledged: oneof<nothing, bool> # e.g. true
-  --category-names: list # e.g. [Processing Plant]
+  --category-names: list<string> # e.g. [Processing Plant]
   --description: string # e.g. Event Frame of Past Week
   --end-time: string # format: date-time, e.g. 2014-07-25T14:45:29Z
   --extended-properties: record
@@ -2257,31 +2266,31 @@ export def "assetdatabases-eventframes create" [
   --links: record # shape: {Annotations?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, PrimaryReferencedElement?: string, RecordedData?: string, ReferencedElements?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
   --name: string # e.g. EF20140725-001
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\EventFrames[EF20140725-001]
-  --ref-element-web-ids: list # e.g. [I1EmDqD5loBNH0erqeqJodtALAaqQoQHk26BGgMQAVXYR0Ag]
-  --security: record # shape: {CanAnnotate?: bool, CanDelete?: bool, CanExecute?: bool, CanRead?: bool, CanReadData?: bool, CanSubscribe?: bool, CanSubscribeOthers?: bool, CanWrite?: bool, CanWriteData?: bool, HasAdmin?: bool, Rights?: list, WebException?: record}
+  --ref-element-web-ids: list<string> # e.g. [I1EmDqD5loBNH0erqeqJodtALAaqQoQHk26BGgMQAVXYR0Ag]
+  --security: record # shape: {CanAnnotate?: bool, CanDelete?: bool, CanExecute?: bool, CanRead?: bool, CanReadData?: bool, CanSubscribe?: bool, CanSubscribeOthers?: bool, CanWrite?: bool, CanWriteData?: bool, HasAdmin?: bool, Rights?: list<string>, WebException?: record}
   --severity: string # e.g. None
   --start-time: string # format: date-time, e.g. 2014-07-18T14:45:29Z
   --template-name: string # e.g. Template
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1FmDqD5loBNH0erqeqJodtALADqD5loBNH0cAAAAAAASwAg
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/eventframes") $qp)
-  let body = {"AcknowledgedBy": $acknowledged_by, "AcknowledgedDate": $acknowledged_date, "AreValuesCaptured": $are_values_captured, "CanBeAcknowledged": $can_be_acknowledged, "CategoryNames": $category_names, "Description": $description, "EndTime": $end_time, "ExtendedProperties": $extended_properties, "HasChildren": $has_children, "Id": $id, "IsAcknowledged": $is_acknowledged, "IsAnnotated": $is_annotated, "IsLocked": $is_locked, "Links": $links, "Name": $name, "Path": $path, "RefElementWebIds": $ref_element_web_ids, "Security": $security, "Severity": $severity, "StartTime": $start_time, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/eventframes") $qp)
+  let req_body = {"AcknowledgedBy": $acknowledged_by, "AcknowledgedDate": $acknowledged_date, "AreValuesCaptured": $are_values_captured, "CanBeAcknowledged": $can_be_acknowledged, "CategoryNames": $category_names, "Description": $description, "EndTime": $end_time, "ExtendedProperties": $extended_properties, "HasChildren": $has_children, "Id": $id, "IsAcknowledged": $is_acknowledged, "IsAnnotated": $is_annotated, "IsLocked": $is_locked, "Links": $links, "Name": $name, "Path": $path, "RefElementWebIds": $ref_element_web_ids, "Security": $security, "Severity": $severity, "StartTime": $start_time, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Export the asset database.
 #
 # GET /assetdatabases/{webId}/export
 # operationId: AssetDatabase_Export
-export def "assetdatabases-export export" [
+export def "assetdatabases-export export-asset-database" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2293,13 +2302,13 @@ export def "assetdatabases-export export" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --end-time: string # The latest ending time for AFEventFrame, AFTransfer, and AFCase objects that may be part of the export. The default is '*'.
-  --export-mode: list # Indicates the type of export to perform. The default is 'StrongReferences'. Multiple export modes may be specified by using multiple instances of exportMode.
+  --export-mode: list<string> # Indicates the type of export to perform. The default is 'StrongReferences'. Multiple export modes may be specified by using multiple instances of exportMode.
   --start-time: string # The earliest starting time for AFEventFrame, AFTransfer, and AFCase objects that may be part of the export. The default is '*-30d'.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "endTime" $end_time "scalar") (serialize-qp "exportMode" $export_mode "multi") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/export") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/export") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2309,7 +2318,7 @@ export def "assetdatabases-export export" [
 #
 # POST /assetdatabases/{webId}/import
 # operationId: AssetDatabase_Import
-export def "assetdatabases-import import" [
+export def "assetdatabases-import import-asset-database" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2320,12 +2329,12 @@ export def "assetdatabases-import import" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --import-mode: list # Indicates the type of import to perform. The default is 'AllowCreate | AllowUpdate | AutoCheckIn'. Multiple import modes may be specified by using multiple instances of importMode.
+  --import-mode: list<string> # Indicates the type of import to perform. The default is 'AllowCreate | AllowUpdate | AutoCheckIn'. Multiple import modes may be specified by using multiple instances of importMode.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "importMode" $import_mode "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/import") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/import") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2335,7 +2344,7 @@ export def "assetdatabases-import import" [
 #
 # DELETE /assetdatabases/{webId}/referencedelements
 # operationId: AssetDatabase_RemoveReferencedElement
-export def "assetdatabases-referencedelements delete" [
+export def "assetdatabases-referencedelements delete-asset-database-referenced-element" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2346,12 +2355,12 @@ export def "assetdatabases-referencedelements delete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --referenced-element-web-id: list # The ID of the referenced element. Multiple referenced elements may be specified with multiple instances of the parameter.
+  --referenced-element-web-id: list<string> # The ID of the referenced element. Multiple referenced elements may be specified with multiple instances of the parameter.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "referencedElementWebId" $referenced_element_web_id "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/referencedelements") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/referencedelements") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2361,7 +2370,7 @@ export def "assetdatabases-referencedelements delete" [
 #
 # GET /assetdatabases/{webId}/referencedelements
 # operationId: AssetDatabase_GetReferencedElements
-export def "assetdatabases-referencedelements get" [
+export def "assetdatabases-referencedelements get-asset-database-referenced-elements" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2388,7 +2397,7 @@ export def "assetdatabases-referencedelements get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "descriptionFilter" $description_filter "scalar") (serialize-qp "elementType" $element_type "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/referencedelements") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/referencedelements") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2398,7 +2407,7 @@ export def "assetdatabases-referencedelements get" [
 #
 # POST /assetdatabases/{webId}/referencedelements
 # operationId: AssetDatabase_AddReferencedElement
-export def "assetdatabases-referencedelements create" [
+export def "assetdatabases-referencedelements create-asset-database-referenced-element" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2409,13 +2418,13 @@ export def "assetdatabases-referencedelements create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --referenced-element-web-id: list # The ID of the referenced element. Multiple referenced elements may be specified with multiple instances of the parameter.
+  --referenced-element-web-id: list<string> # The ID of the referenced element. Multiple referenced elements may be specified with multiple instances of the parameter.
   --reference-type: string # The name of the reference type between the parent and the referenced element. This must be a "strong" reference type. The default is "parent-child".
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "referencedElementWebId" $referenced_element_web_id "multi") (serialize-qp "referenceType" $reference_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/referencedelements") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/referencedelements") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2425,7 +2434,7 @@ export def "assetdatabases-referencedelements create" [
 #
 # GET /assetdatabases/{webId}/security
 # operationId: AssetDatabase_GetSecurity
-export def "assetdatabases-security get" [
+export def "assetdatabases-security get-asset-database" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2436,8 +2445,8 @@ export def "assetdatabases-security get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --security-item: list # The security item of the desired security information to be returned. Multiple security items may be specified with multiple instances of the parameter. If the parameter is not specified, only 'Default' security item of the security information will be returned.
-  --user-identity: list # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --security-item: list<string> # The security item of the desired security information to be returned. Multiple security items may be specified with multiple instances of the parameter. If the parameter is not specified, only 'Default' security item of the security information will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -2445,7 +2454,7 @@ export def "assetdatabases-security get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "securityItem" $security_item "multi") (serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/security") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2455,7 +2464,7 @@ export def "assetdatabases-security get" [
 #
 # GET /assetdatabases/{webId}/securityentries
 # operationId: AssetDatabase_GetSecurityEntries
-export def "assetdatabases-securityentries get" [
+export def "assetdatabases-securityentries get-asset-database-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2474,7 +2483,7 @@ export def "assetdatabases-securityentries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "securityItem" $security_item "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/securityentries") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2485,8 +2494,8 @@ export def "assetdatabases-securityentries get" [
 # POST /assetdatabases/{webId}/securityentries
 # operationId: AssetDatabase_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-securityentries create-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetdatabases-securityentries create-asset-database-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2500,30 +2509,30 @@ export def "assetdatabases-securityentries create-security-entry" [
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
   --security-item: string # The security item of the desired security entries to be created. If the parameter is not specified, security entries of the 'Default' security item will be created.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "securityItem" $security_item "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/securityentries") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/securityentries") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a security entry owned by the asset database.
 #
 # DELETE /assetdatabases/{webId}/securityentries/{name}
 # operationId: AssetDatabase_DeleteSecurityEntry
-export def "assetdatabases-securityentries delete-security-entry" [
+export def "assetdatabases-securityentries delete-asset-database-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2541,7 +2550,7 @@ export def "assetdatabases-securityentries delete-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "securityItem" $security_item "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/assetdatabases/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/assetdatabases/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2551,7 +2560,7 @@ export def "assetdatabases-securityentries delete-security-entry" [
 #
 # GET /assetdatabases/{webId}/securityentries/{name}
 # operationId: AssetDatabase_GetSecurityEntryByName
-export def "assetdatabases-securityentries get-security-entry" [
+export def "assetdatabases-securityentries get-asset-database-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2570,7 +2579,7 @@ export def "assetdatabases-securityentries get-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "securityItem" $security_item "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/assetdatabases/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/assetdatabases/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2581,8 +2590,8 @@ export def "assetdatabases-securityentries get-security-entry" [
 # PUT /assetdatabases/{webId}/securityentries/{name}
 # operationId: AssetDatabase_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-securityentries update-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetdatabases-securityentries update-asset-database-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2596,30 +2605,30 @@ export def "assetdatabases-securityentries update-security-entry" [
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
   --security-item: string # The security item of the desired security entries to be updated. If the parameter is not specified, security entries of the 'Default' security item will be updated.
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --body-name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "securityItem" $security_item "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/assetdatabases/{web_id}/securityentries/{name}") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/assetdatabases/{web_id}/securityentries/{name}") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve table categories for a given Asset Database.
 #
 # GET /assetdatabases/{webId}/tablecategories
 # operationId: AssetDatabase_GetTableCategories
-export def "assetdatabases-tablecategories get" [
+export def "assetdatabases-tablecategories get-asset-database-table-categories" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2636,7 +2645,7 @@ export def "assetdatabases-tablecategories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/tablecategories") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/tablecategories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2647,8 +2656,8 @@ export def "assetdatabases-tablecategories get" [
 # POST /assetdatabases/{webId}/tablecategories
 # operationId: AssetDatabase_CreateTableCategory
 # --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-tablecategories create-table-category" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetdatabases-tablecategories create-asset-database-table-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2665,26 +2674,26 @@ export def "assetdatabases-tablecategories create-table-category" [
   --links: record # shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
   --name: string # e.g. CategoryName
   --path: string # format: path, e.g. \\MyAssetServer\Database\CategoriesTable[CategoryName]
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1BCDqD5loBNH0erqeqJodtALAwgzHiSFSd06HP4lKPqYefQ
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/tablecategories") $qp)
-  let body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/tablecategories") $qp)
+  let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve tables for given Asset Database.
 #
 # GET /assetdatabases/{webId}/tables
 # operationId: AssetDatabase_GetTables
-export def "assetdatabases-tables get" [
+export def "assetdatabases-tables get-asset-database" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2701,7 +2710,7 @@ export def "assetdatabases-tables get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/tables") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/tables") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2712,8 +2721,8 @@ export def "assetdatabases-tables get" [
 # POST /assetdatabases/{webId}/tables
 # operationId: AssetDatabase_CreateTable
 # --Links shape: {Categories?: string, Data?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetdatabases-tables create" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetdatabases-tables create-asset-database" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2725,7 +2734,7 @@ export def "assetdatabases-tables create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --category-names: list # e.g. [Table Category]
+  --category-names: list<string> # e.g. [Table Category]
   --convert-to-local-time: oneof<nothing, bool> # e.g. false
   --description: string # e.g. Table of car info.
   --id: string # format: uuid, e.g. 5ff8ba98-89ce-479a-b29e-ddd057096a5f
@@ -2733,26 +2742,26 @@ export def "assetdatabases-tables create" [
   --name: string # e.g. CarInfo
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\Tables[CarInfo]
   --time-zone: string # e.g. Eastern Standard Time
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1BlDqD5loBNH0erqeqJodtALAmLr4X86Jmkeynt3QVwlqXw
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetdatabases/{web_id}/tables") $qp)
-  let body = {"CategoryNames": $category_names, "ConvertToLocalTime": $convert_to_local_time, "Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "TimeZone": $time_zone, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/tables") $qp)
+  let req_body = {"CategoryNames": $category_names, "ConvertToLocalTime": $convert_to_local_time, "Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "TimeZone": $time_zone, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a list of all Asset Servers known to this service.
 #
 # GET /assetservers
 # operationId: AssetServer_List
-export def "assetservers list" [
+export def "assetservers list-asset-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2778,7 +2787,7 @@ export def "assetservers list" [
 #
 # GET /assetservers#name
 # operationId: AssetServer_GetByName
-export def "assetserversname get-by-name" [
+export def "assetserversname get-asset-server-by-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2805,7 +2814,7 @@ export def "assetserversname get-by-name" [
 #
 # GET /assetservers#path
 # operationId: AssetServer_GetByPath
-export def "assetserverspath get-by-path" [
+export def "assetserverspath get-asset-server-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2832,7 +2841,7 @@ export def "assetserverspath get-by-path" [
 #
 # GET /assetservers/{webId}
 # operationId: AssetServer_Get
-export def "assetservers get" [
+export def "assetservers get-asset-server" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2849,7 +2858,7 @@ export def "assetservers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetservers/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2859,7 +2868,7 @@ export def "assetservers get" [
 #
 # GET /assetservers/{webId}/analysisruleplugins
 # operationId: AssetServer_GetAnalysisRulePlugIns
-export def "assetservers-analysisruleplugins get-analysis-rule-plug-ins" [
+export def "assetservers-analysisruleplugins get-asset-server-analysis-rule-plug-ins" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2876,7 +2885,7 @@ export def "assetservers-analysisruleplugins get-analysis-rule-plug-ins" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetservers/{web_id}/analysisruleplugins") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/analysisruleplugins") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2886,7 +2895,7 @@ export def "assetservers-analysisruleplugins get-analysis-rule-plug-ins" [
 #
 # GET /assetservers/{webId}/assetdatabases
 # operationId: AssetServer_GetDatabases
-export def "assetservers-assetdatabases get-databases" [
+export def "assetservers-assetdatabases get-asset-server-databases" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2903,7 +2912,7 @@ export def "assetservers-assetdatabases get-databases" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetservers/{web_id}/assetdatabases") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/assetdatabases") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2914,8 +2923,8 @@ export def "assetservers-assetdatabases get-databases" [
 # POST /assetservers/{webId}/assetdatabases
 # operationId: AssetServer_CreateAssetDatabase
 # --Links shape: {AnalysisCategories?: string, AnalysisTemplates?: string, AssetServer?: string, AttributeCategories?: string, ElementCategories?: string, ElementTemplates?: string, Elements?: string, EnumerationSets?: string, EventFrames?: string, Security?: string, SecurityEntries?: string, Self?: string, TableCategories?: string, Tables?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetservers-assetdatabases create" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetservers-assetdatabases create-asset-server-asset-database" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2933,26 +2942,26 @@ export def "assetservers-assetdatabases create" [
   --links: record # shape: {AnalysisCategories?: string, AnalysisTemplates?: string, AssetServer?: string, AttributeCategories?: string, ElementCategories?: string, ElementTemplates?: string, Elements?: string, EnumerationSets?: string, EventFrames?: string, Security?: string, SecurityEntries?: string, Self?: string, TableCategories?: string, Tables?: string}
   --name: string # e.g. MyDatabase
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1RDDqD5loBNH0erqeqJodtALAquulo6433EKdHra7fsmL0g
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetservers/{web_id}/assetdatabases") $qp)
-  let body = {"Description": $description, "ExtendedProperties": $extended_properties, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/assetdatabases") $qp)
+  let req_body = {"Description": $description, "ExtendedProperties": $extended_properties, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a list of all notification contact templates on the specified Asset Server.
 #
 # GET /assetservers/{webId}/notificationcontacttemplates
 # operationId: AssetServer_GetNotificationContactTemplates
-export def "assetservers-notificationcontacttemplates get-notification-contact-templates" [
+export def "assetservers-notificationcontacttemplates get-asset-server-notification-contact-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2969,7 +2978,7 @@ export def "assetservers-notificationcontacttemplates get-notification-contact-t
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetservers/{web_id}/notificationcontacttemplates") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/notificationcontacttemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2980,8 +2989,8 @@ export def "assetservers-notificationcontacttemplates get-notification-contact-t
 # POST /assetservers/{webId}/notificationcontacttemplates
 # operationId: AssetServer_CreateNotificationContactTemplate
 # --Links shape: {AssetServer?: string, NotificationContactTemplates?: string, NotificationPlugIn?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetservers-notificationcontacttemplates create-notification-contact-template" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetservers-notificationcontacttemplates create-asset-server-notification-contact-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3008,26 +3017,26 @@ export def "assetservers-notificationcontacttemplates create-notification-contac
   --path: string # format: path, e.g. \\MyAssetServer\NotificationContactTemplates[Plant Manager]
   --plug-in-name: string # e.g. 
   --retry-interval: string # format: Duration, e.g. PT5S
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1NCEDqD5loBNH0erqeqJodtALAYIKyyz2F5BGAxQAVXYRDBAGyPedZG1sUmxOOclp3Flwg
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetservers/{web_id}/notificationcontacttemplates") $qp)
-  let body = {"Available": $available, "ConfigString": $config_string, "ContactType": $contact_type, "Description": $description, "EscalationTimeout": $escalation_timeout, "HasChildren": $has_children, "Id": $id, "Links": $links, "MaximumRetries": $maximum_retries, "MinimumAcknowledgements": $minimum_acknowledgements, "Name": $name, "NotifyWhenInstanceEnded": $notify_when_instance_ended, "Path": $path, "PlugInName": $plug_in_name, "RetryInterval": $retry_interval, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/notificationcontacttemplates") $qp)
+  let req_body = {"Available": $available, "ConfigString": $config_string, "ContactType": $contact_type, "Description": $description, "EscalationTimeout": $escalation_timeout, "HasChildren": $has_children, "Id": $id, "Links": $links, "MaximumRetries": $maximum_retries, "MinimumAcknowledgements": $minimum_acknowledgements, "Name": $name, "NotifyWhenInstanceEnded": $notify_when_instance_ended, "Path": $path, "PlugInName": $plug_in_name, "RetryInterval": $retry_interval, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a list of all notification plugins on the specified Asset Server.
 #
 # GET /assetservers/{webId}/notificationplugins
 # operationId: AssetServer_GetNotificationPlugIns
-export def "assetservers-notificationplugins get-notification-plug-ins" [
+export def "assetservers-notificationplugins get-asset-server-notification-plug-ins" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3044,7 +3053,7 @@ export def "assetservers-notificationplugins get-notification-plug-ins" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetservers/{web_id}/notificationplugins") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/notificationplugins") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3054,7 +3063,7 @@ export def "assetservers-notificationplugins get-notification-plug-ins" [
 #
 # GET /assetservers/{webId}/security
 # operationId: AssetServer_GetSecurity
-export def "assetservers-security get" [
+export def "assetservers-security get-asset-server" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3065,8 +3074,8 @@ export def "assetservers-security get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --security-item: list # The security item of the desired security information to be returned. Multiple security items may be specified with multiple instances of the parameter. If the parameter is not specified, only 'Default' security item of the security information will be returned.
-  --user-identity: list # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --security-item: list<string> # The security item of the desired security information to be returned. Multiple security items may be specified with multiple instances of the parameter. If the parameter is not specified, only 'Default' security item of the security information will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -3074,7 +3083,7 @@ export def "assetservers-security get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "securityItem" $security_item "multi") (serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetservers/{web_id}/security") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3084,7 +3093,7 @@ export def "assetservers-security get" [
 #
 # GET /assetservers/{webId}/securityentries
 # operationId: AssetServer_GetSecurityEntries
-export def "assetservers-securityentries get" [
+export def "assetservers-securityentries get-asset-server-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3103,7 +3112,7 @@ export def "assetservers-securityentries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "securityItem" $security_item "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetservers/{web_id}/securityentries") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3114,8 +3123,8 @@ export def "assetservers-securityentries get" [
 # POST /assetservers/{webId}/securityentries
 # operationId: AssetServer_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetservers-securityentries create-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetservers-securityentries create-asset-server-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3129,30 +3138,30 @@ export def "assetservers-securityentries create-security-entry" [
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
   --security-item: string # The security item of the desired security entries to be created. If the parameter is not specified, security entries of the 'Default' security item will be created.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "securityItem" $security_item "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetservers/{web_id}/securityentries") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/securityentries") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a security entry owned by the asset server.
 #
 # DELETE /assetservers/{webId}/securityentries/{name}
 # operationId: AssetServer_DeleteSecurityEntry
-export def "assetservers-securityentries delete-security-entry" [
+export def "assetservers-securityentries delete-asset-server-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3170,7 +3179,7 @@ export def "assetservers-securityentries delete-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "securityItem" $security_item "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/assetservers/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/assetservers/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3180,7 +3189,7 @@ export def "assetservers-securityentries delete-security-entry" [
 #
 # GET /assetservers/{webId}/securityentries/{name}
 # operationId: AssetServer_GetSecurityEntryByName
-export def "assetservers-securityentries get-security-entry" [
+export def "assetservers-securityentries get-asset-server-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3199,7 +3208,7 @@ export def "assetservers-securityentries get-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "securityItem" $security_item "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/assetservers/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/assetservers/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3210,8 +3219,8 @@ export def "assetservers-securityentries get-security-entry" [
 # PUT /assetservers/{webId}/securityentries/{name}
 # operationId: AssetServer_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetservers-securityentries update-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetservers-securityentries update-asset-server-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3225,30 +3234,30 @@ export def "assetservers-securityentries update-security-entry" [
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
   --security-item: string # The security item of the desired security entries to be updated. If the parameter is not specified, security entries of the 'Default' security item will be updated.
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --body-name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "securityItem" $security_item "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/assetservers/{web_id}/securityentries/{name}") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/assetservers/{web_id}/securityentries/{name}") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve security identities based on the specified criteria. By default, all security identities in the specified Asset Server are returned.
 #
 # GET /assetservers/{webId}/securityidentities
 # operationId: AssetServer_GetSecurityIdentities
-export def "assetservers-securityidentities get" [
+export def "assetservers-securityidentities get-asset-server-security-identities" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3270,7 +3279,7 @@ export def "assetservers-securityidentities get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "field" $field "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetservers/{web_id}/securityidentities") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/securityidentities") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3281,8 +3290,8 @@ export def "assetservers-securityidentities get" [
 # POST /assetservers/{webId}/securityidentities
 # operationId: AssetServer_CreateSecurityIdentity
 # --Links shape: {AssetServer?: string, Security?: string, SecurityEntries?: string, SecurityMappings?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetservers-securityidentities create-security-identity" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetservers-securityidentities create-asset-server-security-identity" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3300,26 +3309,26 @@ export def "assetservers-securityidentities create-security-identity" [
   --links: record # shape: {AssetServer?: string, Security?: string, SecurityEntries?: string, SecurityMappings?: string, Self?: string}
   --name: string # e.g. MySecurityIdentity
   --path: string # format: path, e.g. \\MyAssetServer\SecurityIdentities[MySecurityIdentity]
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1SIDqD5loBNH0erqeqJodtALASe6l8zgYokqdeeFilFI9tw
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetservers/{web_id}/securityidentities") $qp)
-  let body = {"Description": $description, "Id": $id, "IsEnabled": $is_enabled, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/securityidentities") $qp)
+  let req_body = {"Description": $description, "Id": $id, "IsEnabled": $is_enabled, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve security identities for a specific user.
 #
 # GET /assetservers/{webId}/securityidentities#userIdentity
 # operationId: AssetServer_GetSecurityIdentitiesForUser
-export def "assetservers-securityidentitiesuser-identity get-security-identities-for-user" [
+export def "assetservers-securityidentitiesuser-identity get-asset-server-security-identities-for-user" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3337,7 +3346,7 @@ export def "assetservers-securityidentitiesuser-identity get-security-identities
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userIdentity" $user_identity "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetservers/{web_id}/securityidentities#userIdentity") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/securityidentities#userIdentity") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3347,7 +3356,7 @@ export def "assetservers-securityidentitiesuser-identity get-security-identities
 #
 # GET /assetservers/{webId}/securitymappings
 # operationId: AssetServer_GetSecurityMappings
-export def "assetservers-securitymappings get" [
+export def "assetservers-securitymappings get-asset-server-security-mappings" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3369,7 +3378,7 @@ export def "assetservers-securitymappings get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "field" $field "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetservers/{web_id}/securitymappings") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/securitymappings") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3380,8 +3389,8 @@ export def "assetservers-securitymappings get" [
 # POST /assetservers/{webId}/securitymappings
 # operationId: AssetServer_CreateSecurityMapping
 # --Links shape: {AssetServer?: string, Security?: string, SecurityEntries?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetservers-securitymappings create" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetservers-securitymappings create-asset-server-security-mapping" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3400,26 +3409,26 @@ export def "assetservers-securitymappings create" [
   --name: string # e.g. MySecurityMapping
   --path: string # format: path, e.g. \\MyAssetServer\SecurityMappings[MySecurityMapping]
   --security-identity-web-id: string # e.g. I1SIEDqD5loBNH0erqeqJodtALAYIKyyz2F5BGAxQAVXYRDBAGyPedZG1sUmxOOclp3Flwg
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1SMDqD5loBNH0erqeqJodtALAgu8UrMAZB0qWp9H7C4TAXQ
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetservers/{web_id}/securitymappings") $qp)
-  let body = {"Account": $account, "Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "SecurityIdentityWebId": $security_identity_web_id, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/securitymappings") $qp)
+  let req_body = {"Account": $account, "Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "SecurityIdentityWebId": $security_identity_web_id, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a list of all Time Rule Plug-in's.
 #
 # GET /assetservers/{webId}/timeruleplugins
 # operationId: AssetServer_GetTimeRulePlugIns
-export def "assetservers-timeruleplugins get-time-rule-plug-ins" [
+export def "assetservers-timeruleplugins get-asset-server-time-rule-plug-ins" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3436,7 +3445,7 @@ export def "assetservers-timeruleplugins get-time-rule-plug-ins" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetservers/{web_id}/timeruleplugins") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/timeruleplugins") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3446,7 +3455,7 @@ export def "assetservers-timeruleplugins get-time-rule-plug-ins" [
 #
 # GET /assetservers/{webId}/unitclasses
 # operationId: AssetServer_GetUnitClasses
-export def "assetservers-unitclasses get" [
+export def "assetservers-unitclasses get-asset-server-unit-classes" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3463,7 +3472,7 @@ export def "assetservers-unitclasses get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetservers/{web_id}/unitclasses") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/unitclasses") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3474,8 +3483,8 @@ export def "assetservers-unitclasses get" [
 # POST /assetservers/{webId}/unitclasses
 # operationId: AssetServer_CreateUnitClass
 # --Links shape: {AssetServer?: string, CanonicalUnit?: string, Self?: string, Units?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "assetservers-unitclasses create-unit-class" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "assetservers-unitclasses create-asset-server-unit-class" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3494,26 +3503,26 @@ export def "assetservers-unitclasses create-unit-class" [
   --links: record # shape: {AssetServer?: string, CanonicalUnit?: string, Self?: string, Units?: string}
   --name: string # e.g. Power
   --path: string # format: path, e.g. \\MyAssetServer\UOMDatabase\UOMClasses[Power]
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1UCDqD5loBNH0erqeqJodtALATbkl-fxulEulDQAVw5HySQ
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/assetservers/{web_id}/unitclasses") $qp)
-  let body = {"CanonicalUnitAbbreviation": $canonical_unit_abbreviation, "CanonicalUnitName": $canonical_unit_name, "Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/unitclasses") $qp)
+  let req_body = {"CanonicalUnitAbbreviation": $canonical_unit_abbreviation, "CanonicalUnitName": $canonical_unit_name, "Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve an attribute category by path.
 #
 # GET /attributecategories
 # operationId: AttributeCategory_GetByPath
-export def "attributecategories get-by-path" [
+export def "attributecategories get-attribute-category-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3540,7 +3549,7 @@ export def "attributecategories get-by-path" [
 #
 # DELETE /attributecategories/{webId}
 # operationId: AttributeCategory_Delete
-export def "attributecategories delete" [
+export def "attributecategories delete-attribute-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3554,7 +3563,7 @@ export def "attributecategories delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributecategories/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributecategories/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3564,7 +3573,7 @@ export def "attributecategories delete" [
 #
 # GET /attributecategories/{webId}
 # operationId: AttributeCategory_Get
-export def "attributecategories get" [
+export def "attributecategories get-attribute-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3581,7 +3590,7 @@ export def "attributecategories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributecategories/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributecategories/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3592,8 +3601,8 @@ export def "attributecategories get" [
 # PATCH /attributecategories/{webId}
 # operationId: AttributeCategory_Update
 # --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "attributecategories update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "attributecategories update-attribute-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3609,25 +3618,25 @@ export def "attributecategories update" [
   --links: record # shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
   --name: string # e.g. CategoryName
   --path: string # format: path, e.g. \\MyAssetServer\Database\CategoriesAttribute[CategoryName]
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1ACDqD5loBNH0erqeqJodtALAofQgBVRE3E-0dk03Hqa1ng
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributecategories/{web_id}"))
-  let body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributecategories/{web_id}"))
+  let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the security information of the specified security item associated with the attribute category for a specified user.
 #
 # GET /attributecategories/{webId}/security
 # operationId: AttributeCategory_GetSecurity
-export def "attributecategories-security get" [
+export def "attributecategories-security get-attribute-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3638,7 +3647,7 @@ export def "attributecategories-security get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -3646,7 +3655,7 @@ export def "attributecategories-security get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributecategories/{web_id}/security") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributecategories/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3656,7 +3665,7 @@ export def "attributecategories-security get" [
 #
 # GET /attributecategories/{webId}/securityentries
 # operationId: AttributeCategory_GetSecurityEntries
-export def "attributecategories-securityentries get" [
+export def "attributecategories-securityentries get-attribute-category-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3674,7 +3683,7 @@ export def "attributecategories-securityentries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributecategories/{web_id}/securityentries") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributecategories/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3685,8 +3694,8 @@ export def "attributecategories-securityentries get" [
 # POST /attributecategories/{webId}/securityentries
 # operationId: AttributeCategory_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "attributecategories-securityentries create-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "attributecategories-securityentries create-attribute-category-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3699,30 +3708,30 @@ export def "attributecategories-securityentries create-security-entry" [
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributecategories/{web_id}/securityentries") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributecategories/{web_id}/securityentries") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a security entry owned by the attribute category.
 #
 # DELETE /attributecategories/{webId}/securityentries/{name}
 # operationId: AttributeCategory_DeleteSecurityEntry
-export def "attributecategories-securityentries delete-security-entry" [
+export def "attributecategories-securityentries delete-attribute-category-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3739,7 +3748,7 @@ export def "attributecategories-securityentries delete-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/attributecategories/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/attributecategories/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3749,7 +3758,7 @@ export def "attributecategories-securityentries delete-security-entry" [
 #
 # GET /attributecategories/{webId}/securityentries/{name}
 # operationId: AttributeCategory_GetSecurityEntryByName
-export def "attributecategories-securityentries get-security-entry" [
+export def "attributecategories-securityentries get-attribute-category-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3767,7 +3776,7 @@ export def "attributecategories-securityentries get-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/attributecategories/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/attributecategories/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3778,8 +3787,8 @@ export def "attributecategories-securityentries get-security-entry" [
 # PUT /attributecategories/{webId}/securityentries/{name}
 # operationId: AttributeCategory_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "attributecategories-securityentries update-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "attributecategories-securityentries update-attribute-category-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3792,23 +3801,23 @@ export def "attributecategories-securityentries update-security-entry" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --body-name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/attributecategories/{web_id}/securityentries/{name}") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/attributecategories/{web_id}/securityentries/{name}") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve an attribute by path.
@@ -3856,9 +3865,9 @@ export def "attributes-multiple get" [
   --as-parallel: oneof<nothing, bool> # Specifies if the retrieval processes should be run in parallel on the server. This may improve the response time for large amounts of requested attributes. The default is 'false'.
   --associations: string # Associated values to return in the response, separated by semicolons (;). This call supports DataReference to return attributes with data references. If this parameter is not specified, DataReference values are not returned.
   --include-mode: string # The include mode for the return list. The default is 'All'.
-  --path: list # The path of an attribute. Multiple attributes may be specified with multiple instances of the parameter.
+  --path: list<string> # The path of an attribute. Multiple attributes may be specified with multiple instances of the parameter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
-  --web-id: list # The ID of an attribute. Multiple attributes may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of an attribute. Multiple attributes may be specified with multiple instances of the parameter.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
 ]: nothing -> record<Items: table<Exception: record, Identifier: string, IdentifierType: string, Object: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3874,7 +3883,7 @@ export def "attributes-multiple get" [
 #
 # GET /attributes/search
 # operationId: Attribute_GetAttributesQuery
-export def "attributes-search get-attributes-query" [
+export def "attributes-search get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3919,7 +3928,7 @@ export def "attributes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributes/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributes/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3947,7 +3956,7 @@ export def "attributes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributes/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributes/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3959,7 +3968,7 @@ export def "attributes get" [
 # operationId: Attribute_Update
 # --DataReference shape: {PIPoint?: record, Type?: string, WebException?: record}
 # --Links shape: {Attributes?: string, Categories?: string, Element?: string, EndValue?: string, EnumerationSet?: string, EnumerationValues?: string, EventFrame?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, Point?: string, RecordedData?: string, Self?: string, SummaryData?: string, Template?: string, Trait?: string, Value?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "attributes update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3971,7 +3980,7 @@ export def "attributes update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --category-names: list # e.g. [Energy Savings Targets]
+  --category-names: list<string> # e.g. [Energy Savings Targets]
   --config-string: string # e.g. SELECT [Water Use] FROM [Energy Use 2008] WHERE [Asset ID] = '%Element%'
   --data-reference: record # shape: {PIPoint?: record, Type?: string, WebException?: record}
   --data-reference-plug-in: string # e.g. Table Lookup
@@ -3988,25 +3997,25 @@ export def "attributes update" [
   --links: record # shape: {Attributes?: string, Categories?: string, Element?: string, EndValue?: string, EnumerationSet?: string, EnumerationValues?: string, EventFrame?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, Point?: string, RecordedData?: string, Self?: string, SummaryData?: string, Template?: string, Trait?: string, Value?: string}
   --name: string # e.g. Water
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\CityName\EngineeringProcess\Equipment\MachineName|Water(2008)
-  --paths: list # e.g. [\\MyAssetServer\MyDatabase\MyElement|MyAttribute, \\MyAssetServer\MyDatabase\ReferencingElement\MyElement|MyAttribute]
+  --paths: list<string> # e.g. [\\MyAssetServer\MyDatabase\MyElement|MyAttribute, \\MyAssetServer\MyDatabase\ReferencingElement\MyElement|MyAttribute]
   --span: float # e.g. 100
   --step: oneof<nothing, bool> # e.g. false
   --trait-name: string # e.g. LimitLoLo
   --type: string # e.g. Int32
   --type-qualifier: string # e.g. 
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1AbEDqD5loBNH0erqeqJodtALAYIKyyz2F5BGAxQAVXYRDBAGyPedZG1sUmxOOclp3Flwg
   --zero: float # e.g. 0
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributes/{web_id}"))
-  let body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReference": $data_reference, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "Description": $description, "DisplayDigits": $display_digits, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "Span": $span, "Step": $step, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id, "Zero": $zero} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributes/{web_id}"))
+  let req_body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReference": $data_reference, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "Description": $description, "DisplayDigits": $display_digits, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "Span": $span, "Step": $step, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id, "Zero": $zero} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the child attributes of the specified attribute.
@@ -4036,15 +4045,15 @@ export def "attributes-attributes get" [
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --template-name: string # Specify that returned attributes must be members of this template. The default is no template filter.
-  --trait: list # The name of the attribute trait. Multiple traits may be specified with multiple instances of the parameter.
-  --trait-category: list # The category of the attribute traits. Multiple categories may be specified with multiple instances of the parameter. If the parameter is not specified, or if its value is "all", then all attribute traits of all categories will be returned.
+  --trait: list<string> # The name of the attribute trait. Multiple traits may be specified with multiple instances of the parameter.
+  --trait-category: list<string> # The category of the attribute traits. Multiple categories may be specified with multiple instances of the parameter. If the parameter is not specified, or if its value is "all", then all attribute traits of all categories will be returned.
   --value-type: string # Specify that returned attributes' value type must be the given value type. The default is no value type filter.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
 ]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "trait" $trait "multi") (serialize-qp "traitCategory" $trait_category "multi") (serialize-qp "valueType" $value_type "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributes/{web_id}/attributes") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributes/{web_id}/attributes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4056,7 +4065,7 @@ export def "attributes-attributes get" [
 # operationId: Attribute_CreateAttribute
 # --DataReference shape: {PIPoint?: record, Type?: string, WebException?: record}
 # --Links shape: {Attributes?: string, Categories?: string, Element?: string, EndValue?: string, EnumerationSet?: string, EnumerationValues?: string, EventFrame?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, Point?: string, RecordedData?: string, Self?: string, SummaryData?: string, Template?: string, Trait?: string, Value?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "attributes-attributes create" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4069,7 +4078,7 @@ export def "attributes-attributes create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --category-names: list # e.g. [Energy Savings Targets]
+  --category-names: list<string> # e.g. [Energy Savings Targets]
   --config-string: string # e.g. SELECT [Water Use] FROM [Energy Use 2008] WHERE [Asset ID] = '%Element%'
   --data-reference: record # shape: {PIPoint?: record, Type?: string, WebException?: record}
   --data-reference-plug-in: string # e.g. Table Lookup
@@ -4086,13 +4095,13 @@ export def "attributes-attributes create" [
   --links: record # shape: {Attributes?: string, Categories?: string, Element?: string, EndValue?: string, EnumerationSet?: string, EnumerationValues?: string, EventFrame?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, Point?: string, RecordedData?: string, Self?: string, SummaryData?: string, Template?: string, Trait?: string, Value?: string}
   --name: string # e.g. Water
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\CityName\EngineeringProcess\Equipment\MachineName|Water(2008)
-  --paths: list # e.g. [\\MyAssetServer\MyDatabase\MyElement|MyAttribute, \\MyAssetServer\MyDatabase\ReferencingElement\MyElement|MyAttribute]
+  --paths: list<string> # e.g. [\\MyAssetServer\MyDatabase\MyElement|MyAttribute, \\MyAssetServer\MyDatabase\ReferencingElement\MyElement|MyAttribute]
   --span: float # e.g. 100
   --step: oneof<nothing, bool> # e.g. false
   --trait-name: string # e.g. LimitLoLo
   --type: string # e.g. Int32
   --type-qualifier: string # e.g. 
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1AbEDqD5loBNH0erqeqJodtALAYIKyyz2F5BGAxQAVXYRDBAGyPedZG1sUmxOOclp3Flwg
   --zero: float # e.g. 0
 ]: any -> any {
@@ -4100,12 +4109,12 @@ export def "attributes-attributes create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributes/{web_id}/attributes") $qp)
-  let body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReference": $data_reference, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "Description": $description, "DisplayDigits": $display_digits, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "Span": $span, "Step": $step, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id, "Zero": $zero} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributes/{web_id}/attributes") $qp)
+  let req_body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReference": $data_reference, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "Description": $description, "DisplayDigits": $display_digits, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "Span": $span, "Step": $step, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id, "Zero": $zero} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get an attribute's categories.
@@ -4129,7 +4138,7 @@ export def "attributes-categories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributes/{web_id}/categories") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributes/{web_id}/categories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4155,7 +4164,7 @@ export def "attributes-config create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributes/{web_id}/config") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributes/{web_id}/config") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4181,7 +4190,7 @@ export def "attributes-value get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributes/{web_id}/value") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributes/{web_id}/value") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4191,9 +4200,9 @@ export def "attributes-value get" [
 #
 # PUT /attributes/{webId}/value
 # operationId: Attribute_SetValue
-# --Errors item shape: {FieldName?: string, Message?: list}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "attributes-value put" [
+# --Errors item shape: {FieldName?: string, Message?: list<string>}
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "attributes-value update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4205,31 +4214,31 @@ export def "attributes-value put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --annotated: oneof<nothing, bool> # e.g. false
-  --errors: list # item shape: {FieldName?: string, Message?: list}
+  --errors: list # item shape: {FieldName?: string, Message?: list<string>}
   --good: oneof<nothing, bool> # e.g. true
   --questionable: oneof<nothing, bool> # e.g. false
   --substituted: oneof<nothing, bool> # e.g. false
   --timestamp: string # format: date-time, e.g. 2014-07-22T14:00:00Z
   --units-abbreviation: string # e.g. m
   --value: record # e.g. 12.3
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributes/{web_id}/value"))
-  let body = {"Annotated": $annotated, "Errors": $errors, "Good": $good, "Questionable": $questionable, "Substituted": $substituted, "Timestamp": $timestamp, "UnitsAbbreviation": $units_abbreviation, "Value": $value, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributes/{web_id}/value"))
+  let req_body = {"Annotated": $annotated, "Errors": $errors, "Good": $good, "Questionable": $questionable, "Substituted": $substituted, "Timestamp": $timestamp, "UnitsAbbreviation": $units_abbreviation, "Value": $value, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve an attribute template by path.
 #
 # GET /attributetemplates
 # operationId: AttributeTemplate_GetByPath
-export def "attributetemplates get-by-path" [
+export def "attributetemplates get-attribute-template-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4256,7 +4265,7 @@ export def "attributetemplates get-by-path" [
 #
 # DELETE /attributetemplates/{webId}
 # operationId: AttributeTemplate_Delete
-export def "attributetemplates delete" [
+export def "attributetemplates delete-attribute-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4270,7 +4279,7 @@ export def "attributetemplates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributetemplates/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributetemplates/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4280,7 +4289,7 @@ export def "attributetemplates delete" [
 #
 # GET /attributetemplates/{webId}
 # operationId: AttributeTemplate_Get
-export def "attributetemplates get" [
+export def "attributetemplates get-attribute-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4297,7 +4306,7 @@ export def "attributetemplates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributetemplates/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributetemplates/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4308,8 +4317,8 @@ export def "attributetemplates get" [
 # PATCH /attributetemplates/{webId}
 # operationId: AttributeTemplate_Update
 # --Links shape: {AttributeTemplates?: string, Categories?: string, ElementTemplate?: string, Parent?: string, Self?: string, Trait?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "attributetemplates update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "attributetemplates update-attribute-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4320,7 +4329,7 @@ export def "attributetemplates update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --category-names: list # e.g. [Energy Savings Targets]
+  --category-names: list<string> # e.g. [Energy Savings Targets]
   --config-string: string # e.g. SELECT [Water Use] FROM [Energy Use 2008] WHERE [Asset ID] = '%Element%'
   --data-reference-plug-in: string # e.g. Table Lookup
   --default-units-name: string # e.g. liter
@@ -4339,25 +4348,25 @@ export def "attributetemplates update" [
   --trait-name: string # e.g. LimitLoLo
   --type: string # e.g. Int32
   --type-qualifier: string # e.g. 
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1ATEG_auSSsvuECG8ad_p8b25QQkxqWDwIWU6zC4vmgpd4kgtSfQI9VdxUGA8fi1yf9DVg
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributetemplates/{web_id}"))
-  let body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "DefaultValue": $default_value, "Description": $description, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributetemplates/{web_id}"))
+  let req_body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "DefaultValue": $default_value, "Description": $description, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve an attribute template's child attribute templates.
 #
 # GET /attributetemplates/{webId}/attributetemplates
 # operationId: AttributeTemplate_GetAttributeTemplates
-export def "attributetemplates-attributetemplates get" [
+export def "attributetemplates-attributetemplates get-attribute-template-attribute-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4374,7 +4383,7 @@ export def "attributetemplates-attributetemplates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributetemplates/{web_id}/attributetemplates") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributetemplates/{web_id}/attributetemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4385,8 +4394,8 @@ export def "attributetemplates-attributetemplates get" [
 # POST /attributetemplates/{webId}/attributetemplates
 # operationId: AttributeTemplate_CreateAttributeTemplate
 # --Links shape: {AttributeTemplates?: string, Categories?: string, ElementTemplate?: string, Parent?: string, Self?: string, Trait?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "attributetemplates-attributetemplates create" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "attributetemplates-attributetemplates create-attribute-template-attribute-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4398,7 +4407,7 @@ export def "attributetemplates-attributetemplates create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --category-names: list # e.g. [Energy Savings Targets]
+  --category-names: list<string> # e.g. [Energy Savings Targets]
   --config-string: string # e.g. SELECT [Water Use] FROM [Energy Use 2008] WHERE [Asset ID] = '%Element%'
   --data-reference-plug-in: string # e.g. Table Lookup
   --default-units-name: string # e.g. liter
@@ -4417,26 +4426,26 @@ export def "attributetemplates-attributetemplates create" [
   --trait-name: string # e.g. LimitLoLo
   --type: string # e.g. Int32
   --type-qualifier: string # e.g. 
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1ATEG_auSSsvuECG8ad_p8b25QQkxqWDwIWU6zC4vmgpd4kgtSfQI9VdxUGA8fi1yf9DVg
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributetemplates/{web_id}/attributetemplates") $qp)
-  let body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "DefaultValue": $default_value, "Description": $description, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributetemplates/{web_id}/attributetemplates") $qp)
+  let req_body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "DefaultValue": $default_value, "Description": $description, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get an attribute template's categories.
 #
 # GET /attributetemplates/{webId}/categories
 # operationId: AttributeTemplate_GetCategories
-export def "attributetemplates-categories get" [
+export def "attributetemplates-categories get-attribute-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4453,7 +4462,7 @@ export def "attributetemplates-categories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/attributetemplates/{web_id}/categories") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributetemplates/{web_id}/categories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4463,7 +4472,7 @@ export def "attributetemplates-categories get" [
 #
 # GET /attributetraits
 # operationId: AttributeTrait_GetByCategory
-export def "attributetraits get-by-category" [
+export def "attributetraits get-attribute-trait-by-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4473,7 +4482,7 @@ export def "attributetraits get-by-category" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --category: list # The category of the attribute traits. Multiple categories may be specified with multiple instances of the parameter. If the parameter is not specified, or if its value is "all", then all attribute traits of all categories will be returned.
+  --category: list<string> # The category of the attribute traits. Multiple categories may be specified with multiple instances of the parameter. If the parameter is not specified, or if its value is "all", then all attribute traits of all categories will be returned.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
 ]: nothing -> record<Items: table<Abbreviation: string, AllowChildAttributes: bool, AllowDuplicates: bool, IsAllowedOnRootAttribute: bool, IsTypeInherited: bool, IsUOMInherited: bool, Links: record, Name: string, RequireNumeric: bool, RequireString: bool, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4489,7 +4498,7 @@ export def "attributetraits get-by-category" [
 #
 # GET /attributetraits/{name}
 # operationId: AttributeTrait_Get
-export def "attributetraits get" [
+export def "attributetraits get-attribute-trait" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4505,7 +4514,7 @@ export def "attributetraits get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/attributetraits/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/attributetraits/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4515,7 +4524,7 @@ export def "attributetraits get" [
 #
 # POST /batch
 # operationId: Batch_Execute
-export def "batch exec-ute" [
+export def "batch create-execute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4531,10 +4540,11 @@ export def "batch exec-ute" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/batch")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns results of evaluating the expression over the time range from the start time to the end time at a defined interval.
@@ -4618,7 +4628,7 @@ export def "calculation-summary get" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --start-time: string # An optional start time. The default is '*-1d' for element attributes and points. For event frame attributes, the default is the event frame's start time, or '*-1d' if that is not set.
   --summary-duration: string # The duration of each summary interval.
-  --summary-type: list # Specifies the kinds of summaries to produce over the range. The default is 'Total'. Multiple summary types may be specified by using multiple instances of summaryType.
+  --summary-type: list<string> # Specifies the kinds of summaries to produce over the range. The default is 'Total'. Multiple summary types may be specified by using multiple instances of summaryType.
   --time-type: string # Specifies how to calculate the timestamp for each interval. The default is 'Auto'.
   --web-id: string # The ID of the target object of the expression. A target object can be a Data Server, a database, an element, an event frame or an attribute. References to attributes or points are based on the target. If this parameter is not provided, the target object is set to null.
 ]: nothing -> record<Items: table<Type: string, Value: record, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
@@ -4646,7 +4656,7 @@ export def "calculation-times get-at" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --expression: string # A string containing the expression to be evaluated. The syntax for the expression generally follows the Performance Equation syntax as described in the PI Server documentation, with the exception that expressions which target AF objects use attribute names in place of tag names in the equation.
-  --time: list # A list of timestamps at which to calculate the expression.
+  --time: list<string> # A list of timestamps at which to calculate the expression.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --web-id: string # The ID of the target object of the expression. A target object can be a Data Server, a database, an element, an event frame or an attribute. References to attributes or points are based on the target. If this parameter is not provided, the target object is set to null.
@@ -4687,7 +4697,7 @@ export def "channels-instances get" [
 #
 # GET /dataservers
 # operationId: DataServer_List
-export def "dataservers list" [
+export def "dataservers list-data-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4713,7 +4723,7 @@ export def "dataservers list" [
 #
 # GET /dataservers#name
 # operationId: DataServer_GetByName
-export def "dataserversname get-by-name" [
+export def "dataserversname get-data-server-by-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4740,7 +4750,7 @@ export def "dataserversname get-by-name" [
 #
 # GET /dataservers#path
 # operationId: DataServer_GetByPath
-export def "dataserverspath get-by-path" [
+export def "dataserverspath get-data-server-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4767,7 +4777,7 @@ export def "dataserverspath get-by-path" [
 #
 # GET /dataservers/{webId}
 # operationId: DataServer_Get
-export def "dataservers get" [
+export def "dataservers get-data-server" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4784,7 +4794,7 @@ export def "dataservers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/dataservers/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/dataservers/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4794,7 +4804,7 @@ export def "dataservers get" [
 #
 # GET /dataservers/{webId}/enumerationsets
 # operationId: DataServer_GetEnumerationSets
-export def "dataservers-enumerationsets get" [
+export def "dataservers-enumerationsets get-data-server-enumeration-sets" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4811,7 +4821,7 @@ export def "dataservers-enumerationsets get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/dataservers/{web_id}/enumerationsets") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/dataservers/{web_id}/enumerationsets") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4822,8 +4832,8 @@ export def "dataservers-enumerationsets get" [
 # POST /dataservers/{webId}/enumerationsets
 # operationId: DataServer_CreateEnumerationSet
 # --Links shape: {DataServer?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Values?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "dataservers-enumerationsets create" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "dataservers-enumerationsets create-data-server-enumeration-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4841,26 +4851,26 @@ export def "dataservers-enumerationsets create" [
   --name: string # e.g. Model Number
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\EnumerationSets[Model Number]
   --serialize-description: oneof<nothing, bool>
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1MSRDqD5loBNH0erqeqJodtALAT_x3jpGsKUCB1vtmvQHUMQ
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/dataservers/{web_id}/enumerationsets") $qp)
-  let body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "SerializeDescription": $serialize_description, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/dataservers/{web_id}/enumerationsets") $qp)
+  let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "SerializeDescription": $serialize_description, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieves the specified license for the given Data Server. The fields of the response object are string representations of the numerical values reported by the Data Server, with "Infinity" representing a license field with no limit.
 #
 # GET /dataservers/{webId}/license
 # operationId: DataServer_GetLicense
-export def "dataservers-license get" [
+export def "dataservers-license get-data-server" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4878,7 +4888,7 @@ export def "dataservers-license get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "module" $qp_module "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/dataservers/{web_id}/license") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/dataservers/{web_id}/license") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4888,7 +4898,7 @@ export def "dataservers-license get" [
 #
 # GET /dataservers/{webId}/points
 # operationId: DataServer_GetPoints
-export def "dataservers-points get" [
+export def "dataservers-points get-data-server" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4908,7 +4918,7 @@ export def "dataservers-points get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/dataservers/{web_id}/points") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/dataservers/{web_id}/points") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4919,8 +4929,8 @@ export def "dataservers-points get" [
 # POST /dataservers/{webId}/points
 # operationId: DataServer_CreatePoint
 # --Links shape: {Attributes?: string, DataServer?: string, EndValue?: string, InterpolatedData?: string, PlotData?: string, RecordedData?: string, Self?: string, SummaryData?: string, Value?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "dataservers-points create" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "dataservers-points create-data-server" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4945,7 +4955,7 @@ export def "dataservers-points create" [
   --point-type: string # e.g. Float32
   --span: float # e.g. 100
   --step: oneof<nothing, bool> # e.g. false
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1DPa70Wf0zBA06CLkV9ovNQgQCAAAAA
   --zero: float # e.g. 0
 ]: any -> any {
@@ -4953,19 +4963,19 @@ export def "dataservers-points create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/dataservers/{web_id}/points") $qp)
-  let body = {"Descriptor": $descriptor, "DigitalSetName": $digital_set_name, "DisplayDigits": $display_digits, "EngineeringUnits": $engineering_units, "Future": $future, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "PointClass": $point_class, "PointType": $point_type, "Span": $span, "Step": $step, "WebException": $web_exception, "WebId": $body_web_id, "Zero": $zero} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/dataservers/{web_id}/points") $qp)
+  let req_body = {"Descriptor": $descriptor, "DigitalSetName": $digital_set_name, "DisplayDigits": $display_digits, "EngineeringUnits": $engineering_units, "Future": $future, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "PointClass": $point_class, "PointType": $point_type, "Span": $span, "Step": $step, "WebException": $web_exception, "WebId": $body_web_id, "Zero": $zero} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve an element category by path.
 #
 # GET /elementcategories
 # operationId: ElementCategory_GetByPath
-export def "elementcategories get-by-path" [
+export def "elementcategories get-element-category-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4992,7 +5002,7 @@ export def "elementcategories get-by-path" [
 #
 # DELETE /elementcategories/{webId}
 # operationId: ElementCategory_Delete
-export def "elementcategories delete" [
+export def "elementcategories delete-element-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5006,7 +5016,7 @@ export def "elementcategories delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementcategories/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementcategories/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5016,7 +5026,7 @@ export def "elementcategories delete" [
 #
 # GET /elementcategories/{webId}
 # operationId: ElementCategory_Get
-export def "elementcategories get" [
+export def "elementcategories get-element-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5033,7 +5043,7 @@ export def "elementcategories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementcategories/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementcategories/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5044,8 +5054,8 @@ export def "elementcategories get" [
 # PATCH /elementcategories/{webId}
 # operationId: ElementCategory_Update
 # --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elementcategories update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "elementcategories update-element-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5061,25 +5071,25 @@ export def "elementcategories update" [
   --links: record # shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
   --name: string # e.g. CategoryName
   --path: string # format: path, e.g. \\MyAssetServer\Database\CategoriesElement[CategoryName]
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1ECDqD5loBNH0erqeqJodtALAQ_lRME1-QUKrnEUKhMgEUA
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementcategories/{web_id}"))
-  let body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementcategories/{web_id}"))
+  let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the security information of the specified security item associated with the element category for a specified user.
 #
 # GET /elementcategories/{webId}/security
 # operationId: ElementCategory_GetSecurity
-export def "elementcategories-security get" [
+export def "elementcategories-security get-element-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5090,7 +5100,7 @@ export def "elementcategories-security get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -5098,7 +5108,7 @@ export def "elementcategories-security get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementcategories/{web_id}/security") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementcategories/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5108,7 +5118,7 @@ export def "elementcategories-security get" [
 #
 # GET /elementcategories/{webId}/securityentries
 # operationId: ElementCategory_GetSecurityEntries
-export def "elementcategories-securityentries get" [
+export def "elementcategories-securityentries get-element-category-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5126,7 +5136,7 @@ export def "elementcategories-securityentries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementcategories/{web_id}/securityentries") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementcategories/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5137,8 +5147,8 @@ export def "elementcategories-securityentries get" [
 # POST /elementcategories/{webId}/securityentries
 # operationId: ElementCategory_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elementcategories-securityentries create-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "elementcategories-securityentries create-element-category-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5151,30 +5161,30 @@ export def "elementcategories-securityentries create-security-entry" [
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementcategories/{web_id}/securityentries") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementcategories/{web_id}/securityentries") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a security entry owned by the element category.
 #
 # DELETE /elementcategories/{webId}/securityentries/{name}
 # operationId: ElementCategory_DeleteSecurityEntry
-export def "elementcategories-securityentries delete-security-entry" [
+export def "elementcategories-securityentries delete-element-category-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5191,7 +5201,7 @@ export def "elementcategories-securityentries delete-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/elementcategories/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/elementcategories/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5201,7 +5211,7 @@ export def "elementcategories-securityentries delete-security-entry" [
 #
 # GET /elementcategories/{webId}/securityentries/{name}
 # operationId: ElementCategory_GetSecurityEntryByName
-export def "elementcategories-securityentries get-security-entry" [
+export def "elementcategories-securityentries get-element-category-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5219,7 +5229,7 @@ export def "elementcategories-securityentries get-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/elementcategories/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/elementcategories/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5230,8 +5240,8 @@ export def "elementcategories-securityentries get-security-entry" [
 # PUT /elementcategories/{webId}/securityentries/{name}
 # operationId: ElementCategory_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elementcategories-securityentries update-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "elementcategories-securityentries update-element-category-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5244,23 +5254,23 @@ export def "elementcategories-securityentries update-security-entry" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --body-name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/elementcategories/{web_id}/securityentries/{name}") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/elementcategories/{web_id}/securityentries/{name}") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve an element by path.
@@ -5308,9 +5318,9 @@ export def "elements-multiple get" [
   --as-parallel: oneof<nothing, bool> # Specifies if the retrieval processes should be run in parallel on the server. This may improve the response time for large amounts of requested attributes. The default is 'false'.
   --associations: string # Associated values to return in the response, separated by semicolons (;). This call supports Paths to return all paths to the element. If this parameter is not specified, paths are not returned.
   --include-mode: string # The include mode for the return list. The default is 'All'.
-  --path: list # The path of an element. Multiple elements may be specified with multiple instances of the parameter.
+  --path: list<string> # The path of an element. Multiple elements may be specified with multiple instances of the parameter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
-  --web-id: list # The ID of an element. Multiple elements may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of an element. Multiple elements may be specified with multiple instances of the parameter.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
 ]: nothing -> record<Items: table<Exception: record, Identifier: string, IdentifierType: string, Object: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5326,7 +5336,7 @@ export def "elements-multiple get" [
 #
 # GET /elements/search
 # operationId: Element_GetElementsQuery
-export def "elements-search get-elements-query" [
+export def "elements-search get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5359,8 +5369,8 @@ export def "elements-search get-elements-query" [
 # POST /elements/searchbyattribute
 # operationId: Element_CreateSearchByAttribute
 # --ValueQueries item shape: {AttributeName?: string, AttributeUOM?: string, AttributeValue?: record, SearchOperator?: string, WebException?: record}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elements-searchbyattribute create-search" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "elements-searchbyattribute create-list-by-attribute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5376,25 +5386,25 @@ export def "elements-searchbyattribute create-search" [
   --element-template: string # format: webid, e.g. I1ETDqD5loBNH0erqeqJodtALAjFPVfUpY-02A8uioGDSgIg
   --search-root: string # format: webid, e.g. I1RDDqD5loBNH0erqeqJodtALA8fbgUnyQW02v-gLGIxumSg
   --value-queries: list # item shape: {AttributeName?: string, AttributeUOM?: string, AttributeValue?: record, SearchOperator?: string, WebException?: record}
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "noResults" $no_results "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/elements/searchbyattribute" $qp)
-  let body = {"ElementTemplate": $element_template, "SearchRoot": $search_root, "ValueQueries": $value_queries, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ElementTemplate": $element_template, "SearchRoot": $search_root, "ValueQueries": $value_queries, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Execute a "Search Elements By Attribute Value" operation.
 #
 # GET /elements/searchbyattribute/{searchId}
 # operationId: Element_ExecuteSearchByAttribute
-export def "elements-searchbyattribute exec-ute-search" [
+export def "elements-searchbyattribute list-execute-by-attribute" [
   search_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5420,7 +5430,7 @@ export def "elements-searchbyattribute exec-ute-search" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "descriptionFilter" $description_filter "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({search_id: $search_id} | format pattern "/elements/searchbyattribute/{search_id}") $qp)
+  let full_url = (build-url $base ({search_id: (encode-path-segment $search_id)} | format pattern "/elements/searchbyattribute/{search_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5444,7 +5454,7 @@ export def "elements delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5472,7 +5482,7 @@ export def "elements get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5482,9 +5492,9 @@ export def "elements get" [
 #
 # PATCH /elements/{webId}
 # operationId: Element_Update
-# --Errors item shape: {FieldName?: string, Message?: list}
+# --Errors item shape: {FieldName?: string, Message?: list<string>}
 # --Links shape: {Analyses?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, Elements?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, NotificationRules?: string, Parent?: string, PlotData?: string, RecordedData?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "elements update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5496,29 +5506,29 @@ export def "elements update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --category-names: list # e.g. [Equipment Assets]
+  --category-names: list<string> # e.g. [Equipment Assets]
   --description: string # e.g. Manufacturing Equipment MachineName
-  --errors: list # item shape: {FieldName?: string, Message?: list}
+  --errors: list # item shape: {FieldName?: string, Message?: list<string>}
   --extended-properties: record
   --has-children: oneof<nothing, bool> # e.g. false
   --id: string # format: uuid, e.g. cbb28260-853d-11e4-80c5-00155d844304
   --links: record # shape: {Analyses?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, Elements?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, NotificationRules?: string, Parent?: string, PlotData?: string, RecordedData?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
   --name: string # e.g. MachineName
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\CityName\EngineeringProcess\Equipment\MachineName
-  --paths: list
+  --paths: list<string>
   --template-name: string # e.g. MachineName
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1EmDqD5loBNH0erqeqJodtALAYIKyyz2F5BGAxQAVXYRDBA
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}"))
-  let body = {"CategoryNames": $category_names, "Description": $description, "Errors": $errors, "ExtendedProperties": $extended_properties, "HasChildren": $has_children, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}"))
+  let req_body = {"CategoryNames": $category_names, "Description": $description, "Errors": $errors, "ExtendedProperties": $extended_properties, "HasChildren": $has_children, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve analyses based on the specified conditions.
@@ -5546,7 +5556,7 @@ export def "elements-analyses get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxCount" $max_count "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}/analyses") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/analyses") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5557,7 +5567,7 @@ export def "elements-analyses get" [
 # POST /elements/{webId}/analyses
 # operationId: Element_CreateAnalysis
 # --Links shape: {AnalysisRule?: string, AnalysisRulePlugIn?: string, Categories?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Target?: string, Template?: string, TimeRule?: string, TimeRulePlugIn?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "elements-analyses create-analysis" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5572,7 +5582,7 @@ export def "elements-analyses create-analysis" [
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
   --analysis-rule-plug-in-name: string # e.g. PerformanceEquation
   --auto-created: oneof<nothing, bool> # e.g. false
-  --category-names: list # e.g. [MyAnalysisCategory]
+  --category-names: list<string> # e.g. [MyAnalysisCategory]
   --description: string # e.g. 
   --group-id: int # format: int32, e.g. 0
   --has-notification: oneof<nothing, bool> # e.g. false
@@ -5592,19 +5602,19 @@ export def "elements-analyses create-analysis" [
   --target-web-id: string # format: webid, e.g. I1ETDqD5loBNH0erqeqJodtALAjFPVfUpY-02A8uioGDSgIg
   --template-name: string # e.g. 
   --time-rule-plug-in-name: string # e.g. Periodic
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1XsDqD5loBNH0erqeqJodtALAWDOFEb-U5xGEQwAVXYTCAA
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}/analyses") $qp)
-  let body = {"AnalysisRulePlugInName": $analysis_rule_plug_in_name, "AutoCreated": $auto_created, "CategoryNames": $category_names, "Description": $description, "GroupId": $group_id, "HasNotification": $has_notification, "HasTarget": $has_target, "HasTemplate": $has_template, "Id": $id, "IsConfigured": $is_configured, "IsTimeRuleDefinedByTemplate": $is_time_rule_defined_by_template, "Links": $links, "MaximumQueueSize": $maximum_queue_size, "Name": $name, "OutputTime": $output_time, "Path": $path, "Priority": $priority, "PublishResults": $publish_results, "Status": $status, "TargetWebId": $target_web_id, "TemplateName": $template_name, "TimeRulePlugInName": $time_rule_plug_in_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/analyses") $qp)
+  let req_body = {"AnalysisRulePlugInName": $analysis_rule_plug_in_name, "AutoCreated": $auto_created, "CategoryNames": $category_names, "Description": $description, "GroupId": $group_id, "HasNotification": $has_notification, "HasTarget": $has_target, "HasTemplate": $has_template, "Id": $id, "IsConfigured": $is_configured, "IsTimeRuleDefinedByTemplate": $is_time_rule_defined_by_template, "Links": $links, "MaximumQueueSize": $maximum_queue_size, "Name": $name, "OutputTime": $output_time, "Path": $path, "Priority": $priority, "PublishResults": $publish_results, "Status": $status, "TargetWebId": $target_web_id, "TemplateName": $template_name, "TimeRulePlugInName": $time_rule_plug_in_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the attributes of the specified element.
@@ -5634,15 +5644,15 @@ export def "elements-attributes get" [
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --template-name: string # Specify that returned attributes must be members of this template. The default is no template filter.
-  --trait: list # The name of the attribute trait. Multiple traits may be specified with multiple instances of the parameter.
-  --trait-category: list # The category of the attribute traits. Multiple categories may be specified with multiple instances of the parameter. If the parameter is not specified, or if its value is "all", then all attribute traits of all categories will be returned.
+  --trait: list<string> # The name of the attribute trait. Multiple traits may be specified with multiple instances of the parameter.
+  --trait-category: list<string> # The category of the attribute traits. Multiple categories may be specified with multiple instances of the parameter. If the parameter is not specified, or if its value is "all", then all attribute traits of all categories will be returned.
   --value-type: string # Specify that returned attributes' value type must be the given value type. The default is no value type filter.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
 ]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "trait" $trait "multi") (serialize-qp "traitCategory" $trait_category "multi") (serialize-qp "valueType" $value_type "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}/attributes") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/attributes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5654,7 +5664,7 @@ export def "elements-attributes get" [
 # operationId: Element_CreateAttribute
 # --DataReference shape: {PIPoint?: record, Type?: string, WebException?: record}
 # --Links shape: {Attributes?: string, Categories?: string, Element?: string, EndValue?: string, EnumerationSet?: string, EnumerationValues?: string, EventFrame?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, Point?: string, RecordedData?: string, Self?: string, SummaryData?: string, Template?: string, Trait?: string, Value?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "elements-attributes create" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5667,7 +5677,7 @@ export def "elements-attributes create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --category-names: list # e.g. [Energy Savings Targets]
+  --category-names: list<string> # e.g. [Energy Savings Targets]
   --config-string: string # e.g. SELECT [Water Use] FROM [Energy Use 2008] WHERE [Asset ID] = '%Element%'
   --data-reference: record # shape: {PIPoint?: record, Type?: string, WebException?: record}
   --data-reference-plug-in: string # e.g. Table Lookup
@@ -5684,13 +5694,13 @@ export def "elements-attributes create" [
   --links: record # shape: {Attributes?: string, Categories?: string, Element?: string, EndValue?: string, EnumerationSet?: string, EnumerationValues?: string, EventFrame?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, Point?: string, RecordedData?: string, Self?: string, SummaryData?: string, Template?: string, Trait?: string, Value?: string}
   --name: string # e.g. Water
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\CityName\EngineeringProcess\Equipment\MachineName|Water(2008)
-  --paths: list # e.g. [\\MyAssetServer\MyDatabase\MyElement|MyAttribute, \\MyAssetServer\MyDatabase\ReferencingElement\MyElement|MyAttribute]
+  --paths: list<string> # e.g. [\\MyAssetServer\MyDatabase\MyElement|MyAttribute, \\MyAssetServer\MyDatabase\ReferencingElement\MyElement|MyAttribute]
   --span: float # e.g. 100
   --step: oneof<nothing, bool> # e.g. false
   --trait-name: string # e.g. LimitLoLo
   --type: string # e.g. Int32
   --type-qualifier: string # e.g. 
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1AbEDqD5loBNH0erqeqJodtALAYIKyyz2F5BGAxQAVXYRDBAGyPedZG1sUmxOOclp3Flwg
   --zero: float # e.g. 0
 ]: any -> any {
@@ -5698,12 +5708,12 @@ export def "elements-attributes create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}/attributes") $qp)
-  let body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReference": $data_reference, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "Description": $description, "DisplayDigits": $display_digits, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "Span": $span, "Step": $step, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id, "Zero": $zero} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/attributes") $qp)
+  let req_body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReference": $data_reference, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "Description": $description, "DisplayDigits": $display_digits, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "Span": $span, "Step": $step, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id, "Zero": $zero} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get an element's categories.
@@ -5727,7 +5737,7 @@ export def "elements-categories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}/categories") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/categories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5753,7 +5763,7 @@ export def "elements-config create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeChildElements" $include_child_elements "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}/config") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/config") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5763,7 +5773,7 @@ export def "elements-config create" [
 #
 # GET /elements/{webId}/elementattributes
 # operationId: Element_FindElementAttributes
-export def "elements-elementattributes get" [
+export def "elements-elementattributes find-attributes" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5795,7 +5805,7 @@ export def "elements-elementattributes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "attributeCategory" $attribute_category "scalar") (serialize-qp "attributeDescriptionFilter" $attribute_description_filter "scalar") (serialize-qp "attributeNameFilter" $attribute_name_filter "scalar") (serialize-qp "attributeType" $attribute_type "scalar") (serialize-qp "elementCategory" $element_category "scalar") (serialize-qp "elementDescriptionFilter" $element_description_filter "scalar") (serialize-qp "elementNameFilter" $element_name_filter "scalar") (serialize-qp "elementTemplate" $element_template "scalar") (serialize-qp "elementType" $element_type "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}/elementattributes") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/elementattributes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5833,7 +5843,7 @@ export def "elements-elements get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "descriptionFilter" $description_filter "scalar") (serialize-qp "elementType" $element_type "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}/elements") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/elements") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5843,9 +5853,9 @@ export def "elements-elements get" [
 #
 # POST /elements/{webId}/elements
 # operationId: Element_CreateElement
-# --Errors item shape: {FieldName?: string, Message?: list}
+# --Errors item shape: {FieldName?: string, Message?: list<string>}
 # --Links shape: {Analyses?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, Elements?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, NotificationRules?: string, Parent?: string, PlotData?: string, RecordedData?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "elements-elements create" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5858,37 +5868,37 @@ export def "elements-elements create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --category-names: list # e.g. [Equipment Assets]
+  --category-names: list<string> # e.g. [Equipment Assets]
   --description: string # e.g. Manufacturing Equipment MachineName
-  --errors: list # item shape: {FieldName?: string, Message?: list}
+  --errors: list # item shape: {FieldName?: string, Message?: list<string>}
   --extended-properties: record
   --has-children: oneof<nothing, bool> # e.g. false
   --id: string # format: uuid, e.g. cbb28260-853d-11e4-80c5-00155d844304
   --links: record # shape: {Analyses?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, Elements?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, NotificationRules?: string, Parent?: string, PlotData?: string, RecordedData?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
   --name: string # e.g. MachineName
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\CityName\EngineeringProcess\Equipment\MachineName
-  --paths: list
+  --paths: list<string>
   --template-name: string # e.g. MachineName
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1EmDqD5loBNH0erqeqJodtALAYIKyyz2F5BGAxQAVXYRDBA
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}/elements") $qp)
-  let body = {"CategoryNames": $category_names, "Description": $description, "Errors": $errors, "ExtendedProperties": $extended_properties, "HasChildren": $has_children, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/elements") $qp)
+  let req_body = {"CategoryNames": $category_names, "Description": $description, "Errors": $errors, "ExtendedProperties": $extended_properties, "HasChildren": $has_children, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve event frames that reference this element based on the specified conditions. By default, returns all event frames that reference this element that have been active in the past 8 hours.
 #
 # GET /elements/{webId}/eventframes
 # operationId: Element_GetEventFrames
-export def "elements-eventframes get" [
+export def "elements-eventframes get-event-frames" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5907,7 +5917,7 @@ export def "elements-eventframes get" [
   --name-filter: string # The name query string used for finding event frames. The default is no filter.
   --search-mode: string # Determines how the startTime and endTime parameters are treated when searching for event frame objects to be included in the returned collection. If this parameter is one of the 'Backward*' or 'Forward*' values, none of endTime, sortField, or sortOrder may be specified. The default is 'Overlapped'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
-  --severity: list # Specify that returned event frames must have this severity. Multiple severity values may be specified with multiple instances of the parameter. The default is no severity filter.
+  --severity: list<string> # Specify that returned event frames must have this severity. Multiple severity values may be specified with multiple instances of the parameter. The default is no severity filter.
   --sort-field: string # The field or property of the object used to sort the returned collection. The default is 'Name' if searchMode is not one of the 'Backward*' or 'Forward*' values.
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending' if searchMode is not one of the 'Backward*' or 'Forward*' values.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
@@ -5918,7 +5928,7 @@ export def "elements-eventframes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "canBeAcknowledged" $can_be_acknowledged "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "isAcknowledged" $is_acknowledged "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchMode" $search_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "severity" $severity "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}/eventframes") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/eventframes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5928,7 +5938,7 @@ export def "elements-eventframes get" [
 #
 # GET /elements/{webId}/notificationrules
 # operationId: Element_GetNotificationRules
-export def "elements-notificationrules get" [
+export def "elements-notificationrules get-notification-rules" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5945,7 +5955,7 @@ export def "elements-notificationrules get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}/notificationrules") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/notificationrules") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5955,8 +5965,8 @@ export def "elements-notificationrules get" [
 #
 # POST /elements/{webId}/notificationrules
 # operationId: Element_CreateNotificationRule
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elements-notificationrules create" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "elements-notificationrules create-notification-rule" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5969,7 +5979,7 @@ export def "elements-notificationrules create" [
   --accept: string@accept-completer # Response content type
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
   --auto-created: oneof<nothing, bool> # e.g. true
-  --category-names: list # e.g. [Equipment Assets]
+  --category-names: list<string> # e.g. [Equipment Assets]
   --criteria: string # e.g. Name: EventFrameCriteriaName
   --description: string # e.g. Manufacturing Equipment MachineName
   --id: string # format: uuid, e.g. e9a984d0-f47c-11e7-8454-00155d029708
@@ -5980,19 +5990,19 @@ export def "elements-notificationrules create" [
   --resend-interval: string # format: Duration, e.g. PT5S
   --status: string # e.g. Disabled
   --template-name: string # e.g. MachineName Notification Rule
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1NRDqD5loBNH0erqeqJodtALA5bYfWno26BGgMQAVXYR0Ag
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}/notificationrules") $qp)
-  let body = {"AutoCreated": $auto_created, "CategoryNames": $category_names, "Criteria": $criteria, "Description": $description, "Id": $id, "MultiTriggerEventOption": $multi_trigger_event_option, "Name": $name, "NonrepetitionInterval": $nonrepetition_interval, "Path": $path, "ResendInterval": $resend_interval, "Status": $status, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/notificationrules") $qp)
+  let req_body = {"AutoCreated": $auto_created, "CategoryNames": $category_names, "Criteria": $criteria, "Description": $description, "Id": $id, "MultiTriggerEventOption": $multi_trigger_event_option, "Name": $name, "NonrepetitionInterval": $nonrepetition_interval, "Path": $path, "ResendInterval": $resend_interval, "Status": $status, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a list of the full or relative paths to this element.
@@ -6015,7 +6025,7 @@ export def "elements-paths get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "relativePath" $relative_path "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}/paths") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/paths") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6025,7 +6035,7 @@ export def "elements-paths get" [
 #
 # DELETE /elements/{webId}/referencedelements
 # operationId: Element_RemoveReferencedElement
-export def "elements-referencedelements delete" [
+export def "elements-referencedelements delete-referenced" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6036,12 +6046,12 @@ export def "elements-referencedelements delete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --referenced-element-web-id: list # The ID of the referenced element. Multiple referenced elements may be specified with multiple instances of the parameter.
+  --referenced-element-web-id: list<string> # The ID of the referenced element. Multiple referenced elements may be specified with multiple instances of the parameter.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "referencedElementWebId" $referenced_element_web_id "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}/referencedelements") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/referencedelements") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6051,7 +6061,7 @@ export def "elements-referencedelements delete" [
 #
 # GET /elements/{webId}/referencedelements
 # operationId: Element_GetReferencedElements
-export def "elements-referencedelements get" [
+export def "elements-referencedelements get-referenced" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6078,7 +6088,7 @@ export def "elements-referencedelements get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "descriptionFilter" $description_filter "scalar") (serialize-qp "elementType" $element_type "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}/referencedelements") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/referencedelements") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6088,7 +6098,7 @@ export def "elements-referencedelements get" [
 #
 # POST /elements/{webId}/referencedelements
 # operationId: Element_AddReferencedElement
-export def "elements-referencedelements create" [
+export def "elements-referencedelements create-referenced" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6099,13 +6109,13 @@ export def "elements-referencedelements create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --referenced-element-web-id: list # The ID of the referenced element. Multiple referenced elements may be specified with multiple instances of the parameter.
+  --referenced-element-web-id: list<string> # The ID of the referenced element. Multiple referenced elements may be specified with multiple instances of the parameter.
   --reference-type: string # The name of the reference type between the parent and the referenced element. The default is "parent-child".
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "referencedElementWebId" $referenced_element_web_id "multi") (serialize-qp "referenceType" $reference_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}/referencedelements") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/referencedelements") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6126,7 +6136,7 @@ export def "elements-security get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -6134,7 +6144,7 @@ export def "elements-security get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}/security") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6144,7 +6154,7 @@ export def "elements-security get" [
 #
 # GET /elements/{webId}/securityentries
 # operationId: Element_GetSecurityEntries
-export def "elements-securityentries get" [
+export def "elements-securityentries get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6162,7 +6172,7 @@ export def "elements-securityentries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}/securityentries") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6173,7 +6183,7 @@ export def "elements-securityentries get" [
 # POST /elements/{webId}/securityentries
 # operationId: Element_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "elements-securityentries create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6187,23 +6197,23 @@ export def "elements-securityentries create-security-entry" [
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elements/{web_id}/securityentries") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/securityentries") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a security entry owned by the element.
@@ -6227,7 +6237,7 @@ export def "elements-securityentries delete-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/elements/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/elements/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6255,7 +6265,7 @@ export def "elements-securityentries get-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/elements/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/elements/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6266,7 +6276,7 @@ export def "elements-securityentries get-security-entry" [
 # PUT /elements/{webId}/securityentries/{name}
 # operationId: Element_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "elements-securityentries update-security-entry" [
   web_id: string
   name: string
@@ -6280,30 +6290,30 @@ export def "elements-securityentries update-security-entry" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --body-name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/elements/{web_id}/securityentries/{name}") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/elements/{web_id}/securityentries/{name}") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve an element template by path.
 #
 # GET /elementtemplates
 # operationId: ElementTemplate_GetByPath
-export def "elementtemplates get-by-path" [
+export def "elementtemplates get-element-template-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6330,7 +6340,7 @@ export def "elementtemplates get-by-path" [
 #
 # DELETE /elementtemplates/{webId}
 # operationId: ElementTemplate_Delete
-export def "elementtemplates delete" [
+export def "elementtemplates delete-element-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6344,7 +6354,7 @@ export def "elementtemplates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementtemplates/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6354,7 +6364,7 @@ export def "elementtemplates delete" [
 #
 # GET /elementtemplates/{webId}
 # operationId: ElementTemplate_Get
-export def "elementtemplates get" [
+export def "elementtemplates get-element-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6371,7 +6381,7 @@ export def "elementtemplates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementtemplates/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6382,8 +6392,8 @@ export def "elementtemplates get" [
 # PATCH /elementtemplates/{webId}
 # operationId: ElementTemplate_Update
 # --Links shape: {AnalysisTemplates?: string, AttributeTemplates?: string, BaseTemplate?: string, BaseTemplates?: string, Categories?: string, Database?: string, DefaultAttribute?: string, DerivedTemplates?: string, NotificationRuleTemplates?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elementtemplates update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "elementtemplates update-element-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6397,7 +6407,7 @@ export def "elementtemplates update" [
   --allow-element-to-extend: oneof<nothing, bool> # e.g. false
   --base-template: string # e.g. Equipment
   --can-be-acknowledged: oneof<nothing, bool> # e.g. false
-  --category-names: list # e.g. [Equipment Assets]
+  --category-names: list<string> # e.g. [Equipment Assets]
   --description: string # e.g. Manufacturing Machine MachineName
   --extended-properties: record
   --id: string # format: uuid, e.g. a7989492-b2ab-4d90-8abb-4c8284353dd6
@@ -6407,25 +6417,25 @@ export def "elementtemplates update" [
   --naming-pattern: string # e.g. %TEMPLATE%
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\ElementTemplates[Boiler]
   --severity: string # e.g. None
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1ETDqD5loBNH0erqeqJodtALAkpSYp6uykE2Ku0yChDU91g
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementtemplates/{web_id}"))
-  let body = {"AllowElementToExtend": $allow_element_to_extend, "BaseTemplate": $base_template, "CanBeAcknowledged": $can_be_acknowledged, "CategoryNames": $category_names, "Description": $description, "ExtendedProperties": $extended_properties, "Id": $id, "InstanceType": $instance_type, "Links": $links, "Name": $name, "NamingPattern": $naming_pattern, "Path": $path, "Severity": $severity, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}"))
+  let req_body = {"AllowElementToExtend": $allow_element_to_extend, "BaseTemplate": $base_template, "CanBeAcknowledged": $can_be_acknowledged, "CategoryNames": $category_names, "Description": $description, "ExtendedProperties": $extended_properties, "Id": $id, "InstanceType": $instance_type, "Links": $links, "Name": $name, "NamingPattern": $naming_pattern, "Path": $path, "Severity": $severity, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get analysis templates for an element template.
 #
 # GET /elementtemplates/{webId}/analysistemplates
 # operationId: ElementTemplate_GetAnalysisTemplates
-export def "elementtemplates-analysistemplates get-analysis-templates" [
+export def "elementtemplates-analysistemplates get-element-template-analysis-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6442,7 +6452,7 @@ export def "elementtemplates-analysistemplates get-analysis-templates" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementtemplates/{web_id}/analysistemplates") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/analysistemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6452,7 +6462,7 @@ export def "elementtemplates-analysistemplates get-analysis-templates" [
 #
 # GET /elementtemplates/{webId}/attributetemplates
 # operationId: ElementTemplate_GetAttributeTemplates
-export def "elementtemplates-attributetemplates get" [
+export def "elementtemplates-attributetemplates get-element-template-attribute-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6474,7 +6484,7 @@ export def "elementtemplates-attributetemplates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "depthFirstTraverse" $depth_first_traverse "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showDescendants" $show_descendants "scalar") (serialize-qp "showInherited" $show_inherited "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementtemplates/{web_id}/attributetemplates") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/attributetemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6485,8 +6495,8 @@ export def "elementtemplates-attributetemplates get" [
 # POST /elementtemplates/{webId}/attributetemplates
 # operationId: ElementTemplate_CreateAttributeTemplate
 # --Links shape: {AttributeTemplates?: string, Categories?: string, ElementTemplate?: string, Parent?: string, Self?: string, Trait?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elementtemplates-attributetemplates create" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "elementtemplates-attributetemplates create-element-template-attribute-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6498,7 +6508,7 @@ export def "elementtemplates-attributetemplates create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --category-names: list # e.g. [Energy Savings Targets]
+  --category-names: list<string> # e.g. [Energy Savings Targets]
   --config-string: string # e.g. SELECT [Water Use] FROM [Energy Use 2008] WHERE [Asset ID] = '%Element%'
   --data-reference-plug-in: string # e.g. Table Lookup
   --default-units-name: string # e.g. liter
@@ -6517,26 +6527,26 @@ export def "elementtemplates-attributetemplates create" [
   --trait-name: string # e.g. LimitLoLo
   --type: string # e.g. Int32
   --type-qualifier: string # e.g. 
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1ATEG_auSSsvuECG8ad_p8b25QQkxqWDwIWU6zC4vmgpd4kgtSfQI9VdxUGA8fi1yf9DVg
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementtemplates/{web_id}/attributetemplates") $qp)
-  let body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "DefaultValue": $default_value, "Description": $description, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/attributetemplates") $qp)
+  let req_body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "DefaultValue": $default_value, "Description": $description, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get base element templates for an element template.
 #
 # GET /elementtemplates/{webId}/baseelementtemplates
 # operationId: ElementTemplate_GetBaseElementTemplates
-export def "elementtemplates-baseelementtemplates get-base" [
+export def "elementtemplates-baseelementtemplates get-element-template-base-element-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6554,7 +6564,7 @@ export def "elementtemplates-baseelementtemplates get-base" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxCount" $max_count "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementtemplates/{web_id}/baseelementtemplates") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/baseelementtemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6564,7 +6574,7 @@ export def "elementtemplates-baseelementtemplates get-base" [
 #
 # GET /elementtemplates/{webId}/categories
 # operationId: ElementTemplate_GetCategories
-export def "elementtemplates-categories get" [
+export def "elementtemplates-categories get-element-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6582,7 +6592,7 @@ export def "elementtemplates-categories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showInherited" $show_inherited "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementtemplates/{web_id}/categories") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/categories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6592,7 +6602,7 @@ export def "elementtemplates-categories get" [
 #
 # GET /elementtemplates/{webId}/derivedelementtemplates
 # operationId: ElementTemplate_GetDerivedElementTemplates
-export def "elementtemplates-derivedelementtemplates get-derived" [
+export def "elementtemplates-derivedelementtemplates get-element-template-derived-element-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6611,7 +6621,7 @@ export def "elementtemplates-derivedelementtemplates get-derived" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxCount" $max_count "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showDescendants" $show_descendants "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementtemplates/{web_id}/derivedelementtemplates") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/derivedelementtemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6621,7 +6631,7 @@ export def "elementtemplates-derivedelementtemplates get-derived" [
 #
 # GET /elementtemplates/{webId}/notificationruletemplates
 # operationId: ElementTemplate_GetNotificationRuleTemplates
-export def "elementtemplates-notificationruletemplates get-notification-rule-templates" [
+export def "elementtemplates-notificationruletemplates get-element-template-notification-rule-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6638,7 +6648,7 @@ export def "elementtemplates-notificationruletemplates get-notification-rule-tem
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementtemplates/{web_id}/notificationruletemplates") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/notificationruletemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6648,8 +6658,8 @@ export def "elementtemplates-notificationruletemplates get-notification-rule-tem
 #
 # POST /elementtemplates/{webId}/notificationruletemplates
 # operationId: ElementTemplate_CreateNotificationRuleTemplate
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elementtemplates-notificationruletemplates create-notification-rule-template" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "elementtemplates-notificationruletemplates create-element-template-notification-rule-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6661,7 +6671,7 @@ export def "elementtemplates-notificationruletemplates create-notification-rule-
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --category-names: list # e.g. [MachineNameAlerts]
+  --category-names: list<string> # e.g. [MachineNameAlerts]
   --criteria: string # e.g. Name: EventFrameCriteriaName
   --description: string # e.g. Description entered by the user
   --id: string # format: uuid, e.g. e9a984d0-f47c-11e7-8454-00155d029708
@@ -6672,26 +6682,26 @@ export def "elementtemplates-notificationruletemplates create-notification-rule-
   --resend-interval: string # format: Duration, e.g. PT5S
   --status: string # e.g. Functioning
   --template-name: string # e.g. MachineName Notification Rule Template
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1NTDqD5loBNH0erqeqJodtALAtdcX5JH_5xGEKAAVXTSaAg
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementtemplates/{web_id}/notificationruletemplates") $qp)
-  let body = {"CategoryNames": $category_names, "Criteria": $criteria, "Description": $description, "Id": $id, "MultiTriggerEventOption": $multi_trigger_event_option, "Name": $name, "NonrepetitionInterval": $nonrepetition_interval, "Path": $path, "ResendInterval": $resend_interval, "Status": $status, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/notificationruletemplates") $qp)
+  let req_body = {"CategoryNames": $category_names, "Criteria": $criteria, "Description": $description, "Id": $id, "MultiTriggerEventOption": $multi_trigger_event_option, "Name": $name, "NonrepetitionInterval": $nonrepetition_interval, "Path": $path, "ResendInterval": $resend_interval, "Status": $status, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the security information of the specified security item associated with the element template for a specified user.
 #
 # GET /elementtemplates/{webId}/security
 # operationId: ElementTemplate_GetSecurity
-export def "elementtemplates-security get" [
+export def "elementtemplates-security get-element-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6702,7 +6712,7 @@ export def "elementtemplates-security get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -6710,7 +6720,7 @@ export def "elementtemplates-security get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementtemplates/{web_id}/security") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6720,7 +6730,7 @@ export def "elementtemplates-security get" [
 #
 # GET /elementtemplates/{webId}/securityentries
 # operationId: ElementTemplate_GetSecurityEntries
-export def "elementtemplates-securityentries get" [
+export def "elementtemplates-securityentries get-element-template-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6738,7 +6748,7 @@ export def "elementtemplates-securityentries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementtemplates/{web_id}/securityentries") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6749,8 +6759,8 @@ export def "elementtemplates-securityentries get" [
 # POST /elementtemplates/{webId}/securityentries
 # operationId: ElementTemplate_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elementtemplates-securityentries create-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "elementtemplates-securityentries create-element-template-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6763,30 +6773,30 @@ export def "elementtemplates-securityentries create-security-entry" [
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/elementtemplates/{web_id}/securityentries") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/securityentries") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a security entry owned by the element template.
 #
 # DELETE /elementtemplates/{webId}/securityentries/{name}
 # operationId: ElementTemplate_DeleteSecurityEntry
-export def "elementtemplates-securityentries delete-security-entry" [
+export def "elementtemplates-securityentries delete-element-template-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6803,7 +6813,7 @@ export def "elementtemplates-securityentries delete-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/elementtemplates/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/elementtemplates/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6813,7 +6823,7 @@ export def "elementtemplates-securityentries delete-security-entry" [
 #
 # GET /elementtemplates/{webId}/securityentries/{name}
 # operationId: ElementTemplate_GetSecurityEntryByName
-export def "elementtemplates-securityentries get-security-entry" [
+export def "elementtemplates-securityentries get-element-template-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6831,7 +6841,7 @@ export def "elementtemplates-securityentries get-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/elementtemplates/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/elementtemplates/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6842,8 +6852,8 @@ export def "elementtemplates-securityentries get-security-entry" [
 # PUT /elementtemplates/{webId}/securityentries/{name}
 # operationId: ElementTemplate_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "elementtemplates-securityentries update-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "elementtemplates-securityentries update-element-template-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6856,30 +6866,30 @@ export def "elementtemplates-securityentries update-security-entry" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --body-name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/elementtemplates/{web_id}/securityentries/{name}") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/elementtemplates/{web_id}/securityentries/{name}") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve an enumeration set by path.
 #
 # GET /enumerationsets
 # operationId: EnumerationSet_GetByPath
-export def "enumerationsets get-by-path" [
+export def "enumerationsets update-enumeration-get-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6906,7 +6916,7 @@ export def "enumerationsets get-by-path" [
 #
 # DELETE /enumerationsets/{webId}
 # operationId: EnumerationSet_Delete
-export def "enumerationsets delete" [
+export def "enumerationsets update-enumeration-delete" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6920,7 +6930,7 @@ export def "enumerationsets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/enumerationsets/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationsets/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6930,7 +6940,7 @@ export def "enumerationsets delete" [
 #
 # GET /enumerationsets/{webId}
 # operationId: EnumerationSet_Get
-export def "enumerationsets get" [
+export def "enumerationsets update-enumeration-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6947,7 +6957,7 @@ export def "enumerationsets get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/enumerationsets/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationsets/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6958,8 +6968,8 @@ export def "enumerationsets get" [
 # PATCH /enumerationsets/{webId}
 # operationId: EnumerationSet_Update
 # --Links shape: {DataServer?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Values?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "enumerationsets update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "enumerationsets update-enumeration-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6976,25 +6986,25 @@ export def "enumerationsets update" [
   --name: string # e.g. Model Number
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\EnumerationSets[Model Number]
   --serialize-description: oneof<nothing, bool>
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1MSRDqD5loBNH0erqeqJodtALAT_x3jpGsKUCB1vtmvQHUMQ
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/enumerationsets/{web_id}"))
-  let body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "SerializeDescription": $serialize_description, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationsets/{web_id}"))
+  let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "SerializeDescription": $serialize_description, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve an enumeration set's values.
 #
 # GET /enumerationsets/{webId}/enumerationvalues
 # operationId: EnumerationSet_GetValues
-export def "enumerationsets-enumerationvalues get-values" [
+export def "enumerationsets-enumerationvalues update-enumeration-get-values" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7011,7 +7021,7 @@ export def "enumerationsets-enumerationvalues get-values" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/enumerationsets/{web_id}/enumerationvalues") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationsets/{web_id}/enumerationvalues") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7022,8 +7032,8 @@ export def "enumerationsets-enumerationvalues get-values" [
 # POST /enumerationsets/{webId}/enumerationvalues
 # operationId: EnumerationSet_CreateValue
 # --Links shape: {EnumerationSet?: string, Parent?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "enumerationsets-enumerationvalues create-value" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "enumerationsets-enumerationvalues update-enumeration-create-value" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7047,26 +7057,26 @@ export def "enumerationsets-enumerationvalues create-value" [
   --serialize-path: oneof<nothing, bool>
   --serialize-web-id: oneof<nothing, bool>
   --value: int # format: int32, e.g. 2005
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1MVRDqD5loBNH0erqeqJodtALAT_x3jpGsKUCB1vtmvQHUMQlIYqmOlvs0ygEQnSeGSe7w
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/enumerationsets/{web_id}/enumerationvalues") $qp)
-  let body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Parent": $parent, "Path": $path, "SerializeDescription": $serialize_description, "SerializeId": $serialize_id, "SerializeLinks": $serialize_links, "SerializePath": $serialize_path, "SerializeWebId": $serialize_web_id, "Value": $value, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationsets/{web_id}/enumerationvalues") $qp)
+  let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Parent": $parent, "Path": $path, "SerializeDescription": $serialize_description, "SerializeId": $serialize_id, "SerializeLinks": $serialize_links, "SerializePath": $serialize_path, "SerializeWebId": $serialize_web_id, "Value": $value, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the security information of the specified security item associated with the enumeration set for a specified user.
 #
 # GET /enumerationsets/{webId}/security
 # operationId: EnumerationSet_GetSecurity
-export def "enumerationsets-security get" [
+export def "enumerationsets-security update-enumeration-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7077,7 +7087,7 @@ export def "enumerationsets-security get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -7085,7 +7095,7 @@ export def "enumerationsets-security get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/enumerationsets/{web_id}/security") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationsets/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7095,7 +7105,7 @@ export def "enumerationsets-security get" [
 #
 # GET /enumerationsets/{webId}/securityentries
 # operationId: EnumerationSet_GetSecurityEntries
-export def "enumerationsets-securityentries get" [
+export def "enumerationsets-securityentries update-enumeration-get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7113,7 +7123,7 @@ export def "enumerationsets-securityentries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/enumerationsets/{web_id}/securityentries") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationsets/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7124,8 +7134,8 @@ export def "enumerationsets-securityentries get" [
 # POST /enumerationsets/{webId}/securityentries
 # operationId: EnumerationSet_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "enumerationsets-securityentries create-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "enumerationsets-securityentries update-enumeration-create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7138,30 +7148,30 @@ export def "enumerationsets-securityentries create-security-entry" [
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/enumerationsets/{web_id}/securityentries") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationsets/{web_id}/securityentries") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a security entry owned by the enumeration set.
 #
 # DELETE /enumerationsets/{webId}/securityentries/{name}
 # operationId: EnumerationSet_DeleteSecurityEntry
-export def "enumerationsets-securityentries delete-security-entry" [
+export def "enumerationsets-securityentries update-enumeration-delete-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7178,7 +7188,7 @@ export def "enumerationsets-securityentries delete-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/enumerationsets/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/enumerationsets/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7188,7 +7198,7 @@ export def "enumerationsets-securityentries delete-security-entry" [
 #
 # GET /enumerationsets/{webId}/securityentries/{name}
 # operationId: EnumerationSet_GetSecurityEntryByName
-export def "enumerationsets-securityentries get-security-entry" [
+export def "enumerationsets-securityentries update-enumeration-get-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7206,7 +7216,7 @@ export def "enumerationsets-securityentries get-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/enumerationsets/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/enumerationsets/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7217,8 +7227,8 @@ export def "enumerationsets-securityentries get-security-entry" [
 # PUT /enumerationsets/{webId}/securityentries/{name}
 # operationId: EnumerationSet_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "enumerationsets-securityentries update-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "enumerationsets-securityentries update-enumeration-update-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7231,30 +7241,30 @@ export def "enumerationsets-securityentries update-security-entry" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --body-name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/enumerationsets/{web_id}/securityentries/{name}") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/enumerationsets/{web_id}/securityentries/{name}") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve an enumeration value by path.
 #
 # GET /enumerationvalues
 # operationId: EnumerationValue_GetByPath
-export def "enumerationvalues get-by-path" [
+export def "enumerationvalues get-enumeration-value-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7281,7 +7291,7 @@ export def "enumerationvalues get-by-path" [
 #
 # DELETE /enumerationvalues/{webId}
 # operationId: EnumerationValue_DeleteEnumerationValue
-export def "enumerationvalues delete" [
+export def "enumerationvalues delete-enumeration-value-enumeration-value" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7295,7 +7305,7 @@ export def "enumerationvalues delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/enumerationvalues/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationvalues/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7305,7 +7315,7 @@ export def "enumerationvalues delete" [
 #
 # GET /enumerationvalues/{webId}
 # operationId: EnumerationValue_Get
-export def "enumerationvalues get" [
+export def "enumerationvalues get-enumeration-value" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7322,7 +7332,7 @@ export def "enumerationvalues get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/enumerationvalues/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationvalues/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7333,8 +7343,8 @@ export def "enumerationvalues get" [
 # PATCH /enumerationvalues/{webId}
 # operationId: EnumerationValue_UpdateEnumerationValue
 # --Links shape: {EnumerationSet?: string, Parent?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "enumerationvalues update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "enumerationvalues update-enumeration-value-enumeration-value" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7357,25 +7367,25 @@ export def "enumerationvalues update" [
   --serialize-path: oneof<nothing, bool>
   --serialize-web-id: oneof<nothing, bool>
   --value: int # format: int32, e.g. 2005
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1MVRDqD5loBNH0erqeqJodtALAT_x3jpGsKUCB1vtmvQHUMQlIYqmOlvs0ygEQnSeGSe7w
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/enumerationvalues/{web_id}"))
-  let body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Parent": $parent, "Path": $path, "SerializeDescription": $serialize_description, "SerializeId": $serialize_id, "SerializeLinks": $serialize_links, "SerializePath": $serialize_path, "SerializeWebId": $serialize_web_id, "Value": $value, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationvalues/{web_id}"))
+  let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Parent": $parent, "Path": $path, "SerializeDescription": $serialize_description, "SerializeId": $serialize_id, "SerializeLinks": $serialize_links, "SerializePath": $serialize_path, "SerializeWebId": $serialize_web_id, "Value": $value, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve an event frame by path.
 #
 # GET /eventframes
 # operationId: EventFrame_GetByPath
-export def "eventframes get-by-path" [
+export def "eventframes get-event-frame-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7402,7 +7412,7 @@ export def "eventframes get-by-path" [
 #
 # GET /eventframes/multiple
 # operationId: EventFrame_GetMultiple
-export def "eventframes-multiple get" [
+export def "eventframes-multiple get-event-frame" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7414,9 +7424,9 @@ export def "eventframes-multiple get" [
   --accept: string@accept-completer # Response content type
   --as-parallel: oneof<nothing, bool> # Specifies if the retrieval processes should be run in parallel on the server. This may improve the response time for large amounts of requested attributes. The default is 'false'.
   --include-mode: string # The include mode for the return list. The default is 'All'.
-  --path: list # The path of an event frame. Multiple event frames may be specified with multiple instances of the parameter.
+  --path: list<string> # The path of an event frame. Multiple event frames may be specified with multiple instances of the parameter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
-  --web-id: list # The ID of an event frame. Multiple event frames may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of an event frame. Multiple event frames may be specified with multiple instances of the parameter.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
 ]: nothing -> record<Items: table<Exception: record, Identifier: string, IdentifierType: string, Object: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7432,7 +7442,7 @@ export def "eventframes-multiple get" [
 #
 # GET /eventframes/search
 # operationId: EventFrame_GetEventFramesQuery
-export def "eventframes-search get-event-frames-query" [
+export def "eventframes-search get-event-frame-event-frames-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7463,8 +7473,8 @@ export def "eventframes-search get-event-frames-query" [
 # POST /eventframes/searchbyattribute
 # operationId: EventFrame_CreateSearchByAttribute
 # --ValueQueries item shape: {AttributeName?: string, AttributeUOM?: string, AttributeValue?: record, SearchOperator?: string, WebException?: record}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "eventframes-searchbyattribute create-search" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "eventframes-searchbyattribute create-event-frame-list-by-attribute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7480,25 +7490,25 @@ export def "eventframes-searchbyattribute create-search" [
   --element-template: string # format: webid, e.g. I1ETDqD5loBNH0erqeqJodtALAjFPVfUpY-02A8uioGDSgIg
   --search-root: string # format: webid, e.g. I1RDDqD5loBNH0erqeqJodtALA8fbgUnyQW02v-gLGIxumSg
   --value-queries: list # item shape: {AttributeName?: string, AttributeUOM?: string, AttributeValue?: record, SearchOperator?: string, WebException?: record}
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> record<Items: table<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record, Name: string, Path: string, RefElementWebIds: list, Security: record, Severity: string, StartTime: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "noResults" $no_results "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/eventframes/searchbyattribute" $qp)
-  let body = {"ElementTemplate": $element_template, "SearchRoot": $search_root, "ValueQueries": $value_queries, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ElementTemplate": $element_template, "SearchRoot": $search_root, "ValueQueries": $value_queries, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Execute a "Search EventFrames By Attribute Value" operation.
 #
 # GET /eventframes/searchbyattribute/{searchId}
 # operationId: EventFrame_ExecuteSearchByAttribute
-export def "eventframes-searchbyattribute exec-ute-search" [
+export def "eventframes-searchbyattribute list-event-frame-execute-by-attribute" [
   search_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7518,7 +7528,7 @@ export def "eventframes-searchbyattribute exec-ute-search" [
   --search-full-hierarchy: oneof<nothing, bool> # Specifies whether the search should include objects nested further than the immediate children of the search root. The default is 'false'.
   --search-mode: string # Determines how the startTime and endTime parameters are treated when searching for event frame objects to be included in the returned collection. The default is 'Overlapped'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
-  --severity: list # Specify that returned event frames must have this severity. Multiple severity values may be specified with multiple instances of the parameter. The default is no severity filter.
+  --severity: list<string> # Specify that returned event frames must have this severity. Multiple severity values may be specified with multiple instances of the parameter. The default is no severity filter.
   --sort-field: string # The field or property of the object used to sort the returned collection. The default is 'Name'.
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
@@ -7528,7 +7538,7 @@ export def "eventframes-searchbyattribute exec-ute-search" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "canBeAcknowledged" $can_be_acknowledged "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "isAcknowledged" $is_acknowledged "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "referencedElementNameFilter" $referenced_element_name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "searchMode" $search_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "severity" $severity "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({search_id: $search_id} | format pattern "/eventframes/searchbyattribute/{search_id}") $qp)
+  let full_url = (build-url $base ({search_id: (encode-path-segment $search_id)} | format pattern "/eventframes/searchbyattribute/{search_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7538,7 +7548,7 @@ export def "eventframes-searchbyattribute exec-ute-search" [
 #
 # DELETE /eventframes/{webId}
 # operationId: EventFrame_Delete
-export def "eventframes delete" [
+export def "eventframes delete-event-frame" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7552,7 +7562,7 @@ export def "eventframes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/eventframes/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7562,7 +7572,7 @@ export def "eventframes delete" [
 #
 # GET /eventframes/{webId}
 # operationId: EventFrame_Get
-export def "eventframes get" [
+export def "eventframes get-event-frame" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7579,7 +7589,7 @@ export def "eventframes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/eventframes/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7590,9 +7600,9 @@ export def "eventframes get" [
 # PATCH /eventframes/{webId}
 # operationId: EventFrame_Update
 # --Links shape: {Annotations?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, PrimaryReferencedElement?: string, RecordedData?: string, ReferencedElements?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
-# --Security shape: {CanAnnotate?: bool, CanDelete?: bool, CanExecute?: bool, CanRead?: bool, CanReadData?: bool, CanSubscribe?: bool, CanSubscribeOthers?: bool, CanWrite?: bool, CanWriteData?: bool, HasAdmin?: bool, Rights?: list, WebException?: record}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "eventframes update" [
+# --Security shape: {CanAnnotate?: bool, CanDelete?: bool, CanExecute?: bool, CanRead?: bool, CanReadData?: bool, CanSubscribe?: bool, CanSubscribeOthers?: bool, CanWrite?: bool, CanWriteData?: bool, HasAdmin?: bool, Rights?: list<string>, WebException?: record}
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "eventframes update-event-frame" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7607,7 +7617,7 @@ export def "eventframes update" [
   --acknowledged-date: string # format: date-time, e.g. 2014-07-30T11:04:23Z
   --are-values-captured: oneof<nothing, bool> # e.g. false
   --can-be-acknowledged: oneof<nothing, bool> # e.g. true
-  --category-names: list # e.g. [Processing Plant]
+  --category-names: list<string> # e.g. [Processing Plant]
   --description: string # e.g. Event Frame of Past Week
   --end-time: string # format: date-time, e.g. 2014-07-25T14:45:29Z
   --extended-properties: record
@@ -7619,30 +7629,30 @@ export def "eventframes update" [
   --links: record # shape: {Annotations?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, PrimaryReferencedElement?: string, RecordedData?: string, ReferencedElements?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
   --name: string # e.g. EF20140725-001
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\EventFrames[EF20140725-001]
-  --ref-element-web-ids: list # e.g. [I1EmDqD5loBNH0erqeqJodtALAaqQoQHk26BGgMQAVXYR0Ag]
-  --security: record # shape: {CanAnnotate?: bool, CanDelete?: bool, CanExecute?: bool, CanRead?: bool, CanReadData?: bool, CanSubscribe?: bool, CanSubscribeOthers?: bool, CanWrite?: bool, CanWriteData?: bool, HasAdmin?: bool, Rights?: list, WebException?: record}
+  --ref-element-web-ids: list<string> # e.g. [I1EmDqD5loBNH0erqeqJodtALAaqQoQHk26BGgMQAVXYR0Ag]
+  --security: record # shape: {CanAnnotate?: bool, CanDelete?: bool, CanExecute?: bool, CanRead?: bool, CanReadData?: bool, CanSubscribe?: bool, CanSubscribeOthers?: bool, CanWrite?: bool, CanWriteData?: bool, HasAdmin?: bool, Rights?: list<string>, WebException?: record}
   --severity: string # e.g. None
   --start-time: string # format: date-time, e.g. 2014-07-18T14:45:29Z
   --template-name: string # e.g. Template
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1FmDqD5loBNH0erqeqJodtALADqD5loBNH0cAAAAAAASwAg
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/eventframes/{web_id}"))
-  let body = {"AcknowledgedBy": $acknowledged_by, "AcknowledgedDate": $acknowledged_date, "AreValuesCaptured": $are_values_captured, "CanBeAcknowledged": $can_be_acknowledged, "CategoryNames": $category_names, "Description": $description, "EndTime": $end_time, "ExtendedProperties": $extended_properties, "HasChildren": $has_children, "Id": $id, "IsAcknowledged": $is_acknowledged, "IsAnnotated": $is_annotated, "IsLocked": $is_locked, "Links": $links, "Name": $name, "Path": $path, "RefElementWebIds": $ref_element_web_ids, "Security": $security, "Severity": $severity, "StartTime": $start_time, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}"))
+  let req_body = {"AcknowledgedBy": $acknowledged_by, "AcknowledgedDate": $acknowledged_date, "AreValuesCaptured": $are_values_captured, "CanBeAcknowledged": $can_be_acknowledged, "CategoryNames": $category_names, "Description": $description, "EndTime": $end_time, "ExtendedProperties": $extended_properties, "HasChildren": $has_children, "Id": $id, "IsAcknowledged": $is_acknowledged, "IsAnnotated": $is_annotated, "IsLocked": $is_locked, "Links": $links, "Name": $name, "Path": $path, "RefElementWebIds": $ref_element_web_ids, "Security": $security, "Severity": $severity, "StartTime": $start_time, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Calls the EventFrame's Acknowledge method.
 #
 # PATCH /eventframes/{webId}/acknowledge
 # operationId: EventFrame_Acknowledge
-export def "eventframes-acknowledge patch" [
+export def "eventframes-acknowledge update-event-frame" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7656,7 +7666,7 @@ export def "eventframes-acknowledge patch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/eventframes/{web_id}/acknowledge"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/acknowledge"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7683,7 +7693,7 @@ export def "eventframes-annotations list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/eventframes/{web_id}/annotations") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/annotations") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7693,10 +7703,10 @@ export def "eventframes-annotations list" [
 #
 # POST /eventframes/{webId}/annotations
 # operationId: EventFrame_CreateAnnotation
-# --Errors item shape: {FieldName?: string, Message?: list}
+# --Errors item shape: {FieldName?: string, Message?: list<string>}
 # --Links shape: {MediaData?: string, MediaMetadata?: string, Owner?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "eventframes-annotations create" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "eventframes-annotations create-event-frame" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7711,32 +7721,32 @@ export def "eventframes-annotations create" [
   --creation-date: string # format: date-time, e.g. 2016-06-21T14:45:50.2988321Z
   --creator: string # e.g. MyDomain\UserA
   --description: string # e.g. Signifies a spike in temperature.
-  --errors: list # item shape: {FieldName?: string, Message?: list}
+  --errors: list # item shape: {FieldName?: string, Message?: list<string>}
   --id: string # format: uuid, e.g. 512B6616-CE39-4F70-9048-8C6A025FB592
   --links: record # shape: {MediaData?: string, MediaMetadata?: string, Owner?: string, Self?: string}
   --modifier: string # e.g. MyDomain\UserA
   --modify-date: string # format: date-time, e.g. 2016-06-21T14:45:50.2988321Z
   --name: string # e.g. Temperature Annotation
   --value: record # e.g. The temperature spiked because of a malfunction with a unit in our west plant.
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/eventframes/{web_id}/annotations") $qp)
-  let body = {"CreationDate": $creation_date, "Creator": $creator, "Description": $description, "Errors": $errors, "Id": $id, "Links": $links, "Modifier": $modifier, "ModifyDate": $modify_date, "Name": $name, "Value": $value, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/annotations") $qp)
+  let req_body = {"CreationDate": $creation_date, "Creator": $creator, "Description": $description, "Errors": $errors, "Id": $id, "Links": $links, "Modifier": $modifier, "ModifyDate": $modify_date, "Name": $name, "Value": $value, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an annotation on an event frame. If the annotation has attached media, the attached media will also be deleted.
 #
 # DELETE /eventframes/{webId}/annotations/{id}
 # operationId: EventFrame_DeleteAnnotation
-export def "eventframes-annotations delete" [
+export def "eventframes-annotations delete-event-frame" [
   web_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7751,7 +7761,7 @@ export def "eventframes-annotations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id, id: $id} | format pattern "/eventframes/{web_id}/annotations/{id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), id: (encode-path-segment $id)} | format pattern "/eventframes/{web_id}/annotations/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7761,7 +7771,7 @@ export def "eventframes-annotations delete" [
 #
 # GET /eventframes/{webId}/annotations/{id}
 # operationId: EventFrame_GetAnnotationById
-export def "eventframes-annotations get" [
+export def "eventframes-annotations get-event-frame" [
   web_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7779,7 +7789,7 @@ export def "eventframes-annotations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, id: $id} | format pattern "/eventframes/{web_id}/annotations/{id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), id: (encode-path-segment $id)} | format pattern "/eventframes/{web_id}/annotations/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7789,10 +7799,10 @@ export def "eventframes-annotations get" [
 #
 # PATCH /eventframes/{webId}/annotations/{id}
 # operationId: EventFrame_UpdateAnnotation
-# --Errors item shape: {FieldName?: string, Message?: list}
+# --Errors item shape: {FieldName?: string, Message?: list<string>}
 # --Links shape: {MediaData?: string, MediaMetadata?: string, Owner?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "eventframes-annotations update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "eventframes-annotations update-event-frame" [
   web_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7807,31 +7817,31 @@ export def "eventframes-annotations update" [
   --creation-date: string # format: date-time, e.g. 2016-06-21T14:45:50.2988321Z
   --creator: string # e.g. MyDomain\UserA
   --description: string # e.g. Signifies a spike in temperature.
-  --errors: list # item shape: {FieldName?: string, Message?: list}
+  --errors: list # item shape: {FieldName?: string, Message?: list<string>}
   --body-id: string # format: uuid, e.g. 512B6616-CE39-4F70-9048-8C6A025FB592
   --links: record # shape: {MediaData?: string, MediaMetadata?: string, Owner?: string, Self?: string}
   --modifier: string # e.g. MyDomain\UserA
   --modify-date: string # format: date-time, e.g. 2016-06-21T14:45:50.2988321Z
   --name: string # e.g. Temperature Annotation
   --value: record # e.g. The temperature spiked because of a malfunction with a unit in our west plant.
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id, id: $id} | format pattern "/eventframes/{web_id}/annotations/{id}"))
-  let body = {"CreationDate": $creation_date, "Creator": $creator, "Description": $description, "Errors": $errors, "Id": $body_id, "Links": $links, "Modifier": $modifier, "ModifyDate": $modify_date, "Name": $name, "Value": $value, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), id: (encode-path-segment $id)} | format pattern "/eventframes/{web_id}/annotations/{id}"))
+  let req_body = {"CreationDate": $creation_date, "Creator": $creator, "Description": $description, "Errors": $errors, "Id": $body_id, "Links": $links, "Modifier": $modifier, "ModifyDate": $modify_date, "Name": $name, "Value": $value, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete attached media from an annotation on an event frame.
 #
 # DELETE /eventframes/{webId}/annotations/{id}/attachment/media
 # operationId: EventFrame_DeleteAnnotationAttachmentMediaById
-export def "eventframes-annotations-attachment-media delete" [
+export def "eventframes-annotations-attachment-media delete-event-frame" [
   web_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7846,7 +7856,7 @@ export def "eventframes-annotations-attachment-media delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id, id: $id} | format pattern "/eventframes/{web_id}/annotations/{id}/attachment/media"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), id: (encode-path-segment $id)} | format pattern "/eventframes/{web_id}/annotations/{id}/attachment/media"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7856,7 +7866,7 @@ export def "eventframes-annotations-attachment-media delete" [
 #
 # GET /eventframes/{webId}/annotations/{id}/attachment/media/metadata
 # operationId: EventFrame_GetAnnotationAttachmentMediaMetadataById
-export def "eventframes-annotations-attachment-media-metadata get" [
+export def "eventframes-annotations-attachment-media-metadata get-event-frame" [
   web_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7874,7 +7884,7 @@ export def "eventframes-annotations-attachment-media-metadata get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, id: $id} | format pattern "/eventframes/{web_id}/annotations/{id}/attachment/media/metadata") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), id: (encode-path-segment $id)} | format pattern "/eventframes/{web_id}/annotations/{id}/attachment/media/metadata") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7884,7 +7894,7 @@ export def "eventframes-annotations-attachment-media-metadata get" [
 #
 # GET /eventframes/{webId}/attributes
 # operationId: EventFrame_GetAttributes
-export def "eventframes-attributes get" [
+export def "eventframes-attributes get-event-frame" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7907,15 +7917,15 @@ export def "eventframes-attributes get" [
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
   --template-name: string # Specify that returned attributes must be members of this template. The default is no template filter.
-  --trait: list # The name of the attribute trait. Multiple traits may be specified with multiple instances of the parameter.
-  --trait-category: list # The category of the attribute traits. Multiple categories may be specified with multiple instances of the parameter. If the parameter is not specified, or if its value is "all", then all attribute traits of all categories will be returned.
+  --trait: list<string> # The name of the attribute trait. Multiple traits may be specified with multiple instances of the parameter.
+  --trait-category: list<string> # The category of the attribute traits. Multiple categories may be specified with multiple instances of the parameter. If the parameter is not specified, or if its value is "all", then all attribute traits of all categories will be returned.
   --value-type: string # Specify that returned attributes' value type must be the given value type. The default is no value type filter.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
 ]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "trait" $trait "multi") (serialize-qp "traitCategory" $trait_category "multi") (serialize-qp "valueType" $value_type "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/eventframes/{web_id}/attributes") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/attributes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7927,8 +7937,8 @@ export def "eventframes-attributes get" [
 # operationId: EventFrame_CreateAttribute
 # --DataReference shape: {PIPoint?: record, Type?: string, WebException?: record}
 # --Links shape: {Attributes?: string, Categories?: string, Element?: string, EndValue?: string, EnumerationSet?: string, EnumerationValues?: string, EventFrame?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, Point?: string, RecordedData?: string, Self?: string, SummaryData?: string, Template?: string, Trait?: string, Value?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "eventframes-attributes create" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "eventframes-attributes create-event-frame" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7940,7 +7950,7 @@ export def "eventframes-attributes create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --category-names: list # e.g. [Energy Savings Targets]
+  --category-names: list<string> # e.g. [Energy Savings Targets]
   --config-string: string # e.g. SELECT [Water Use] FROM [Energy Use 2008] WHERE [Asset ID] = '%Element%'
   --data-reference: record # shape: {PIPoint?: record, Type?: string, WebException?: record}
   --data-reference-plug-in: string # e.g. Table Lookup
@@ -7957,13 +7967,13 @@ export def "eventframes-attributes create" [
   --links: record # shape: {Attributes?: string, Categories?: string, Element?: string, EndValue?: string, EnumerationSet?: string, EnumerationValues?: string, EventFrame?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, Point?: string, RecordedData?: string, Self?: string, SummaryData?: string, Template?: string, Trait?: string, Value?: string}
   --name: string # e.g. Water
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\CityName\EngineeringProcess\Equipment\MachineName|Water(2008)
-  --paths: list # e.g. [\\MyAssetServer\MyDatabase\MyElement|MyAttribute, \\MyAssetServer\MyDatabase\ReferencingElement\MyElement|MyAttribute]
+  --paths: list<string> # e.g. [\\MyAssetServer\MyDatabase\MyElement|MyAttribute, \\MyAssetServer\MyDatabase\ReferencingElement\MyElement|MyAttribute]
   --span: float # e.g. 100
   --step: oneof<nothing, bool> # e.g. false
   --trait-name: string # e.g. LimitLoLo
   --type: string # e.g. Int32
   --type-qualifier: string # e.g. 
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1AbEDqD5loBNH0erqeqJodtALAYIKyyz2F5BGAxQAVXYRDBAGyPedZG1sUmxOOclp3Flwg
   --zero: float # e.g. 0
 ]: any -> any {
@@ -7971,19 +7981,19 @@ export def "eventframes-attributes create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/eventframes/{web_id}/attributes") $qp)
-  let body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReference": $data_reference, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "Description": $description, "DisplayDigits": $display_digits, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "Span": $span, "Step": $step, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id, "Zero": $zero} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/attributes") $qp)
+  let req_body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReference": $data_reference, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "Description": $description, "DisplayDigits": $display_digits, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "Span": $span, "Step": $step, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id, "Zero": $zero} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Calls the EventFrame's CaptureValues method.
 #
 # POST /eventframes/{webId}/attributes/capture
 # operationId: EventFrame_CaptureValues
-export def "eventframes-attributes-capture post" [
+export def "eventframes-attributes-capture create-event-frame-values" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7997,7 +8007,7 @@ export def "eventframes-attributes-capture post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/eventframes/{web_id}/attributes/capture"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/attributes/capture"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8007,7 +8017,7 @@ export def "eventframes-attributes-capture post" [
 #
 # GET /eventframes/{webId}/categories
 # operationId: EventFrame_GetCategories
-export def "eventframes-categories get" [
+export def "eventframes-categories get-event-frame" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8024,7 +8034,7 @@ export def "eventframes-categories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/eventframes/{web_id}/categories") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/categories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8034,7 +8044,7 @@ export def "eventframes-categories get" [
 #
 # POST /eventframes/{webId}/config
 # operationId: EventFrame_CreateConfig
-export def "eventframes-config create" [
+export def "eventframes-config create-event-frame" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8050,7 +8060,7 @@ export def "eventframes-config create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeChildElements" $include_child_elements "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/eventframes/{web_id}/config") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/config") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8060,7 +8070,7 @@ export def "eventframes-config create" [
 #
 # GET /eventframes/{webId}/eventframeattributes
 # operationId: EventFrame_FindEventFrameAttributes
-export def "eventframes-eventframeattributes get" [
+export def "eventframes-eventframeattributes find-event-frame-event-frame-attributes" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8095,7 +8105,7 @@ export def "eventframes-eventframeattributes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "attributeCategory" $attribute_category "scalar") (serialize-qp "attributeDescriptionFilter" $attribute_description_filter "scalar") (serialize-qp "attributeNameFilter" $attribute_name_filter "scalar") (serialize-qp "attributeType" $attribute_type "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "eventFrameCategory" $event_frame_category "scalar") (serialize-qp "eventFrameDescriptionFilter" $event_frame_description_filter "scalar") (serialize-qp "eventFrameNameFilter" $event_frame_name_filter "scalar") (serialize-qp "eventFrameTemplate" $event_frame_template "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "referencedElementNameFilter" $referenced_element_name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "searchMode" $search_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/eventframes/{web_id}/eventframeattributes") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/eventframeattributes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8105,7 +8115,7 @@ export def "eventframes-eventframeattributes get" [
 #
 # GET /eventframes/{webId}/eventframes
 # operationId: EventFrame_GetEventFrames
-export def "eventframes-eventframes get" [
+export def "eventframes-eventframes get-event-frame-event-frames" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8127,7 +8137,7 @@ export def "eventframes-eventframes get" [
   --search-full-hierarchy: oneof<nothing, bool> # Specifies whether the search should include objects nested further than the immediate children of the search root. The default is 'false'.
   --search-mode: string # Determines how the startTime and endTime parameters are treated when searching for event frame objects to be included in the returned collection. If this parameter is one of the 'Backward*' or 'Forward*' values, none of endTime, sortField, or sortOrder may be specified. The default is 'Overlapped'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
-  --severity: list # Specify that returned event frames must have this severity. Multiple severity values may be specified with multiple instances of the parameter. The default is no severity filter.
+  --severity: list<string> # Specify that returned event frames must have this severity. Multiple severity values may be specified with multiple instances of the parameter. The default is no severity filter.
   --sort-field: string # The field or property of the object used to sort the returned collection. The default is 'Name' if searchMode is not one of the 'Backward*' or 'Forward*' values.
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending' if searchMode is not one of the 'Backward*' or 'Forward*' values.
   --start-index: int # The starting index (zero based) of the items to be returned. The default is 0.
@@ -8138,7 +8148,7 @@ export def "eventframes-eventframes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "canBeAcknowledged" $can_be_acknowledged "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "isAcknowledged" $is_acknowledged "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "referencedElementNameFilter" $referenced_element_name_filter "scalar") (serialize-qp "referencedElementTemplateName" $referenced_element_template_name "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "searchMode" $search_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "severity" $severity "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/eventframes/{web_id}/eventframes") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/eventframes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8149,9 +8159,9 @@ export def "eventframes-eventframes get" [
 # POST /eventframes/{webId}/eventframes
 # operationId: EventFrame_CreateEventFrame
 # --Links shape: {Annotations?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, PrimaryReferencedElement?: string, RecordedData?: string, ReferencedElements?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
-# --Security shape: {CanAnnotate?: bool, CanDelete?: bool, CanExecute?: bool, CanRead?: bool, CanReadData?: bool, CanSubscribe?: bool, CanSubscribeOthers?: bool, CanWrite?: bool, CanWriteData?: bool, HasAdmin?: bool, Rights?: list, WebException?: record}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "eventframes-eventframes create" [
+# --Security shape: {CanAnnotate?: bool, CanDelete?: bool, CanExecute?: bool, CanRead?: bool, CanReadData?: bool, CanSubscribe?: bool, CanSubscribeOthers?: bool, CanWrite?: bool, CanWriteData?: bool, HasAdmin?: bool, Rights?: list<string>, WebException?: record}
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "eventframes-eventframes create-event-frame-event-frame" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8167,7 +8177,7 @@ export def "eventframes-eventframes create" [
   --acknowledged-date: string # format: date-time, e.g. 2014-07-30T11:04:23Z
   --are-values-captured: oneof<nothing, bool> # e.g. false
   --can-be-acknowledged: oneof<nothing, bool> # e.g. true
-  --category-names: list # e.g. [Processing Plant]
+  --category-names: list<string> # e.g. [Processing Plant]
   --description: string # e.g. Event Frame of Past Week
   --end-time: string # format: date-time, e.g. 2014-07-25T14:45:29Z
   --extended-properties: record
@@ -8179,31 +8189,31 @@ export def "eventframes-eventframes create" [
   --links: record # shape: {Annotations?: string, Attributes?: string, Categories?: string, Database?: string, DefaultAttribute?: string, EndValue?: string, EventFrames?: string, InterpolatedData?: string, Parent?: string, PlotData?: string, PrimaryReferencedElement?: string, RecordedData?: string, ReferencedElements?: string, Security?: string, SecurityEntries?: string, Self?: string, SummaryData?: string, Template?: string, Value?: string}
   --name: string # e.g. EF20140725-001
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\EventFrames[EF20140725-001]
-  --ref-element-web-ids: list # e.g. [I1EmDqD5loBNH0erqeqJodtALAaqQoQHk26BGgMQAVXYR0Ag]
-  --security: record # shape: {CanAnnotate?: bool, CanDelete?: bool, CanExecute?: bool, CanRead?: bool, CanReadData?: bool, CanSubscribe?: bool, CanSubscribeOthers?: bool, CanWrite?: bool, CanWriteData?: bool, HasAdmin?: bool, Rights?: list, WebException?: record}
+  --ref-element-web-ids: list<string> # e.g. [I1EmDqD5loBNH0erqeqJodtALAaqQoQHk26BGgMQAVXYR0Ag]
+  --security: record # shape: {CanAnnotate?: bool, CanDelete?: bool, CanExecute?: bool, CanRead?: bool, CanReadData?: bool, CanSubscribe?: bool, CanSubscribeOthers?: bool, CanWrite?: bool, CanWriteData?: bool, HasAdmin?: bool, Rights?: list<string>, WebException?: record}
   --severity: string # e.g. None
   --start-time: string # format: date-time, e.g. 2014-07-18T14:45:29Z
   --template-name: string # e.g. Template
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1FmDqD5loBNH0erqeqJodtALADqD5loBNH0cAAAAAAASwAg
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/eventframes/{web_id}/eventframes") $qp)
-  let body = {"AcknowledgedBy": $acknowledged_by, "AcknowledgedDate": $acknowledged_date, "AreValuesCaptured": $are_values_captured, "CanBeAcknowledged": $can_be_acknowledged, "CategoryNames": $category_names, "Description": $description, "EndTime": $end_time, "ExtendedProperties": $extended_properties, "HasChildren": $has_children, "Id": $id, "IsAcknowledged": $is_acknowledged, "IsAnnotated": $is_annotated, "IsLocked": $is_locked, "Links": $links, "Name": $name, "Path": $path, "RefElementWebIds": $ref_element_web_ids, "Security": $security, "Severity": $severity, "StartTime": $start_time, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/eventframes") $qp)
+  let req_body = {"AcknowledgedBy": $acknowledged_by, "AcknowledgedDate": $acknowledged_date, "AreValuesCaptured": $are_values_captured, "CanBeAcknowledged": $can_be_acknowledged, "CategoryNames": $category_names, "Description": $description, "EndTime": $end_time, "ExtendedProperties": $extended_properties, "HasChildren": $has_children, "Id": $id, "IsAcknowledged": $is_acknowledged, "IsAnnotated": $is_annotated, "IsLocked": $is_locked, "Links": $links, "Name": $name, "Path": $path, "RefElementWebIds": $ref_element_web_ids, "Security": $security, "Severity": $severity, "StartTime": $start_time, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve the event frame's referenced elements.
 #
 # GET /eventframes/{webId}/referencedelements
 # operationId: EventFrame_GetReferencedElements
-export def "eventframes-referencedelements get" [
+export def "eventframes-referencedelements get-event-frame-referenced-elements" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8221,7 +8231,7 @@ export def "eventframes-referencedelements get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/eventframes/{web_id}/referencedelements") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/referencedelements") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8231,7 +8241,7 @@ export def "eventframes-referencedelements get" [
 #
 # GET /eventframes/{webId}/security
 # operationId: EventFrame_GetSecurity
-export def "eventframes-security get" [
+export def "eventframes-security get-event-frame" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8242,7 +8252,7 @@ export def "eventframes-security get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -8250,7 +8260,7 @@ export def "eventframes-security get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/eventframes/{web_id}/security") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8260,7 +8270,7 @@ export def "eventframes-security get" [
 #
 # GET /eventframes/{webId}/securityentries
 # operationId: EventFrame_GetSecurityEntries
-export def "eventframes-securityentries get" [
+export def "eventframes-securityentries get-event-frame-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8278,7 +8288,7 @@ export def "eventframes-securityentries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/eventframes/{web_id}/securityentries") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8289,8 +8299,8 @@ export def "eventframes-securityentries get" [
 # POST /eventframes/{webId}/securityentries
 # operationId: EventFrame_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "eventframes-securityentries create-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "eventframes-securityentries create-event-frame-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8303,30 +8313,30 @@ export def "eventframes-securityentries create-security-entry" [
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/eventframes/{web_id}/securityentries") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/securityentries") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a security entry owned by the event frame.
 #
 # DELETE /eventframes/{webId}/securityentries/{name}
 # operationId: EventFrame_DeleteSecurityEntry
-export def "eventframes-securityentries delete-security-entry" [
+export def "eventframes-securityentries delete-event-frame-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8343,7 +8353,7 @@ export def "eventframes-securityentries delete-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/eventframes/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/eventframes/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8353,7 +8363,7 @@ export def "eventframes-securityentries delete-security-entry" [
 #
 # GET /eventframes/{webId}/securityentries/{name}
 # operationId: EventFrame_GetSecurityEntryByName
-export def "eventframes-securityentries get-security-entry" [
+export def "eventframes-securityentries get-event-frame-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8371,7 +8381,7 @@ export def "eventframes-securityentries get-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/eventframes/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/eventframes/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8382,8 +8392,8 @@ export def "eventframes-securityentries get-security-entry" [
 # PUT /eventframes/{webId}/securityentries/{name}
 # operationId: EventFrame_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "eventframes-securityentries update-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "eventframes-securityentries update-event-frame-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8396,30 +8406,30 @@ export def "eventframes-securityentries update-security-entry" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --body-name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/eventframes/{web_id}/securityentries/{name}") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/eventframes/{web_id}/securityentries/{name}") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a notification contact template by path.
 #
 # GET /notificationcontacttemplates
 # operationId: NotificationContactTemplate_GetByPath
-export def "notificationcontacttemplates get-by-path" [
+export def "notificationcontacttemplates get-notification-contact-template-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8446,7 +8456,7 @@ export def "notificationcontacttemplates get-by-path" [
 #
 # GET /notificationcontacttemplates/search
 # operationId: NotificationContactTemplate_GetNotificationContactTemplatesQuery
-export def "notificationcontacttemplates-search get-notification-contact-templates-query" [
+export def "notificationcontacttemplates-search get-notification-contact-template-notification-contact-templates-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8476,7 +8486,7 @@ export def "notificationcontacttemplates-search get-notification-contact-templat
 #
 # DELETE /notificationcontacttemplates/{webId}
 # operationId: NotificationContactTemplate_Delete
-export def "notificationcontacttemplates delete" [
+export def "notificationcontacttemplates delete-notification-contact-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8490,7 +8500,7 @@ export def "notificationcontacttemplates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationcontacttemplates/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationcontacttemplates/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8500,7 +8510,7 @@ export def "notificationcontacttemplates delete" [
 #
 # GET /notificationcontacttemplates/{webId}
 # operationId: NotificationContactTemplate_Get
-export def "notificationcontacttemplates get" [
+export def "notificationcontacttemplates get-notification-contact-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8517,7 +8527,7 @@ export def "notificationcontacttemplates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationcontacttemplates/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationcontacttemplates/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8528,8 +8538,8 @@ export def "notificationcontacttemplates get" [
 # PATCH /notificationcontacttemplates/{webId}
 # operationId: NotificationContactTemplate_Update
 # --Links shape: {AssetServer?: string, NotificationContactTemplates?: string, NotificationPlugIn?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationcontacttemplates update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "notificationcontacttemplates update-notification-contact-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8555,25 +8565,25 @@ export def "notificationcontacttemplates update" [
   --path: string # format: path, e.g. \\MyAssetServer\NotificationContactTemplates[Plant Manager]
   --plug-in-name: string # e.g. 
   --retry-interval: string # format: Duration, e.g. PT5S
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1NCEDqD5loBNH0erqeqJodtALAYIKyyz2F5BGAxQAVXYRDBAGyPedZG1sUmxOOclp3Flwg
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationcontacttemplates/{web_id}"))
-  let body = {"Available": $available, "ConfigString": $config_string, "ContactType": $contact_type, "Description": $description, "EscalationTimeout": $escalation_timeout, "HasChildren": $has_children, "Id": $id, "Links": $links, "MaximumRetries": $maximum_retries, "MinimumAcknowledgements": $minimum_acknowledgements, "Name": $name, "NotifyWhenInstanceEnded": $notify_when_instance_ended, "Path": $path, "PlugInName": $plug_in_name, "RetryInterval": $retry_interval, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationcontacttemplates/{web_id}"))
+  let req_body = {"Available": $available, "ConfigString": $config_string, "ContactType": $contact_type, "Description": $description, "EscalationTimeout": $escalation_timeout, "HasChildren": $has_children, "Id": $id, "Links": $links, "MaximumRetries": $maximum_retries, "MinimumAcknowledgements": $minimum_acknowledgements, "Name": $name, "NotifyWhenInstanceEnded": $notify_when_instance_ended, "Path": $path, "PlugInName": $plug_in_name, "RetryInterval": $retry_interval, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve notification contact template's child templates.
 #
 # GET /notificationcontacttemplates/{webId}/notificationcontacttemplates
 # operationId: NotificationContactTemplate_GetNotificationContactTemplates
-export def "notificationcontacttemplates-notificationcontacttemplates get-notification-contact-templates" [
+export def "notificationcontacttemplates-notificationcontacttemplates get-notification-contact-template-notification-contact-templates" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8590,7 +8600,7 @@ export def "notificationcontacttemplates-notificationcontacttemplates get-notifi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationcontacttemplates/{web_id}/notificationcontacttemplates") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationcontacttemplates/{web_id}/notificationcontacttemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8600,7 +8610,7 @@ export def "notificationcontacttemplates-notificationcontacttemplates get-notifi
 #
 # GET /notificationcontacttemplates/{webId}/security
 # operationId: NotificationContactTemplate_GetSecurity
-export def "notificationcontacttemplates-security get" [
+export def "notificationcontacttemplates-security get-notification-contact-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8611,7 +8621,7 @@ export def "notificationcontacttemplates-security get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -8619,7 +8629,7 @@ export def "notificationcontacttemplates-security get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationcontacttemplates/{web_id}/security") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationcontacttemplates/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8629,7 +8639,7 @@ export def "notificationcontacttemplates-security get" [
 #
 # GET /notificationcontacttemplates/{webId}/securityentries
 # operationId: NotificationContactTemplate_GetSecurityEntries
-export def "notificationcontacttemplates-securityentries get" [
+export def "notificationcontacttemplates-securityentries get-notification-contact-template-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8647,7 +8657,7 @@ export def "notificationcontacttemplates-securityentries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationcontacttemplates/{web_id}/securityentries") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationcontacttemplates/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8658,8 +8668,8 @@ export def "notificationcontacttemplates-securityentries get" [
 # POST /notificationcontacttemplates/{webId}/securityentries
 # operationId: NotificationContactTemplate_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationcontacttemplates-securityentries create-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "notificationcontacttemplates-securityentries create-notification-contact-template-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8672,30 +8682,30 @@ export def "notificationcontacttemplates-securityentries create-security-entry" 
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationcontacttemplates/{web_id}/securityentries") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationcontacttemplates/{web_id}/securityentries") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a security entry owned by the notification contact template.
 #
 # DELETE /notificationcontacttemplates/{webId}/securityentries/{name}
 # operationId: NotificationContactTemplate_DeleteSecurityEntry
-export def "notificationcontacttemplates-securityentries delete-security-entry" [
+export def "notificationcontacttemplates-securityentries delete-notification-contact-template-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8712,7 +8722,7 @@ export def "notificationcontacttemplates-securityentries delete-security-entry" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/notificationcontacttemplates/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/notificationcontacttemplates/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8722,7 +8732,7 @@ export def "notificationcontacttemplates-securityentries delete-security-entry" 
 #
 # GET /notificationcontacttemplates/{webId}/securityentries/{name}
 # operationId: NotificationContactTemplate_GetSecurityEntryByName
-export def "notificationcontacttemplates-securityentries get-security-entry" [
+export def "notificationcontacttemplates-securityentries get-notification-contact-template-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8740,7 +8750,7 @@ export def "notificationcontacttemplates-securityentries get-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/notificationcontacttemplates/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/notificationcontacttemplates/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8751,8 +8761,8 @@ export def "notificationcontacttemplates-securityentries get-security-entry" [
 # PUT /notificationcontacttemplates/{webId}/securityentries/{name}
 # operationId: NotificationContactTemplate_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationcontacttemplates-securityentries update-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "notificationcontacttemplates-securityentries update-notification-contact-template-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8765,30 +8775,30 @@ export def "notificationcontacttemplates-securityentries update-security-entry" 
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --body-name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/notificationcontacttemplates/{web_id}/securityentries/{name}") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/notificationcontacttemplates/{web_id}/securityentries/{name}") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a notification plugin by path.
 #
 # GET /notificationplugIns
 # operationId: NotificationPlugIn_GetByPath
-export def "notificationplug-ins get-by-path" [
+export def "notificationplug-ins get-notification-plug-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8815,7 +8825,7 @@ export def "notificationplug-ins get-by-path" [
 #
 # GET /notificationplugins/{webId}
 # operationId: NotificationPlugIn_Get
-export def "notificationplugins get" [
+export def "notificationplugins get-notification-plug-in" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8832,7 +8842,7 @@ export def "notificationplugins get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationplugins/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationplugins/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8842,7 +8852,7 @@ export def "notificationplugins get" [
 #
 # GET /notificationrules
 # operationId: NotificationRule_GetByPath
-export def "notificationrules get-by-path" [
+export def "notificationrules get-notification-rule-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8869,7 +8879,7 @@ export def "notificationrules get-by-path" [
 #
 # GET /notificationrules/search
 # operationId: NotificationRule_GetNotificationRulesQuery
-export def "notificationrules-search get-notification-rules-query" [
+export def "notificationrules-search get-notification-rule-notification-rules-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8899,7 +8909,7 @@ export def "notificationrules-search get-notification-rules-query" [
 #
 # DELETE /notificationrules/{webId}
 # operationId: NotificationRule_Delete
-export def "notificationrules delete" [
+export def "notificationrules delete-notification-rule" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8913,7 +8923,7 @@ export def "notificationrules delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationrules/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrules/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8923,7 +8933,7 @@ export def "notificationrules delete" [
 #
 # GET /notificationrules/{webId}
 # operationId: NotificationRule_Get
-export def "notificationrules get" [
+export def "notificationrules get-notification-rule" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8940,7 +8950,7 @@ export def "notificationrules get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationrules/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrules/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8950,8 +8960,8 @@ export def "notificationrules get" [
 #
 # PATCH /notificationrules/{webId}
 # operationId: NotificationRule_Update
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationrules update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "notificationrules update-notification-rule" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8963,7 +8973,7 @@ export def "notificationrules update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --auto-created: oneof<nothing, bool> # e.g. true
-  --category-names: list # e.g. [Equipment Assets]
+  --category-names: list<string> # e.g. [Equipment Assets]
   --criteria: string # e.g. Name: EventFrameCriteriaName
   --description: string # e.g. Manufacturing Equipment MachineName
   --id: string # format: uuid, e.g. e9a984d0-f47c-11e7-8454-00155d029708
@@ -8974,25 +8984,25 @@ export def "notificationrules update" [
   --resend-interval: string # format: Duration, e.g. PT5S
   --status: string # e.g. Disabled
   --template-name: string # e.g. MachineName Notification Rule
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1NRDqD5loBNH0erqeqJodtALA5bYfWno26BGgMQAVXYR0Ag
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationrules/{web_id}"))
-  let body = {"AutoCreated": $auto_created, "CategoryNames": $category_names, "Criteria": $criteria, "Description": $description, "Id": $id, "MultiTriggerEventOption": $multi_trigger_event_option, "Name": $name, "NonrepetitionInterval": $nonrepetition_interval, "Path": $path, "ResendInterval": $resend_interval, "Status": $status, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrules/{web_id}"))
+  let req_body = {"AutoCreated": $auto_created, "CategoryNames": $category_names, "Criteria": $criteria, "Description": $description, "Id": $id, "MultiTriggerEventOption": $multi_trigger_event_option, "Name": $name, "NonrepetitionInterval": $nonrepetition_interval, "Path": $path, "ResendInterval": $resend_interval, "Status": $status, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve notification rule subscribers.
 #
 # GET /notificationrules/{webId}/notificationrulesubscribers
 # operationId: NotificationRule_GetNotificationRuleSubscribers
-export def "notificationrules-notificationrulesubscribers get-notification-rule-subscribers" [
+export def "notificationrules-notificationrulesubscribers get-notification-rule-notification-rule-subscribers" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9009,7 +9019,7 @@ export def "notificationrules-notificationrulesubscribers get-notification-rule-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationrules/{web_id}/notificationrulesubscribers") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrules/{web_id}/notificationrulesubscribers") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9019,8 +9029,8 @@ export def "notificationrules-notificationrulesubscribers get-notification-rule-
 #
 # POST /notificationrules/{webId}/notificationrulesubscribers
 # operationId: NotificationRule_CreateNotificationRuleSubscriber
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationrules-notificationrulesubscribers create-notification-rule-subscriber" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "notificationrules-notificationrulesubscribers create-notification-rule-notification-rule-subscriber" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9045,26 +9055,26 @@ export def "notificationrules-notificationrulesubscribers create-notification-ru
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\NotificationRules[NotificationSubscriptionRuleName]
   --plug-in-name: string # e.g. Email
   --retry-interval: string # format: Duration, e.g. PT3S
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1NSLDqD5loBNH0erqeqJodtALA5bYfWno26BGgMQAVXYR0AgPUJJXNlEW1w78rnCXDmcDA
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationrules/{web_id}/notificationrulesubscribers") $qp)
-  let body = {"ConfigString": $config_string, "ContactTemplateName": $contact_template_name, "ContactType": $contact_type, "DeliveryFormatName": $delivery_format_name, "Description": $description, "EscalationTimeout": $escalation_timeout, "Id": $id, "MaximumRetries": $maximum_retries, "Name": $name, "NotifyOption": $notify_option, "Path": $path, "PlugInName": $plug_in_name, "RetryInterval": $retry_interval, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrules/{web_id}/notificationrulesubscribers") $qp)
+  let req_body = {"ConfigString": $config_string, "ContactTemplateName": $contact_template_name, "ContactType": $contact_type, "DeliveryFormatName": $delivery_format_name, "Description": $description, "EscalationTimeout": $escalation_timeout, "Id": $id, "MaximumRetries": $maximum_retries, "Name": $name, "NotifyOption": $notify_option, "Path": $path, "PlugInName": $plug_in_name, "RetryInterval": $retry_interval, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the security information of the specified security item associated with the notification rule for a specified user.
 #
 # GET /notificationrules/{webId}/security
 # operationId: NotificationRule_GetSecurity
-export def "notificationrules-security get" [
+export def "notificationrules-security get-notification-rule" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9075,7 +9085,7 @@ export def "notificationrules-security get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -9083,7 +9093,7 @@ export def "notificationrules-security get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationrules/{web_id}/security") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrules/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9093,7 +9103,7 @@ export def "notificationrules-security get" [
 #
 # GET /notificationrules/{webId}/securityentries
 # operationId: NotificationRule_GetSecurityEntries
-export def "notificationrules-securityentries get" [
+export def "notificationrules-securityentries get-notification-rule-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9111,7 +9121,7 @@ export def "notificationrules-securityentries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationrules/{web_id}/securityentries") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrules/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9122,8 +9132,8 @@ export def "notificationrules-securityentries get" [
 # POST /notificationrules/{webId}/securityentries
 # operationId: NotificationRule_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationrules-securityentries create-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "notificationrules-securityentries create-notification-rule-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9136,30 +9146,30 @@ export def "notificationrules-securityentries create-security-entry" [
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationrules/{web_id}/securityentries") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrules/{web_id}/securityentries") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a security entry owned by the notification rule.
 #
 # DELETE /notificationrules/{webId}/securityentries/{name}
 # operationId: NotificationRule_DeleteSecurityEntry
-export def "notificationrules-securityentries delete-security-entry" [
+export def "notificationrules-securityentries delete-notification-rule-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9176,7 +9186,7 @@ export def "notificationrules-securityentries delete-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/notificationrules/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/notificationrules/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9186,7 +9196,7 @@ export def "notificationrules-securityentries delete-security-entry" [
 #
 # GET /notificationrules/{webId}/securityentries/{name}
 # operationId: NotificationRule_GetSecurityEntryByName
-export def "notificationrules-securityentries get-security-entry" [
+export def "notificationrules-securityentries get-notification-rule-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9204,7 +9214,7 @@ export def "notificationrules-securityentries get-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/notificationrules/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/notificationrules/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9215,8 +9225,8 @@ export def "notificationrules-securityentries get-security-entry" [
 # PUT /notificationrules/{webId}/securityentries/{name}
 # operationId: NotificationRule_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationrules-securityentries update-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "notificationrules-securityentries update-notification-rule-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9229,30 +9239,30 @@ export def "notificationrules-securityentries update-security-entry" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --body-name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/notificationrules/{web_id}/securityentries/{name}") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/notificationrules/{web_id}/securityentries/{name}") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a notification rule subscriber by path.
 #
 # GET /notificationrulesubscribers
 # operationId: NotificationRuleSubscriber_GetByPath
-export def "notificationrulesubscribers get-by-path" [
+export def "notificationrulesubscribers get-notification-rule-subscriber-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9279,7 +9289,7 @@ export def "notificationrulesubscribers get-by-path" [
 #
 # DELETE /notificationrulesubscribers/{webId}
 # operationId: NotificationRuleSubscriber_Delete
-export def "notificationrulesubscribers delete" [
+export def "notificationrulesubscribers delete-notification-rule-subscriber" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9293,7 +9303,7 @@ export def "notificationrulesubscribers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationrulesubscribers/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrulesubscribers/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9303,7 +9313,7 @@ export def "notificationrulesubscribers delete" [
 #
 # GET /notificationrulesubscribers/{webId}
 # operationId: NotificationRuleSubscriber_Get
-export def "notificationrulesubscribers get" [
+export def "notificationrulesubscribers get-notification-rule-subscriber" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9320,7 +9330,7 @@ export def "notificationrulesubscribers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationrulesubscribers/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrulesubscribers/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9330,8 +9340,8 @@ export def "notificationrulesubscribers get" [
 #
 # PATCH /notificationrulesubscribers/{webId}
 # operationId: NotificationRuleSubscriber_Update
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationrulesubscribers update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "notificationrulesubscribers update-notification-rule-subscriber" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9355,25 +9365,25 @@ export def "notificationrulesubscribers update" [
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\NotificationRules[NotificationSubscriptionRuleName]
   --plug-in-name: string # e.g. Email
   --retry-interval: string # format: Duration, e.g. PT3S
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1NSLDqD5loBNH0erqeqJodtALA5bYfWno26BGgMQAVXYR0AgPUJJXNlEW1w78rnCXDmcDA
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationrulesubscribers/{web_id}"))
-  let body = {"ConfigString": $config_string, "ContactTemplateName": $contact_template_name, "ContactType": $contact_type, "DeliveryFormatName": $delivery_format_name, "Description": $description, "EscalationTimeout": $escalation_timeout, "Id": $id, "MaximumRetries": $maximum_retries, "Name": $name, "NotifyOption": $notify_option, "Path": $path, "PlugInName": $plug_in_name, "RetryInterval": $retry_interval, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrulesubscribers/{web_id}"))
+  let req_body = {"ConfigString": $config_string, "ContactTemplateName": $contact_template_name, "ContactType": $contact_type, "DeliveryFormatName": $delivery_format_name, "Description": $description, "EscalationTimeout": $escalation_timeout, "Id": $id, "MaximumRetries": $maximum_retries, "Name": $name, "NotifyOption": $notify_option, "Path": $path, "PlugInName": $plug_in_name, "RetryInterval": $retry_interval, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve notification rule subscriber subscribers.
 #
 # GET /notificationrulesubscribers/{webId}/notificationrulesubscribers
 # operationId: NotificationRuleSubscriber_GetNotificationRuleSubscribers
-export def "notificationrulesubscribers-notificationrulesubscribers get-notification-rule-subscribers" [
+export def "notificationrulesubscribers-notificationrulesubscribers get-notification-rule-subscriber-notification-rule-subscribers" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9390,7 +9400,7 @@ export def "notificationrulesubscribers-notificationrulesubscribers get-notifica
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationrulesubscribers/{web_id}/notificationrulesubscribers") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrulesubscribers/{web_id}/notificationrulesubscribers") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9400,7 +9410,7 @@ export def "notificationrulesubscribers-notificationrulesubscribers get-notifica
 #
 # GET /notificationruletemplates
 # operationId: NotificationRuleTemplate_GetByPath
-export def "notificationruletemplates get-by-path" [
+export def "notificationruletemplates get-notification-rule-template-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9427,7 +9437,7 @@ export def "notificationruletemplates get-by-path" [
 #
 # GET /notificationruletemplates/search
 # operationId: NotificationRuleTemplate_GetNotificationRuleTemplatesQuery
-export def "notificationruletemplates-search get-notification-rule-templates-query" [
+export def "notificationruletemplates-search get-notification-rule-template-notification-rule-templates-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9457,7 +9467,7 @@ export def "notificationruletemplates-search get-notification-rule-templates-que
 #
 # DELETE /notificationruletemplates/{webId}
 # operationId: NotificationRuleTemplate_Delete
-export def "notificationruletemplates delete" [
+export def "notificationruletemplates delete-notification-rule-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9471,7 +9481,7 @@ export def "notificationruletemplates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationruletemplates/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationruletemplates/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9481,7 +9491,7 @@ export def "notificationruletemplates delete" [
 #
 # GET /notificationruletemplates/{webId}
 # operationId: NotificationRuleTemplate_Get
-export def "notificationruletemplates get" [
+export def "notificationruletemplates get-notification-rule-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9498,7 +9508,7 @@ export def "notificationruletemplates get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationruletemplates/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationruletemplates/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9508,8 +9518,8 @@ export def "notificationruletemplates get" [
 #
 # PATCH /notificationruletemplates/{webId}
 # operationId: NotificationRuleTemplate_Update
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationruletemplates update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "notificationruletemplates update-notification-rule-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9520,7 +9530,7 @@ export def "notificationruletemplates update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --category-names: list # e.g. [MachineNameAlerts]
+  --category-names: list<string> # e.g. [MachineNameAlerts]
   --criteria: string # e.g. Name: EventFrameCriteriaName
   --description: string # e.g. Description entered by the user
   --id: string # format: uuid, e.g. e9a984d0-f47c-11e7-8454-00155d029708
@@ -9531,25 +9541,25 @@ export def "notificationruletemplates update" [
   --resend-interval: string # format: Duration, e.g. PT5S
   --status: string # e.g. Functioning
   --template-name: string # e.g. MachineName Notification Rule Template
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1NTDqD5loBNH0erqeqJodtALAtdcX5JH_5xGEKAAVXTSaAg
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationruletemplates/{web_id}"))
-  let body = {"CategoryNames": $category_names, "Criteria": $criteria, "Description": $description, "Id": $id, "MultiTriggerEventOption": $multi_trigger_event_option, "Name": $name, "NonrepetitionInterval": $nonrepetition_interval, "Path": $path, "ResendInterval": $resend_interval, "Status": $status, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationruletemplates/{web_id}"))
+  let req_body = {"CategoryNames": $category_names, "Criteria": $criteria, "Description": $description, "Id": $id, "MultiTriggerEventOption": $multi_trigger_event_option, "Name": $name, "NonrepetitionInterval": $nonrepetition_interval, "Path": $path, "ResendInterval": $resend_interval, "Status": $status, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve notification rule template subscribers.
 #
 # GET /notificationruletemplates/{webId}/notificationrulesubscribers
 # operationId: NotificationRuleTemplate_GetNotificationRuleTemplateSubscribers
-export def "notificationruletemplates-notificationrulesubscribers get-notification-rule-template-subscribers" [
+export def "notificationruletemplates-notificationrulesubscribers get-notification-rule-template-notification-rule-template-subscribers" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9566,7 +9576,7 @@ export def "notificationruletemplates-notificationrulesubscribers get-notificati
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationruletemplates/{web_id}/notificationrulesubscribers") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationruletemplates/{web_id}/notificationrulesubscribers") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9576,8 +9586,8 @@ export def "notificationruletemplates-notificationrulesubscribers get-notificati
 #
 # POST /notificationruletemplates/{webId}/notificationrulesubscribers
 # operationId: NotificationRuleTemplate_CreateNotificationRuleTemplateSubscriber
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationruletemplates-notificationrulesubscribers create-notification-rule-template-subscriber" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "notificationruletemplates-notificationrulesubscribers create-notification-rule-template-notification-rule-template-subscriber" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9602,26 +9612,26 @@ export def "notificationruletemplates-notificationrulesubscribers create-notific
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\NotificationRules[NotificationSubscriptionRuleName]
   --plug-in-name: string # e.g. Email
   --retry-interval: string # format: Duration, e.g. PT3S
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1NSLDqD5loBNH0erqeqJodtALA5bYfWno26BGgMQAVXYR0AgPUJJXNlEW1w78rnCXDmcDA
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationruletemplates/{web_id}/notificationrulesubscribers") $qp)
-  let body = {"ConfigString": $config_string, "ContactTemplateName": $contact_template_name, "ContactType": $contact_type, "DeliveryFormatName": $delivery_format_name, "Description": $description, "EscalationTimeout": $escalation_timeout, "Id": $id, "MaximumRetries": $maximum_retries, "Name": $name, "NotifyOption": $notify_option, "Path": $path, "PlugInName": $plug_in_name, "RetryInterval": $retry_interval, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationruletemplates/{web_id}/notificationrulesubscribers") $qp)
+  let req_body = {"ConfigString": $config_string, "ContactTemplateName": $contact_template_name, "ContactType": $contact_type, "DeliveryFormatName": $delivery_format_name, "Description": $description, "EscalationTimeout": $escalation_timeout, "Id": $id, "MaximumRetries": $maximum_retries, "Name": $name, "NotifyOption": $notify_option, "Path": $path, "PlugInName": $plug_in_name, "RetryInterval": $retry_interval, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the security information of the specified security item associated with the notification rule template for a specified user.
 #
 # GET /notificationruletemplates/{webId}/security
 # operationId: NotificationRuleTemplate_GetSecurity
-export def "notificationruletemplates-security get" [
+export def "notificationruletemplates-security get-notification-rule-template" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9632,7 +9642,7 @@ export def "notificationruletemplates-security get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -9640,7 +9650,7 @@ export def "notificationruletemplates-security get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationruletemplates/{web_id}/security") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationruletemplates/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9650,7 +9660,7 @@ export def "notificationruletemplates-security get" [
 #
 # GET /notificationruletemplates/{webId}/securityentries
 # operationId: NotificationRuleTemplate_GetSecurityEntries
-export def "notificationruletemplates-securityentries get" [
+export def "notificationruletemplates-securityentries get-notification-rule-template-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9668,7 +9678,7 @@ export def "notificationruletemplates-securityentries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationruletemplates/{web_id}/securityentries") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationruletemplates/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9679,8 +9689,8 @@ export def "notificationruletemplates-securityentries get" [
 # POST /notificationruletemplates/{webId}/securityentries
 # operationId: NotificationRuleTemplate_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationruletemplates-securityentries create-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "notificationruletemplates-securityentries create-notification-rule-template-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9693,30 +9703,30 @@ export def "notificationruletemplates-securityentries create-security-entry" [
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/notificationruletemplates/{web_id}/securityentries") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationruletemplates/{web_id}/securityentries") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a security entry owned by the notification rule template.
 #
 # DELETE /notificationruletemplates/{webId}/securityentries/{name}
 # operationId: NotificationRuleTemplate_DeleteSecurityEntry
-export def "notificationruletemplates-securityentries delete-security-entry" [
+export def "notificationruletemplates-securityentries delete-notification-rule-template-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9733,7 +9743,7 @@ export def "notificationruletemplates-securityentries delete-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/notificationruletemplates/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/notificationruletemplates/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9743,7 +9753,7 @@ export def "notificationruletemplates-securityentries delete-security-entry" [
 #
 # GET /notificationruletemplates/{webId}/securityentries/{name}
 # operationId: NotificationRuleTemplate_GetSecurityEntryByName
-export def "notificationruletemplates-securityentries get-security-entry" [
+export def "notificationruletemplates-securityentries get-notification-rule-template-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9761,7 +9771,7 @@ export def "notificationruletemplates-securityentries get-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/notificationruletemplates/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/notificationruletemplates/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9772,8 +9782,8 @@ export def "notificationruletemplates-securityentries get-security-entry" [
 # PUT /notificationruletemplates/{webId}/securityentries/{name}
 # operationId: NotificationRuleTemplate_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "notificationruletemplates-securityentries update-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "notificationruletemplates-securityentries update-notification-rule-template-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9786,23 +9796,23 @@ export def "notificationruletemplates-securityentries update-security-entry" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --body-name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/notificationruletemplates/{web_id}/securityentries/{name}") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/notificationruletemplates/{web_id}/securityentries/{name}") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a point by path.
@@ -9848,9 +9858,9 @@ export def "points-multiple get" [
   --accept: string@accept-completer # Response content type
   --as-parallel: oneof<nothing, bool> # Specifies if the retrieval processes should be run in parallel on the server. This may improve the response time for large amounts of requested points. The default is 'false'.
   --include-mode: string # The include mode for the return list. The default is 'All'.
-  --path: list # The path of a point. Multiple points may be specified with multiple instances of the parameter.
+  --path: list<string> # The path of a point. Multiple points may be specified with multiple instances of the parameter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
-  --web-id: list # The ID of a point. Multiple points may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a point. Multiple points may be specified with multiple instances of the parameter.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
 ]: nothing -> record<Items: table<Exception: record, Identifier: string, IdentifierType: string, Object: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9880,7 +9890,7 @@ export def "points delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/points/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/points/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9907,7 +9917,7 @@ export def "points get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/points/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/points/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9918,7 +9928,7 @@ export def "points get" [
 # PATCH /points/{webId}
 # operationId: Point_Update
 # --Links shape: {Attributes?: string, DataServer?: string, EndValue?: string, InterpolatedData?: string, PlotData?: string, RecordedData?: string, Self?: string, SummaryData?: string, Value?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "points update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9943,19 +9953,19 @@ export def "points update" [
   --point-type: string # e.g. Float32
   --span: float # e.g. 100
   --step: oneof<nothing, bool> # e.g. false
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1DPa70Wf0zBA06CLkV9ovNQgQCAAAAA
   --zero: float # e.g. 0
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/points/{web_id}"))
-  let body = {"Descriptor": $descriptor, "DigitalSetName": $digital_set_name, "DisplayDigits": $display_digits, "EngineeringUnits": $engineering_units, "Future": $future, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "PointClass": $point_class, "PointType": $point_type, "Span": $span, "Step": $step, "WebException": $web_exception, "WebId": $body_web_id, "Zero": $zero} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/points/{web_id}"))
+  let req_body = {"Descriptor": $descriptor, "DigitalSetName": $digital_set_name, "DisplayDigits": $display_digits, "EngineeringUnits": $engineering_units, "Future": $future, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "PointClass": $point_class, "PointType": $point_type, "Span": $span, "Step": $step, "WebException": $web_exception, "WebId": $body_web_id, "Zero": $zero} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get point attributes.
@@ -9973,7 +9983,7 @@ export def "points-attributes list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --name: list # The name of a point attribute to be returned. Multiple attributes may be specified with multiple instances of the parameter.
+  --name: list<string> # The name of a point attribute to be returned. Multiple attributes may be specified with multiple instances of the parameter.
   --name-filter: string # The filter to the names of the list of point attributes to be returned. The default is no filter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -9981,7 +9991,7 @@ export def "points-attributes list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "multi") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/points/{web_id}/attributes") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/points/{web_id}/attributes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10009,7 +10019,7 @@ export def "points-attributes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/points/{web_id}/attributes/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/points/{web_id}/attributes/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10019,7 +10029,7 @@ export def "points-attributes get" [
 #
 # GET /securityidentities
 # operationId: SecurityIdentity_GetByPath
-export def "securityidentities get-by-path" [
+export def "securityidentities get-security-identity-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10046,7 +10056,7 @@ export def "securityidentities get-by-path" [
 #
 # DELETE /securityidentities/{webId}
 # operationId: SecurityIdentity_Delete
-export def "securityidentities delete" [
+export def "securityidentities delete-security-identity" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10060,7 +10070,7 @@ export def "securityidentities delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/securityidentities/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securityidentities/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10070,7 +10080,7 @@ export def "securityidentities delete" [
 #
 # GET /securityidentities/{webId}
 # operationId: SecurityIdentity_Get
-export def "securityidentities get" [
+export def "securityidentities get-security-identity" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10087,7 +10097,7 @@ export def "securityidentities get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/securityidentities/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securityidentities/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10098,8 +10108,8 @@ export def "securityidentities get" [
 # PATCH /securityidentities/{webId}
 # operationId: SecurityIdentity_Update
 # --Links shape: {AssetServer?: string, Security?: string, SecurityEntries?: string, SecurityMappings?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "securityidentities update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "securityidentities update-security-identity" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10116,25 +10126,25 @@ export def "securityidentities update" [
   --links: record # shape: {AssetServer?: string, Security?: string, SecurityEntries?: string, SecurityMappings?: string, Self?: string}
   --name: string # e.g. MySecurityIdentity
   --path: string # format: path, e.g. \\MyAssetServer\SecurityIdentities[MySecurityIdentity]
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1SIDqD5loBNH0erqeqJodtALASe6l8zgYokqdeeFilFI9tw
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/securityidentities/{web_id}"))
-  let body = {"Description": $description, "Id": $id, "IsEnabled": $is_enabled, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securityidentities/{web_id}"))
+  let req_body = {"Description": $description, "Id": $id, "IsEnabled": $is_enabled, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the security information of the specified security item associated with the security identity for a specified user.
 #
 # GET /securityidentities/{webId}/security
 # operationId: SecurityIdentity_GetSecurity
-export def "securityidentities-security get" [
+export def "securityidentities-security get-identity" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10145,7 +10155,7 @@ export def "securityidentities-security get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -10153,7 +10163,7 @@ export def "securityidentities-security get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/securityidentities/{web_id}/security") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securityidentities/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10163,7 +10173,7 @@ export def "securityidentities-security get" [
 #
 # GET /securityidentities/{webId}/securityentries
 # operationId: SecurityIdentity_GetSecurityEntries
-export def "securityidentities-securityentries get" [
+export def "securityidentities-securityentries get-security-identity-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10181,7 +10191,7 @@ export def "securityidentities-securityentries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/securityidentities/{web_id}/securityentries") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securityidentities/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10191,7 +10201,7 @@ export def "securityidentities-securityentries get" [
 #
 # GET /securityidentities/{webId}/securityentries/{name}
 # operationId: SecurityIdentity_GetSecurityEntryByName
-export def "securityidentities-securityentries get-security-entry" [
+export def "securityidentities-securityentries get-security-identity-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10209,7 +10219,7 @@ export def "securityidentities-securityentries get-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/securityidentities/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/securityidentities/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10219,7 +10229,7 @@ export def "securityidentities-securityentries get-security-entry" [
 #
 # GET /securityidentities/{webId}/securitymappings
 # operationId: SecurityIdentity_GetSecurityMappings
-export def "securityidentities-securitymappings get" [
+export def "securityidentities-securitymappings get-security-identity-security-mappings" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10236,7 +10246,7 @@ export def "securityidentities-securitymappings get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/securityidentities/{web_id}/securitymappings") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securityidentities/{web_id}/securitymappings") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10246,7 +10256,7 @@ export def "securityidentities-securitymappings get" [
 #
 # GET /securitymappings
 # operationId: SecurityMapping_GetByPath
-export def "securitymappings get-by-path" [
+export def "securitymappings get-security-mapping-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10273,7 +10283,7 @@ export def "securitymappings get-by-path" [
 #
 # DELETE /securitymappings/{webId}
 # operationId: SecurityMapping_Delete
-export def "securitymappings delete" [
+export def "securitymappings delete-security-mapping" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10287,7 +10297,7 @@ export def "securitymappings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/securitymappings/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securitymappings/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10297,7 +10307,7 @@ export def "securitymappings delete" [
 #
 # GET /securitymappings/{webId}
 # operationId: SecurityMapping_Get
-export def "securitymappings get" [
+export def "securitymappings get-security-mapping" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10314,7 +10324,7 @@ export def "securitymappings get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/securitymappings/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securitymappings/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10325,8 +10335,8 @@ export def "securitymappings get" [
 # PATCH /securitymappings/{webId}
 # operationId: SecurityMapping_Update
 # --Links shape: {AssetServer?: string, Security?: string, SecurityEntries?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "securitymappings update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "securitymappings update-security-mapping" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10344,25 +10354,25 @@ export def "securitymappings update" [
   --name: string # e.g. MySecurityMapping
   --path: string # format: path, e.g. \\MyAssetServer\SecurityMappings[MySecurityMapping]
   --security-identity-web-id: string # e.g. I1SIEDqD5loBNH0erqeqJodtALAYIKyyz2F5BGAxQAVXYRDBAGyPedZG1sUmxOOclp3Flwg
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1SMDqD5loBNH0erqeqJodtALAgu8UrMAZB0qWp9H7C4TAXQ
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/securitymappings/{web_id}"))
-  let body = {"Account": $account, "Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "SecurityIdentityWebId": $security_identity_web_id, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securitymappings/{web_id}"))
+  let req_body = {"Account": $account, "Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "SecurityIdentityWebId": $security_identity_web_id, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the security information of the specified security item associated with the security mapping for a specified user.
 #
 # GET /securitymappings/{webId}/security
 # operationId: SecurityMapping_GetSecurity
-export def "securitymappings-security get" [
+export def "securitymappings-security get-mapping" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10373,7 +10383,7 @@ export def "securitymappings-security get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -10381,7 +10391,7 @@ export def "securitymappings-security get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/securitymappings/{web_id}/security") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securitymappings/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10391,7 +10401,7 @@ export def "securitymappings-security get" [
 #
 # GET /securitymappings/{webId}/securityentries
 # operationId: SecurityMapping_GetSecurityEntries
-export def "securitymappings-securityentries get" [
+export def "securitymappings-securityentries get-security-mapping-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10409,7 +10419,7 @@ export def "securitymappings-securityentries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/securitymappings/{web_id}/securityentries") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securitymappings/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10419,7 +10429,7 @@ export def "securitymappings-securityentries get" [
 #
 # GET /securitymappings/{webId}/securityentries/{name}
 # operationId: SecurityMapping_GetSecurityEntryByName
-export def "securitymappings-securityentries get-security-entry" [
+export def "securitymappings-securityentries get-security-mapping-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10437,7 +10447,7 @@ export def "securitymappings-securityentries get-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/securitymappings/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/securitymappings/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10447,7 +10457,7 @@ export def "securitymappings-securityentries get-security-entry" [
 #
 # GET /streams/updates/{marker}
 # operationId: Stream_RetrieveStreamUpdate
-export def "streams-updates retrieve" [
+export def "streams-updates get" [
   marker: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10465,7 +10475,7 @@ export def "streams-updates retrieve" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({marker: $marker} | format pattern "/streams/updates/{marker}") $qp)
+  let full_url = (build-url $base ({marker: (encode-path-segment $marker)} | format pattern "/streams/updates/{marker}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10493,7 +10503,7 @@ export def "streams-channel get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "heartbeatRate" $heartbeat_rate "scalar") (serialize-qp "includeInitialValues" $include_initial_values "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streams/{web_id}/channel") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/channel") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10520,7 +10530,7 @@ export def "streams-end get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "selectedFields" $selected_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streams/{web_id}/end") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/end") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10555,7 +10565,7 @@ export def "streams-interpolated get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "includeFilteredValues" $include_filtered_values "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "syncTime" $sync_time "scalar") (serialize-qp "syncTimeBoundaryType" $sync_time_boundary_type "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streams/{web_id}/interpolated") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/interpolated") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10576,7 +10586,7 @@ export def "streams-interpolatedattimes get-interpolated-at-times" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --time: list # The timestamp at which to retrieve an interpolated value. Multiple timestamps may be specified with multiple instances of the parameter.
+  --time: list<string> # The timestamp at which to retrieve an interpolated value. Multiple timestamps may be specified with multiple instances of the parameter.
   --desired-units: string # The name or abbreviation of the desired units of measure for the returned value, as found in the UOM database associated with the attribute. If not specified for an attribute, the attribute's default unit of measure is used. If the underlying stream is a point, this value may not be specified, as points are not associated with a unit of measure.
   --filter-expression: string # An optional string containing a filter expression. Expression variables are relative to the data point. Use '.' to reference the containing attribute. If the attribute does not support filtering, the filter will be ignored. The default is no filtering.
   --include-filtered-values: oneof<nothing, bool> # Specify 'true' to indicate that values which fail the filter criteria are present in the returned data at the times where they occurred with a value set to a 'Filtered' enumeration value with bad status. Repeated consecutive failures are omitted.
@@ -10587,7 +10597,7 @@ export def "streams-interpolatedattimes get-interpolated-at-times" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "multi") (serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "includeFilteredValues" $include_filtered_values "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streams/{web_id}/interpolatedattimes") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/interpolatedattimes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10618,7 +10628,7 @@ export def "streams-plot get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "intervals" $intervals "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streams/{web_id}/plot") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/plot") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10653,7 +10663,7 @@ export def "streams-recorded get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "boundaryType" $boundary_type "scalar") (serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "includeFilteredValues" $include_filtered_values "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streams/{web_id}/recorded") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/recorded") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10682,11 +10692,12 @@ export def "streams-recorded update-values" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "bufferOption" $buffer_option "scalar") (serialize-qp "updateOption" $update_option "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streams/{web_id}/recorded") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/recorded") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns a single recorded value based on the passed time and retrieval mode from the stream.
@@ -10714,7 +10725,7 @@ export def "streams-recordedattime get-recorded-at-time" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar") (serialize-qp "associations" $associations "scalar") (serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "retrievalMode" $retrieval_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streams/{web_id}/recordedattime") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/recordedattime") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10735,7 +10746,7 @@ export def "streams-recordedattimes get-recorded-at-times" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --time: list # The timestamp at which to retrieve a recorded value. Multiple timestamps may be specified with multiple instances of the parameter.
+  --time: list<string> # The timestamp at which to retrieve a recorded value. Multiple timestamps may be specified with multiple instances of the parameter.
   --associations: string # Associated values to return in the response, separated by semicolons (;). This call supports Annotations to return events with annotation values. If this parameter is not specified, annotation values are not returned.
   --desired-units: string # The name or abbreviation of the desired units of measure for the returned value, as found in the UOM database associated with the attribute. If not specified for an attribute, the attribute's default unit of measure is used. If the underlying stream is a point, this value may not be specified, as points are not associated with a unit of measure.
   --retrieval-mode: string # An optional value that determines the value to return when a value doesn't exist at the exact time specified. The default is 'Auto'.
@@ -10746,7 +10757,7 @@ export def "streams-recordedattimes get-recorded-at-times" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "multi") (serialize-qp "associations" $associations "scalar") (serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "retrievalMode" $retrieval_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streams/{web_id}/recordedattimes") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/recordedattimes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10775,14 +10786,14 @@ export def "streams-summary get" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --start-time: string # An optional start time. The default is '*-1d' for element attributes and points. For event frame attributes, the default is the event frame's start time, or '*-1d' if that is not set.
   --summary-duration: string # The duration of each summary interval. If specified in hours, minutes, seconds, or milliseconds, the summary durations will be evenly spaced UTC time intervals. Longer interval types are interpreted using wall clock rules and are time zone dependent.
-  --summary-type: list # Specifies the kinds of summaries to produce over the range. The default is 'Total'. Multiple summary types may be specified by using multiple instances of summaryType.
+  --summary-type: list<string> # Specifies the kinds of summaries to produce over the range. The default is 'Total'. Multiple summary types may be specified by using multiple instances of summaryType.
   --time-type: string # Specifies how to calculate the timestamp for each interval. The default is 'Auto'.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
 ]: nothing -> record<Items: table<Type: string, Value: record, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "calculationBasis" $calculation_basis "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "sampleInterval" $sample_interval "scalar") (serialize-qp "sampleType" $sample_type "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "summaryDuration" $summary_duration "scalar") (serialize-qp "summaryType" $summary_type "multi") (serialize-qp "timeType" $time_type "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streams/{web_id}/summary") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/summary") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10809,7 +10820,7 @@ export def "streams-updates create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streams/{web_id}/updates") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/updates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10838,7 +10849,7 @@ export def "streams-value get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "time" $time "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streams/{web_id}/value") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/value") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10848,8 +10859,8 @@ export def "streams-value get" [
 #
 # POST /streams/{webId}/value
 # operationId: Stream_UpdateValue
-# --Errors item shape: {FieldName?: string, Message?: list}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+# --Errors item shape: {FieldName?: string, Message?: list<string>}
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "streams-value update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10865,32 +10876,32 @@ export def "streams-value update" [
   --update-option: string # The desired AFUpdateOption. The default is 'Replace'. This parameter is ignored if the attribute is a configuration item.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
   --annotated: oneof<nothing, bool> # e.g. false
-  --errors: list # item shape: {FieldName?: string, Message?: list}
+  --errors: list # item shape: {FieldName?: string, Message?: list<string>}
   --good: oneof<nothing, bool> # e.g. true
   --questionable: oneof<nothing, bool> # e.g. false
   --substituted: oneof<nothing, bool> # e.g. false
   --timestamp: string # format: date-time, e.g. 2014-07-22T14:00:00Z
   --units-abbreviation: string # e.g. m
   --value: record # e.g. 12.3
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "bufferOption" $buffer_option "scalar") (serialize-qp "updateOption" $update_option "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streams/{web_id}/value") $qp)
-  let body = {"Annotated": $annotated, "Errors": $errors, "Good": $good, "Questionable": $questionable, "Substituted": $substituted, "Timestamp": $timestamp, "UnitsAbbreviation": $units_abbreviation, "Value": $value, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/value") $qp)
+  let req_body = {"Annotated": $annotated, "Errors": $errors, "Good": $good, "Questionable": $questionable, "Substituted": $substituted, "Timestamp": $timestamp, "UnitsAbbreviation": $units_abbreviation, "Value": $value, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Opens a channel that will send messages about any value changes for the specified streams.
 #
 # GET /streamsets/channel
 # operationId: StreamSet_GetChannelAdHoc
-export def "streamsets-channel get-channel-ad-hoc" [
+export def "streamsets-channel update-stream-get-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10900,7 +10911,7 @@ export def "streamsets-channel get-channel-ad-hoc" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --web-id: list # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
   --heartbeat-rate: int # Specifies the maximum number of consecutive empty messages that can be elapsed with no new data updates from the PI System, after which the client receives an empty payload. It helps to check if the connection is still alive. Zero/negative values correspond to no heartbeat, and the default value is no heartbeat.
   --include-initial-values: oneof<nothing, bool> # Specified if the channel should send a message with the current values of all the streams after the connection is opened. The default is 'false'.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -10918,7 +10929,7 @@ export def "streamsets-channel get-channel-ad-hoc" [
 #
 # GET /streamsets/end
 # operationId: StreamSet_GetEndAdHoc
-export def "streamsets-end get-end-ad-hoc" [
+export def "streamsets-end update-stream-get-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10928,7 +10939,7 @@ export def "streamsets-end get-end-ad-hoc" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --web-id: list # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --sort-field: string # The field or property of the object used to sort the returned collection. For better performance, by default no sorting is applied. 'Name' is the only supported field by which to sort.
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'
@@ -10947,7 +10958,7 @@ export def "streamsets-end get-end-ad-hoc" [
 #
 # GET /streamsets/interpolated
 # operationId: StreamSet_GetInterpolatedAdHoc
-export def "streamsets-interpolated get-interpolated-ad-hoc" [
+export def "streamsets-interpolated update-stream-get-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10957,7 +10968,7 @@ export def "streamsets-interpolated get-interpolated-ad-hoc" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --web-id: list # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
   --end-time: string # An optional end time. The default is '*'. Note that if endTime is earlier than startTime, the resulting values will be in time-descending order.
   --filter-expression: string # An optional string containing a filter expression. Expression variables are relative to the data point. Use '.' to reference the containing attribute. If the attribute does not support filtering, the filter will be ignored. The default is no filtering.
   --include-filtered-values: oneof<nothing, bool> # Specify 'true' to indicate that values which fail the filter criteria are present in the returned data at the times where they occurred with a value set to a 'Filtered' enumeration value with bad status. Repeated consecutive failures are omitted.
@@ -10984,7 +10995,7 @@ export def "streamsets-interpolated get-interpolated-ad-hoc" [
 #
 # GET /streamsets/interpolatedattimes
 # operationId: StreamSet_GetInterpolatedAtTimesAdHoc
-export def "streamsets-interpolatedattimes get-interpolated-at-times-ad-hoc" [
+export def "streamsets-interpolatedattimes update-stream-get-interpolated-at-times-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10994,8 +11005,8 @@ export def "streamsets-interpolatedattimes get-interpolated-at-times-ad-hoc" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --time: list # The timestamp at which to retrieve a interpolated value. Multiple timestamps may be specified with multiple instances of the parameter.
-  --web-id: list # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --time: list<string> # The timestamp at which to retrieve a interpolated value. Multiple timestamps may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
   --filter-expression: string # An optional string containing a filter expression. Expression variables are relative to the data point. Use '.' to reference the containing attribute. If the attribute does not support filtering, the filter will be ignored. The default is no filtering.
   --include-filtered-values: oneof<nothing, bool> # Specify 'true' to indicate that values which fail the filter criteria are present in the returned data at the times where they occurred with a value set to a 'Filtered' enumeration value with bad status. Repeated consecutive failures are omitted.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
@@ -11016,7 +11027,7 @@ export def "streamsets-interpolatedattimes get-interpolated-at-times-ad-hoc" [
 #
 # GET /streamsets/joined
 # operationId: StreamSet_GetJoined
-export def "streamsets-joined get" [
+export def "streamsets-joined update-stream-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11027,7 +11038,7 @@ export def "streamsets-joined get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --base-web-id: string # The ID of the base stream which is used for retrieving the recorded values.
-  --subordinate-web-id: list # The ID of a stream whose values will be joined on the times with the values of the base stream. Multiple streams may be specified with multiple instances of the parameter.
+  --subordinate-web-id: list<string> # The ID of a stream whose values will be joined on the times with the values of the base stream. Multiple streams may be specified with multiple instances of the parameter.
   --boundary-type: string # An optional value that determines how the times and values of the returned end points are determined. The default is 'Inside'.
   --end-time: string # An optional end time. The default is '*' for element attributes and points. For event frame attributes, the default is the event frame's end time, or '*' if that is not set. Note that if endTime is earlier than startTime, the resulting values will be in time-descending order.
   --filter-expression: string # An optional string containing a filter expression. Expression variables are relative to the data point. Use '.' to reference the containing attribute. The default is no filtering.
@@ -11051,7 +11062,7 @@ export def "streamsets-joined get" [
 #
 # GET /streamsets/plot
 # operationId: StreamSet_GetPlotAdHoc
-export def "streamsets-plot get-plot-ad-hoc" [
+export def "streamsets-plot update-stream-get-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11061,7 +11072,7 @@ export def "streamsets-plot get-plot-ad-hoc" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --web-id: list # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
   --end-time: string # An optional end time. The default is '*'. Note that if endTime is earlier than startTime, the resulting values will be in time-descending order.
   --intervals: int # The number of intervals to plot over. Typically, this would be the number of horizontal pixels in the trend. The default is '24'. For each interval, the data available is examined and significant values are returned. Each interval can produce up to 5 values if they are unique, the first value in the interval, the last value, the highest value, the lowest value and at most one exceptional point (bad status or digital state).
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
@@ -11084,7 +11095,7 @@ export def "streamsets-plot get-plot-ad-hoc" [
 #
 # GET /streamsets/recorded
 # operationId: StreamSet_GetRecordedAdHoc
-export def "streamsets-recorded get-recorded-ad-hoc" [
+export def "streamsets-recorded update-stream-get-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11094,7 +11105,7 @@ export def "streamsets-recorded get-recorded-ad-hoc" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --web-id: list # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
   --boundary-type: string # An optional value that determines how the times and values of the returned end points are determined. The default is 'Inside'.
   --end-time: string # An optional end time. The default is '*'. Note that if endTime is earlier than startTime, the resulting values will be in time-descending order.
   --filter-expression: string # An optional string containing a filter expression. Expression variables are relative to the data point. Use '.' to reference the containing attribute. The default is no filtering.
@@ -11120,7 +11131,7 @@ export def "streamsets-recorded get-recorded-ad-hoc" [
 #
 # POST /streamsets/recorded
 # operationId: StreamSet_UpdateValuesAdHoc
-export def "streamsets-recorded update-values-ad-hoc" [
+export def "streamsets-recorded update-stream-update-values-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11139,17 +11150,18 @@ export def "streamsets-recorded update-values-ad-hoc" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "bufferOption" $buffer_option "scalar") (serialize-qp "updateOption" $update_option "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/streamsets/recorded" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns recorded values based on the passed time and retrieval mode.
 #
 # GET /streamsets/recordedattime
 # operationId: StreamSet_GetRecordedAtTimeAdHoc
-export def "streamsets-recordedattime get-recorded-at-time-ad-hoc" [
+export def "streamsets-recordedattime update-stream-get-recorded-at-time-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11160,7 +11172,7 @@ export def "streamsets-recordedattime get-recorded-at-time-ad-hoc" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --time: string # The timestamp at which the values are desired.
-  --web-id: list # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
   --retrieval-mode: string # An optional value that determines the values to return when values don't exist at the exact time specified. The default is 'Auto'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
@@ -11179,7 +11191,7 @@ export def "streamsets-recordedattime get-recorded-at-time-ad-hoc" [
 #
 # GET /streamsets/recordedattimes
 # operationId: StreamSet_GetRecordedAtTimesAdHoc
-export def "streamsets-recordedattimes get-recorded-at-times-ad-hoc" [
+export def "streamsets-recordedattimes update-stream-get-recorded-at-times-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11189,8 +11201,8 @@ export def "streamsets-recordedattimes get-recorded-at-times-ad-hoc" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --time: list # The timestamp at which to retrieve a recorded value. Multiple timestamps may be specified with multiple instances of the parameter.
-  --web-id: list # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --time: list<string> # The timestamp at which to retrieve a recorded value. Multiple timestamps may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
   --retrieval-mode: string # An optional value that determines the values to return when values don't exist at the exact time specified. The default is 'Auto'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'.
@@ -11210,7 +11222,7 @@ export def "streamsets-recordedattimes get-recorded-at-times-ad-hoc" [
 #
 # GET /streamsets/summary
 # operationId: StreamSet_GetSummariesAdHoc
-export def "streamsets-summary get-summaries-ad-hoc" [
+export def "streamsets-summary update-stream-get-summaries-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11220,7 +11232,7 @@ export def "streamsets-summary get-summaries-ad-hoc" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --web-id: list # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
   --calculation-basis: string # Specifies the method of evaluating the data over the time range. The default is 'TimeWeighted'.
   --end-time: string # An optional end time. The default is '*'. Note that if endTime is earlier than startTime, the resulting values will be in time-descending order.
   --filter-expression: string # A string containing a filter expression. Expression variables are relative to the attribute. Use '.' to reference the containing attribute. The default is no filtering.
@@ -11229,7 +11241,7 @@ export def "streamsets-summary get-summaries-ad-hoc" [
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --start-time: string # An optional start time. The default is '*-1d'.
   --summary-duration: string # The duration of each summary interval.
-  --summary-type: list # Specifies the kinds of summaries to produce over the range. The default is 'Total'. Multiple summary types may be specified by using multiple instances of summaryType.
+  --summary-type: list<string> # Specifies the kinds of summaries to produce over the range. The default is 'Total'. Multiple summary types may be specified by using multiple instances of summaryType.
   --time-type: string # Specifies how to calculate the timestamp for each interval. The default is 'Auto'.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -11247,7 +11259,7 @@ export def "streamsets-summary get-summaries-ad-hoc" [
 #
 # GET /streamsets/updates
 # operationId: StreamSet_RetrieveStreamSetUpdates
-export def "streamsets-updates retrieve" [
+export def "streamsets-updates update-stream-get-stream-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11257,7 +11269,7 @@ export def "streamsets-updates retrieve" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --marker: list # Identifier of stream source and current position. Multiple markers may be specified with multiple instances of the parameter.
+  --marker: list<string> # Identifier of stream source and current position. Multiple markers may be specified with multiple instances of the parameter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
 ]: nothing -> record<Items: table<Events: list, Exception: record, LatestMarker: string, RequestedMarker: string, Source: string, SourceName: string, SourcePath: string, Status: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
@@ -11274,7 +11286,7 @@ export def "streamsets-updates retrieve" [
 #
 # POST /streamsets/updates
 # operationId: StreamSet_RegisterStreamSetUpdates
-export def "streamsets-updates create" [
+export def "streamsets-updates update-stream-create-stream-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11284,7 +11296,7 @@ export def "streamsets-updates create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --web-id: list # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
 ]: nothing -> record<Items: table<Exception: record, LatestMarker: string, Source: string, SourceName: string, SourcePath: string, Status: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
@@ -11301,7 +11313,7 @@ export def "streamsets-updates create" [
 #
 # GET /streamsets/value
 # operationId: StreamSet_GetValuesAdHoc
-export def "streamsets-value get-values-ad-hoc" [
+export def "streamsets-value update-stream-get-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11311,7 +11323,7 @@ export def "streamsets-value get-values-ad-hoc" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --web-id: list # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
+  --web-id: list<string> # The ID of a stream. Multiple streams may be specified with multiple instances of the parameter.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --sort-field: string # The field or property of the object used to sort the returned collection. For better performance, by default no sorting is applied. 'Name' is the only supported field by which to sort.
   --sort-order: string # The order that the returned collection is sorted. The default is 'Ascending'
@@ -11332,7 +11344,7 @@ export def "streamsets-value get-values-ad-hoc" [
 #
 # POST /streamsets/value
 # operationId: StreamSet_UpdateValueAdHoc
-export def "streamsets-value update-value-ad-hoc" [
+export def "streamsets-value update-stream-update-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11351,17 +11363,18 @@ export def "streamsets-value update-value-ad-hoc" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "bufferOption" $buffer_option "scalar") (serialize-qp "updateOption" $update_option "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/streamsets/value" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Opens a channel that will send messages about any value changes for the attributes of an Element, Event Frame, or Attribute.
 #
 # GET /streamsets/{webId}/channel
 # operationId: StreamSet_GetChannel
-export def "streamsets-channel get" [
+export def "streamsets-channel update-stream-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11385,7 +11398,7 @@ export def "streamsets-channel get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "categoryName" $category_name "scalar") (serialize-qp "heartbeatRate" $heartbeat_rate "scalar") (serialize-qp "includeInitialValues" $include_initial_values "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streamsets/{web_id}/channel") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/channel") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11395,7 +11408,7 @@ export def "streamsets-channel get" [
 #
 # GET /streamsets/{webId}/end
 # operationId: StreamSet_GetEnd
-export def "streamsets-end get" [
+export def "streamsets-end update-stream-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11420,7 +11433,7 @@ export def "streamsets-end get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "categoryName" $category_name "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streamsets/{web_id}/end") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/end") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11430,7 +11443,7 @@ export def "streamsets-end get" [
 #
 # GET /streamsets/{webId}/interpolated
 # operationId: StreamSet_GetInterpolated
-export def "streamsets-interpolated get" [
+export def "streamsets-interpolated update-stream-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11463,7 +11476,7 @@ export def "streamsets-interpolated get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "categoryName" $category_name "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "includeFilteredValues" $include_filtered_values "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "syncTime" $sync_time "scalar") (serialize-qp "syncTimeBoundaryType" $sync_time_boundary_type "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streamsets/{web_id}/interpolated") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/interpolated") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11473,7 +11486,7 @@ export def "streamsets-interpolated get" [
 #
 # GET /streamsets/{webId}/interpolatedattimes
 # operationId: StreamSet_GetInterpolatedAtTimes
-export def "streamsets-interpolatedattimes get-interpolated-at-times" [
+export def "streamsets-interpolatedattimes update-stream-get-interpolated-at-times" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11484,7 +11497,7 @@ export def "streamsets-interpolatedattimes get-interpolated-at-times" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --time: list # The timestamp at which to retrieve a interpolated value. Multiple timestamps may be specified with multiple instances of the parameter.
+  --time: list<string> # The timestamp at which to retrieve a interpolated value. Multiple timestamps may be specified with multiple instances of the parameter.
   --category-name: string # Specify that included attributes must have this category. The default is no category filter.
   --filter-expression: string # An optional string containing a filter expression. Expression variables are relative to the data point. Use '.' to reference the containing attribute. If the attribute does not support filtering, the filter will be ignored. The default is no filtering.
   --include-filtered-values: oneof<nothing, bool> # Specify 'true' to indicate that values which fail the filter criteria are present in the returned data at the times where they occurred with a value set to a 'Filtered' enumeration value with bad status. Repeated consecutive failures are omitted.
@@ -11501,7 +11514,7 @@ export def "streamsets-interpolatedattimes get-interpolated-at-times" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "multi") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "includeFilteredValues" $include_filtered_values "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streamsets/{web_id}/interpolatedattimes") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/interpolatedattimes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11511,7 +11524,7 @@ export def "streamsets-interpolatedattimes get-interpolated-at-times" [
 #
 # GET /streamsets/{webId}/plot
 # operationId: StreamSet_GetPlot
-export def "streamsets-plot get" [
+export def "streamsets-plot update-stream-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11540,7 +11553,7 @@ export def "streamsets-plot get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "categoryName" $category_name "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "intervals" $intervals "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streamsets/{web_id}/plot") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/plot") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11550,7 +11563,7 @@ export def "streamsets-plot get" [
 #
 # GET /streamsets/{webId}/recorded
 # operationId: StreamSet_GetRecorded
-export def "streamsets-recorded get" [
+export def "streamsets-recorded update-stream-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11582,7 +11595,7 @@ export def "streamsets-recorded get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "boundaryType" $boundary_type "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "includeFilteredValues" $include_filtered_values "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streamsets/{web_id}/recorded") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/recorded") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11592,7 +11605,7 @@ export def "streamsets-recorded get" [
 #
 # POST /streamsets/{webId}/recorded
 # operationId: StreamSet_UpdateValues
-export def "streamsets-recorded update-values" [
+export def "streamsets-recorded update-stream-update-values" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11611,18 +11624,19 @@ export def "streamsets-recorded update-values" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "bufferOption" $buffer_option "scalar") (serialize-qp "updateOption" $update_option "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streamsets/{web_id}/recorded") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/recorded") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns recorded values of the attributes for an element, event frame, or attribute.
 #
 # GET /streamsets/{webId}/recordedattime
 # operationId: StreamSet_GetRecordedAtTime
-export def "streamsets-recordedattime get-recorded-at-time" [
+export def "streamsets-recordedattime update-stream-get-recorded-at-time" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11648,7 +11662,7 @@ export def "streamsets-recordedattime get-recorded-at-time" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "retrievalMode" $retrieval_mode "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streamsets/{web_id}/recordedattime") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/recordedattime") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11658,7 +11672,7 @@ export def "streamsets-recordedattime get-recorded-at-time" [
 #
 # GET /streamsets/{webId}/recordedattimes
 # operationId: StreamSet_GetRecordedAtTimes
-export def "streamsets-recordedattimes get-recorded-at-times" [
+export def "streamsets-recordedattimes update-stream-get-recorded-at-times" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11669,7 +11683,7 @@ export def "streamsets-recordedattimes get-recorded-at-times" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --time: list # The timestamp at which to retrieve a recorded value. Multiple timestamps may be specified with multiple instances of the parameter.
+  --time: list<string> # The timestamp at which to retrieve a recorded value. Multiple timestamps may be specified with multiple instances of the parameter.
   --category-name: string # Specify that included attributes must have this category. The default is no category filter.
   --name-filter: string # The name query string used for filtering attributes. The default is no filter.
   --retrieval-mode: string # An optional value that determines the values to return when values don't exist at the exact time specified. The default is 'Auto'.
@@ -11685,7 +11699,7 @@ export def "streamsets-recordedattimes get-recorded-at-times" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "multi") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "retrievalMode" $retrieval_mode "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streamsets/{web_id}/recordedattimes") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/recordedattimes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11695,7 +11709,7 @@ export def "streamsets-recordedattimes get-recorded-at-times" [
 #
 # GET /streamsets/{webId}/summary
 # operationId: StreamSet_GetSummaries
-export def "streamsets-summary get-summaries" [
+export def "streamsets-summary update-stream-get-summaries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11719,7 +11733,7 @@ export def "streamsets-summary get-summaries" [
   --show-hidden: oneof<nothing, bool> # Specified if the search should include attributes with the Hidden property set. The default is 'false'.
   --start-time: string # An optional start time. The default is '*-1d' for element attributes and points. For event frame attributes, the default is the event frame's start time, or '*-1d' if that is not set.
   --summary-duration: string # The duration of each summary interval.
-  --summary-type: list # Specifies the kinds of summaries to produce over the range. The default is 'Total'. Multiple summary types may be specified by using multiple instances of summaryType.
+  --summary-type: list<string> # Specifies the kinds of summaries to produce over the range. The default is 'Total'. Multiple summary types may be specified by using multiple instances of summaryType.
   --template-name: string # Specify that included attributes must be members of this template. The default is no template filter.
   --time-type: string # Specifies how to calculate the timestamp for each interval. The default is 'Auto'.
   --time-zone: string # The time zone in which the time string will be interpreted. This parameter will be ignored if a time zone is specified in the time string. If no time zone is specified in either places, the PI Web API server time zone will be used.
@@ -11728,7 +11742,7 @@ export def "streamsets-summary get-summaries" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "calculationBasis" $calculation_basis "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "sampleInterval" $sample_interval "scalar") (serialize-qp "sampleType" $sample_type "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "summaryDuration" $summary_duration "scalar") (serialize-qp "summaryType" $summary_type "multi") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "timeType" $time_type "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streamsets/{web_id}/summary") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/summary") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11738,7 +11752,7 @@ export def "streamsets-summary get-summaries" [
 #
 # GET /streamsets/{webId}/value
 # operationId: StreamSet_GetValues
-export def "streamsets-value get" [
+export def "streamsets-value update-stream-get" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11765,7 +11779,7 @@ export def "streamsets-value get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "categoryName" $category_name "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "time" $time "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streamsets/{web_id}/value") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/value") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11775,7 +11789,7 @@ export def "streamsets-value get" [
 #
 # POST /streamsets/{webId}/value
 # operationId: StreamSet_UpdateValue
-export def "streamsets-value update" [
+export def "streamsets-value update-stream-update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11794,18 +11808,19 @@ export def "streamsets-value update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "bufferOption" $buffer_option "scalar") (serialize-qp "updateOption" $update_option "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/streamsets/{web_id}/value") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/value") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get system links for this PI System Web API instance.
 #
 # GET /system
 # operationId: System_Landing
-export def "system get" [
+export def "system get-landing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11828,7 +11843,7 @@ export def "system get" [
 #
 # GET /system/cacheinstances
 # operationId: System_CacheInstances
-export def "system-cacheinstances get" [
+export def "system-cacheinstances get-cache-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11888,7 +11903,7 @@ export def "system-configuration delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key} | format pattern "/system/configuration/{key}"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/system/configuration/{key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11912,7 +11927,7 @@ export def "system-configuration get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key} | format pattern "/system/configuration/{key}"))
+  let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/system/configuration/{key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11945,7 +11960,7 @@ export def "system-status get" [
 #
 # GET /system/userinfo
 # operationId: System_UserInfo
-export def "system-userinfo get" [
+export def "system-userinfo get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11968,7 +11983,7 @@ export def "system-userinfo get" [
 #
 # GET /system/versions
 # operationId: System_Versions
-export def "system-versions version-s" [
+export def "system-versions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11991,7 +12006,7 @@ export def "system-versions version-s" [
 #
 # GET /tablecategories
 # operationId: TableCategory_GetByPath
-export def "tablecategories get-by-path" [
+export def "tablecategories get-table-category-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12018,7 +12033,7 @@ export def "tablecategories get-by-path" [
 #
 # DELETE /tablecategories/{webId}
 # operationId: TableCategory_Delete
-export def "tablecategories delete" [
+export def "tablecategories delete-table-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12032,7 +12047,7 @@ export def "tablecategories delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/tablecategories/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tablecategories/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12042,7 +12057,7 @@ export def "tablecategories delete" [
 #
 # GET /tablecategories/{webId}
 # operationId: TableCategory_Get
-export def "tablecategories get" [
+export def "tablecategories get-table-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12059,7 +12074,7 @@ export def "tablecategories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/tablecategories/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tablecategories/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12070,8 +12085,8 @@ export def "tablecategories get" [
 # PATCH /tablecategories/{webId}
 # operationId: TableCategory_Update
 # --Links shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "tablecategories update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "tablecategories update-table-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12087,25 +12102,25 @@ export def "tablecategories update" [
   --links: record # shape: {Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
   --name: string # e.g. CategoryName
   --path: string # format: path, e.g. \\MyAssetServer\Database\CategoriesTable[CategoryName]
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1BCDqD5loBNH0erqeqJodtALAwgzHiSFSd06HP4lKPqYefQ
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/tablecategories/{web_id}"))
-  let body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tablecategories/{web_id}"))
+  let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the security information of the specified security item associated with the table category for a specified user.
 #
 # GET /tablecategories/{webId}/security
 # operationId: TableCategory_GetSecurity
-export def "tablecategories-security get" [
+export def "tablecategories-security get-table-category" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12116,7 +12131,7 @@ export def "tablecategories-security get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -12124,7 +12139,7 @@ export def "tablecategories-security get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/tablecategories/{web_id}/security") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tablecategories/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12134,7 +12149,7 @@ export def "tablecategories-security get" [
 #
 # GET /tablecategories/{webId}/securityentries
 # operationId: TableCategory_GetSecurityEntries
-export def "tablecategories-securityentries get" [
+export def "tablecategories-securityentries get-table-category-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12152,7 +12167,7 @@ export def "tablecategories-securityentries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/tablecategories/{web_id}/securityentries") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tablecategories/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12163,8 +12178,8 @@ export def "tablecategories-securityentries get" [
 # POST /tablecategories/{webId}/securityentries
 # operationId: TableCategory_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "tablecategories-securityentries create-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "tablecategories-securityentries create-table-category-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12177,30 +12192,30 @@ export def "tablecategories-securityentries create-security-entry" [
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/tablecategories/{web_id}/securityentries") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tablecategories/{web_id}/securityentries") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a security entry owned by the table category.
 #
 # DELETE /tablecategories/{webId}/securityentries/{name}
 # operationId: TableCategory_DeleteSecurityEntry
-export def "tablecategories-securityentries delete-security-entry" [
+export def "tablecategories-securityentries delete-table-category-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12217,7 +12232,7 @@ export def "tablecategories-securityentries delete-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/tablecategories/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/tablecategories/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12227,7 +12242,7 @@ export def "tablecategories-securityentries delete-security-entry" [
 #
 # GET /tablecategories/{webId}/securityentries/{name}
 # operationId: TableCategory_GetSecurityEntryByName
-export def "tablecategories-securityentries get-security-entry" [
+export def "tablecategories-securityentries get-table-category-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12245,7 +12260,7 @@ export def "tablecategories-securityentries get-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/tablecategories/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/tablecategories/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12256,8 +12271,8 @@ export def "tablecategories-securityentries get-security-entry" [
 # PUT /tablecategories/{webId}/securityentries/{name}
 # operationId: TableCategory_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "tablecategories-securityentries update-security-entry" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "tablecategories-securityentries update-table-category-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12270,23 +12285,23 @@ export def "tablecategories-securityentries update-security-entry" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --body-name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/tablecategories/{web_id}/securityentries/{name}") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/tablecategories/{web_id}/securityentries/{name}") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a table by path.
@@ -12334,7 +12349,7 @@ export def "tables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/tables/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tables/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12361,7 +12376,7 @@ export def "tables get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/tables/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tables/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12372,7 +12387,7 @@ export def "tables get" [
 # PATCH /tables/{webId}
 # operationId: Table_Update
 # --Links shape: {Categories?: string, Data?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "tables update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12384,7 +12399,7 @@ export def "tables update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --category-names: list # e.g. [Table Category]
+  --category-names: list<string> # e.g. [Table Category]
   --convert-to-local-time: oneof<nothing, bool> # e.g. false
   --description: string # e.g. Table of car info.
   --id: string # format: uuid, e.g. 5ff8ba98-89ce-479a-b29e-ddd057096a5f
@@ -12392,18 +12407,18 @@ export def "tables update" [
   --name: string # e.g. CarInfo
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\Tables[CarInfo]
   --time-zone: string # e.g. Eastern Standard Time
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1BlDqD5loBNH0erqeqJodtALAmLr4X86Jmkeynt3QVwlqXw
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/tables/{web_id}"))
-  let body = {"CategoryNames": $category_names, "ConvertToLocalTime": $convert_to_local_time, "Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "TimeZone": $time_zone, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tables/{web_id}"))
+  let req_body = {"CategoryNames": $category_names, "ConvertToLocalTime": $convert_to_local_time, "Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "TimeZone": $time_zone, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a table's categories.
@@ -12427,7 +12442,7 @@ export def "tables-categories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/tables/{web_id}/categories") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tables/{web_id}/categories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12453,7 +12468,7 @@ export def "tables-data get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/tables/{web_id}/data") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tables/{web_id}/data") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12463,7 +12478,7 @@ export def "tables-data get" [
 #
 # PUT /tables/{webId}/data
 # operationId: Table_UpdateData
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "tables-data update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12477,17 +12492,17 @@ export def "tables-data update" [
   --accept: string@accept-completer # Response content type
   --columns: record
   --rows: list
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/tables/{web_id}/data"))
-  let body = {"Columns": $columns, "Rows": $rows, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tables/{web_id}/data"))
+  let req_body = {"Columns": $columns, "Rows": $rows, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the security information of the specified security item associated with the table for a specified user.
@@ -12505,7 +12520,7 @@ export def "tables-security get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --user-identity: list # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
+  --user-identity: list<string> # The user identity for the security information to be checked. Multiple security identities may be specified with multiple instances of the parameter. If the parameter is not specified, only the current user's security rights will be returned.
   --force-refresh: oneof<nothing, bool> # Indicates if the security cache should be refreshed before getting security information. The default is 'false'.
   --selected-fields: string # List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
@@ -12513,7 +12528,7 @@ export def "tables-security get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/tables/{web_id}/security") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tables/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12523,7 +12538,7 @@ export def "tables-security get" [
 #
 # GET /tables/{webId}/securityentries
 # operationId: Table_GetSecurityEntries
-export def "tables-securityentries get" [
+export def "tables-securityentries get-security-entries" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12541,7 +12556,7 @@ export def "tables-securityentries get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/tables/{web_id}/securityentries") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tables/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12552,7 +12567,7 @@ export def "tables-securityentries get" [
 # POST /tables/{webId}/securityentries
 # operationId: Table_CreateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "tables-securityentries create-security-entry" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12566,23 +12581,23 @@ export def "tables-securityentries create-security-entry" [
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
   --web-id-type: string # Optional parameter. Used to specify the type of WebID. Useful for URL brevity and other special cases. Default is the value of the configuration item "WebIDType".
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/tables/{web_id}/securityentries") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tables/{web_id}/securityentries") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a security entry owned by the table.
@@ -12606,7 +12621,7 @@ export def "tables-securityentries delete-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/tables/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/tables/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12634,7 +12649,7 @@ export def "tables-securityentries get-security-entry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/tables/{web_id}/securityentries/{name}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/tables/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12645,7 +12660,7 @@ export def "tables-securityentries get-security-entry" [
 # PUT /tables/{webId}/securityentries/{name}
 # operationId: Table_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "tables-securityentries update-security-entry" [
   web_id: string
   name: string
@@ -12659,30 +12674,30 @@ export def "tables-securityentries update-security-entry" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --apply-to-children: oneof<nothing, bool> # If false, the new access permissions are only applied to the associated object. If true, the access permissions of children with any parent-child reference types will change when the permissions on the primary parent change.
-  --allow-rights: list # e.g. [Read, ReadData]
-  --deny-rights: list # e.g. [Write, Execute, Admin]
+  --allow-rights: list<string> # e.g. [Read, ReadData]
+  --deny-rights: list<string> # e.g. [Write, Execute, Admin]
   --links: record # shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
   --body-name: string # e.g. domain\user1
   --security-identity-name: string # e.g. domain\user1
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id, name: $name} | format pattern "/tables/{web_id}/securityentries/{name}") $qp)
-  let body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/tables/{web_id}/securityentries/{name}") $qp)
+  let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a Time Rule Plug-in by path.
 #
 # GET /timeruleplugins
 # operationId: TimeRulePlugIn_GetByPath
-export def "timeruleplugins get-by-path" [
+export def "timeruleplugins get-time-rule-plug-in-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12709,7 +12724,7 @@ export def "timeruleplugins get-by-path" [
 #
 # GET /timeruleplugins/{webId}
 # operationId: TimeRulePlugIn_Get
-export def "timeruleplugins get" [
+export def "timeruleplugins get-time-rule-plug-in" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12726,7 +12741,7 @@ export def "timeruleplugins get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/timeruleplugins/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/timeruleplugins/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12736,7 +12751,7 @@ export def "timeruleplugins get" [
 #
 # GET /timerules
 # operationId: TimeRule_GetByPath
-export def "timerules get-by-path" [
+export def "timerules get-time-rule-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12763,7 +12778,7 @@ export def "timerules get-by-path" [
 #
 # DELETE /timerules/{webId}
 # operationId: TimeRule_Delete
-export def "timerules delete" [
+export def "timerules delete-time-rule" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12777,7 +12792,7 @@ export def "timerules delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/timerules/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/timerules/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12787,7 +12802,7 @@ export def "timerules delete" [
 #
 # GET /timerules/{webId}
 # operationId: TimeRule_Get
-export def "timerules get" [
+export def "timerules get-time-rule" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12804,7 +12819,7 @@ export def "timerules get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/timerules/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/timerules/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12815,8 +12830,8 @@ export def "timerules get" [
 # PATCH /timerules/{webId}
 # operationId: TimeRule_Update
 # --Links shape: {Analysis?: string, AnalysisTemplate?: string, PlugIn?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "timerules update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "timerules update-time-rule" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12840,25 +12855,25 @@ export def "timerules update" [
   --name: string # e.g. Periodic
   --path: string # format: path, e.g. \\MyAssetServer\MyDatabase\MyElement\Analyses[MyAnalysis]\TimeRule
   --plug-in-name: string # e.g. Periodic
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1TRXDqD5loBNH0erqeqJodtALAROsUFcWU5xGEQwAVXYTCAAROsUFcWU5xGEQwAVXYTCAA
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/timerules/{web_id}"))
-  let body = {"ConfigString": $config_string, "ConfigStringStored": $config_string_stored, "Description": $description, "DisplayString": $display_string, "EditorType": $editor_type, "Id": $id, "IsConfigured": $is_configured, "IsInitializing": $is_initializing, "Links": $links, "MergeDuplicatedItems": $merge_duplicated_items, "Name": $name, "Path": $path, "PlugInName": $plug_in_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/timerules/{web_id}"))
+  let req_body = {"ConfigString": $config_string, "ConfigStringStored": $config_string_stored, "Description": $description, "DisplayString": $display_string, "EditorType": $editor_type, "Id": $id, "IsConfigured": $is_configured, "IsInitializing": $is_initializing, "Links": $links, "MergeDuplicatedItems": $merge_duplicated_items, "Name": $name, "Path": $path, "PlugInName": $plug_in_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a unit class by path.
 #
 # GET /unitclasses
 # operationId: UnitClass_GetByPath
-export def "unitclasses get-by-path" [
+export def "unitclasses get-unit-class-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12885,7 +12900,7 @@ export def "unitclasses get-by-path" [
 #
 # DELETE /unitclasses/{webId}
 # operationId: UnitClass_Delete
-export def "unitclasses delete" [
+export def "unitclasses delete-unit-class" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12899,7 +12914,7 @@ export def "unitclasses delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/unitclasses/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/unitclasses/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12909,7 +12924,7 @@ export def "unitclasses delete" [
 #
 # GET /unitclasses/{webId}
 # operationId: UnitClass_Get
-export def "unitclasses get" [
+export def "unitclasses get-unit-class" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12926,7 +12941,7 @@ export def "unitclasses get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/unitclasses/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/unitclasses/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12937,8 +12952,8 @@ export def "unitclasses get" [
 # PATCH /unitclasses/{webId}
 # operationId: UnitClass_Update
 # --Links shape: {AssetServer?: string, CanonicalUnit?: string, Self?: string, Units?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "unitclasses update" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "unitclasses update-unit-class" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12956,25 +12971,25 @@ export def "unitclasses update" [
   --links: record # shape: {AssetServer?: string, CanonicalUnit?: string, Self?: string, Units?: string}
   --name: string # e.g. Power
   --path: string # format: path, e.g. \\MyAssetServer\UOMDatabase\UOMClasses[Power]
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1UCDqD5loBNH0erqeqJodtALATbkl-fxulEulDQAVw5HySQ
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/unitclasses/{web_id}"))
-  let body = {"CanonicalUnitAbbreviation": $canonical_unit_abbreviation, "CanonicalUnitName": $canonical_unit_name, "Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/unitclasses/{web_id}"))
+  let req_body = {"CanonicalUnitAbbreviation": $canonical_unit_abbreviation, "CanonicalUnitName": $canonical_unit_name, "Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get the canonical unit of a unit class.
 #
 # GET /unitclasses/{webId}/canonicalunit
 # operationId: UnitClass_GetCanonicalUnit
-export def "unitclasses-canonicalunit get" [
+export def "unitclasses-canonicalunit get-unit-class-canonical-unit" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12991,7 +13006,7 @@ export def "unitclasses-canonicalunit get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/unitclasses/{web_id}/canonicalunit") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/unitclasses/{web_id}/canonicalunit") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13001,7 +13016,7 @@ export def "unitclasses-canonicalunit get" [
 #
 # GET /unitclasses/{webId}/units
 # operationId: UnitClass_GetUnits
-export def "unitclasses-units get" [
+export def "unitclasses-units get-class" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13018,7 +13033,7 @@ export def "unitclasses-units get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/unitclasses/{web_id}/units") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/unitclasses/{web_id}/units") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13029,8 +13044,8 @@ export def "unitclasses-units get" [
 # POST /unitclasses/{webId}/units
 # operationId: UnitClass_CreateUnit
 # --Links shape: {Class?: string, ReferenceUnit?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "unitclasses-units create" [
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+export def "unitclasses-units create-class" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13053,19 +13068,19 @@ export def "unitclasses-units create" [
   --reference-factor: float # format: double, e.g. 1
   --reference-offset: float # format: double, e.g. 0
   --reference-unit-abbreviation: string # e.g. 
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1UtDqD5loBNH0erqeqJodtALAjqwhgeI8lEeV4xeD1db0_A
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/unitclasses/{web_id}/units") $qp)
-  let body = {"Abbreviation": $abbreviation, "Description": $description, "Factor": $factor, "Id": $id, "Links": $links, "Name": $name, "Offset": $offset, "Path": $path, "ReferenceFactor": $reference_factor, "ReferenceOffset": $reference_offset, "ReferenceUnitAbbreviation": $reference_unit_abbreviation, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/unitclasses/{web_id}/units") $qp)
+  let req_body = {"Abbreviation": $abbreviation, "Description": $description, "Factor": $factor, "Id": $id, "Links": $links, "Name": $name, "Offset": $offset, "Path": $path, "ReferenceFactor": $reference_factor, "ReferenceOffset": $reference_offset, "ReferenceUnitAbbreviation": $reference_unit_abbreviation, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve a unit by path.
@@ -13113,7 +13128,7 @@ export def "units delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/units/{web_id}"))
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/units/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13140,7 +13155,7 @@ export def "units get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/units/{web_id}") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/units/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -13151,7 +13166,7 @@ export def "units get" [
 # PATCH /units/{webId}
 # operationId: Unit_Update
 # --Links shape: {Class?: string, ReferenceUnit?: string, Self?: string}
-# --WebException shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+# --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
 export def "units update" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13174,16 +13189,16 @@ export def "units update" [
   --reference-factor: float # format: double, e.g. 1
   --reference-offset: float # format: double, e.g. 0
   --reference-unit-abbreviation: string # e.g. 
-  --web-exception: record # shape: {Errors?: list, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
+  --web-exception: record # shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
   --body-web-id: string # format: webid, e.g. I1UtDqD5loBNH0erqeqJodtALAjqwhgeI8lEeV4xeD1db0_A
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({web_id: $web_id} | format pattern "/units/{web_id}"))
-  let body = {"Abbreviation": $abbreviation, "Description": $description, "Factor": $factor, "Id": $id, "Links": $links, "Name": $name, "Offset": $offset, "Path": $path, "ReferenceFactor": $reference_factor, "ReferenceOffset": $reference_offset, "ReferenceUnitAbbreviation": $reference_unit_abbreviation, "WebException": $web_exception, "WebId": $body_web_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/units/{web_id}"))
+  let req_body = {"Abbreviation": $abbreviation, "Description": $description, "Factor": $factor, "Id": $id, "Links": $links, "Name": $name, "Offset": $offset, "Path": $path, "ReferenceFactor": $reference_factor, "ReferenceOffset": $reference_offset, "ReferenceUnitAbbreviation": $reference_unit_abbreviation, "WebException": $web_exception, "WebId": $body_web_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

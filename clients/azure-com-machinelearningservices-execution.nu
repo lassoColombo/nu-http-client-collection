@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -62,6 +71,33 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
 def base-url-completer [] { ["https://azure.local"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -71,7 +107,7 @@ def accept-completer [] { ["application/json" "application/octet-stream"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "execution-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-run-id-cancel cancel-run-with-uri" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "execution-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-run-id-cancel cancel-with-uri" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +131,7 @@ export def commands []: nothing -> table {
 #
 # POST /execution/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/runId/{runId}/cancel
 # operationId: Runs_CancelRunWithUri
-export def "execution-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-run-id-cancel cancel-run-with-uri" [
+export def "execution-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-run-id-cancel cancel-with-uri" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -112,7 +148,7 @@ export def "execution-v10-subscriptions-resource-groups-providers-microsoft-mach
 ]: nothing -> record<runId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, run_id: $run_id} | format pattern "/execution/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runId/{run_id}/cancel"))
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/execution/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runId/{run_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -122,8 +158,8 @@ export def "execution-v10-subscriptions-resource-groups-providers-microsoft-mach
 #
 # POST /execution/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/snapshotrun
 # operationId: Runs_StartSnapshotRun
-# --configuration shape: {arguments?: list, communicator?: "None"|"ParameterServer"|"Gloo"|"Mpi"|"Nccl", dataReferences?: record, environment?: record, framework?: "Python"|"PySpark"|"Cntk"|"TensorFlow"|"PyTorch", hdi?: record, history?: record, jobName?: string, maxRunDurationSeconds?: int, mpi?: record, nodeCount?: int, script?: string, spark?: record, target?: string, tensorflow?: record}
-export def "execution-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-snapshotrun start" [
+# --configuration shape: {arguments?: list<string>, communicator?: "None"|"ParameterServer"|"Gloo"|"Mpi"|"Nccl", dataReferences?: record, environment?: record, framework?: "Python"|"PySpark"|"Cntk"|"TensorFlow"|"PyTorch", hdi?: record, history?: record, jobName?: string, maxRunDurationSeconds?: int, mpi?: record, nodeCount?: int, script?: string, spark?: record, target?: string, tensorflow?: record}
+export def "execution-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-snapshotrun start-runs-snapshot-run" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -137,7 +173,7 @@ export def "execution-v10-subscriptions-resource-groups-providers-microsoft-mach
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --run-id: string # A run id. If not supplied a run id will be created automatically.
-  --configuration: record # shape: {arguments?: list, communicator?: "None"|"ParameterServer"|"Gloo"|"Mpi"|"Nccl", dataReferences?: record, environment?: record, framework?: "Python"|"PySpark"|"Cntk"|"TensorFlow"|"PyTorch", hdi?: record, history?: record, jobName?: string, maxRunDurationSeconds?: int, mpi?: record, nodeCount?: int, script?: string, spark?: record, target?: string, tensorflow?: record}
+  --configuration: record # shape: {arguments?: list<string>, communicator?: "None"|"ParameterServer"|"Gloo"|"Mpi"|"Nccl", dataReferences?: record, environment?: record, framework?: "Python"|"PySpark"|"Cntk"|"TensorFlow"|"PyTorch", hdi?: record, history?: record, jobName?: string, maxRunDurationSeconds?: int, mpi?: record, nodeCount?: int, script?: string, spark?: record, target?: string, tensorflow?: record}
   --parent-run-id: string # Specifies that the run history entry for this execution should be scoped within an existing run as a child. Defaults to null, meaning the run has no parent. This is intended for first-party service integration, not third-party API users. (e.g. myexperiment_155000000001_0)
   --run-type: string # Specifies the runsource property for this run. The default value is "experiment" if not specified. (e.g. experiment)
   --snapshot-id: string # Snapshots are user project folders that have been uploaded to the cloud for subsequent execution. This field is required when executing against cloud-based compute targets unless the run submission was against the API endpoint that takes a zipped project folder inline with the request. (format: uuid)
@@ -146,20 +182,20 @@ export def "execution-v10-subscriptions-resource-groups-providers-microsoft-mach
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "runId" $run_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name} | format pattern "/execution/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/snapshotrun") $qp)
-  let body = {"configuration": $configuration, "parentRunId": $parent_run_id, "runType": $run_type, "snapshotId": $snapshot_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/execution/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/snapshotrun") $qp)
+  let req_body = {"configuration": $configuration, "parentRunId": $parent_run_id, "runType": $run_type, "snapshotId": $snapshot_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Start a run on a local machine.
 #
 # POST /execution/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/startlocalrun
 # operationId: Runs_StartLocalRun
-# --configuration shape: {arguments?: list, communicator?: "None"|"ParameterServer"|"Gloo"|"Mpi"|"Nccl", dataReferences?: record, environment?: record, framework?: "Python"|"PySpark"|"Cntk"|"TensorFlow"|"PyTorch", hdi?: record, history?: record, jobName?: string, maxRunDurationSeconds?: int, mpi?: record, nodeCount?: int, script?: string, spark?: record, target?: string, tensorflow?: record}
-export def "execution-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-startlocalrun start-local-run" [
+# --configuration shape: {arguments?: list<string>, communicator?: "None"|"ParameterServer"|"Gloo"|"Mpi"|"Nccl", dataReferences?: record, environment?: record, framework?: "Python"|"PySpark"|"Cntk"|"TensorFlow"|"PyTorch", hdi?: record, history?: record, jobName?: string, maxRunDurationSeconds?: int, mpi?: record, nodeCount?: int, script?: string, spark?: record, target?: string, tensorflow?: record}
+export def "execution-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-startlocalrun start-runs-local-run" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -174,7 +210,7 @@ export def "execution-v10-subscriptions-resource-groups-providers-microsoft-mach
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --run-id: string # A run id. If not supplied a run id will be created automatically.
-  --configuration: record # shape: {arguments?: list, communicator?: "None"|"ParameterServer"|"Gloo"|"Mpi"|"Nccl", dataReferences?: record, environment?: record, framework?: "Python"|"PySpark"|"Cntk"|"TensorFlow"|"PyTorch", hdi?: record, history?: record, jobName?: string, maxRunDurationSeconds?: int, mpi?: record, nodeCount?: int, script?: string, spark?: record, target?: string, tensorflow?: record}
+  --configuration: record # shape: {arguments?: list<string>, communicator?: "None"|"ParameterServer"|"Gloo"|"Mpi"|"Nccl", dataReferences?: record, environment?: record, framework?: "Python"|"PySpark"|"Cntk"|"TensorFlow"|"PyTorch", hdi?: record, history?: record, jobName?: string, maxRunDurationSeconds?: int, mpi?: record, nodeCount?: int, script?: string, spark?: record, target?: string, tensorflow?: record}
   --parent-run-id: string # Specifies that the run history entry for this execution should be scoped within an existing run as a child. Defaults to null, meaning the run has no parent. This is intended for first-party service integration, not third-party API users. (e.g. myexperiment_155000000001_0)
   --run-type: string # Specifies the runsource property for this run. The default value is "experiment" if not specified. (e.g. experiment)
   --snapshot-id: string # Snapshots are user project folders that have been uploaded to the cloud for subsequent execution. This field is required when executing against cloud-based compute targets unless the run submission was against the API endpoint that takes a zipped project folder inline with the request. (format: uuid)
@@ -183,19 +219,19 @@ export def "execution-v10-subscriptions-resource-groups-providers-microsoft-mach
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "runId" $run_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name} | format pattern "/execution/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/startlocalrun") $qp)
-  let body = {"configuration": $configuration, "parentRunId": $parent_run_id, "runType": $run_type, "snapshotId": $snapshot_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/execution/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/startlocalrun") $qp)
+  let req_body = {"configuration": $configuration, "parentRunId": $parent_run_id, "runType": $run_type, "snapshotId": $snapshot_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Start a run on a remote compute target.
 #
 # POST /execution/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/experiments/{experimentName}/startrun
 # operationId: Runs_StartRun
-export def "execution-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-startrun start-run" [
+export def "execution-v1-0-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-experiments-startrun start-runs-run" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -216,12 +252,11 @@ export def "execution-v10-subscriptions-resource-groups-providers-microsoft-mach
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "runId" $run_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name} | format pattern "/execution/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/startrun") $qp)
-  let body = {"runDefinitionFile": $run_definition_file, "projectZipFile": $project_zip_file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/execution/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/startrun") $qp)
+  let req_body = {"runDefinitionFile": $run_definition_file, "projectZipFile": $project_zip_file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let body = if ($run_definition_file | is-not-empty) { $body | upsert runDefinitionFile (open -r $run_definition_file) } else { $body }
-  let body = if ($project_zip_file | is-not-empty) { $body | upsert projectZipFile (open -r $project_zip_file) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["runDefinitionFile" "projectZipFile"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }

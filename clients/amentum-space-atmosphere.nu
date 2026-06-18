@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -68,7 +77,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "jb2008 atmosphere" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "jb2008 get-sample-atmosphere" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /jb2008
 # operationId: app.api.endpoints.JB2008.sample_atmosphere
-export def "jb2008 atmosphere" [
+export def "jb2008 get-sample-atmosphere" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -122,7 +131,7 @@ export def "jb2008 atmosphere" [
 #
 # GET /nrlmsise00
 # operationId: app.api.endpoints.NRLMSISE00.sample_atmosphere
-export def "nrlmsise00 atmosphere" [
+export def "nrlmsise00 get-sample-atmosphere" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,9 +147,9 @@ export def "nrlmsise00 atmosphere" [
   --geodetic-latitude: float # GeodeticLatitude (deg) -90 to 90 deg (e.g. 42)
   --geodetic-longitude: float # GeodeticLongitude (deg) 0 to 360 deg (e.g. 42)
   --utc: float # Coordinated Universal Time (hrs) (e.g. 2)
-  --f107a: float # (Optional) 81 day average of F10.7 flux (SFU) centered on the specified day. F107 and F107A values correspond to the 10.7 cm radio flux at the actual distance of Earth from Sun rather than radio flux at 1 AU. F107, F107A, AP effects can be neglected below 80 km. If unspecified, values provided by the US National Oceanic and  Atmospheric Administration are retrieved automatically.  (e.g. 120)
-  --f107: float # (Optional) Daily F10.7 cm radio flux for previous day (SFU). F107 and F107A values correspond to the 10.7 cm radio flux at the actual distance of Earth from Sun rather than radio flux at 1 AU. F107, F107A, AP effects can be neglected below 80 km. If unspecified, values provided by the US National Oceanic and  Atmospheric Administration are retrieved automatically.  (e.g. 120)
-  --ap: float # (Optional) The Ap-index provides a daily average level for geomagnetic activity F107, F107A, AP effects can be neglected below 80 km. If unspecified, the average of values in the 24 hours preceding the date-time  are automatically calculated from data provided by GFZ German Research Centre  for Geosciences.  (e.g. 30)
+  --f107a: float # (Optional) 81 day average of F10.7 flux (SFU) centered on the specified day. F107 and F107A values correspond to the 10.7 cm radio flux at the actual distance of Earth from Sun rather than radio flux at 1 AU. F107, F107A, AP effects can be neglected below 80 km. If unspecified, values provided by the US National Oceanic and Atmospheric Administration are retrieved automatically. (e.g. 120)
+  --f107: float # (Optional) Daily F10.7 cm radio flux for previous day (SFU). F107 and F107A values correspond to the 10.7 cm radio flux at the actual distance of Earth from Sun rather than radio flux at 1 AU. F107, F107A, AP effects can be neglected below 80 km. If unspecified, values provided by the US National Oceanic and Atmospheric Administration are retrieved automatically. (e.g. 120)
+  --ap: float # (Optional) The Ap-index provides a daily average level for geomagnetic activity F107, F107A, AP effects can be neglected below 80 km. If unspecified, the average of values in the 24 hours preceding the date-time are automatically calculated from data provided by GFZ German Research Centre for Geosciences. (e.g. 30)
 ]: nothing -> record<Ar_density: record<units: string, value: float>, H_density: record<units: string, value: float>, He_density: record<units: string, value: float>, N2_density: record<units: string, value: float>, N_density: record<units: string, value: float>, O2_density: record<units: string, value: float>, O_density: record<units: string, value: float>, anomalous_O_density: record<units: string, value: float>, ap: record<value: float>, at_alt_temp: record<units: string, value: float>, exospheric_temp: record<units: string, value: float>, f107: record<units: string, value: float>, f107a: record<units: string, value: float>, total_mass_density: record<units: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -155,7 +164,7 @@ export def "nrlmsise00 atmosphere" [
 #
 # GET /wam-ipe
 # operationId: app.api_wfs.endpoints.WFS.get_values
-export def "wam-ipe values" [
+export def "wam-ipe get-values" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

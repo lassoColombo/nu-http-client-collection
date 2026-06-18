@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -114,7 +123,7 @@ export def "autofollow-strategies list" [
 #
 # POST /autofollow/strategies
 # --strategy shape: {apr?: string, author?: string, content?: string, description?: string, drawdown?: string, guid?: string, limitorder?: string, marketname?: string, multiposition?: string, name?: string, positionsize?: string, strategytypeid?: string, symbols?: string, timeframe?: string}
-export def "autofollow-strategies post" [
+export def "autofollow-strategies create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,11 +138,11 @@ export def "autofollow-strategies post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/autofollow/strategies")
-  let body = {"strategy": $strategy} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"strategy": $strategy} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get autofollow strategy by ID
@@ -152,7 +161,7 @@ export def "autofollow-strategies get" [
 ]: nothing -> record<apr: string, author: string, brokername: string, code: string, datascale: string, description: string, drawdown: string, folder: string, guid: string, image: string, limitorder: string, marketname: string, multiposition: string, name: string, owner: string, permissions: string, positionsize: string, risklevelcode: string, risklevelid: string, risklevelname: string, rules: record<longentry: list<record>, longexit: list<record>>, strategyid: string, strategytypeid: string, symbols: list<string>, taskfolder: string, taskid: string, taskresult: record<apr: string, curMonthProfit: string, curYearProfit: string, drawdown: string, halfYearProfit: string, monthProfit: string, prevMonthProfit: string, totalProfit: string, weekProfit: string, yearProfit: string>, timeframe: string, updatedate: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({strategyid: $strategyid} | format pattern "/autofollow/strategies/{strategyid}"))
+  let full_url = (build-url $base ({strategyid: (encode-path-segment $strategyid)} | format pattern "/autofollow/strategies/{strategyid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -162,7 +171,7 @@ export def "autofollow-strategies get" [
 #
 # PUT /autofollow/strategies/{strategyid}
 # --strategy shape: {author?: string, description?: string, limitorder?: string, marketname?: string, multiposition?: string, name?: string, symbols?: string}
-export def "autofollow-strategies put" [
+export def "autofollow-strategies update" [
   strategyid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -177,19 +186,19 @@ export def "autofollow-strategies put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({strategyid: $strategyid} | format pattern "/autofollow/strategies/{strategyid}"))
-  let body = {"strategy": $strategy} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({strategyid: (encode-path-segment $strategyid)} | format pattern "/autofollow/strategies/{strategyid}"))
+  let req_body = {"strategy": $strategy} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update rules for strategy that was created with strategy builder
 #
 # PUT /autofollow/strategies/{strategyid}/content
 # --strategy shape: {rules?: record}
-export def "autofollow-strategies-content put" [
+export def "autofollow-strategies-content update" [
   strategyid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -204,12 +213,12 @@ export def "autofollow-strategies-content put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({strategyid: $strategyid} | format pattern "/autofollow/strategies/{strategyid}/content"))
-  let body = {"strategy": $strategy} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({strategyid: (encode-path-segment $strategyid)} | format pattern "/autofollow/strategies/{strategyid}/content"))
+  let req_body = {"strategy": $strategy} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get positions for strategy
@@ -228,7 +237,7 @@ export def "autofollow-strategies-positions get" [
 ]: nothing -> table<date: string, price: string, size: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({strategyid: $strategyid} | format pattern "/autofollow/strategies/{strategyid}/positions"))
+  let full_url = (build-url $base ({strategyid: (encode-path-segment $strategyid)} | format pattern "/autofollow/strategies/{strategyid}/positions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -252,7 +261,7 @@ export def "autofollow-strategies-signals get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({strategyid: $strategyid} | format pattern "/autofollow/strategies/{strategyid}/signals") $qp)
+  let full_url = (build-url $base ({strategyid: (encode-path-segment $strategyid)} | format pattern "/autofollow/strategies/{strategyid}/signals") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -262,7 +271,7 @@ export def "autofollow-strategies-signals get" [
 #
 # POST /autofollow/strategies/{strategyid}/signals
 # --signal shape: {position?: string, price?: string, shares?: string, size?: string, symbol?: string, timestamp?: string, type?: string}
-export def "autofollow-strategies-signals post" [
+export def "autofollow-strategies-signals create" [
   strategyid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -277,12 +286,12 @@ export def "autofollow-strategies-signals post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({strategyid: $strategyid} | format pattern "/autofollow/strategies/{strategyid}/signals"))
-  let body = {"signal": $signal} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({strategyid: (encode-path-segment $strategyid)} | format pattern "/autofollow/strategies/{strategyid}/signals"))
+  let req_body = {"signal": $signal} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get strategy builder rules list
@@ -322,7 +331,7 @@ export def "builder-rules get" [
 ]: nothing -> table<category: string, description: string, guid: string, name: string, parameters: list<record>, ruletype: string, validnot: string, validor: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({ruleid: $ruleid} | format pattern "/builder/rules/{ruleid}"))
+  let full_url = (build-url $base ({ruleid: (encode-path-segment $ruleid)} | format pattern "/builder/rules/{ruleid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -352,7 +361,7 @@ export def "client-apikeys get" [
 # Create new API key
 #
 # POST /client/apikeys
-export def "client-apikeys post" [
+export def "client-apikeys create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,7 +395,7 @@ export def "client-apikeys delete" [
 ]: nothing -> record<keyid: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({keyid: $keyid} | format pattern "/client/apikeys/{keyid}"))
+  let full_url = (build-url $base ({keyid: (encode-path-segment $keyid)} | format pattern "/client/apikeys/{keyid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -416,7 +425,7 @@ export def "client-users list" [
 # Logs user into the system
 #
 # POST /client/users/login
-export def "client-users-login post" [
+export def "client-users-login create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -438,7 +447,7 @@ export def "client-users-login post" [
 #
 # POST /client/users/register
 # --user shape: {name?: string, password?: string, username?: string}
-export def "client-users-register post" [
+export def "client-users-register create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,11 +462,11 @@ export def "client-users-register post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/client/users/register")
-  let body = {"user": $user} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"user": $user} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get user by ID
@@ -476,7 +485,7 @@ export def "client-users get" [
 ]: nothing -> record<comments: string, createdby: string, name: string, regdate: string, userid: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({userid: $userid} | format pattern "/client/users/{userid}"))
+  let full_url = (build-url $base ({userid: (encode-path-segment $userid)} | format pattern "/client/users/{userid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -519,7 +528,7 @@ export def "cloud-accounts get" [
 ]: nothing -> record<account: string, accountid: string, accounttypename: string, cash: string, change: string, changepercent: string, comments: string, computer: string, currencyid: string, currencytext: string, hwid: string, positions: record, positionspercent: record, sessionid: string, typeid: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({accountid: $accountid} | format pattern "/cloud/accounts/{accountid}"))
+  let full_url = (build-url $base ({accountid: (encode-path-segment $accountid)} | format pattern "/cloud/accounts/{accountid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -528,7 +537,7 @@ export def "cloud-accounts get" [
 # Close all positions by account
 #
 # POST /cloud/accounts/{accountid}/closeall
-export def "cloud-accounts-closeall post" [
+export def "cloud-accounts-closeall create" [
   accountid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -541,7 +550,7 @@ export def "cloud-accounts-closeall post" [
 ]: nothing -> record<commandid: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({accountid: $accountid} | format pattern "/cloud/accounts/{accountid}/closeall"))
+  let full_url = (build-url $base ({accountid: (encode-path-segment $accountid)} | format pattern "/cloud/accounts/{accountid}/closeall"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -563,7 +572,7 @@ export def "cloud-accounts-orders get" [
 ]: nothing -> table<account: string, buy: string, message: string, number: string, orderid: string, price: string, shares: string, status: string, statusname: string, symbol: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({accountid: $accountid} | format pattern "/cloud/accounts/{accountid}/orders"))
+  let full_url = (build-url $base ({accountid: (encode-path-segment $accountid)} | format pattern "/cloud/accounts/{accountid}/orders"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -573,7 +582,7 @@ export def "cloud-accounts-orders get" [
 #
 # POST /cloud/accounts/{accountid}/orders
 # --order shape: {buy?: string, price?: string, shares?: string, symbol?: string, type?: string}
-export def "cloud-accounts-orders post" [
+export def "cloud-accounts-orders create" [
   accountid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -588,12 +597,12 @@ export def "cloud-accounts-orders post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({accountid: $accountid} | format pattern "/cloud/accounts/{accountid}/orders"))
-  let body = {"order": $order} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({accountid: (encode-path-segment $accountid)} | format pattern "/cloud/accounts/{accountid}/orders"))
+  let req_body = {"order": $order} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Cancel an order by ID
@@ -613,7 +622,7 @@ export def "cloud-accounts-orders delete" [
 ]: nothing -> record<commandid: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({accountid: $accountid, orderid: $orderid} | format pattern "/cloud/accounts/{accountid}/orders/{orderid}"))
+  let full_url = (build-url $base ({accountid: (encode-path-segment $accountid), orderid: (encode-path-segment $orderid)} | format pattern "/cloud/accounts/{accountid}/orders/{orderid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -635,7 +644,7 @@ export def "cloud-accounts-snapshots get" [
 ]: nothing -> table<cash: string, daynum: string, snapshotid: string, timestamp: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({accountid: $accountid} | format pattern "/cloud/accounts/{accountid}/snapshots"))
+  let full_url = (build-url $base ({accountid: (encode-path-segment $accountid)} | format pattern "/cloud/accounts/{accountid}/snapshots"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -644,7 +653,7 @@ export def "cloud-accounts-snapshots get" [
 # Syhchronize an account with account active strategies
 #
 # POST /cloud/accounts/{accountid}/sync
-export def "cloud-accounts-sync post" [
+export def "cloud-accounts-sync create" [
   accountid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -657,7 +666,7 @@ export def "cloud-accounts-sync post" [
 ]: nothing -> record<commandid: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({accountid: $accountid} | format pattern "/cloud/accounts/{accountid}/sync"))
+  let full_url = (build-url $base ({accountid: (encode-path-segment $accountid)} | format pattern "/cloud/accounts/{accountid}/sync"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -679,7 +688,7 @@ export def "cloud-accounts-trades get" [
 ]: nothing -> table<account: string, buy: string, number: string, price: string, shares: string, symbol: string, timestamp: string, tradeid: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({accountid: $accountid} | format pattern "/cloud/accounts/{accountid}/trades"))
+  let full_url = (build-url $base ({accountid: (encode-path-segment $accountid)} | format pattern "/cloud/accounts/{accountid}/trades"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -722,7 +731,7 @@ export def "cloud-commands get" [
 ]: nothing -> record<account: string, accountid: string, commanddate: string, commandid: string, commandstatusname: string, commandtypename: string, computer: string, hwid: string, message: string, parameters: record, status: string, timestamp: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({commandid: $commandid} | format pattern "/cloud/commands/{commandid}"))
+  let full_url = (build-url $base ({commandid: (encode-path-segment $commandid)} | format pattern "/cloud/commands/{commandid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -753,7 +762,7 @@ export def "cloud-connections list" [
 #
 # POST /cloud/connections
 # --connection shape: {active?: string, connectorid?: string, host?: string, login?: string, password?: string, port?: string}
-export def "cloud-connections post" [
+export def "cloud-connections create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -768,11 +777,11 @@ export def "cloud-connections post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cloud/connections")
-  let body = {"connection": $connection} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"connection": $connection} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete connection by ID
@@ -791,7 +800,7 @@ export def "cloud-connections delete" [
 ]: nothing -> record<connectionid: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({connectionid: $connectionid} | format pattern "/cloud/connections/{connectionid}"))
+  let full_url = (build-url $base ({connectionid: (encode-path-segment $connectionid)} | format pattern "/cloud/connections/{connectionid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -813,7 +822,7 @@ export def "cloud-connections get" [
 ]: nothing -> record<active: string, connectionid: string, connectionstring: string, connectorcode: string, connectorid: string, connectorname: string, connectortypename: string, creationdate: string, host: string, login: string, password: string, port: string, sessionid: string, updatedate: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({connectionid: $connectionid} | format pattern "/cloud/connections/{connectionid}"))
+  let full_url = (build-url $base ({connectionid: (encode-path-segment $connectionid)} | format pattern "/cloud/connections/{connectionid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -823,7 +832,7 @@ export def "cloud-connections get" [
 #
 # PUT /cloud/connections/{connectionid}
 # --connection shape: {active?: string, connectorid?: string, host?: string, login?: string, password?: string, port?: string}
-export def "cloud-connections put" [
+export def "cloud-connections update" [
   connectionid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -838,12 +847,12 @@ export def "cloud-connections put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({connectionid: $connectionid} | format pattern "/cloud/connections/{connectionid}"))
-  let body = {"connection": $connection} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({connectionid: (encode-path-segment $connectionid)} | format pattern "/cloud/connections/{connectionid}"))
+  let req_body = {"connection": $connection} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get available connectors list
@@ -883,7 +892,7 @@ export def "cloud-connectors get" [
 ]: nothing -> record<code: string, connectorid: string, connectortypename: string, name: string, typeid: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({connectorid: $connectorid} | format pattern "/cloud/connectors/{connectorid}"))
+  let full_url = (build-url $base ({connectorid: (encode-path-segment $connectorid)} | format pattern "/cloud/connectors/{connectorid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -926,7 +935,7 @@ export def "cloud-sessions get" [
 ]: nothing -> record<computer: string, hwid: string, login: string, mode: string, sessionid: string, sessionmodename: string, sessionstatusname: string, status: string, timestamp: string, type: string, userid: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({sessionid: $sessionid} | format pattern "/cloud/sessions/{sessionid}"))
+  let full_url = (build-url $base ({sessionid: (encode-path-segment $sessionid)} | format pattern "/cloud/sessions/{sessionid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -957,7 +966,7 @@ export def "cloud-strategies list" [
 #
 # POST /cloud/strategies/start
 # --data shape: {accountid?: string, strategyid?: string}
-export def "cloud-strategies-start post" [
+export def "cloud-strategies-start create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -972,11 +981,11 @@ export def "cloud-strategies-start post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cloud/strategies/start")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get active (executing) strategy by ID
@@ -995,7 +1004,7 @@ export def "cloud-strategies get" [
 ]: nothing -> table<account: string, computer: string, hwid: string, message: string, status: string, strategy: string, strategyid: string, strategystatusname: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({strategyid: $strategyid} | format pattern "/cloud/strategies/{strategyid}"))
+  let full_url = (build-url $base ({strategyid: (encode-path-segment $strategyid)} | format pattern "/cloud/strategies/{strategyid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1004,7 +1013,7 @@ export def "cloud-strategies get" [
 # Stop a strategy execution by ID
 #
 # POST /cloud/strategies/{strategyid}/stop
-export def "cloud-strategies-stop post" [
+export def "cloud-strategies-stop create" [
   strategyid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1017,7 +1026,7 @@ export def "cloud-strategies-stop post" [
 ]: nothing -> record<commandid: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({strategyid: $strategyid} | format pattern "/cloud/strategies/{strategyid}/stop"))
+  let full_url = (build-url $base ({strategyid: (encode-path-segment $strategyid)} | format pattern "/cloud/strategies/{strategyid}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1060,7 +1069,7 @@ export def "marketdata-markets get" [
 ]: nothing -> record<code: string, countryid: string, marketid: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({marketid: $marketid} | format pattern "/marketdata/markets/{marketid}"))
+  let full_url = (build-url $base ({marketid: (encode-path-segment $marketid)} | format pattern "/marketdata/markets/{marketid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1106,7 +1115,7 @@ export def "marketdata-symbols get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({symbolid: $symbolid} | format pattern "/marketdata/symbols/{symbolid}"))
+  let full_url = (build-url $base ({symbolid: (encode-path-segment $symbolid)} | format pattern "/marketdata/symbols/{symbolid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1132,7 +1141,7 @@ export def "marketdata-symbols-histdata get" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tf" $tf "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({symbolid: $symbolid} | format pattern "/marketdata/symbols/{symbolid}/histdata") $qp)
+  let full_url = (build-url $base ({symbolid: (encode-path-segment $symbolid)} | format pattern "/marketdata/symbols/{symbolid}/histdata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1175,7 +1184,7 @@ export def "news-news get" [
 ]: nothing -> record<body: string, newsid: string, source: string, timestamp: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({newsid: $newsid} | format pattern "/news/news/{newsid}"))
+  let full_url = (build-url $base ({newsid: (encode-path-segment $newsid)} | format pattern "/news/news/{newsid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1227,7 +1236,7 @@ export def "taskmanager-tasks list" [
 #
 # POST /taskmanager/tasks
 # --task shape: {isbenchmark?: string, strategyid?: string, tasktypeid?: string, userid2?: string}
-export def "taskmanager-tasks post" [
+export def "taskmanager-tasks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1242,11 +1251,11 @@ export def "taskmanager-tasks post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/taskmanager/tasks")
-  let body = {"task": $task} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"task": $task} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get task by ID
@@ -1265,7 +1274,7 @@ export def "taskmanager-tasks get" [
 ]: nothing -> record<isbenchmark: string, name: string, status: string, statusupdatedate: string, strategyid: string, taskid: string, usestaticdata: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({taskid: $taskid} | format pattern "/taskmanager/tasks/{taskid}"))
+  let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1287,7 +1296,7 @@ export def "taskmanager-tasks-bymonths get" [
 ]: nothing -> table<equitypct: string, period: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({taskid: $taskid} | format pattern "/taskmanager/tasks/{taskid}/bymonths"))
+  let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/bymonths"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1309,7 +1318,7 @@ export def "taskmanager-tasks-byquarters get" [
 ]: nothing -> table<equitypct: string, period: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({taskid: $taskid} | format pattern "/taskmanager/tasks/{taskid}/byquarters"))
+  let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/byquarters"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1331,7 +1340,7 @@ export def "taskmanager-tasks-byyears get" [
 ]: nothing -> table<equitypct: string, period: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({taskid: $taskid} | format pattern "/taskmanager/tasks/{taskid}/byyears"))
+  let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/byyears"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1353,7 +1362,7 @@ export def "taskmanager-tasks-contribution get" [
 ]: nothing -> table<pandl: string, share: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({taskid: $taskid} | format pattern "/taskmanager/tasks/{taskid}/contribution"))
+  let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/contribution"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1375,7 +1384,7 @@ export def "taskmanager-tasks-drawdown get" [
 ]: nothing -> table<drawdownpct: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({taskid: $taskid} | format pattern "/taskmanager/tasks/{taskid}/drawdown"))
+  let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/drawdown"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1397,7 +1406,7 @@ export def "taskmanager-tasks-equity get" [
 ]: nothing -> table<cash: string, equity: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({taskid: $taskid} | format pattern "/taskmanager/tasks/{taskid}/equity"))
+  let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/equity"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1419,7 +1428,7 @@ export def "taskmanager-tasks-equitypct get" [
 ]: nothing -> table<buyandhold: string, equity: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({taskid: $taskid} | format pattern "/taskmanager/tasks/{taskid}/equitypct"))
+  let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/equitypct"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1441,7 +1450,7 @@ export def "taskmanager-tasks-equitypctsm get" [
 ]: nothing -> table<buyandhold: string, equity: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({taskid: $taskid} | format pattern "/taskmanager/tasks/{taskid}/equitypctsm"))
+  let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/equitypctsm"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1463,7 +1472,7 @@ export def "taskmanager-tasks-folder get" [
 ]: nothing -> record<folder: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({taskid: $taskid} | format pattern "/taskmanager/tasks/{taskid}/folder"))
+  let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/folder"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1485,7 +1494,7 @@ export def "taskmanager-tasks-performance get" [
 ]: nothing -> record<buyandhold: record<apr: string, avgbarsheld: string, avgloss: string, avglossbarsheld: string, avglosspct: string, avgprofit: string, avgprofitavgloss: string, avgprofitbarsheld: string, avgprofitpct: string, endcapital: string, exposure: string, grossloss: string, grossprofit: string, losingtrades: string, losingtradespct: string, mar: string, margininterest: string, maxconsecloss: string, maxconsecwin: string, maxdrawdown: string, maxdrawdowndate: string, maxdrawdownlength: string, maxdrawdownpct: string, maxdrawdownpctdate: string, mpr: string, netprofit: string, netprofitpct: string, profitabletrades: string, profitabletradespct: string, profitfactor: string, profitriskratio: string, rar: string, recoveryfactor: string, sharperatio: string, sortinoratio: string, startcapital: string, totalcommission: string, totaltrades: string, totalvolume: string, turnover: string>, long: record<apr: string, avgbarsheld: string, avgloss: string, avglossbarsheld: string, avglosspct: string, avgprofit: string, avgprofitavgloss: string, avgprofitbarsheld: string, avgprofitpct: string, endcapital: string, exposure: string, grossloss: string, grossprofit: string, losingtrades: string, losingtradespct: string, mar: string, margininterest: string, maxconsecloss: string, maxconsecwin: string, maxdrawdown: string, maxdrawdowndate: string, maxdrawdownlength: string, maxdrawdownpct: string, maxdrawdownpctdate: string, mpr: string, netprofit: string, netprofitpct: string, profitabletrades: string, profitabletradespct: string, profitfactor: string, profitriskratio: string, rar: string, recoveryfactor: string, sharperatio: string, sortinoratio: string, startcapital: string, totalcommission: string, totaltrades: string, totalvolume: string, turnover: string>, longshort: record<apr: string, avgbarsheld: string, avgloss: string, avglossbarsheld: string, avglosspct: string, avgprofit: string, avgprofitavgloss: string, avgprofitbarsheld: string, avgprofitpct: string, endcapital: string, exposure: string, grossloss: string, grossprofit: string, losingtrades: string, losingtradespct: string, mar: string, margininterest: string, maxconsecloss: string, maxconsecwin: string, maxdrawdown: string, maxdrawdowndate: string, maxdrawdownlength: string, maxdrawdownpct: string, maxdrawdownpctdate: string, mpr: string, netprofit: string, netprofitpct: string, profitabletrades: string, profitabletradespct: string, profitfactor: string, profitriskratio: string, rar: string, recoveryfactor: string, sharperatio: string, sortinoratio: string, startcapital: string, totalcommission: string, totaltrades: string, totalvolume: string, turnover: string>, short: record<apr: string, avgbarsheld: string, avgloss: string, avglossbarsheld: string, avglosspct: string, avgprofit: string, avgprofitavgloss: string, avgprofitbarsheld: string, avgprofitpct: string, endcapital: string, exposure: string, grossloss: string, grossprofit: string, losingtrades: string, losingtradespct: string, mar: string, margininterest: string, maxconsecloss: string, maxconsecwin: string, maxdrawdown: string, maxdrawdowndate: string, maxdrawdownlength: string, maxdrawdownpct: string, maxdrawdownpctdate: string, mpr: string, netprofit: string, netprofitpct: string, profitabletrades: string, profitabletradespct: string, profitfactor: string, profitriskratio: string, rar: string, recoveryfactor: string, sharperatio: string, sortinoratio: string, startcapital: string, totalcommission: string, totaltrades: string, totalvolume: string, turnover: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({taskid: $taskid} | format pattern "/taskmanager/tasks/{taskid}/performance"))
+  let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/performance"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1507,7 +1516,7 @@ export def "taskmanager-tasks-result get" [
 ]: nothing -> record<bymonths_csv: string, bymonths_png: string, byquarters_csv: string, byquarters_png: string, byyears_csv: string, byyears_png: string, contribution_csv: string, contribution_png: string, drawdown_csv: string, drawdown_png: string, equity_csv: string, equity_png: string, equitypct_csv: string, equitypct_png: string, equitypctnofill_csv: string, equitypctnofill_png: string, equitypctsm: string, equitypctsm_csv: string, equitypctsm_png: string, performance_csv: string, performance_png: string, trades_csv: string, trades_png: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({taskid: $taskid} | format pattern "/taskmanager/tasks/{taskid}/result"))
+  let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/result"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1529,7 +1538,7 @@ export def "taskmanager-tasks-result2 get" [
 ]: nothing -> record<apr: string, curMonthProfit: string, curYearProfit: string, drawdown: string, halfYearProfit: string, monthProfit: string, prevMonthProfit: string, totalProfit: string, weekProfit: string, yearProfit: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({taskid: $taskid} | format pattern "/taskmanager/tasks/{taskid}/result2"))
+  let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/result2"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1551,7 +1560,7 @@ export def "taskmanager-tasks-status get" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({taskid: $taskid} | format pattern "/taskmanager/tasks/{taskid}/status"))
+  let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1573,7 +1582,7 @@ export def "taskmanager-tasks-trades get" [
 ]: nothing -> table<barsheld: string, changepct: string, commission: string, entrydatetime: string, entryprice: string, entrysignal: string, exitdatetime: string, exitprice: string, exitsignal: string, mae: string, mfe: string, pandl: string, position: string, shares: string, size: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({taskid: $taskid} | format pattern "/taskmanager/tasks/{taskid}/trades"))
+  let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/trades"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

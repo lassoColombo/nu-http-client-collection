@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def level-completer [] { ["default" "picky"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "check post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "check create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 # Check a text
 #
 # POST /check
-export def "check post" [
+export def "check create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,10 +112,10 @@ export def "check post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --text: string # The text to be checked. This or 'data' is required.
-  --data: string # The text to be checked, given as a JSON document that specifies what's text and what's markup. This or 'text' is required. Markup will be ignored when looking for errors. Example text: <pre>A &lt;b>test&lt;/b></pre>JSON for the example text: <pre>{"annotation":[  {"text": "A "},  {"markup": "&lt;b>"},  {"text": "test"},  {"markup": "&lt;/b>"} ]}</pre> <p>If you have markup that should be interpreted as whitespace, like <tt>&lt;p&gt;</tt> in HTML, you can have it interpreted like this: <pre>{"markup": "&lt;p&gt;", "interpretAs": "\n\n"}</pre><p>The 'data' feature is not limited to HTML or XML, it can be used for any kind of markup. Entities will need to be expanded in this input.
+  --data: string # The text to be checked, given as a JSON document that specifies what's text and what's markup. This or 'text' is required. Markup will be ignored when looking for errors. Example text: A <b>test</b>JSON for the example text: {"annotation":[ {"text": "A "}, {"markup": "<b>"}, {"text": "test"}, {"markup": "</b>"} ]} If you have markup that should be interpreted as whitespace, like <p> in HTML, you can have it interpreted like this: {"markup": "<p>", "interpretAs": "\n\n"}The 'data' feature is not limited to HTML or XML, it can be used for any kind of markup. Entities will need to be expanded in this input.
   language: string # A language code like `en-US`, `de-DE`, `fr`, or `auto` to guess the language automatically (see `preferredVariants` below). For languages with variants (English, German, Portuguese) spell checking will only be activated when you specify the variant, e.g. `en-GB` instead of just `en`.
   --username: string # Set to get Premium API access: Your username/email as used to log in at languagetool.org.
-  --api-key: string # Set to get Premium API access: <a target='_blank' href='https://languagetool.org/editor/settings/access-tokens'>your API key</a>
+  --api-key: string # Set to get Premium API access: your API key
   --dicts: string # Comma-separated list of dictionaries to include words from; uses special default dictionary if this is unset
   --mother-tongue: string # A language code of the user's native language, enabling false friends checks for some language pairs.
   --preferred-variants: string # Comma-separated list of preferred language variants. The language detector used with `language=auto` can detect e.g. English, but it cannot decide whether British English or American English is used. Thus this parameter can be used to specify the preferred variants like `en-GB` and `de-AT`. Only available with `language=auto`. You should set variants for at least German and English, as otherwise the spell checking will not work for those, as no spelling dictionary can be selected for just `en` or `de`.
@@ -121,11 +130,12 @@ export def "check post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/check")
-  let body = {"text": $text, "data": $data, "language": $language, "username": $username, "apiKey": $api_key, "dicts": $dicts, "motherTongue": $mother_tongue, "preferredVariants": $preferred_variants, "enabledRules": $enabled_rules, "disabledRules": $disabled_rules, "enabledCategories": $enabled_categories, "disabledCategories": $disabled_categories, "enabledOnly": $enabled_only, "level": $level} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"text": $text, "data": $data, "language": $language, "username": $username, "apiKey": $api_key, "dicts": $dicts, "motherTongue": $mother_tongue, "preferredVariants": $preferred_variants, "enabledRules": $enabled_rules, "disabledRules": $disabled_rules, "enabledCategories": $enabled_categories, "disabledCategories": $disabled_categories, "enabledOnly": $enabled_only, "level": $level} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Get a list of supported languages.
@@ -164,7 +174,7 @@ export def "words get" [
   --offset: int # Offset of where to start in the list of words. Defaults to 0.
   --limit: int # Maximum number of words to return. Defaults to 10.
   --username: string # Your username as used to log in at languagetool.org.
-  --api-key: string # <a target='_blank' href='https://languagetool.org/editor/settings/access-tokens'>Your API key</a> (format: password)
+  --api-key: string # Your API key (format: password)
   --dicts: string # Comma-separated list of dictionaries to include words from; uses special default dictionary if this is unset
 ]: nothing -> record<words: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -179,7 +189,7 @@ export def "words get" [
 # Add word to a dictionary
 #
 # POST /words/add
-export def "words-add post" [
+export def "words-add create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,24 +200,25 @@ export def "words-add post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   word: string # The word to be added. Must not be a phrase, i.e. cannot contain white space. The word is added to a global dictionary that applies to all languages.
   username: string # Your username as used to log in at languagetool.org.
-  api_key: string # <a target='_blank' href='https://languagetool.org/editor/settings/access-tokens'>Your API key</a>
+  api_key: string # Your API key
   --dict: string # Name of the dictionary to add the word to; non-existent dictionaries are created after calling this; if unset, adds to special default dictionary
 ]: any -> record<added: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/words/add")
-  let body = {"word": $word, "username": $username, "apiKey": $api_key, "dict": $dict} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"word": $word, "username": $username, "apiKey": $api_key, "dict": $dict} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Remove word from a dictionary
 #
 # POST /words/delete
-export def "words-delete post" [
+export def "words-delete create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,16 +229,17 @@ export def "words-delete post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   word: string # The word to be removed.
   username: string # Your username as used to log in at languagetool.org.
-  api_key: string # <a target='_blank' href='https://languagetool.org/editor/settings/access-tokens'>Your API key</a>
+  api_key: string # Your API key
   --dict: string # Name of the dictionary to remove the word from; if the dictionary is empty upon calling this, it is deleted; if unset, removes from special default dictionary
 ]: any -> record<deleted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/words/delete")
-  let body = {"word": $word, "username": $username, "apiKey": $api_key, "dict": $dict} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"word": $word, "username": $username, "apiKey": $api_key, "dict": $dict} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }

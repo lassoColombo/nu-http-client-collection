@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "suggestions get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "suggestions get-getsuggestions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /suggestions
 # operationId: Getsuggestions
-export def "suggestions get" [
+export def "suggestions get-getsuggestions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,10 +128,10 @@ export def "suggestions get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "seller" $seller "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "hasmapping" $hasmapping "scalar") (serialize-qp "matcherid" $matcherid "scalar") (serialize-qp "_from" $qp_from "scalar") (serialize-qp "_to" $qp_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suggestions" $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -130,7 +139,7 @@ export def "suggestions get" [
 #
 # GET /suggestions/configuration
 # operationId: Getaccountconfig
-export def "suggestions-configuration get-accountconfig" [
+export def "suggestions-configuration get-getaccountconfig" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,10 +156,10 @@ export def "suggestions-configuration get-accountconfig" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suggestions/configuration" $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -160,7 +169,7 @@ export def "suggestions-configuration get-accountconfig" [
 # operationId: Saveaccountconfig
 # --Matchers item shape: {Description?: string, IsActive: bool, MatcherId: string, UpdatesNotificationEndpoint: string, hook-base-address: string}
 # --Score shape: {Approve: int, Reject: int}
-export def "suggestions-configuration put" [
+export def "suggestions-configuration update-saveaccountconfig" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,30 +181,32 @@ export def "suggestions-configuration put" [
   --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
   --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
   --content-type: string # Describes the type of the content being sent.
-  match_flux: string # This field determines the type of approval configuration applied to SKUs received  from a seller. The possible values include:   - `default` where the Matcher reviews the SKU, and approves it based on its score   - `manual` for manual approvals through the Received SKU UI or Match API   - `autoApprove` for every SKU received from a given seller to be approved automatically, regardless of the Matcher Score. (default: autoApprove)
+  match_flux: string # This field determines the type of approval configuration applied to SKUs received from a seller. The possible values include: - `default` where the Matcher reviews the SKU, and approves it based on its score - `manual` for manual approvals through the Received SKU UI or Match API - `autoApprove` for every SKU received from a given seller to be approved automatically, regardless of the Matcher Score. (default: autoApprove)
   matchers: list # Matchers for approving and rejecting SKUs received from sellers. — item shape: {Description?: string, IsActive: bool, MatcherId: string, UpdatesNotificationEndpoint: string, hook-base-address: string}
   score: record # Matcher rates received SKUs by comparing the data sent by sellers to existing fields in the marketplace. The calculation of these scores determines whether the product has been: `Approved` or `Denied`. — shape: {Approve: int, Reject: int}
-  specifications_mapping: list # This attribute maps product and SKU specifications.
+  specifications_mapping: list<string> # This attribute maps product and SKU specifications.
 ]: any -> record<MatchFlux: string, Matchers: list<any>, Rules: record<Item: list<int>, Product: list<string>>, Score: record<Approve: int, Reject: int>, SpecificationsMapping: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suggestions/configuration" $qp)
-  let body = {"MatchFlux": $match_flux, "Matchers": $matchers, "Score": $score, "SpecificationsMapping": $specifications_mapping} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"MatchFlux": $match_flux, "Matchers": $matchers, "Score": $score, "SpecificationsMapping": $specifications_mapping} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get autoApprove Status in Account Settings
 #
 # GET /suggestions/configuration/autoapproval/toggle
 # operationId: GetautoApprovevaluefromconfig
-export def "suggestions-configuration-autoapproval-toggle get-auto-approvevaluefromconfig" [
+export def "suggestions-configuration-autoapproval-toggle get-getauto-approvevaluefromconfig" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,10 +224,10 @@ export def "suggestions-configuration-autoapproval-toggle get-auto-approvevaluef
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sellerId" $seller_id "scalar") (serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suggestions/configuration/autoapproval/toggle" $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -224,7 +235,7 @@ export def "suggestions-configuration-autoapproval-toggle get-auto-approvevaluef
 #
 # PUT /suggestions/configuration/autoapproval/toggle
 # operationId: Saveautoapproveforaccount
-export def "suggestions-configuration-autoapproval-toggle put" [
+export def "suggestions-configuration-autoapproval-toggle update-saveautoapproveforaccount" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,20 +254,22 @@ export def "suggestions-configuration-autoapproval-toggle put" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suggestions/configuration/autoapproval/toggle" $qp)
-  let body = {"Enabled": $enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"Enabled": $enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Activate autoApprove Setting for a Seller
 #
 # PUT /suggestions/configuration/autoapproval/toggle/seller/{sellerId}
 # operationId: Saveautoapproveforaccountseller
-export def "suggestions-configuration-autoapproval-toggle-seller put" [
+export def "suggestions-configuration-autoapproval-toggle-seller update-saveautoapproveforaccountseller" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -275,21 +288,23 @@ export def "suggestions-configuration-autoapproval-toggle-seller put" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id} | format pattern "/suggestions/configuration/autoapproval/toggle/seller/{seller_id}") $qp)
-  let body = {"Enabled": $enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/suggestions/configuration/autoapproval/toggle/seller/{seller_id}") $qp)
+  let req_body = {"Enabled": $enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get Seller's Approval Settings
 #
 # GET /suggestions/configuration/seller/{sellerId}
 # operationId: Getselleraccountconfig
-export def "suggestions-configuration-seller get-selleraccountconfig" [
+export def "suggestions-configuration-seller get-getselleraccountconfig" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -306,11 +321,11 @@ export def "suggestions-configuration-seller get-selleraccountconfig" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id} | format pattern "/suggestions/configuration/seller/{seller_id}") $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/suggestions/configuration/seller/{seller_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -318,7 +333,7 @@ export def "suggestions-configuration-seller get-selleraccountconfig" [
 #
 # PUT /suggestions/configuration/seller/{sellerId}
 # operationId: Putselleraccountconfig
-export def "suggestions-configuration-seller update-selleraccountconfig" [
+export def "suggestions-configuration-seller update-putselleraccountconfig" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -331,29 +346,31 @@ export def "suggestions-configuration-seller update-selleraccountconfig" [
   --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
   --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
   --content-type: string # Describes the type of the content being sent.
-  --mapping: record # Mapping of SKU and product Specifications. This object should be sent in the following format for all fields you wish to map:  {specificationName}:{specificationValue},  Example:  Choose voltage: Voltage,  Choose size: Size (nullable, default: {Choose size: Size, Choose type: Type, Choose voltage: Voltage, Choose volume: Volume})
-  match_flux: string # This field determines the type of approval configuration applied to SKUs received  from a seller. The possible values include:   - `default` where the Matcher reviews the SKU, and approves it based on its score   - `manual` for manual approvals through the Received SKU UI or Match API   - `autoApprove` for every SKU received from a given seller to be approved automatically, regardless of the Matcher Score. (default: autoApprove)
+  --mapping: record # Mapping of SKU and product Specifications. This object should be sent in the following format for all fields you wish to map: {specificationName}:{specificationValue}, Example: Choose voltage: Voltage, Choose size: Size (nullable, default: {Choose size: Size, Choose type: Type, Choose voltage: Voltage, Choose volume: Volume})
+  match_flux: string # This field determines the type of approval configuration applied to SKUs received from a seller. The possible values include: - `default` where the Matcher reviews the SKU, and approves it based on its score - `manual` for manual approvals through the Received SKU UI or Match API - `autoApprove` for every SKU received from a given seller to be approved automatically, regardless of the Matcher Score. (default: autoApprove)
   --body-seller-id: string # A string that identifies the seller in the marketplace. This ID must be created by the marketplace. (default: seller123)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id} | format pattern "/suggestions/configuration/seller/{seller_id}") $qp)
-  let body = {"mapping": $mapping, "matchFlux": $match_flux, "sellerId": $body_seller_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/suggestions/configuration/seller/{seller_id}") $qp)
+  let req_body = {"mapping": $mapping, "matchFlux": $match_flux, "sellerId": $body_seller_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Match Multiple Received SKUs
 #
 # PUT /suggestions/matches/action/{actionName}
 # operationId: MatchMultiple
-export def "suggestions-matches-action put" [
+export def "suggestions-matches-action update-match-multiple" [
   action_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -372,13 +389,16 @@ export def "suggestions-matches-action put" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({action_name: $action_name} | format pattern "/suggestions/matches/action/{action_name}") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({action_name: (encode-path-segment $action_name)} | format pattern "/suggestions/matches/action/{action_name}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Delete SKU Suggestion
@@ -403,11 +423,11 @@ export def "suggestions delete" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id, seller_sku_id: $seller_sku_id} | format pattern "/suggestions/{seller_id}/{seller_sku_id}") $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), seller_sku_id: (encode-path-segment $seller_sku_id)} | format pattern "/suggestions/{seller_id}/{seller_sku_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -415,7 +435,7 @@ export def "suggestions delete" [
 #
 # GET /suggestions/{sellerId}/{sellerSkuId}
 # operationId: GetSuggestion
-export def "suggestions get-by-sellerId-sellerSkuId" [
+export def "suggestions get" [
   seller_id: string
   seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -433,11 +453,11 @@ export def "suggestions get-by-sellerId-sellerSkuId" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id, seller_sku_id: $seller_sku_id} | format pattern "/suggestions/{seller_id}/{seller_sku_id}") $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), seller_sku_id: (encode-path-segment $seller_sku_id)} | format pattern "/suggestions/{seller_id}/{seller_sku_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -447,9 +467,9 @@ export def "suggestions get-by-sellerId-sellerSkuId" [
 # operationId: SaveSuggestion
 # --Images item shape: {imageName: string, imageUrl: string}
 # --Pricing shape: {Currency?: string, CurrencySymbol?: string, SalePrice?: int}
-# --ProductSpecifications item shape: {fieldName?: string, fieldValues?: list}
-# --SkuSpecifications item shape: {fieldName?: string, fieldValues?: list}
-export def "suggestions put" [
+# --ProductSpecifications item shape: {fieldName?: string, fieldValues?: list<string>}
+# --SkuSpecifications item shape: {fieldName?: string, fieldValues?: list<string>}
+export def "suggestions update-save" [
   seller_id: string
   seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -475,12 +495,12 @@ export def "suggestions put" [
   product_description: string # Product Description containing the main information about the product (not the SKU).
   product_id: string # Product ID in seller's account. (default: 1234)
   product_name: string # Name of the suggested product. This field has a limit of 150 characters. (default: )
-  --product-specifications: list # Array containing the names and values of the product specifications. — item shape: {fieldName?: string, fieldValues?: list}
+  --product-specifications: list # Array containing the names and values of the product specifications. — item shape: {fieldName?: string, fieldValues?: list<string>}
   ref_id: string # SKU reference code. Mandotory if the EAN is not informed. (default: REF10)
   --body-seller-id: string # ID of the seller in the marketplace. This ID must be created by the marketplace and informed to the seller before the integration is built. (default: 1)
   --seller-stock-keeping-unit-id: int # ID of the SKU registered in the seller. (format: int32)
   sku_name: string # Name of the suggested SKU.
-  --sku-specifications: list # Array containing the names and values of the SKU specifications. — item shape: {fieldName?: string, fieldValues?: list}
+  --sku-specifications: list # Array containing the names and values of the SKU specifications. — item shape: {fieldName?: string, fieldValues?: list<string>}
   --unit-multiplier: int # Unit multiplier for this SKU. If this information doesn't apply, you should use the default value `1`. (format: int32)
   weight: int # Weight of the SKU in grams. (format: decimal, default: 100)
   width: int # Width of the SKU. (format: decimal, default: 10)
@@ -489,14 +509,16 @@ export def "suggestions put" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id, seller_sku_id: $seller_sku_id} | format pattern "/suggestions/{seller_id}/{seller_sku_id}") $qp)
-  let body = {"AvailableQuantity": $available_quantity, "BrandName": $brand_name, "CategoryFullPath": $category_full_path, "EAN": $ean, "Height": $height, "Images": $images, "Length": $length, "MeasurementUnit": $measurement_unit, "Pricing": $pricing, "ProductDescription": $product_description, "ProductId": $product_id, "ProductName": $product_name, "ProductSpecifications": $product_specifications, "RefId": $ref_id, "SellerId": $body_seller_id, "SellerStockKeepingUnitId": $seller_stock_keeping_unit_id, "SkuName": $sku_name, "SkuSpecifications": $sku_specifications, "UnitMultiplier": $unit_multiplier, "Weight": $weight, "Width": $width} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), seller_sku_id: (encode-path-segment $seller_sku_id)} | format pattern "/suggestions/{seller_id}/{seller_sku_id}") $qp)
+  let req_body = {"AvailableQuantity": $available_quantity, "BrandName": $brand_name, "CategoryFullPath": $category_full_path, "EAN": $ean, "Height": $height, "Images": $images, "Length": $length, "MeasurementUnit": $measurement_unit, "Pricing": $pricing, "ProductDescription": $product_description, "ProductId": $product_id, "ProductName": $product_name, "ProductSpecifications": $product_specifications, "RefId": $ref_id, "SellerId": $body_seller_id, "SellerStockKeepingUnitId": $seller_stock_keeping_unit_id, "SkuName": $sku_name, "SkuSpecifications": $sku_specifications, "UnitMultiplier": $unit_multiplier, "Weight": $weight, "Width": $width} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }
 
 # Get all Versions
@@ -521,11 +543,11 @@ export def "suggestions-versions get" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id, sellerskuid: $sellerskuid} | format pattern "/suggestions/{seller_id}/{sellerskuid}/versions") $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), sellerskuid: (encode-path-segment $sellerskuid)} | format pattern "/suggestions/{seller_id}/{sellerskuid}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -552,11 +574,11 @@ export def "suggestions-versions get-suggestionbyversion" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id, sellerskuid: $sellerskuid, version: $version} | format pattern "/suggestions/{seller_id}/{sellerskuid}/versions/{version}") $qp)
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), sellerskuid: (encode-path-segment $sellerskuid), version: (encode-path-segment $version)} | format pattern "/suggestions/{seller_id}/{sellerskuid}/versions/{version}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -565,8 +587,8 @@ export def "suggestions-versions get-suggestionbyversion" [
 # PUT /suggestions/{sellerId}/{sellerskuid}/versions/{version}/matches/{matchid}
 # operationId: Match
 # --product shape: {brandId: int, categoryId: int, description: string, name: string, specifications: string}
-# --sku shape: {eans: list, height: int, images: list, length: int, measurementUnit: string, name: string, refId: string, specifications: record, unitMultiplier: int, weight: int, width: int}
-export def "suggestions-versions-matches put" [
+# --sku shape: {eans: list<string>, height: int, images: list, length: int, measurementUnit: string, name: string, refId: string, specifications: record, unitMultiplier: int, weight: int, width: int}
+export def "suggestions-versions-matches update-match" [
   seller_id: string
   sellerskuid: string
   version: string
@@ -582,24 +604,26 @@ export def "suggestions-versions-matches put" [
   --account-name: string # Name of the VTEX account. Used as part of the URL (default: apiexamples)
   --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --content-type: string # Describes the type of the content being sent.
-  match_type: string # Define the action you want to apply to each SKU. Values include:   1. `newproduct`: match the SKU as a new product.   2. `itemMatch`: associate the received SKU to an existing SKU.   3. `productMatch`: associate the received SKU to an existing product.   4. `deny`: deny the received SKU.   5. `pending`: the received SKU requires attention.   6. `incomplete`: the received SKU is lacking information to be matched.   7. `insufficientScore`: the score given by the Matcher to this received SKU doesn't qualify it to be matched.   Note that  if the autoApprove setting is enabled, the SKUs will be approved, regardless of the Score. (default: itemMatch)
+  match_type: string # Define the action you want to apply to each SKU. Values include: 1. `newproduct`: match the SKU as a new product. 2. `itemMatch`: associate the received SKU to an existing SKU. 3. `productMatch`: associate the received SKU to an existing product. 4. `deny`: deny the received SKU. 5. `pending`: the received SKU requires attention. 6. `incomplete`: the received SKU is lacking information to be matched. 7. `insufficientScore`: the score given by the Matcher to this received SKU doesn't qualify it to be matched. Note that if the autoApprove setting is enabled, the SKUs will be approved, regardless of the Score. (default: itemMatch)
   matcher_id: string # Identifies the matching entity. It can be either VTEX's matcher, or an external matcher developed by partners, for example. The `matcherId`'s value can be obtained through the [Get SKU Suggestion by ID](https://developers.vtex.com/vtex-rest-api/reference/getsuggestion) endpoint. (default: vtex-matcher)
   --product: record # shape: {brandId: int, categoryId: int, description: string, name: string, specifications: string}
   --product-ref: string # In `productMatch` actions, fill in this field on your request to match the item to an existing product in the marketplace. (nullable, default: )
-  score: string # Matcher rates received SKUs by correlating the data sent by sellers, to existing fields in the marketplace. The calculation of these scores determines whether the product has been:   `Approved`: score equal to or greater than 80 points.   `Pending`: from 31 to 79 points.  `Denied`: from 0 to 30 points.   Note that  if the autoApprove setting is enabled, the SKUs will be approved, regardless of the Score. (default: 80)
-  --sku: record # e.g. {eans: [12345678901213], height: 1, images: [{imagem1.jpg: imageurl.example}], length: 1, measurementUnit: un, name: Sku exemplo, refId: , specifications: {Embalagem: 3 kg}, unitMultiplier: 1, weight: 1, width: 1} — shape: {eans: list, height: int, images: list, length: int, measurementUnit: string, name: string, refId: string, specifications: record, unitMultiplier: int, weight: int, width: int}
+  score: string # Matcher rates received SKUs by correlating the data sent by sellers, to existing fields in the marketplace. The calculation of these scores determines whether the product has been: `Approved`: score equal to or greater than 80 points. `Pending`: from 31 to 79 points. `Denied`: from 0 to 30 points. Note that if the autoApprove setting is enabled, the SKUs will be approved, regardless of the Score. (default: 80)
+  --sku: record # e.g. {eans: [12345678901213], height: 1, images: [{imagem1.jpg: imageurl.example}], length: 1, measurementUnit: un, name: Sku exemplo, refId: , specifications: {Embalagem: 3 kg}, unitMultiplier: 1, weight: 1, width: 1} — shape: {eans: list<string>, height: int, images: list, length: int, measurementUnit: string, name: string, refId: string, specifications: record, unitMultiplier: int, weight: int, width: int}
   --sku-ref: string # In `itemMatch` actions, fill in this field on your request to match the item to an existing SKU in the marketplace. (nullable, default: )
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({seller_id: $seller_id, sellerskuid: $sellerskuid, version: $version, matchid: $matchid} | format pattern "/suggestions/{seller_id}/{sellerskuid}/versions/{version}/matches/{matchid}") $qp)
-  let body = {"matchType": $match_type, "matcherId": $matcher_id, "product": $product, "productRef": $product_ref, "score": $score, "sku": $sku, "skuRef": $sku_ref} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), sellerskuid: (encode-path-segment $sellerskuid), version: (encode-path-segment $version), matchid: (encode-path-segment $matchid)} | format pattern "/suggestions/{seller_id}/{sellerskuid}/versions/{version}/matches/{matchid}") $qp)
+  let req_body = {"matchType": $match_type, "matcherId": $matcher_id, "product": $product, "productRef": $product_ref, "score": $score, "sku": $sku, "skuRef": $sku_ref} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
 }

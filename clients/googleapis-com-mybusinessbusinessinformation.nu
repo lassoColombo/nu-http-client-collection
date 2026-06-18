@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def view-completer [] { ["BASIC" "CATEGORY_VIEW_UNSPECIFIED" "FULL"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "attributes mybusinessbusinessinformationattributeslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "attributes list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/attributes
 # operationId: mybusinessbusinessinformation.attributes.list
-export def "attributes mybusinessbusinessinformationattributeslist" [
+export def "attributes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,7 +146,7 @@ export def "attributes mybusinessbusinessinformationattributeslist" [
 #
 # GET /v1/categories
 # operationId: mybusinessbusinessinformation.categories.list
-export def "categories mybusinessbusinessinformationcategorieslist" [
+export def "categories list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +186,7 @@ export def "categories mybusinessbusinessinformationcategorieslist" [
 #
 # GET /v1/categories:batchGet
 # operationId: mybusinessbusinessinformation.categories.batchGet
-export def "categories-batch-get mybusinessbusinessinformationcategoriesbatchGet" [
+export def "categories-batch-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +207,7 @@ export def "categories-batch-get mybusinessbusinessinformationcategoriesbatchGet
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --language-code: string # Required. The BCP 47 code of language that the category names should be returned in.
-  --names: list # Required. At least one name must be set. The GConcept ids the localized category names should be returned for. To return details for more than one category, repeat this parameter in the request.
+  --names: list<string> # Required. At least one name must be set. The GConcept ids the localized category names should be returned for. To return details for more than one category, repeat this parameter in the request.
   --region-code: string # Optional. The ISO 3166-1 alpha-2 country code used to infer non-standard language.
   --view: string@view-completer # Required. Specifies which parts to the Category resource should be returned in the response.
 ]: nothing -> record<categories: table<displayName: string, moreHoursTypes: list, name: string, serviceTypes: list>> {
@@ -215,7 +224,7 @@ export def "categories-batch-get mybusinessbusinessinformationcategoriesbatchGet
 #
 # GET /v1/chains:search
 # operationId: mybusinessbusinessinformation.chains.search
-export def "chains-search mybusinessbusinessinformationchainssearch" [
+export def "chains-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,8 +260,8 @@ export def "chains-search mybusinessbusinessinformationchainssearch" [
 #
 # POST /v1/googleLocations:search
 # operationId: mybusinessbusinessinformation.googleLocations.search
-# --location shape: {adWordsLocationExtensions?: record, categories?: record, labels?: list, languageCode?: string, latlng?: record, metadata?: record, moreHours?: list, name?: string, openInfo?: record, phoneNumbers?: record, profile?: record, regularHours?: record, relationshipData?: record, serviceArea?: record, serviceItems?: list, specialHours?: record, storeCode?: string, storefrontAddress?: record, title?: string, websiteUri?: string}
-export def "google-locations-search mybusinessbusinessinformationgoogleLocationssearch" [
+# --location shape: {adWordsLocationExtensions?: record, categories?: record, labels?: list<string>, languageCode?: string, latlng?: record, metadata?: record, moreHours?: list, name?: string, openInfo?: record, phoneNumbers?: record, profile?: record, regularHours?: record, relationshipData?: record, serviceArea?: record, serviceItems?: list, specialHours?: record, storeCode?: string, storefrontAddress?: record, title?: string, websiteUri?: string}
+export def "google-locations-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,7 +281,7 @@ export def "google-locations-search mybusinessbusinessinformationgoogleLocations
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --location: record # A location. See the [help center article] (https://support.google.com/business/answer/3038177) for a detailed description of these fields, or the [category endpoint](/my-business/reference/rest/v4/categories) for a list of valid business categories. — shape: {adWordsLocationExtensions?: record, categories?: record, labels?: list, languageCode?: string, latlng?: record, metadata?: record, moreHours?: list, name?: string, openInfo?: record, phoneNumbers?: record, profile?: record, regularHours?: record, relationshipData?: record, serviceArea?: record, serviceItems?: list, specialHours?: record, storeCode?: string, storefrontAddress?: record, title?: string, websiteUri?: string}
+  --location: record # A location. See the [help center article] (https://support.google.com/business/answer/3038177) for a detailed description of these fields, or the [category endpoint](/my-business/reference/rest/v4/categories) for a list of valid business categories. — shape: {adWordsLocationExtensions?: record, categories?: record, labels?: list<string>, languageCode?: string, latlng?: record, metadata?: record, moreHours?: list, name?: string, openInfo?: record, phoneNumbers?: record, profile?: record, regularHours?: record, relationshipData?: record, serviceArea?: record, serviceItems?: list, specialHours?: record, storeCode?: string, storefrontAddress?: record, title?: string, websiteUri?: string}
   --page-size: int # The number of matches to return. The default value is 3, with a maximum of 10. Note that latency may increase if more are requested. There is no pagination. (format: int32)
   --query: string # Text query to search for. The search results from a query string will be less accurate than if providing an exact location, but can provide more inexact matches.
 ]: any -> record<googleLocations: table<location: record, name: string, requestAdminRightsUri: string>> {
@@ -281,18 +290,18 @@ export def "google-locations-search mybusinessbusinessinformationgoogleLocations
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/googleLocations:search" $qp)
-  let body = {"location": $location, "pageSize": $page_size, "query": $query} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"location": $location, "pageSize": $page_size, "query": $query} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a location. If this location cannot be deleted using the API and it is marked so in the `google.mybusiness.businessinformation.v1.LocationState`, use the [Google Business Profile](https://business.google.com/manage/) website.
 #
 # DELETE /v1/{name}
 # operationId: mybusinessbusinessinformation.locations.delete
-export def "locations mybusinessbusinessinformationlocationsdelete" [
+export def "locations delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -317,7 +326,7 @@ export def "locations mybusinessbusinessinformationlocationsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -327,7 +336,7 @@ export def "locations mybusinessbusinessinformationlocationsdelete" [
 #
 # GET /v1/{name}
 # operationId: mybusinessbusinessinformation.locations.getAttributes
-export def "locations mybusinessbusinessinformationlocationsgetAttributes" [
+export def "locations get-attributes" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -352,7 +361,7 @@ export def "locations mybusinessbusinessinformationlocationsgetAttributes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -363,7 +372,7 @@ export def "locations mybusinessbusinessinformationlocationsgetAttributes" [
 # PATCH /v1/{name}
 # operationId: mybusinessbusinessinformation.locations.updateAttributes
 # --attributes item shape: {name?: string, repeatedEnumValue?: record, uriValues?: list, values?: list}
-export def "locations mybusinessbusinessinformationlocationsupdateAttributes" [
+export def "locations update-attributes" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -392,19 +401,19 @@ export def "locations mybusinessbusinessinformationlocationsupdateAttributes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "attributeMask" $attribute_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
-  let body = {"attributes": $attributes, "name": $body_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"attributes": $attributes, "name": $body_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Associates a location to a place ID. Any previous association is overwritten. This operation is only valid if the location is unverified. The association must be valid, that is, it appears in the list of `SearchGoogleLocations`.
 #
 # POST /v1/{name}:associate
 # operationId: mybusinessbusinessinformation.locations.associate
-export def "locations mybusinessbusinessinformationlocationsassociate" [
+export def "locations create-associate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -431,19 +440,19 @@ export def "locations mybusinessbusinessinformationlocationsassociate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:associate") $qp)
-  let body = {"placeId": $place_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:associate") $qp)
+  let req_body = {"placeId": $place_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Clears an association between a location and its place ID. This operation is only valid if the location is unverified.
 #
 # POST /v1/{name}:clearLocationAssociation
 # operationId: mybusinessbusinessinformation.locations.clearLocationAssociation
-export def "locations mybusinessbusinessinformationlocationsclearLocationAssociation" [
+export def "locations create-clear-association" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -470,18 +479,19 @@ export def "locations mybusinessbusinessinformationlocationsclearLocationAssocia
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:clearLocationAssociation") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:clearLocationAssociation") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the Google-updated version of the specified location.
 #
 # GET /v1/{name}:getGoogleUpdated
 # operationId: mybusinessbusinessinformation.locations.attributes.getGoogleUpdated
-export def "locations mybusinessbusinessinformationlocationsattributesgetGoogleUpdated" [
+export def "locations get-google-updated" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -507,7 +517,7 @@ export def "locations mybusinessbusinessinformationlocationsattributesgetGoogleU
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:getGoogleUpdated") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:getGoogleUpdated") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -517,7 +527,7 @@ export def "locations mybusinessbusinessinformationlocationsattributesgetGoogleU
 #
 # GET /v1/{parent}/locations
 # operationId: mybusinessbusinessinformation.accounts.locations.list
-export def "locations mybusinessbusinessinformationaccountslocationslist" [
+export def "locations list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -547,7 +557,7 @@ export def "locations mybusinessbusinessinformationaccountslocationslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/locations") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/locations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -562,15 +572,15 @@ export def "locations mybusinessbusinessinformationaccountslocationslist" [
 # --latlng shape: {latitude?: float, longitude?: float}
 # --moreHours item shape: {hoursTypeId?: string, periods?: list}
 # --openInfo shape: {openingDate?: record, status?: "OPEN_FOR_BUSINESS_UNSPECIFIED"|"OPEN"|"CLOSED_PERMANENTLY"|"CLOSED_TEMPORARILY"}
-# --phoneNumbers shape: {additionalPhones?: list, primaryPhone?: string}
+# --phoneNumbers shape: {additionalPhones?: list<string>, primaryPhone?: string}
 # --profile shape: {description?: string}
 # --regularHours shape: {periods?: list}
 # --relationshipData shape: {childrenLocations?: list, parentChain?: string, parentLocation?: record}
 # --serviceArea shape: {businessType?: "BUSINESS_TYPE_UNSPECIFIED"|"CUSTOMER_LOCATION_ONLY"|"CUSTOMER_AND_BUSINESS_LOCATION", places?: record, regionCode?: string}
 # --serviceItems item shape: {freeFormServiceItem?: record, price?: record, structuredServiceItem?: record}
 # --specialHours shape: {specialHourPeriods?: list}
-# --storefrontAddress shape: {addressLines?: list, administrativeArea?: string, languageCode?: string, locality?: string, organization?: string, postalCode?: string, recipients?: list, regionCode?: string, revision?: int, sortingCode?: string, sublocality?: string}
-export def "locations mybusinessbusinessinformationaccountslocationscreate" [
+# --storefrontAddress shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, organization?: string, postalCode?: string, recipients?: list<string>, regionCode?: string, revision?: int, sortingCode?: string, sublocality?: string}
+export def "locations create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -595,14 +605,14 @@ export def "locations mybusinessbusinessinformationaccountslocationscreate" [
   --validate-only: oneof<nothing, bool> # Optional. If true, the request is validated without actually creating the location.
   --ad-words-location-extensions: record # Additional information that is surfaced in AdWords. — shape: {adPhone?: string}
   --categories: record # A collection of categories that describes the business. During updates, both fields must be set. Clients are prohibited from individually updating the primary or additional categories using the update mask. — shape: {additionalCategories?: list, primaryCategory?: record}
-  --labels: list # Optional. A collection of free-form strings to allow you to tag your business. These labels are NOT user facing; only you can see them. Must be between 1-255 characters per label.
+  --labels: list<string> # Optional. A collection of free-form strings to allow you to tag your business. These labels are NOT user facing; only you can see them. Must be between 1-255 characters per label.
   --language-code: string # Immutable. The language of the location. Set during creation and not updateable.
   --latlng: record # An object that represents a latitude/longitude pair. This is expressed as a pair of doubles to represent degrees latitude and degrees longitude. Unless specified otherwise, this object must conform to the WGS84 standard. Values must be within normalized ranges. — shape: {latitude?: float, longitude?: float}
   --metadata: record # Additional non-user-editable information about the location.
   --more-hours: list # Optional. More hours for a business's different departments or specific customers. — item shape: {hoursTypeId?: string, periods?: list}
   --name: string # Google identifier for this location in the form: `locations/{location_id}`.
   --open-info: record # Information related to the opening state of the business. — shape: {openingDate?: record, status?: "OPEN_FOR_BUSINESS_UNSPECIFIED"|"OPEN"|"CLOSED_PERMANENTLY"|"CLOSED_TEMPORARILY"}
-  --phone-numbers: record # A collection of phone numbers for the business. During updates, both fields must be set. Clients may not update just the primary or additional phone numbers using the update mask. International phone format is preferred, such as "+1 415 555 0132", see more in (https://developers.google.com/style/phone-numbers#international-phone-numbers). — shape: {additionalPhones?: list, primaryPhone?: string}
+  --phone-numbers: record # A collection of phone numbers for the business. During updates, both fields must be set. Clients may not update just the primary or additional phone numbers using the update mask. International phone format is preferred, such as "+1 415 555 0132", see more in (https://developers.google.com/style/phone-numbers#international-phone-numbers). — shape: {additionalPhones?: list<string>, primaryPhone?: string}
   --profile: record # All information pertaining to the location's profile. — shape: {description?: string}
   --regular-hours: record # Represents the time periods that this location is open for business. Holds a collection of TimePeriod instances. — shape: {periods?: list}
   --relationship-data: record # Information of all parent and children locations related to this one. — shape: {childrenLocations?: list, parentChain?: string, parentLocation?: record}
@@ -610,7 +620,7 @@ export def "locations mybusinessbusinessinformationaccountslocationscreate" [
   --service-items: list # Optional. List of services supported by merchants. A service can be haircut, install water heater, etc. Duplicated service items will be removed automatically. — item shape: {freeFormServiceItem?: record, price?: record, structuredServiceItem?: record}
   --special-hours: record # Represents a set of time periods when a location's operational hours differ from its normal business hours. — shape: {specialHourPeriods?: list}
   --store-code: string # Optional. External identifier for this location, which must be unique within a given account. This is a means of associating the location with your own records.
-  --storefront-address: record # Represents a postal address, e.g. for postal delivery or payments addresses. Given a postal address, a postal service can deliver items to a premise, P.O. Box or similar. It is not intended to model geographical locations (roads, towns, mountains). In typical usage an address would be created via user input or from importing existing data, depending on the type of process. Advice on address input / editing: - Use an internationalization-ready address widget such as https://github.com/google/libaddressinput) - Users should not be presented with UI elements for input or editing of fields outside countries where that field is used. For more guidance on how to use this schema, please see: https://support.google.com/business/answer/6397478 — shape: {addressLines?: list, administrativeArea?: string, languageCode?: string, locality?: string, organization?: string, postalCode?: string, recipients?: list, regionCode?: string, revision?: int, sortingCode?: string, sublocality?: string}
+  --storefront-address: record # Represents a postal address, e.g. for postal delivery or payments addresses. Given a postal address, a postal service can deliver items to a premise, P.O. Box or similar. It is not intended to model geographical locations (roads, towns, mountains). In typical usage an address would be created via user input or from importing existing data, depending on the type of process. Advice on address input / editing: - Use an internationalization-ready address widget such as https://github.com/google/libaddressinput) - Users should not be presented with UI elements for input or editing of fields outside countries where that field is used. For more guidance on how to use this schema, please see: https://support.google.com/business/answer/6397478 — shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, organization?: string, postalCode?: string, recipients?: list<string>, regionCode?: string, revision?: int, sortingCode?: string, sublocality?: string}
   --title: string # Required. Location name should reflect your business's real-world name, as used consistently on your storefront, website, and stationery, and as known to customers. Any additional information, when relevant, can be included in other fields of the resource (for example, `Address`, `Categories`). Don't add unnecessary information to your name (for example, prefer "Google" over "Google Inc. - Mountain View Corporate Headquarters"). Don't include marketing taglines, store codes, special characters, hours or closed/open status, phone numbers, website URLs, service/product information, location/address or directions, or containment information (for example, "Chase ATM in Duane Reade").
   --website-uri: string # Optional. A URL for this business. If possible, use a URL that represents this individual business location instead of a generic website/URL that represents all locations, or the brand.
 ]: any -> record<adWordsLocationExtensions: record<adPhone: string>, categories: record<additionalCategories: list<record>, primaryCategory: record<displayName: string, moreHoursTypes: list, name: string, serviceTypes: list>>, labels: list<string>, languageCode: string, latlng: record<latitude: float, longitude: float>, metadata: record<canDelete: bool, canHaveBusinessCalls: bool, canHaveFoodMenus: bool, canModifyServiceList: bool, canOperateHealthData: bool, canOperateLocalPost: bool, canOperateLodgingData: bool, duplicateLocation: string, hasGoogleUpdated: bool, hasPendingEdits: bool, hasVoiceOfMerchant: bool, mapsUri: string, newReviewUri: string, placeId: string>, moreHours: table<hoursTypeId: string, periods: list>, name: string, openInfo: record<canReopen: bool, openingDate: record<day: int, month: int, year: int>, status: string>, phoneNumbers: record<additionalPhones: list<string>, primaryPhone: string>, profile: record<description: string>, regularHours: record<periods: list<record>>, relationshipData: record<childrenLocations: list<record>, parentChain: string, parentLocation: record<placeId: string, relationType: string>>, serviceArea: record<businessType: string, places: record<placeInfos: list>, regionCode: string>, serviceItems: table<freeFormServiceItem: record, price: record, structuredServiceItem: record>, specialHours: record<specialHourPeriods: list<record>>, storeCode: string, storefrontAddress: record<addressLines: list<string>, administrativeArea: string, languageCode: string, locality: string, organization: string, postalCode: string, recipients: list<string>, regionCode: string, revision: int, sortingCode: string, sublocality: string>, title: string, websiteUri: string> {
@@ -618,10 +628,10 @@ export def "locations mybusinessbusinessinformationaccountslocationscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/locations") $qp)
-  let body = {"adWordsLocationExtensions": $ad_words_location_extensions, "categories": $categories, "labels": $labels, "languageCode": $language_code, "latlng": $latlng, "metadata": $metadata, "moreHours": $more_hours, "name": $name, "openInfo": $open_info, "phoneNumbers": $phone_numbers, "profile": $profile, "regularHours": $regular_hours, "relationshipData": $relationship_data, "serviceArea": $service_area, "serviceItems": $service_items, "specialHours": $special_hours, "storeCode": $store_code, "storefrontAddress": $storefront_address, "title": $title, "websiteUri": $website_uri} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/locations") $qp)
+  let req_body = {"adWordsLocationExtensions": $ad_words_location_extensions, "categories": $categories, "labels": $labels, "languageCode": $language_code, "latlng": $latlng, "metadata": $metadata, "moreHours": $more_hours, "name": $name, "openInfo": $open_info, "phoneNumbers": $phone_numbers, "profile": $profile, "regularHours": $regular_hours, "relationshipData": $relationship_data, "serviceArea": $service_area, "serviceItems": $service_items, "specialHours": $special_hours, "storeCode": $store_code, "storefrontAddress": $storefront_address, "title": $title, "websiteUri": $website_uri} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -131,7 +140,7 @@ export def "servers list-1" [
 ]: nothing -> record<config_url: string, daemon_type: string, id: string, type: string, url: string, version: string, zones_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id} | format pattern "/servers/{server_id}"))
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/servers/{server_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -141,7 +150,7 @@ export def "servers list-1" [
 #
 # PUT /servers/{server_id}/cache/flush
 # operationId: cacheFlushByName
-export def "servers-cache-flush cacheFlushByName" [
+export def "servers-cache-flush update-by-name" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -156,7 +165,7 @@ export def "servers-cache-flush cacheFlushByName" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({server_id: $server_id} | format pattern "/servers/{server_id}/cache/flush") $qp)
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/servers/{server_id}/cache/flush") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -166,7 +175,7 @@ export def "servers-cache-flush cacheFlushByName" [
 #
 # GET /servers/{server_id}/config
 # operationId: getConfig
-export def "servers-config get" [
+export def "servers-config list" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -179,7 +188,7 @@ export def "servers-config get" [
 ]: nothing -> table<name: string, type: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id} | format pattern "/servers/{server_id}/config"))
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/servers/{server_id}/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -189,7 +198,7 @@ export def "servers-config get" [
 #
 # GET /servers/{server_id}/config/{config_setting_name}
 # operationId: getConfigSetting
-export def "servers-config get-config-setting" [
+export def "servers-config get" [
   server_id: string
   config_setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -203,7 +212,7 @@ export def "servers-config get-config-setting" [
 ]: nothing -> record<name: string, type: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, config_setting_name: $config_setting_name} | format pattern "/servers/{server_id}/config/{config_setting_name}"))
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), config_setting_name: (encode-path-segment $config_setting_name)} | format pattern "/servers/{server_id}/config/{config_setting_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,7 +239,7 @@ export def "servers-search-data list" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "object_type" $object_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({server_id: $server_id} | format pattern "/servers/{server_id}/search-data") $qp)
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/servers/{server_id}/search-data") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -256,7 +265,7 @@ export def "servers-statistics get-stats" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "statistic" $statistic "scalar") (serialize-qp "includerings" $includerings "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({server_id: $server_id} | format pattern "/servers/{server_id}/statistics") $qp)
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/servers/{server_id}/statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -266,7 +275,7 @@ export def "servers-statistics get-stats" [
 #
 # GET /servers/{server_id}/tsigkeys
 # operationId: listTSIGKeys
-export def "servers-tsigkeys list" [
+export def "servers-tsigkeys list-tsig-keys" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -279,7 +288,7 @@ export def "servers-tsigkeys list" [
 ]: nothing -> table<algorithm: string, id: string, key: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id} | format pattern "/servers/{server_id}/tsigkeys"))
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/servers/{server_id}/tsigkeys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -289,7 +298,7 @@ export def "servers-tsigkeys list" [
 #
 # POST /servers/{server_id}/tsigkeys
 # operationId: createTSIGKey
-export def "servers-tsigkeys create" [
+export def "servers-tsigkeys create-tsig-key" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -306,19 +315,19 @@ export def "servers-tsigkeys create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id} | format pattern "/servers/{server_id}/tsigkeys"))
-  let body = {"algorithm": $algorithm, "key": $key, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/servers/{server_id}/tsigkeys"))
+  let req_body = {"algorithm": $algorithm, "key": $key, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete the TSIGKey with tsigkey_id
 #
 # DELETE /servers/{server_id}/tsigkeys/{tsigkey_id}
 # operationId: deleteTSIGKey
-export def "servers-tsigkeys delete" [
+export def "servers-tsigkeys delete-tsig-key" [
   server_id: string
   tsigkey_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -332,7 +341,7 @@ export def "servers-tsigkeys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, tsigkey_id: $tsigkey_id} | format pattern "/servers/{server_id}/tsigkeys/{tsigkey_id}"))
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), tsigkey_id: (encode-path-segment $tsigkey_id)} | format pattern "/servers/{server_id}/tsigkeys/{tsigkey_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -342,7 +351,7 @@ export def "servers-tsigkeys delete" [
 #
 # GET /servers/{server_id}/tsigkeys/{tsigkey_id}
 # operationId: getTSIGKey
-export def "servers-tsigkeys get" [
+export def "servers-tsigkeys get-tsig-key" [
   server_id: string
   tsigkey_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -356,17 +365,17 @@ export def "servers-tsigkeys get" [
 ]: nothing -> record<algorithm: string, id: string, key: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, tsigkey_id: $tsigkey_id} | format pattern "/servers/{server_id}/tsigkeys/{tsigkey_id}"))
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), tsigkey_id: (encode-path-segment $tsigkey_id)} | format pattern "/servers/{server_id}/tsigkeys/{tsigkey_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# The TSIGKey at tsigkey_id can be changed in multiple ways:  * Changing the Name, this will remove the key with tsigkey_id after adding.  * Changing the Algorithm  * Changing the Key  Only the relevant fields have to be provided in the request body.
+# The TSIGKey at tsigkey_id can be changed in multiple ways: * Changing the Name, this will remove the key with tsigkey_id after adding. * Changing the Algorithm * Changing the Key Only the relevant fields have to be provided in the request body.
 #
 # PUT /servers/{server_id}/tsigkeys/{tsigkey_id}
 # operationId: putTSIGKey
-export def "servers-tsigkeys update" [
+export def "servers-tsigkeys update-tsig-key" [
   server_id: string
   tsigkey_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -384,12 +393,12 @@ export def "servers-tsigkeys update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, tsigkey_id: $tsigkey_id} | format pattern "/servers/{server_id}/tsigkeys/{tsigkey_id}"))
-  let body = {"algorithm": $algorithm, "key": $key, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), tsigkey_id: (encode-path-segment $tsigkey_id)} | format pattern "/servers/{server_id}/tsigkeys/{tsigkey_id}"))
+  let req_body = {"algorithm": $algorithm, "key": $key, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all Zones in a server
@@ -412,7 +421,7 @@ export def "servers-zones list" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "zone" $zone "scalar") (serialize-qp "dnssec" $dnssec "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({server_id: $server_id} | format pattern "/servers/{server_id}/zones") $qp)
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/servers/{server_id}/zones") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -435,38 +444,38 @@ export def "servers-zones create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --rrsets: oneof<nothing, bool> # “true” (default) or “false”, whether to include the “rrsets” in the response Zone object. (default: true) — item shape: {changetype: string, comments?: list, name: string, records: list, ttl: int, type: string}
   --account: string # MAY be set. Its value is defined by local policy
-  --api-rectify: oneof<nothing, bool> #  Whether or not the zone will be rectified on data changes via the API
+  --api-rectify: oneof<nothing, bool> # Whether or not the zone will be rectified on data changes via the API
   --dnssec: oneof<nothing, bool> # Whether or not this zone is DNSSEC signed (inferred from presigned being true XOR presence of at least one cryptokey with active being true)
   --edited-serial: int # The SOA serial as seen in query responses. Calculated using the SOA-EDIT metadata, default-soa-edit and default-soa-edit-signed settings
   --id: string # Opaque zone id (string), assigned by the server, should not be interpreted by the application. Guaranteed to be safe for embedding in URLs.
   --kind: string@kind-completer # Zone kind, one of “Native”, “Master”, “Slave”
-  --master-tsig-key-ids: list # The id of the TSIG keys used for master operation in this zone
-  --masters: list #  List of IP addresses configured as a master for this zone (“Slave” type zones only)
+  --master-tsig-key-ids: list<string> # The id of the TSIG keys used for master operation in this zone
+  --masters: list<string> # List of IP addresses configured as a master for this zone (“Slave” type zones only)
   --name: string # Name of the zone (e.g. “example.com.”) MUST have a trailing dot
-  --nameservers: list # MAY be sent in client bodies during creation, and MUST NOT be sent by the server. Simple list of strings of nameserver names, including the trailing dot. Not required for slave zones.
+  --nameservers: list<string> # MAY be sent in client bodies during creation, and MUST NOT be sent by the server. Simple list of strings of nameserver names, including the trailing dot. Not required for slave zones.
   --notified-serial: int # The SOA serial notifications have been sent out for
   --nsec3narrow: oneof<nothing, bool> # Whether or not the zone uses NSEC3 narrow
   --nsec3param: string # The NSEC3PARAM record
   --presigned: oneof<nothing, bool> # Whether or not the zone is pre-signed
   --rrsets: list # RRSets in this zone (for zones/{zone_id} endpoint only; omitted during GET on the .../zones list endpoint) — item shape: {changetype: string, comments?: list, name: string, records: list, ttl: int, type: string}
   --serial: int # The SOA serial number
-  --slave-tsig-key-ids: list # The id of the TSIG keys used for slave operation in this zone
+  --slave-tsig-key-ids: list<string> # The id of the TSIG keys used for slave operation in this zone
   --soa-edit: string # The SOA-EDIT metadata item
   --soa-edit-api: string # The SOA-EDIT-API metadata item
   --type: string # Set to “Zone”
-  --body-url: string # API endpoint for this zone
+  --url: string # API endpoint for this zone
   --zone: string # MAY contain a BIND-style zone file when creating a zone
 ]: any -> record<account: string, api_rectify: bool, dnssec: bool, edited_serial: int, id: string, kind: string, master_tsig_key_ids: list<string>, masters: list<string>, name: string, nameservers: list<string>, notified_serial: int, nsec3narrow: bool, nsec3param: string, presigned: bool, rrsets: table<changetype: string, comments: list, name: string, records: list, ttl: int, type: string>, serial: int, slave_tsig_key_ids: list<string>, soa_edit: string, soa_edit_api: string, type: string, url: string, zone: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rrsets" $rrsets "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({server_id: $server_id} | format pattern "/servers/{server_id}/zones") $qp)
-  let body = {"account": $account, "api_rectify": $api_rectify, "dnssec": $dnssec, "edited_serial": $edited_serial, "id": $id, "kind": $kind, "master_tsig_key_ids": $master_tsig_key_ids, "masters": $masters, "name": $name, "nameservers": $nameservers, "notified_serial": $notified_serial, "nsec3narrow": $nsec3narrow, "nsec3param": $nsec3param, "presigned": $presigned, "rrsets": $rrsets, "serial": $serial, "slave_tsig_key_ids": $slave_tsig_key_ids, "soa_edit": $soa_edit, "soa_edit_api": $soa_edit_api, "type": $type, "url": $body_url, "zone": $zone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/servers/{server_id}/zones") $qp)
+  let req_body = {"account": $account, "api_rectify": $api_rectify, "dnssec": $dnssec, "edited_serial": $edited_serial, "id": $id, "kind": $kind, "master_tsig_key_ids": $master_tsig_key_ids, "masters": $masters, "name": $name, "nameservers": $nameservers, "notified_serial": $notified_serial, "nsec3narrow": $nsec3narrow, "nsec3param": $nsec3param, "presigned": $presigned, "rrsets": $rrsets, "serial": $serial, "slave_tsig_key_ids": $slave_tsig_key_ids, "soa_edit": $soa_edit, "soa_edit_api": $soa_edit_api, "type": $type, "url": $url, "zone": $zone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes this zone, all attached metadata and rrsets.
@@ -487,7 +496,7 @@ export def "servers-zones delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, zone_id: $zone_id} | format pattern "/servers/{server_id}/zones/{zone_id}"))
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), zone_id: (encode-path-segment $zone_id)} | format pattern "/servers/{server_id}/zones/{zone_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -513,7 +522,7 @@ export def "servers-zones list-1" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rrsets" $rrsets "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({server_id: $server_id, zone_id: $zone_id} | format pattern "/servers/{server_id}/zones/{zone_id}") $qp)
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), zone_id: (encode-path-segment $zone_id)} | format pattern "/servers/{server_id}/zones/{zone_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -536,37 +545,37 @@ export def "servers-zones update-by-server_id-zone_id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --account: string # MAY be set. Its value is defined by local policy
-  --api-rectify: oneof<nothing, bool> #  Whether or not the zone will be rectified on data changes via the API
+  --api-rectify: oneof<nothing, bool> # Whether or not the zone will be rectified on data changes via the API
   --dnssec: oneof<nothing, bool> # Whether or not this zone is DNSSEC signed (inferred from presigned being true XOR presence of at least one cryptokey with active being true)
   --edited-serial: int # The SOA serial as seen in query responses. Calculated using the SOA-EDIT metadata, default-soa-edit and default-soa-edit-signed settings
   --id: string # Opaque zone id (string), assigned by the server, should not be interpreted by the application. Guaranteed to be safe for embedding in URLs.
   --kind: string@kind-completer # Zone kind, one of “Native”, “Master”, “Slave”
-  --master-tsig-key-ids: list # The id of the TSIG keys used for master operation in this zone
-  --masters: list #  List of IP addresses configured as a master for this zone (“Slave” type zones only)
+  --master-tsig-key-ids: list<string> # The id of the TSIG keys used for master operation in this zone
+  --masters: list<string> # List of IP addresses configured as a master for this zone (“Slave” type zones only)
   --name: string # Name of the zone (e.g. “example.com.”) MUST have a trailing dot
-  --nameservers: list # MAY be sent in client bodies during creation, and MUST NOT be sent by the server. Simple list of strings of nameserver names, including the trailing dot. Not required for slave zones.
+  --nameservers: list<string> # MAY be sent in client bodies during creation, and MUST NOT be sent by the server. Simple list of strings of nameserver names, including the trailing dot. Not required for slave zones.
   --notified-serial: int # The SOA serial notifications have been sent out for
   --nsec3narrow: oneof<nothing, bool> # Whether or not the zone uses NSEC3 narrow
   --nsec3param: string # The NSEC3PARAM record
   --presigned: oneof<nothing, bool> # Whether or not the zone is pre-signed
   --rrsets: list # RRSets in this zone (for zones/{zone_id} endpoint only; omitted during GET on the .../zones list endpoint) — item shape: {changetype: string, comments?: list, name: string, records: list, ttl: int, type: string}
   --serial: int # The SOA serial number
-  --slave-tsig-key-ids: list # The id of the TSIG keys used for slave operation in this zone
+  --slave-tsig-key-ids: list<string> # The id of the TSIG keys used for slave operation in this zone
   --soa-edit: string # The SOA-EDIT metadata item
   --soa-edit-api: string # The SOA-EDIT-API metadata item
   --type: string # Set to “Zone”
-  --body-url: string # API endpoint for this zone
+  --url: string # API endpoint for this zone
   --zone: string # MAY contain a BIND-style zone file when creating a zone
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, zone_id: $zone_id} | format pattern "/servers/{server_id}/zones/{zone_id}"))
-  let body = {"account": $account, "api_rectify": $api_rectify, "dnssec": $dnssec, "edited_serial": $edited_serial, "id": $id, "kind": $kind, "master_tsig_key_ids": $master_tsig_key_ids, "masters": $masters, "name": $name, "nameservers": $nameservers, "notified_serial": $notified_serial, "nsec3narrow": $nsec3narrow, "nsec3param": $nsec3param, "presigned": $presigned, "rrsets": $rrsets, "serial": $serial, "slave_tsig_key_ids": $slave_tsig_key_ids, "soa_edit": $soa_edit, "soa_edit_api": $soa_edit_api, "type": $type, "url": $body_url, "zone": $zone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), zone_id: (encode-path-segment $zone_id)} | format pattern "/servers/{server_id}/zones/{zone_id}"))
+  let req_body = {"account": $account, "api_rectify": $api_rectify, "dnssec": $dnssec, "edited_serial": $edited_serial, "id": $id, "kind": $kind, "master_tsig_key_ids": $master_tsig_key_ids, "masters": $masters, "name": $name, "nameservers": $nameservers, "notified_serial": $notified_serial, "nsec3narrow": $nsec3narrow, "nsec3param": $nsec3param, "presigned": $presigned, "rrsets": $rrsets, "serial": $serial, "slave_tsig_key_ids": $slave_tsig_key_ids, "soa_edit": $soa_edit, "soa_edit_api": $soa_edit_api, "type": $type, "url": $url, "zone": $zone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Modifies basic zone data.
@@ -586,44 +595,44 @@ export def "servers-zones update-by-server_id-zone_id-1" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --account: string # MAY be set. Its value is defined by local policy
-  --api-rectify: oneof<nothing, bool> #  Whether or not the zone will be rectified on data changes via the API
+  --api-rectify: oneof<nothing, bool> # Whether or not the zone will be rectified on data changes via the API
   --dnssec: oneof<nothing, bool> # Whether or not this zone is DNSSEC signed (inferred from presigned being true XOR presence of at least one cryptokey with active being true)
   --edited-serial: int # The SOA serial as seen in query responses. Calculated using the SOA-EDIT metadata, default-soa-edit and default-soa-edit-signed settings
   --id: string # Opaque zone id (string), assigned by the server, should not be interpreted by the application. Guaranteed to be safe for embedding in URLs.
   --kind: string@kind-completer # Zone kind, one of “Native”, “Master”, “Slave”
-  --master-tsig-key-ids: list # The id of the TSIG keys used for master operation in this zone
-  --masters: list #  List of IP addresses configured as a master for this zone (“Slave” type zones only)
+  --master-tsig-key-ids: list<string> # The id of the TSIG keys used for master operation in this zone
+  --masters: list<string> # List of IP addresses configured as a master for this zone (“Slave” type zones only)
   --name: string # Name of the zone (e.g. “example.com.”) MUST have a trailing dot
-  --nameservers: list # MAY be sent in client bodies during creation, and MUST NOT be sent by the server. Simple list of strings of nameserver names, including the trailing dot. Not required for slave zones.
+  --nameservers: list<string> # MAY be sent in client bodies during creation, and MUST NOT be sent by the server. Simple list of strings of nameserver names, including the trailing dot. Not required for slave zones.
   --notified-serial: int # The SOA serial notifications have been sent out for
   --nsec3narrow: oneof<nothing, bool> # Whether or not the zone uses NSEC3 narrow
   --nsec3param: string # The NSEC3PARAM record
   --presigned: oneof<nothing, bool> # Whether or not the zone is pre-signed
   --rrsets: list # RRSets in this zone (for zones/{zone_id} endpoint only; omitted during GET on the .../zones list endpoint) — item shape: {changetype: string, comments?: list, name: string, records: list, ttl: int, type: string}
   --serial: int # The SOA serial number
-  --slave-tsig-key-ids: list # The id of the TSIG keys used for slave operation in this zone
+  --slave-tsig-key-ids: list<string> # The id of the TSIG keys used for slave operation in this zone
   --soa-edit: string # The SOA-EDIT metadata item
   --soa-edit-api: string # The SOA-EDIT-API metadata item
   --type: string # Set to “Zone”
-  --body-url: string # API endpoint for this zone
+  --url: string # API endpoint for this zone
   --zone: string # MAY contain a BIND-style zone file when creating a zone
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, zone_id: $zone_id} | format pattern "/servers/{server_id}/zones/{zone_id}"))
-  let body = {"account": $account, "api_rectify": $api_rectify, "dnssec": $dnssec, "edited_serial": $edited_serial, "id": $id, "kind": $kind, "master_tsig_key_ids": $master_tsig_key_ids, "masters": $masters, "name": $name, "nameservers": $nameservers, "notified_serial": $notified_serial, "nsec3narrow": $nsec3narrow, "nsec3param": $nsec3param, "presigned": $presigned, "rrsets": $rrsets, "serial": $serial, "slave_tsig_key_ids": $slave_tsig_key_ids, "soa_edit": $soa_edit, "soa_edit_api": $soa_edit_api, "type": $type, "url": $body_url, "zone": $zone} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), zone_id: (encode-path-segment $zone_id)} | format pattern "/servers/{server_id}/zones/{zone_id}"))
+  let req_body = {"account": $account, "api_rectify": $api_rectify, "dnssec": $dnssec, "edited_serial": $edited_serial, "id": $id, "kind": $kind, "master_tsig_key_ids": $master_tsig_key_ids, "masters": $masters, "name": $name, "nameservers": $nameservers, "notified_serial": $notified_serial, "nsec3narrow": $nsec3narrow, "nsec3param": $nsec3param, "presigned": $presigned, "rrsets": $rrsets, "serial": $serial, "slave_tsig_key_ids": $slave_tsig_key_ids, "soa_edit": $soa_edit, "soa_edit_api": $soa_edit_api, "type": $type, "url": $url, "zone": $zone} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Retrieve slave zone from its master.
 #
 # PUT /servers/{server_id}/zones/{zone_id}/axfr-retrieve
 # operationId: axfrRetrieveZone
-export def "servers-zones-axfr-retrieve axfrRetrieveZone" [
+export def "servers-zones-axfr-retrieve get" [
   server_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -637,7 +646,7 @@ export def "servers-zones-axfr-retrieve axfrRetrieveZone" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, zone_id: $zone_id} | format pattern "/servers/{server_id}/zones/{zone_id}/axfr-retrieve"))
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), zone_id: (encode-path-segment $zone_id)} | format pattern "/servers/{server_id}/zones/{zone_id}/axfr-retrieve"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -661,7 +670,7 @@ export def "servers-zones-cryptokeys list" [
 ]: nothing -> table<active: bool, algorithm: string, bits: int, dnskey: string, ds: list<string>, id: int, keytype: string, privatekey: string, published: bool, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, zone_id: $zone_id} | format pattern "/servers/{server_id}/zones/{zone_id}/cryptokeys"))
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), zone_id: (encode-path-segment $zone_id)} | format pattern "/servers/{server_id}/zones/{zone_id}/cryptokeys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -686,7 +695,7 @@ export def "servers-zones-cryptokeys create" [
   --algorithm: string # The name of the algorithm of the key, should be a mnemonic
   --bits: int # The size of the key
   --dnskey: string # The DNSKEY record for this key
-  --ds: list # An array of DS records for this key
+  --ds: list<string> # An array of DS records for this key
   --id: int # The internal identifier, read only
   --keytype: string@keytype-completer
   --privatekey: string # The private key in ISC format
@@ -696,12 +705,12 @@ export def "servers-zones-cryptokeys create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, zone_id: $zone_id} | format pattern "/servers/{server_id}/zones/{zone_id}/cryptokeys"))
-  let body = {"active": $active, "algorithm": $algorithm, "bits": $bits, "dnskey": $dnskey, "ds": $ds, "id": $id, "keytype": $keytype, "privatekey": $privatekey, "published": $published, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), zone_id: (encode-path-segment $zone_id)} | format pattern "/servers/{server_id}/zones/{zone_id}/cryptokeys"))
+  let req_body = {"active": $active, "algorithm": $algorithm, "bits": $bits, "dnskey": $dnskey, "ds": $ds, "id": $id, "keytype": $keytype, "privatekey": $privatekey, "published": $published, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # This method deletes a key specified by cryptokey_id.
@@ -723,7 +732,7 @@ export def "servers-zones-cryptokeys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, zone_id: $zone_id, cryptokey_id: $cryptokey_id} | format pattern "/servers/{server_id}/zones/{zone_id}/cryptokeys/{cryptokey_id}"))
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), zone_id: (encode-path-segment $zone_id), cryptokey_id: (encode-path-segment $cryptokey_id)} | format pattern "/servers/{server_id}/zones/{zone_id}/cryptokeys/{cryptokey_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -748,7 +757,7 @@ export def "servers-zones-cryptokeys get" [
 ]: nothing -> record<active: bool, algorithm: string, bits: int, dnskey: string, ds: list<string>, id: int, keytype: string, privatekey: string, published: bool, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, zone_id: $zone_id, cryptokey_id: $cryptokey_id} | format pattern "/servers/{server_id}/zones/{zone_id}/cryptokeys/{cryptokey_id}"))
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), zone_id: (encode-path-segment $zone_id), cryptokey_id: (encode-path-segment $cryptokey_id)} | format pattern "/servers/{server_id}/zones/{zone_id}/cryptokeys/{cryptokey_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -758,7 +767,7 @@ export def "servers-zones-cryptokeys get" [
 #
 # PUT /servers/{server_id}/zones/{zone_id}/cryptokeys/{cryptokey_id}
 # operationId: modifyCryptokey
-export def "servers-zones-cryptokeys modifyCryptokey" [
+export def "servers-zones-cryptokeys update-modify" [
   server_id: string
   zone_id: string
   cryptokey_id: string
@@ -774,7 +783,7 @@ export def "servers-zones-cryptokeys modifyCryptokey" [
   --algorithm: string # The name of the algorithm of the key, should be a mnemonic
   --bits: int # The size of the key
   --dnskey: string # The DNSKEY record for this key
-  --ds: list # An array of DS records for this key
+  --ds: list<string> # An array of DS records for this key
   --id: int # The internal identifier, read only
   --keytype: string@keytype-completer
   --privatekey: string # The private key in ISC format
@@ -784,19 +793,19 @@ export def "servers-zones-cryptokeys modifyCryptokey" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, zone_id: $zone_id, cryptokey_id: $cryptokey_id} | format pattern "/servers/{server_id}/zones/{zone_id}/cryptokeys/{cryptokey_id}"))
-  let body = {"active": $active, "algorithm": $algorithm, "bits": $bits, "dnskey": $dnskey, "ds": $ds, "id": $id, "keytype": $keytype, "privatekey": $privatekey, "published": $published, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), zone_id: (encode-path-segment $zone_id), cryptokey_id: (encode-path-segment $cryptokey_id)} | format pattern "/servers/{server_id}/zones/{zone_id}/cryptokeys/{cryptokey_id}"))
+  let req_body = {"active": $active, "algorithm": $algorithm, "bits": $bits, "dnskey": $dnskey, "ds": $ds, "id": $id, "keytype": $keytype, "privatekey": $privatekey, "published": $published, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns the zone in AXFR format.
 #
 # GET /servers/{server_id}/zones/{zone_id}/export
 # operationId: axfrExportZone
-export def "servers-zones-export axfrExportZone" [
+export def "servers-zones-export export-axfr" [
   server_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -810,7 +819,7 @@ export def "servers-zones-export axfrExportZone" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, zone_id: $zone_id} | format pattern "/servers/{server_id}/zones/{zone_id}/export"))
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), zone_id: (encode-path-segment $zone_id)} | format pattern "/servers/{server_id}/zones/{zone_id}/export"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -834,7 +843,7 @@ export def "servers-zones-metadata list" [
 ]: nothing -> table<kind: string, metadata: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, zone_id: $zone_id} | format pattern "/servers/{server_id}/zones/{zone_id}/metadata"))
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), zone_id: (encode-path-segment $zone_id)} | format pattern "/servers/{server_id}/zones/{zone_id}/metadata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -856,17 +865,17 @@ export def "servers-zones-metadata create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Name of the metadata
-  --metadata: list # Array with all values for this metadata kind.
+  --metadata: list<string> # Array with all values for this metadata kind.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, zone_id: $zone_id} | format pattern "/servers/{server_id}/zones/{zone_id}/metadata"))
-  let body = {"kind": $kind, "metadata": $metadata} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), zone_id: (encode-path-segment $zone_id)} | format pattern "/servers/{server_id}/zones/{zone_id}/metadata"))
+  let req_body = {"kind": $kind, "metadata": $metadata} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete all items of a single kind of domain metadata.
@@ -888,7 +897,7 @@ export def "servers-zones-metadata delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, zone_id: $zone_id, metadata_kind: $metadata_kind} | format pattern "/servers/{server_id}/zones/{zone_id}/metadata/{metadata_kind}"))
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), zone_id: (encode-path-segment $zone_id), metadata_kind: (encode-path-segment $metadata_kind)} | format pattern "/servers/{server_id}/zones/{zone_id}/metadata/{metadata_kind}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -913,7 +922,7 @@ export def "servers-zones-metadata get" [
 ]: nothing -> record<kind: string, metadata: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, zone_id: $zone_id, metadata_kind: $metadata_kind} | format pattern "/servers/{server_id}/zones/{zone_id}/metadata/{metadata_kind}"))
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), zone_id: (encode-path-segment $zone_id), metadata_kind: (encode-path-segment $metadata_kind)} | format pattern "/servers/{server_id}/zones/{zone_id}/metadata/{metadata_kind}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -923,7 +932,7 @@ export def "servers-zones-metadata get" [
 #
 # PUT /servers/{server_id}/zones/{zone_id}/metadata/{metadata_kind}
 # operationId: modifyMetadata
-export def "servers-zones-metadata modifyMetadata" [
+export def "servers-zones-metadata update-modify" [
   server_id: string
   zone_id: string
   metadata_kind: string
@@ -936,24 +945,24 @@ export def "servers-zones-metadata modifyMetadata" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Name of the metadata
-  --metadata: list # Array with all values for this metadata kind.
+  --metadata: list<string> # Array with all values for this metadata kind.
 ]: any -> record<kind: string, metadata: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, zone_id: $zone_id, metadata_kind: $metadata_kind} | format pattern "/servers/{server_id}/zones/{zone_id}/metadata/{metadata_kind}"))
-  let body = {"kind": $kind, "metadata": $metadata} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), zone_id: (encode-path-segment $zone_id), metadata_kind: (encode-path-segment $metadata_kind)} | format pattern "/servers/{server_id}/zones/{zone_id}/metadata/{metadata_kind}"))
+  let req_body = {"kind": $kind, "metadata": $metadata} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Send a DNS NOTIFY to all slaves.
 #
 # PUT /servers/{server_id}/zones/{zone_id}/notify
 # operationId: notifyZone
-export def "servers-zones-notify notifyZone" [
+export def "servers-zones-notify notify" [
   server_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -967,7 +976,7 @@ export def "servers-zones-notify notifyZone" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, zone_id: $zone_id} | format pattern "/servers/{server_id}/zones/{zone_id}/notify"))
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), zone_id: (encode-path-segment $zone_id)} | format pattern "/servers/{server_id}/zones/{zone_id}/notify"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -977,7 +986,7 @@ export def "servers-zones-notify notifyZone" [
 #
 # PUT /servers/{server_id}/zones/{zone_id}/rectify
 # operationId: rectifyZone
-export def "servers-zones-rectify rectifyZone" [
+export def "servers-zones-rectify update" [
   server_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -991,7 +1000,7 @@ export def "servers-zones-rectify rectifyZone" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({server_id: $server_id, zone_id: $zone_id} | format pattern "/servers/{server_id}/zones/{zone_id}/rectify"))
+  let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), zone_id: (encode-path-segment $zone_id)} | format pattern "/servers/{server_id}/zones/{zone_id}/rectify"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

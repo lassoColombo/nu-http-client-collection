@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -75,7 +84,7 @@ def volume-retention-mode-completer [] { ["DELETE" "RETAIN"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2020-08-01-studios-eula-acceptances post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2020-08-01-studios-eula-acceptances create-accept" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +108,7 @@ export def commands []: nothing -> table {
 #
 # POST /2020-08-01/studios/{studioId}/eula-acceptances
 # operationId: AcceptEulas
-export def "2020-08-01-studios-eula-acceptances post" [
+export def "2020-08-01-studios-eula-acceptances create-accept" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -117,19 +126,19 @@ export def "2020-08-01-studios-eula-acceptances post" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
-  --eula-ids: list # The EULA ID.
+  --eula-ids: list<string> # The EULA ID.
 ]: any -> record<eulaAcceptances: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id} | format pattern "/2020-08-01/studios/{studio_id}/eula-acceptances"))
-  let body = {"eulaIds": $eula_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id)} | format pattern "/2020-08-01/studios/{studio_id}/eula-acceptances"))
+  let req_body = {"eulaIds": $eula_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List EULA acceptances.
@@ -159,11 +168,11 @@ export def "2020-08-01-studios-eula-acceptances list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "eulaIds" $eula_ids "multi") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({studio_id: $studio_id} | format pattern "/2020-08-01/studios/{studio_id}/eula-acceptances") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id)} | format pattern "/2020-08-01/studios/{studio_id}/eula-acceptances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -191,24 +200,24 @@ export def "2020-08-01-studios-launch-profiles create" [
   --x-amz-signed-headers: string
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
   --description: string # A human-readable description of the launch profile. (format: password)
-  ec2_subnet_ids: list # Specifies the IDs of the EC2 subnets where streaming sessions will be accessible from. These subnets must support the specified instance types. 
-  launch_profile_protocol_versions: list # The version number of the protocol that is used by the launch profile. The only valid version is "2021-03-31".
+  ec2_subnet_ids: list<string> # Specifies the IDs of the EC2 subnets where streaming sessions will be accessible from. These subnets must support the specified instance types.
+  launch_profile_protocol_versions: list<string> # The version number of the protocol that is used by the launch profile. The only valid version is "2021-03-31".
   name: string # The name for the launch profile. (format: password)
   stream_configuration: record # Configuration for streaming workstations created using this launch profile. — shape: {automaticTerminationMode?: any, clipboardMode?: any, ec2InstanceTypes?: any, maxSessionLengthInMinutes?: any, maxStoppedSessionLengthInMinutes?: any, sessionBackup?: any, sessionPersistenceMode?: any, sessionStorage?: any, streamingImageIds?: any, volumeConfiguration?: any}
-  studio_component_ids: list # Unique identifiers for a collection of studio components that can be used with this launch profile.
+  studio_component_ids: list<string> # Unique identifiers for a collection of studio components that can be used with this launch profile.
   --tags: record # A collection of labels, in the form of key-value pairs, that apply to this resource.
 ]: any -> record<launchProfile: record<arn: record, createdAt: record, createdBy: record, description: record, ec2SubnetIds: record, launchProfileId: record, launchProfileProtocolVersions: record, name: record, state: record, statusCode: record, statusMessage: record, streamConfiguration: record<automaticTerminationMode: record, clipboardMode: record, ec2InstanceTypes: record, maxSessionLengthInMinutes: record, maxStoppedSessionLengthInMinutes: record, sessionBackup: record, sessionPersistenceMode: record, sessionStorage: record, streamingImageIds: record, volumeConfiguration: record>, studioComponentIds: record, tags: record, updatedAt: record, updatedBy: record, validationResults: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles"))
-  let body = {"description": $description, "ec2SubnetIds": $ec2_subnet_ids, "launchProfileProtocolVersions": $launch_profile_protocol_versions, "name": $name, "streamConfiguration": $stream_configuration, "studioComponentIds": $studio_component_ids, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id)} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles"))
+  let req_body = {"description": $description, "ec2SubnetIds": $ec2_subnet_ids, "launchProfileProtocolVersions": $launch_profile_protocol_versions, "name": $name, "streamConfiguration": $stream_configuration, "studioComponentIds": $studio_component_ids, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all the launch profiles a studio.
@@ -227,7 +236,7 @@ export def "2020-08-01-studios-launch-profiles list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: int # The max number of results to return in the response.
   --next-token: string # The token for the next set of results, or null if there are no more results.
-  --principal-id: string # The principal ID. This currently supports a IAM Identity Center UserId. 
+  --principal-id: string # The principal ID. This currently supports a IAM Identity Center UserId.
   --states: list # Filter this request to launch profiles in any of the given states.
   --x-amz-content-sha256: string
   --x-amz-date: string
@@ -240,11 +249,11 @@ export def "2020-08-01-studios-launch-profiles list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "principalId" $principal_id "scalar") (serialize-qp "states" $states "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({studio_id: $studio_id} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id)} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -278,17 +287,17 @@ export def "2020-08-01-studios-streaming-images create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id} | format pattern "/2020-08-01/studios/{studio_id}/streaming-images"))
-  let body = {"description": $description, "ec2ImageId": $ec2_image_id, "name": $name, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id)} | format pattern "/2020-08-01/studios/{studio_id}/streaming-images"))
+  let req_body = {"description": $description, "ec2ImageId": $ec2_image_id, "name": $name, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# <p>List the streaming image resources available to this studio.</p> <p>This list will contain both images provided by Amazon Web Services, as well as streaming images that you have created in your studio.</p>
+# List the streaming image resources available to this studio. This list will contain both images provided by Amazon Web Services, as well as streaming images that you have created in your studio.
 #
 # GET /2020-08-01/studios/{studioId}/streaming-images
 # operationId: ListStreamingImages
@@ -315,15 +324,15 @@ export def "2020-08-01-studios-streaming-images list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "owner" $owner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({studio_id: $studio_id} | format pattern "/2020-08-01/studios/{studio_id}/streaming-images") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id)} | format pattern "/2020-08-01/studios/{studio_id}/streaming-images") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p>Creates a streaming session in a studio.</p> <p>After invoking this operation, you must poll GetStreamingSession until the streaming session is in the <code>READY</code> state.</p>
+# Creates a streaming session in a studio. After invoking this operation, you must poll GetStreamingSession until the streaming session is in the READY state.
 #
 # POST /2020-08-01/studios/{studioId}/streaming-sessions
 # operationId: CreateStreamingSession
@@ -354,14 +363,14 @@ export def "2020-08-01-studios-streaming-sessions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id} | format pattern "/2020-08-01/studios/{studio_id}/streaming-sessions"))
-  let body = {"ec2InstanceType": $ec2_instance_type, "launchProfileId": $launch_profile_id, "ownedBy": $owned_by, "streamingImageId": $streaming_image_id, "tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id)} | format pattern "/2020-08-01/studios/{studio_id}/streaming-sessions"))
+  let req_body = {"ec2InstanceType": $ec2_instance_type, "launchProfileId": $launch_profile_id, "ownedBy": $owned_by, "streamingImageId": $streaming_image_id, "tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the streaming sessions in a studio.
@@ -393,15 +402,15 @@ export def "2020-08-01-studios-streaming-sessions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "createdBy" $created_by "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "ownedBy" $owned_by "scalar") (serialize-qp "sessionIds" $session_ids "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({studio_id: $studio_id} | format pattern "/2020-08-01/studios/{studio_id}/streaming-sessions") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id)} | format pattern "/2020-08-01/studios/{studio_id}/streaming-sessions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p>Creates a streaming session stream for a streaming session.</p> <p>After invoking this API, invoke GetStreamingSessionStream with the returned streamId to poll the resource until it is in the <code>READY</code> state.</p>
+# Creates a streaming session stream for a streaming session. After invoking this API, invoke GetStreamingSessionStream with the returned streamId to poll the resource until it is in the READY state.
 #
 # POST /2020-08-01/studios/{studioId}/streaming-sessions/{sessionId}/streams
 # operationId: CreateStreamingSessionStream
@@ -429,17 +438,17 @@ export def "2020-08-01-studios-streaming-sessions-streams create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, session_id: $session_id} | format pattern "/2020-08-01/studios/{studio_id}/streaming-sessions/{session_id}/streams"))
-  let body = {"expirationInSeconds": $expiration_in_seconds} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), session_id: (encode-path-segment $session_id)} | format pattern "/2020-08-01/studios/{studio_id}/streaming-sessions/{session_id}/streams"))
+  let req_body = {"expirationInSeconds": $expiration_in_seconds} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# <p>Create a new studio.</p> <p>When creating a studio, two IAM roles must be provided: the admin role and the user role. These roles are assumed by your users when they log in to the Nimble Studio portal.</p> <p>The user role must have the <code>AmazonNimbleStudio-StudioUser</code> managed policy attached for the portal to function properly.</p> <p>The admin role must have the <code>AmazonNimbleStudio-StudioAdmin</code> managed policy attached for the portal to function properly.</p> <p>You may optionally specify a KMS key in the <code>StudioEncryptionConfiguration</code>.</p> <p>In Nimble Studio, resource names, descriptions, initialization scripts, and other data you provide are always encrypted at rest using an KMS key. By default, this key is owned by Amazon Web Services and managed on your behalf. You may provide your own KMS key when calling <code>CreateStudio</code> to encrypt this data using a key you own and manage.</p> <p>When providing an KMS key during studio creation, Nimble Studio creates KMS grants in your account to provide your studio user and admin roles access to these KMS keys.</p> <p>If you delete this grant, the studio will no longer be accessible to your portal users.</p> <p>If you delete the studio KMS key, your studio will no longer be accessible.</p>
+# Create a new studio. When creating a studio, two IAM roles must be provided: the admin role and the user role. These roles are assumed by your users when they log in to the Nimble Studio portal. The user role must have the AmazonNimbleStudio-StudioUser managed policy attached for the portal to function properly. The admin role must have the AmazonNimbleStudio-StudioAdmin managed policy attached for the portal to function properly. You may optionally specify a KMS key in the StudioEncryptionConfiguration. In Nimble Studio, resource names, descriptions, initialization scripts, and other data you provide are always encrypted at rest using an KMS key. By default, this key is owned by Amazon Web Services and managed on your behalf. You may provide your own KMS key when calling CreateStudio to encrypt this data using a key you own and manage. When providing an KMS key during studio creation, Nimble Studio creates KMS grants in your account to provide your studio user and admin roles access to these KMS keys. If you delete this grant, the studio will no longer be accessible to your portal users. If you delete the studio KMS key, your studio will no longer be accessible.
 #
 # POST /2020-08-01/studios
 # operationId: CreateStudio
@@ -472,13 +481,13 @@ export def "2020-08-01-studios create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2020-08-01/studios")
-  let body = {"adminRoleArn": $admin_role_arn, "displayName": $display_name, "studioEncryptionConfiguration": $studio_encryption_configuration, "studioName": $studio_name, "tags": $tags, "userRoleArn": $user_role_arn} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let req_body = {"adminRoleArn": $admin_role_arn, "displayName": $display_name, "studioEncryptionConfiguration": $studio_encryption_configuration, "studioName": $studio_name, "tags": $tags, "userRoleArn": $user_role_arn} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List studios in your Amazon Web Services accounts in the requested Amazon Web Services Region.
@@ -507,10 +516,10 @@ export def "2020-08-01-studios list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2020-08-01/studios" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -541,10 +550,10 @@ export def "2020-08-01-studios-studio-components create" [
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
   --configuration: record # The configuration of the studio component, based on component type. — shape: {activeDirectoryConfiguration?: any, computeFarmConfiguration?: any, licenseServiceConfiguration?: any, sharedFileSystemConfiguration?: any}
   --description: string # The description. (format: password)
-  --ec2-security-group-ids: list # The EC2 security groups that control access to the studio component.
+  --ec2-security-group-ids: list<string> # The EC2 security groups that control access to the studio component.
   --initialization-scripts: list # Initialization scripts for studio components. — item shape: {launchProfileProtocolVersion?: any, platform?: any, runContext?: any, script?: any}
   name: string # The name for the studio component. (format: password)
-  --runtime-role-arn: string # An IAM role attached to a Studio Component that gives the studio component access to Amazon Web Services resources at anytime while the instance is running. 
+  --runtime-role-arn: string # An IAM role attached to a Studio Component that gives the studio component access to Amazon Web Services resources at anytime while the instance is running.
   --script-parameters: list # Parameters for the studio component scripts. — item shape: {key?: any, value?: any}
   --secure-initialization-role-arn: string # An IAM role attached to Studio Component when the system initialization script runs which give the studio component access to Amazon Web Services resources when the system initialization script runs.
   --subtype: string@subtype-completer # The specific subtype of a studio component.
@@ -554,17 +563,17 @@ export def "2020-08-01-studios-studio-components create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id} | format pattern "/2020-08-01/studios/{studio_id}/studio-components"))
-  let body = {"configuration": $configuration, "description": $description, "ec2SecurityGroupIds": $ec2_security_group_ids, "initializationScripts": $initialization_scripts, "name": $name, "runtimeRoleArn": $runtime_role_arn, "scriptParameters": $script_parameters, "secureInitializationRoleArn": $secure_initialization_role_arn, "subtype": $subtype, "tags": $tags, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id)} | format pattern "/2020-08-01/studios/{studio_id}/studio-components"))
+  let req_body = {"configuration": $configuration, "description": $description, "ec2SecurityGroupIds": $ec2_security_group_ids, "initializationScripts": $initialization_scripts, "name": $name, "runtimeRoleArn": $runtime_role_arn, "scriptParameters": $script_parameters, "secureInitializationRoleArn": $secure_initialization_role_arn, "subtype": $subtype, "tags": $tags, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Lists the <code>StudioComponents</code> in a studio.
+# Lists the StudioComponents in a studio.
 #
 # GET /2020-08-01/studios/{studioId}/studio-components
 # operationId: ListStudioComponents
@@ -580,7 +589,7 @@ export def "2020-08-01-studios-studio-components list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: int # The max number of results to return in the response.
   --next-token: string # The token for the next set of results, or null if there are no more results.
-  --states: list # Filters the request to studio components that are in one of the given states. 
+  --states: list # Filters the request to studio components that are in one of the given states.
   --types: list # Filters the request to studio components that are of one of the given types.
   --x-amz-content-sha256: string
   --x-amz-date: string
@@ -593,11 +602,11 @@ export def "2020-08-01-studios-studio-components list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "states" $states "multi") (serialize-qp "types" $types "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({studio_id: $studio_id} | format pattern "/2020-08-01/studios/{studio_id}/studio-components") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id)} | format pattern "/2020-08-01/studios/{studio_id}/studio-components") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -627,11 +636,11 @@ export def "2020-08-01-studios-launch-profiles delete" [
 ]: nothing -> record<launchProfile: record<arn: record, createdAt: record, createdBy: record, description: record, ec2SubnetIds: record, launchProfileId: record, launchProfileProtocolVersions: record, name: record, state: record, statusCode: record, statusMessage: record, streamConfiguration: record<automaticTerminationMode: record, clipboardMode: record, ec2InstanceTypes: record, maxSessionLengthInMinutes: record, maxStoppedSessionLengthInMinutes: record, sessionBackup: record, sessionPersistenceMode: record, sessionStorage: record, streamingImageIds: record, volumeConfiguration: record>, studioComponentIds: record, tags: record, updatedAt: record, updatedBy: record, validationResults: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, launch_profile_id: $launch_profile_id} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), launch_profile_id: (encode-path-segment $launch_profile_id)} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -660,11 +669,11 @@ export def "2020-08-01-studios-launch-profiles get" [
 ]: nothing -> record<launchProfile: record<arn: record, createdAt: record, createdBy: record, description: record, ec2SubnetIds: record, launchProfileId: record, launchProfileProtocolVersions: record, name: record, state: record, statusCode: record, statusMessage: record, streamConfiguration: record<automaticTerminationMode: record, clipboardMode: record, ec2InstanceTypes: record, maxSessionLengthInMinutes: record, maxStoppedSessionLengthInMinutes: record, sessionBackup: record, sessionPersistenceMode: record, sessionStorage: record, streamingImageIds: record, volumeConfiguration: record>, studioComponentIds: record, tags: record, updatedAt: record, updatedBy: record, validationResults: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, launch_profile_id: $launch_profile_id} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), launch_profile_id: (encode-path-segment $launch_profile_id)} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -693,29 +702,29 @@ export def "2020-08-01-studios-launch-profiles update" [
   --x-amz-signed-headers: string
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
   --description: string # A human-readable description of the launch profile. (format: password)
-  --launch-profile-protocol-versions: list # The version number of the protocol that is used by the launch profile. The only valid version is "2021-03-31".
+  --launch-profile-protocol-versions: list<string> # The version number of the protocol that is used by the launch profile. The only valid version is "2021-03-31".
   --name: string # The name for the launch profile. (format: password)
   --stream-configuration: record # Configuration for streaming workstations created using this launch profile. — shape: {automaticTerminationMode?: any, clipboardMode?: any, ec2InstanceTypes?: any, maxSessionLengthInMinutes?: any, maxStoppedSessionLengthInMinutes?: any, sessionBackup?: any, sessionPersistenceMode?: any, sessionStorage?: any, streamingImageIds?: any, volumeConfiguration?: any}
-  --studio-component-ids: list # Unique identifiers for a collection of studio components that can be used with this launch profile.
+  --studio-component-ids: list<string> # Unique identifiers for a collection of studio components that can be used with this launch profile.
 ]: any -> record<launchProfile: record<arn: record, createdAt: record, createdBy: record, description: record, ec2SubnetIds: record, launchProfileId: record, launchProfileProtocolVersions: record, name: record, state: record, statusCode: record, statusMessage: record, streamConfiguration: record<automaticTerminationMode: record, clipboardMode: record, ec2InstanceTypes: record, maxSessionLengthInMinutes: record, maxStoppedSessionLengthInMinutes: record, sessionBackup: record, sessionPersistenceMode: record, sessionStorage: record, streamingImageIds: record, volumeConfiguration: record>, studioComponentIds: record, tags: record, updatedAt: record, updatedBy: record, validationResults: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, launch_profile_id: $launch_profile_id} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}"))
-  let body = {"description": $description, "launchProfileProtocolVersions": $launch_profile_protocol_versions, "name": $name, "streamConfiguration": $stream_configuration, "studioComponentIds": $studio_component_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), launch_profile_id: (encode-path-segment $launch_profile_id)} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}"))
+  let req_body = {"description": $description, "launchProfileProtocolVersions": $launch_profile_protocol_versions, "name": $name, "streamConfiguration": $stream_configuration, "studioComponentIds": $studio_component_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a user from launch profile membership.
 #
 # DELETE /2020-08-01/studios/{studioId}/launch-profiles/{launchProfileId}/membership/{principalId}
 # operationId: DeleteLaunchProfileMember
-export def "2020-08-01-studios-launch-profiles-membership delete-launch-profile-member" [
+export def "2020-08-01-studios-launch-profiles-membership delete-member" [
   studio_id: string
   launch_profile_id: string
   principal_id: string
@@ -738,11 +747,11 @@ export def "2020-08-01-studios-launch-profiles-membership delete-launch-profile-
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, launch_profile_id: $launch_profile_id, principal_id: $principal_id} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}/membership/{principal_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), launch_profile_id: (encode-path-segment $launch_profile_id), principal_id: (encode-path-segment $principal_id)} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}/membership/{principal_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -750,7 +759,7 @@ export def "2020-08-01-studios-launch-profiles-membership delete-launch-profile-
 #
 # GET /2020-08-01/studios/{studioId}/launch-profiles/{launchProfileId}/membership/{principalId}
 # operationId: GetLaunchProfileMember
-export def "2020-08-01-studios-launch-profiles-membership get-launch-profile-member" [
+export def "2020-08-01-studios-launch-profiles-membership get-member" [
   studio_id: string
   launch_profile_id: string
   principal_id: string
@@ -772,11 +781,11 @@ export def "2020-08-01-studios-launch-profiles-membership get-launch-profile-mem
 ]: nothing -> record<member: record<identityStoreId: record, persona: record, principalId: record, sid: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, launch_profile_id: $launch_profile_id, principal_id: $principal_id} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}/membership/{principal_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), launch_profile_id: (encode-path-segment $launch_profile_id), principal_id: (encode-path-segment $principal_id)} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}/membership/{principal_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -784,7 +793,7 @@ export def "2020-08-01-studios-launch-profiles-membership get-launch-profile-mem
 #
 # PATCH /2020-08-01/studios/{studioId}/launch-profiles/{launchProfileId}/membership/{principalId}
 # operationId: UpdateLaunchProfileMember
-export def "2020-08-01-studios-launch-profiles-membership update-launch-profile-member" [
+export def "2020-08-01-studios-launch-profiles-membership update-member" [
   studio_id: string
   launch_profile_id: string
   principal_id: string
@@ -809,14 +818,14 @@ export def "2020-08-01-studios-launch-profiles-membership update-launch-profile-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, launch_profile_id: $launch_profile_id, principal_id: $principal_id} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}/membership/{principal_id}"))
-  let body = {"persona": $persona} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), launch_profile_id: (encode-path-segment $launch_profile_id), principal_id: (encode-path-segment $principal_id)} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}/membership/{principal_id}"))
+  let req_body = {"persona": $persona} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete streaming image.
@@ -845,11 +854,11 @@ export def "2020-08-01-studios-streaming-images delete" [
 ]: nothing -> record<streamingImage: record<arn: record, description: record, ec2ImageId: record, encryptionConfiguration: record<keyArn: record, keyType: record>, eulaIds: record, name: record, owner: record, platform: record, state: record, statusCode: record, statusMessage: record, streamingImageId: record, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, streaming_image_id: $streaming_image_id} | format pattern "/2020-08-01/studios/{studio_id}/streaming-images/{streaming_image_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), streaming_image_id: (encode-path-segment $streaming_image_id)} | format pattern "/2020-08-01/studios/{studio_id}/streaming-images/{streaming_image_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -878,11 +887,11 @@ export def "2020-08-01-studios-streaming-images get" [
 ]: nothing -> record<streamingImage: record<arn: record, description: record, ec2ImageId: record, encryptionConfiguration: record<keyArn: record, keyType: record>, eulaIds: record, name: record, owner: record, platform: record, state: record, statusCode: record, statusMessage: record, streamingImageId: record, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, streaming_image_id: $streaming_image_id} | format pattern "/2020-08-01/studios/{studio_id}/streaming-images/{streaming_image_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), streaming_image_id: (encode-path-segment $streaming_image_id)} | format pattern "/2020-08-01/studios/{studio_id}/streaming-images/{streaming_image_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -915,17 +924,17 @@ export def "2020-08-01-studios-streaming-images update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, streaming_image_id: $streaming_image_id} | format pattern "/2020-08-01/studios/{studio_id}/streaming-images/{streaming_image_id}"))
-  let body = {"description": $description, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), streaming_image_id: (encode-path-segment $streaming_image_id)} | format pattern "/2020-08-01/studios/{studio_id}/streaming-images/{streaming_image_id}"))
+  let req_body = {"description": $description, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# <p>Deletes streaming session resource.</p> <p>After invoking this operation, use GetStreamingSession to poll the resource until it transitions to a <code>DELETED</code> state.</p> <p>A streaming session will count against your streaming session quota until it is marked <code>DELETED</code>.</p>
+# Deletes streaming session resource. After invoking this operation, use GetStreamingSession to poll the resource until it transitions to a DELETED state. A streaming session will count against your streaming session quota until it is marked DELETED.
 #
 # DELETE /2020-08-01/studios/{studioId}/streaming-sessions/{sessionId}
 # operationId: DeleteStreamingSession
@@ -951,15 +960,15 @@ export def "2020-08-01-studios-streaming-sessions delete" [
 ]: nothing -> record<session: record<arn: record, automaticTerminationMode: record, backupMode: record, createdAt: record, createdBy: record, ec2InstanceType: record, launchProfileId: record, maxBackupsToRetain: record, ownedBy: record, sessionId: record, sessionPersistenceMode: record, startedAt: record, startedBy: record, startedFromBackupId: record, state: record, statusCode: record, statusMessage: record, stopAt: record, stoppedAt: record, stoppedBy: record, streamingImageId: record, tags: record, terminateAt: record, updatedAt: record, updatedBy: record, volumeConfiguration: record<iops: record, size: record, throughput: record>, volumeRetentionMode: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, session_id: $session_id} | format pattern "/2020-08-01/studios/{studio_id}/streaming-sessions/{session_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), session_id: (encode-path-segment $session_id)} | format pattern "/2020-08-01/studios/{studio_id}/streaming-sessions/{session_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p>Gets StreamingSession resource.</p> <p>Invoke this operation to poll for a streaming session state while creating or deleting a session.</p>
+# Gets StreamingSession resource. Invoke this operation to poll for a streaming session state while creating or deleting a session.
 #
 # GET /2020-08-01/studios/{studioId}/streaming-sessions/{sessionId}
 # operationId: GetStreamingSession
@@ -984,11 +993,11 @@ export def "2020-08-01-studios-streaming-sessions get" [
 ]: nothing -> record<session: record<arn: record, automaticTerminationMode: record, backupMode: record, createdAt: record, createdBy: record, ec2InstanceType: record, launchProfileId: record, maxBackupsToRetain: record, ownedBy: record, sessionId: record, sessionPersistenceMode: record, startedAt: record, startedBy: record, startedFromBackupId: record, state: record, statusCode: record, statusMessage: record, stopAt: record, stoppedAt: record, stoppedBy: record, streamingImageId: record, tags: record, terminateAt: record, updatedAt: record, updatedBy: record, volumeConfiguration: record<iops: record, size: record, throughput: record>, volumeRetentionMode: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, session_id: $session_id} | format pattern "/2020-08-01/studios/{studio_id}/streaming-sessions/{session_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), session_id: (encode-path-segment $session_id)} | format pattern "/2020-08-01/studios/{studio_id}/streaming-sessions/{session_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1017,11 +1026,11 @@ export def "2020-08-01-studios delete" [
 ]: nothing -> record<studio: record<adminRoleArn: record, arn: record, createdAt: record, displayName: record, homeRegion: record, ssoClientId: record, state: record, statusCode: record, statusMessage: record, studioEncryptionConfiguration: record<keyArn: record, keyType: record>, studioId: record, studioName: record, studioUrl: record, tags: record, updatedAt: record, userRoleArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id} | format pattern "/2020-08-01/studios/{studio_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id)} | format pattern "/2020-08-01/studios/{studio_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1049,15 +1058,15 @@ export def "2020-08-01-studios get" [
 ]: nothing -> record<studio: record<adminRoleArn: record, arn: record, createdAt: record, displayName: record, homeRegion: record, ssoClientId: record, state: record, statusCode: record, statusMessage: record, studioEncryptionConfiguration: record<keyArn: record, keyType: record>, studioId: record, studioName: record, studioUrl: record, tags: record, updatedAt: record, userRoleArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id} | format pattern "/2020-08-01/studios/{studio_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id)} | format pattern "/2020-08-01/studios/{studio_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p>Update a Studio resource.</p> <p>Currently, this operation only supports updating the displayName of your studio.</p>
+# Update a Studio resource. Currently, this operation only supports updating the displayName of your studio.
 #
 # PATCH /2020-08-01/studios/{studioId}
 # operationId: UpdateStudio
@@ -1086,14 +1095,14 @@ export def "2020-08-01-studios update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id} | format pattern "/2020-08-01/studios/{studio_id}"))
-  let body = {"adminRoleArn": $admin_role_arn, "displayName": $display_name, "userRoleArn": $user_role_arn} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id)} | format pattern "/2020-08-01/studios/{studio_id}"))
+  let req_body = {"adminRoleArn": $admin_role_arn, "displayName": $display_name, "userRoleArn": $user_role_arn} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a studio component resource.
@@ -1122,11 +1131,11 @@ export def "2020-08-01-studios-studio-components delete" [
 ]: nothing -> record<studioComponent: record<arn: record, configuration: record<activeDirectoryConfiguration: record, computeFarmConfiguration: record, licenseServiceConfiguration: record, sharedFileSystemConfiguration: record>, createdAt: record, createdBy: record, description: record, ec2SecurityGroupIds: record, initializationScripts: record, name: record, runtimeRoleArn: record, scriptParameters: record, secureInitializationRoleArn: record, state: record, statusCode: record, statusMessage: record, studioComponentId: record, subtype: record, tags: record, type: record, updatedAt: record, updatedBy: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, studio_component_id: $studio_component_id} | format pattern "/2020-08-01/studios/{studio_id}/studio-components/{studio_component_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), studio_component_id: (encode-path-segment $studio_component_id)} | format pattern "/2020-08-01/studios/{studio_id}/studio-components/{studio_component_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1155,11 +1164,11 @@ export def "2020-08-01-studios-studio-components get" [
 ]: nothing -> record<studioComponent: record<arn: record, configuration: record<activeDirectoryConfiguration: record, computeFarmConfiguration: record, licenseServiceConfiguration: record, sharedFileSystemConfiguration: record>, createdAt: record, createdBy: record, description: record, ec2SecurityGroupIds: record, initializationScripts: record, name: record, runtimeRoleArn: record, scriptParameters: record, secureInitializationRoleArn: record, state: record, statusCode: record, statusMessage: record, studioComponentId: record, subtype: record, tags: record, type: record, updatedAt: record, updatedBy: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, studio_component_id: $studio_component_id} | format pattern "/2020-08-01/studios/{studio_id}/studio-components/{studio_component_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), studio_component_id: (encode-path-segment $studio_component_id)} | format pattern "/2020-08-01/studios/{studio_id}/studio-components/{studio_component_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1191,10 +1200,10 @@ export def "2020-08-01-studios-studio-components update" [
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
   --configuration: record # The configuration of the studio component, based on component type. — shape: {activeDirectoryConfiguration?: any, computeFarmConfiguration?: any, licenseServiceConfiguration?: any, sharedFileSystemConfiguration?: any}
   --description: string # The description. (format: password)
-  --ec2-security-group-ids: list # The EC2 security groups that control access to the studio component.
+  --ec2-security-group-ids: list<string> # The EC2 security groups that control access to the studio component.
   --initialization-scripts: list # Initialization scripts for studio components. — item shape: {launchProfileProtocolVersion?: any, platform?: any, runContext?: any, script?: any}
   --name: string # The name for the studio component. (format: password)
-  --runtime-role-arn: string # An IAM role attached to a Studio Component that gives the studio component access to Amazon Web Services resources at anytime while the instance is running. 
+  --runtime-role-arn: string # An IAM role attached to a Studio Component that gives the studio component access to Amazon Web Services resources at anytime while the instance is running.
   --script-parameters: list # Parameters for the studio component scripts. — item shape: {key?: any, value?: any}
   --secure-initialization-role-arn: string # An IAM role attached to Studio Component when the system initialization script runs which give the studio component access to Amazon Web Services resources when the system initialization script runs.
   --subtype: string@subtype-completer # The specific subtype of a studio component.
@@ -1203,21 +1212,21 @@ export def "2020-08-01-studios-studio-components update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, studio_component_id: $studio_component_id} | format pattern "/2020-08-01/studios/{studio_id}/studio-components/{studio_component_id}"))
-  let body = {"configuration": $configuration, "description": $description, "ec2SecurityGroupIds": $ec2_security_group_ids, "initializationScripts": $initialization_scripts, "name": $name, "runtimeRoleArn": $runtime_role_arn, "scriptParameters": $script_parameters, "secureInitializationRoleArn": $secure_initialization_role_arn, "subtype": $subtype, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), studio_component_id: (encode-path-segment $studio_component_id)} | format pattern "/2020-08-01/studios/{studio_id}/studio-components/{studio_component_id}"))
+  let req_body = {"configuration": $configuration, "description": $description, "ec2SecurityGroupIds": $ec2_security_group_ids, "initializationScripts": $initialization_scripts, "name": $name, "runtimeRoleArn": $runtime_role_arn, "scriptParameters": $script_parameters, "secureInitializationRoleArn": $secure_initialization_role_arn, "subtype": $subtype, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a user from studio membership.
 #
 # DELETE /2020-08-01/studios/{studioId}/membership/{principalId}
 # operationId: DeleteStudioMember
-export def "2020-08-01-studios-membership delete-studio-member" [
+export def "2020-08-01-studios-membership delete-member" [
   studio_id: string
   principal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1239,11 +1248,11 @@ export def "2020-08-01-studios-membership delete-studio-member" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, principal_id: $principal_id} | format pattern "/2020-08-01/studios/{studio_id}/membership/{principal_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), principal_id: (encode-path-segment $principal_id)} | format pattern "/2020-08-01/studios/{studio_id}/membership/{principal_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1251,7 +1260,7 @@ export def "2020-08-01-studios-membership delete-studio-member" [
 #
 # GET /2020-08-01/studios/{studioId}/membership/{principalId}
 # operationId: GetStudioMember
-export def "2020-08-01-studios-membership get-studio-member" [
+export def "2020-08-01-studios-membership get-member" [
   studio_id: string
   principal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1272,11 +1281,11 @@ export def "2020-08-01-studios-membership get-studio-member" [
 ]: nothing -> record<member: record<identityStoreId: record, persona: record, principalId: record, sid: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, principal_id: $principal_id} | format pattern "/2020-08-01/studios/{studio_id}/membership/{principal_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), principal_id: (encode-path-segment $principal_id)} | format pattern "/2020-08-01/studios/{studio_id}/membership/{principal_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1304,11 +1313,11 @@ export def "2020-08-01-eulas get" [
 ]: nothing -> record<eula: record<content: record, createdAt: record, eulaId: record, name: record, updatedAt: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({eula_id: $eula_id} | format pattern "/2020-08-01/eulas/{eula_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({eula_id: (encode-path-segment $eula_id)} | format pattern "/2020-08-01/eulas/{eula_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1337,11 +1346,11 @@ export def "2020-08-01-studios-launch-profiles-details get" [
 ]: nothing -> record<launchProfile: record<arn: record, createdAt: record, createdBy: record, description: record, ec2SubnetIds: record, launchProfileId: record, launchProfileProtocolVersions: record, name: record, state: record, statusCode: record, statusMessage: record, streamConfiguration: record<automaticTerminationMode: record, clipboardMode: record, ec2InstanceTypes: record, maxSessionLengthInMinutes: record, maxStoppedSessionLengthInMinutes: record, sessionBackup: record, sessionPersistenceMode: record, sessionStorage: record, streamingImageIds: record, volumeConfiguration: record>, studioComponentIds: record, tags: record, updatedAt: record, updatedBy: record, validationResults: record>, streamingImages: record, studioComponentSummaries: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, launch_profile_id: $launch_profile_id} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}/details"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), launch_profile_id: (encode-path-segment $launch_profile_id)} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}/details"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1349,7 +1358,7 @@ export def "2020-08-01-studios-launch-profiles-details get" [
 #
 # GET /2020-08-01/studios/{studioId}/launch-profiles/{launchProfileId}/init#launchProfileProtocolVersions&launchPurpose&platform
 # operationId: GetLaunchProfileInitialization
-export def "2020-08-01-studios-launch-profiles-initlaunch-profile-protocol-versionslaunch-purposeplatform get-launch-profile-initialization" [
+export def "2020-08-01-studios-launch-profiles-initlaunch-profile-protocol-versionslaunch-purposeplatform get-initialization" [
   studio_id: string
   launch_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1374,15 +1383,15 @@ export def "2020-08-01-studios-launch-profiles-initlaunch-profile-protocol-versi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "launchProfileProtocolVersions" $launch_profile_protocol_versions "multi") (serialize-qp "launchPurpose" $launch_purpose "scalar") (serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({studio_id: $studio_id, launch_profile_id: $launch_profile_id} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}/init#launchProfileProtocolVersions&launchPurpose&platform") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), launch_profile_id: (encode-path-segment $launch_profile_id)} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}/init#launchProfileProtocolVersions&launchPurpose&platform") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p>Gets <code>StreamingSessionBackup</code> resource.</p> <p>Invoke this operation to poll for a streaming session backup while stopping a streaming session.</p>
+# Gets StreamingSessionBackup resource. Invoke this operation to poll for a streaming session backup while stopping a streaming session.
 #
 # GET /2020-08-01/studios/{studioId}/streaming-session-backups/{backupId}
 # operationId: GetStreamingSessionBackup
@@ -1407,15 +1416,15 @@ export def "2020-08-01-studios-streaming-session-backups get" [
 ]: nothing -> record<streamingSessionBackup: record<arn: record, backupId: record, createdAt: record, launchProfileId: record, ownedBy: record, sessionId: record, state: string, statusCode: record, statusMessage: record, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, backup_id: $backup_id} | format pattern "/2020-08-01/studios/{studio_id}/streaming-session-backups/{backup_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), backup_id: (encode-path-segment $backup_id)} | format pattern "/2020-08-01/studios/{studio_id}/streaming-session-backups/{backup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p>Gets a StreamingSessionStream for a streaming session.</p> <p>Invoke this operation to poll the resource after invoking <code>CreateStreamingSessionStream</code>.</p> <p>After the <code>StreamingSessionStream</code> changes to the <code>READY</code> state, the url property will contain a stream to be used with the DCV streaming client.</p>
+# Gets a StreamingSessionStream for a streaming session. Invoke this operation to poll the resource after invoking CreateStreamingSessionStream. After the StreamingSessionStream changes to the READY state, the url property will contain a stream to be used with the DCV streaming client.
 #
 # GET /2020-08-01/studios/{studioId}/streaming-sessions/{sessionId}/streams/{streamId}
 # operationId: GetStreamingSessionStream
@@ -1441,11 +1450,11 @@ export def "2020-08-01-studios-streaming-sessions-streams get" [
 ]: nothing -> record<stream: record<createdAt: record, createdBy: record, expiresAt: record, ownedBy: record, state: record, statusCode: record, streamId: record, url: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, session_id: $session_id, stream_id: $stream_id} | format pattern "/2020-08-01/studios/{studio_id}/streaming-sessions/{session_id}/streams/{stream_id}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), session_id: (encode-path-segment $session_id), stream_id: (encode-path-segment $stream_id)} | format pattern "/2020-08-01/studios/{studio_id}/streaming-sessions/{session_id}/streams/{stream_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1476,10 +1485,10 @@ export def "2020-08-01-eulas list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "eulaIds" $eula_ids "multi") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2020-08-01/eulas" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1487,7 +1496,7 @@ export def "2020-08-01-eulas list" [
 #
 # GET /2020-08-01/studios/{studioId}/launch-profiles/{launchProfileId}/membership
 # operationId: ListLaunchProfileMembers
-export def "2020-08-01-studios-launch-profiles-membership list-launch-profile-members" [
+export def "2020-08-01-studios-launch-profiles-membership list-members" [
   studio_id: string
   launch_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1511,11 +1520,11 @@ export def "2020-08-01-studios-launch-profiles-membership list-launch-profile-me
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({studio_id: $studio_id, launch_profile_id: $launch_profile_id} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}/membership") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), launch_profile_id: (encode-path-segment $launch_profile_id)} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}/membership") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1524,7 +1533,7 @@ export def "2020-08-01-studios-launch-profiles-membership list-launch-profile-me
 # POST /2020-08-01/studios/{studioId}/launch-profiles/{launchProfileId}/membership
 # operationId: PutLaunchProfileMembers
 # --members item shape: {persona: any, principalId: any}
-export def "2020-08-01-studios-launch-profiles-membership update-launch-profile-members" [
+export def "2020-08-01-studios-launch-profiles-membership update-members" [
   studio_id: string
   launch_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1549,14 +1558,14 @@ export def "2020-08-01-studios-launch-profiles-membership update-launch-profile-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, launch_profile_id: $launch_profile_id} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}/membership"))
-  let body = {"identityStoreId": $identity_store_id, "members": $members} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), launch_profile_id: (encode-path-segment $launch_profile_id)} | format pattern "/2020-08-01/studios/{studio_id}/launch-profiles/{launch_profile_id}/membership"))
+  let req_body = {"identityStoreId": $identity_store_id, "members": $members} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists the backups of a streaming session in a studio.
@@ -1586,19 +1595,19 @@ export def "2020-08-01-studios-streaming-session-backups list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "ownedBy" $owned_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({studio_id: $studio_id} | format pattern "/2020-08-01/studios/{studio_id}/streaming-session-backups") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id)} | format pattern "/2020-08-01/studios/{studio_id}/streaming-session-backups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# <p>Get all users in a given studio membership.</p> <note> <p> <code>ListStudioMembers</code> only returns admin members.</p> </note>
+# Get all users in a given studio membership. ListStudioMembers only returns admin members.
 #
 # GET /2020-08-01/studios/{studioId}/membership
 # operationId: ListStudioMembers
-export def "2020-08-01-studios-membership list-studio-members" [
+export def "2020-08-01-studios-membership list-members" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1621,11 +1630,11 @@ export def "2020-08-01-studios-membership list-studio-members" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({studio_id: $studio_id} | format pattern "/2020-08-01/studios/{studio_id}/membership") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id)} | format pattern "/2020-08-01/studios/{studio_id}/membership") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1634,7 +1643,7 @@ export def "2020-08-01-studios-membership list-studio-members" [
 # POST /2020-08-01/studios/{studioId}/membership
 # operationId: PutStudioMembers
 # --members item shape: {persona: any, principalId: any}
-export def "2020-08-01-studios-membership update-studio-members" [
+export def "2020-08-01-studios-membership update-members" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1658,21 +1667,21 @@ export def "2020-08-01-studios-membership update-studio-members" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id} | format pattern "/2020-08-01/studios/{studio_id}/membership"))
-  let body = {"identityStoreId": $identity_store_id, "members": $members} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id)} | format pattern "/2020-08-01/studios/{studio_id}/membership"))
+  let req_body = {"identityStoreId": $identity_store_id, "members": $members} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# <p>Gets the tags for a resource, given its Amazon Resource Names (ARN).</p> <p>This operation supports ARNs for all resource types in Nimble Studio that support tags, including studio, studio component, launch profile, streaming image, and streaming session. All resources that can be tagged will contain an ARN property, so you do not have to create this ARN yourself.</p>
+# Gets the tags for a resource, given its Amazon Resource Names (ARN). This operation supports ARNs for all resource types in Nimble Studio that support tags, including studio, studio component, launch profile, streaming image, and streaming session. All resources that can be tagged will contain an ARN property, so you do not have to create this ARN yourself.
 #
 # GET /2020-08-01/tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "2020-08-01-tags list-tags-for-resource" [
+export def "2020-08-01-tags list-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1692,11 +1701,11 @@ export def "2020-08-01-tags list-tags-for-resource" [
 ]: nothing -> record<tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/2020-08-01/tags/{resource_arn}"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/2020-08-01/tags/{resource_arn}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -1726,17 +1735,17 @@ export def "2020-08-01-tags tag-resource" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/2020-08-01/tags/{resource_arn}"))
-  let body = {"tags": $tags} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/2020-08-01/tags/{resource_arn}"))
+  let req_body = {"tags": $tags} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# Transitions sessions from the <code>STOPPED</code> state into the <code>READY</code> state. The <code>START_IN_PROGRESS</code> state is the intermediate state between the <code>STOPPED</code> and <code>READY</code> states.
+# Transitions sessions from the STOPPED state into the READY state. The START_IN_PROGRESS state is the intermediate state between the STOPPED and READY states.
 #
 # POST /2020-08-01/studios/{studioId}/streaming-sessions/{sessionId}/start
 # operationId: StartStreamingSession
@@ -1764,21 +1773,21 @@ export def "2020-08-01-studios-streaming-sessions-start start" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, session_id: $session_id} | format pattern "/2020-08-01/studios/{studio_id}/streaming-sessions/{session_id}/start"))
-  let body = {"backupId": $backup_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), session_id: (encode-path-segment $session_id)} | format pattern "/2020-08-01/studios/{studio_id}/streaming-sessions/{session_id}/start"))
+  let req_body = {"backupId": $backup_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
-# <p>Repairs the IAM Identity Center configuration for a given studio.</p> <p>If the studio has a valid IAM Identity Center configuration currently associated with it, this operation will fail with a validation error.</p> <p>If the studio does not have a valid IAM Identity Center configuration currently associated with it, then a new IAM Identity Center application is created for the studio and the studio is changed to the <code>READY</code> state.</p> <p>After the IAM Identity Center application is repaired, you must use the Amazon Nimble Studio console to add administrators and users to your studio.</p>
+# Repairs the IAM Identity Center configuration for a given studio. If the studio has a valid IAM Identity Center configuration currently associated with it, this operation will fail with a validation error. If the studio does not have a valid IAM Identity Center configuration currently associated with it, then a new IAM Identity Center application is created for the studio and the studio is changed to the READY state. After the IAM Identity Center application is repaired, you must use the Amazon Nimble Studio console to add administrators and users to your studio.
 #
 # PUT /2020-08-01/studios/{studioId}/sso-configuration
 # operationId: StartStudioSSOConfigurationRepair
-export def "2020-08-01-studios-sso-configuration start-studio-sso-configuration-repair" [
+export def "2020-08-01-studios-sso-configuration start-repair" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1799,15 +1808,15 @@ export def "2020-08-01-studios-sso-configuration start-studio-sso-configuration-
 ]: nothing -> record<studio: record<adminRoleArn: record, arn: record, createdAt: record, displayName: record, homeRegion: record, ssoClientId: record, state: record, statusCode: record, statusMessage: record, studioEncryptionConfiguration: record<keyArn: record, keyType: record>, studioId: record, studioName: record, studioUrl: record, tags: record, updatedAt: record, userRoleArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id} | format pattern "/2020-08-01/studios/{studio_id}/sso-configuration"))
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id)} | format pattern "/2020-08-01/studios/{studio_id}/sso-configuration"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Transitions sessions from the <code>READY</code> state into the <code>STOPPED</code> state. The <code>STOP_IN_PROGRESS</code> state is the intermediate state between the <code>READY</code> and <code>STOPPED</code> states.
+# Transitions sessions from the READY state into the STOPPED state. The STOP_IN_PROGRESS state is the intermediate state between the READY and STOPPED states.
 #
 # POST /2020-08-01/studios/{studioId}/streaming-sessions/{sessionId}/stop
 # operationId: StopStreamingSession
@@ -1835,14 +1844,14 @@ export def "2020-08-01-studios-streaming-sessions-stop stop" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({studio_id: $studio_id, session_id: $session_id} | format pattern "/2020-08-01/studios/{studio_id}/streaming-sessions/{session_id}/stop"))
-  let body = {"volumeRetentionMode": $volume_retention_mode} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({studio_id: (encode-path-segment $studio_id), session_id: (encode-path-segment $session_id)} | format pattern "/2020-08-01/studios/{studio_id}/streaming-sessions/{session_id}/stop"))
+  let req_body = {"volumeRetentionMode": $volume_retention_mode} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Client-Token": $x_amz_client_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes the tags for a resource.
@@ -1871,10 +1880,10 @@ export def "2020-08-01-tags untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/2020-08-01/tags/{resource_arn}#tagKeys") $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/2020-08-01/tags/{resource_arn}#tagKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

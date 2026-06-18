@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -128,7 +137,7 @@ export def "html get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-url: string # URL of the target page (e.g. https://example.com)
+  --url: string # URL of the target page (e.g. https://example.com)
   --headers: record # HTTP headers to pass to the target page. Can be specified either via a nested query parameter (...&headers[One]=value1&headers=[Another]=value2) or as a JSON encoded object (...&headers={"One": "value1", "Another": "value2"}) (e.g. {"Cookie":"session=some_id"})
   --timeout: int # Maximum processing time in ms. Increase it in case of timeout errors (10000 by default, maximum is 30000) (default: 10000, e.g. 10000)
   --js: oneof<nothing, bool> # Execute on-page JavaScript using a headless browser (true by default) (default: true, e.g. true)
@@ -141,7 +150,7 @@ export def "html get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar") (serialize-qp "headers" $headers "multi") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "js" $js "scalar") (serialize-qp "js_timeout" $js_timeout "scalar") (serialize-qp "proxy" $proxy "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "error_on_404" $error_on_404 "scalar") (serialize-qp "error_on_redirect" $error_on_redirect "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "headers" $headers "multi") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "js" $js "scalar") (serialize-qp "js_timeout" $js_timeout "scalar") (serialize-qp "proxy" $proxy "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "error_on_404" $error_on_404 "scalar") (serialize-qp "error_on_redirect" $error_on_redirect "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/html" $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -162,7 +171,7 @@ export def "selected get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --selector: string # CSS selector (null by default, returns whole page HTML) (e.g. h1)
-  --qp-url: string # URL of the target page (e.g. https://example.com)
+  --url: string # URL of the target page (e.g. https://example.com)
   --headers: record # HTTP headers to pass to the target page. Can be specified either via a nested query parameter (...&headers[One]=value1&headers=[Another]=value2) or as a JSON encoded object (...&headers={"One": "value1", "Another": "value2"}) (e.g. {"Cookie":"session=some_id"})
   --timeout: int # Maximum processing time in ms. Increase it in case of timeout errors (10000 by default, maximum is 30000) (default: 10000, e.g. 10000)
   --js: oneof<nothing, bool> # Execute on-page JavaScript using a headless browser (true by default) (default: true, e.g. true)
@@ -175,7 +184,7 @@ export def "selected get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "selector" $selector "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "headers" $headers "multi") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "js" $js "scalar") (serialize-qp "js_timeout" $js_timeout "scalar") (serialize-qp "proxy" $proxy "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "error_on_404" $error_on_404 "scalar") (serialize-qp "error_on_redirect" $error_on_redirect "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "selector" $selector "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "headers" $headers "multi") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "js" $js "scalar") (serialize-qp "js_timeout" $js_timeout "scalar") (serialize-qp "proxy" $proxy "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "error_on_404" $error_on_404 "scalar") (serialize-qp "error_on_redirect" $error_on_redirect "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/selected" $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -195,8 +204,8 @@ export def "selected-multiple get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --selectors: list # Multiple CSS selectors (null by default, returns whole page HTML) (e.g. [h1])
-  --qp-url: string # URL of the target page (e.g. https://example.com)
+  --selectors: list<string> # Multiple CSS selectors (null by default, returns whole page HTML) (e.g. [h1])
+  --url: string # URL of the target page (e.g. https://example.com)
   --headers: record # HTTP headers to pass to the target page. Can be specified either via a nested query parameter (...&headers[One]=value1&headers=[Another]=value2) or as a JSON encoded object (...&headers={"One": "value1", "Another": "value2"}) (e.g. {"Cookie":"session=some_id"})
   --timeout: int # Maximum processing time in ms. Increase it in case of timeout errors (10000 by default, maximum is 30000) (default: 10000, e.g. 10000)
   --js: oneof<nothing, bool> # Execute on-page JavaScript using a headless browser (true by default) (default: true, e.g. true)
@@ -209,7 +218,7 @@ export def "selected-multiple get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "selectors" $selectors "multi") (serialize-qp "url" $qp_url "scalar") (serialize-qp "headers" $headers "multi") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "js" $js "scalar") (serialize-qp "js_timeout" $js_timeout "scalar") (serialize-qp "proxy" $proxy "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "error_on_404" $error_on_404 "scalar") (serialize-qp "error_on_redirect" $error_on_redirect "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "selectors" $selectors "multi") (serialize-qp "url" $url "scalar") (serialize-qp "headers" $headers "multi") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "js" $js "scalar") (serialize-qp "js_timeout" $js_timeout "scalar") (serialize-qp "proxy" $proxy "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "error_on_404" $error_on_404 "scalar") (serialize-qp "error_on_redirect" $error_on_redirect "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/selected-multiple" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

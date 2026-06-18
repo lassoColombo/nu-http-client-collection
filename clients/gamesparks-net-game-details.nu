@@ -14,6 +14,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "accesstoken" => { {headers: {accessToken: $token_val}, query: ""} }
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
     "jwt" => { {headers: {jwt: $token_val}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -35,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -64,8 +74,35 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
+# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
+# the field names whose value should be read from disk as bytes; every
+# other field is sent as a text part (records/lists JSON-stringified).
+# Returns {content_type, body} ready to pass to `do-request`.
+def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {
+  let boundary = $"----nu-(random chars --length 24)"
+  let crlf = "\r\n"
+  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
+    let name = $p.k
+    let val = $p.v
+    if $name in $file_fields {
+      let filename = ($val | path basename)
+      let bytes = (open --raw $val | into binary | collect)
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
+      $head ++ $bytes ++ ($crlf | into binary)
+    } else {
+      let dt = ($val | describe)
+      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }
+      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
+      $head ++ ($"($s)($crlf)" | into binary)
+    }
+  })
+  let trailer = ($"--($boundary)--($crlf)" | into binary)
+  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
+  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
+}
+
 def base-url-completer [] { ["http://localhost//config2.gamesparks.net"] }
-def auth-scheme-completer [] { ["accesstoken" "basic" "jwt"] }
+def auth-scheme-completer [] { ["accesstoken" "basic" "jwt" "basic-credentials"] }
 
 # Completers for enum parameters
 def stage-completer [] { ["LIVE" "PREVIEW"] }
@@ -76,7 +113,7 @@ def query-name-completer [] { ["activeUsersNow" "averageDailyActiveUsers" "avera
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "restv2-game-regions get-region-options-using-get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "restv2-game-regions list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -100,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # GET /restv2/game/regions
 # operationId: getRegionOptionsUsingGET
-export def "restv2-game-regions get-region-options-using-get" [
+export def "restv2-game-regions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -122,7 +159,7 @@ export def "restv2-game-regions get-region-options-using-get" [
 #
 # GET /restv2/game/{apiKey}/admin/analytics
 # operationId: getAnalyticsDataUsingGET
-export def "restv2-game-admin-analytics get-analytics-data-using-get" [
+export def "restv2-game-admin-analytics get-data-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -142,7 +179,7 @@ export def "restv2-game-admin-analytics get-analytics-data-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stage" $stage "scalar") (serialize-qp "dataType" $data_type "scalar") (serialize-qp "precision" $precision "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "keys" $keys "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/analytics") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/analytics") $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -152,7 +189,7 @@ export def "restv2-game-admin-analytics get-analytics-data-using-get" [
 #
 # GET /restv2/game/{apiKey}/admin/analytics/count
 # operationId: getDataCountUsingGET
-export def "restv2-game-admin-analytics-count get-data-count-using-get" [
+export def "restv2-game-admin-analytics-count get-data-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -168,7 +205,7 @@ export def "restv2-game-admin-analytics-count get-data-count-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stage" $stage "scalar") (serialize-qp "queryName" $query_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/analytics/count") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/analytics/count") $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -178,7 +215,7 @@ export def "restv2-game-admin-analytics-count get-data-count-using-get" [
 #
 # GET /restv2/game/{apiKey}/admin/analytics/rollingRetention
 # operationId: getRetentionUsingGET
-export def "restv2-game-admin-analytics-rolling-retention get-retention-using-get" [
+export def "restv2-game-admin-analytics-rolling-retention get-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -193,7 +230,7 @@ export def "restv2-game-admin-analytics-rolling-retention get-retention-using-ge
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stage" $stage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/analytics/rollingRetention") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/analytics/rollingRetention") $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -216,7 +253,7 @@ export def "restv2-game-admin-billing-details get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/billingDetails"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/billingDetails"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -257,19 +294,19 @@ export def "restv2-game-admin-billing-details update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/billingDetails"))
-  let body = {"building": $building, "city": $city, "companyName": $company_name, "country": $country, "email1": $email1, "email2": $email2, "email3": $email3, "firstName1": $first_name1, "firstName2": $first_name2, "firstName3": $first_name3, "lastName1": $last_name1, "lastName2": $last_name2, "lastName3": $last_name3, "postcode": $postcode, "state": $state, "street": $street, "taxNumber": $tax_number} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/billingDetails"))
+  let req_body = {"building": $building, "city": $city, "companyName": $company_name, "country": $country, "email1": $email1, "email2": $email2, "email3": $email3, "firstName1": $first_name1, "firstName2": $first_name2, "firstName3": $first_name3, "lastName1": $last_name1, "lastName2": $last_name2, "lastName3": $last_name3, "postcode": $postcode, "state": $state, "street": $street, "taxNumber": $tax_number} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # getGameSummary
 #
 # GET /restv2/game/{apiKey}/admin/notifications/summary
 # operationId: getGameSummaryUsingGET
-export def "restv2-game-admin-notifications-summary get-game-summary-using-get" [
+export def "restv2-game-admin-notifications-summary get-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -286,7 +323,7 @@ export def "restv2-game-admin-notifications-summary get-game-summary-using-get" 
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stage" $stage "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/notifications/summary") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/notifications/summary") $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -296,7 +333,7 @@ export def "restv2-game-admin-notifications-summary get-game-summary-using-get" 
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/amazon
 # operationId: testPushAmazonNotificationsUsingPOST
-export def "restv2-game-admin-push-notifications-test-amazon test-push-amazon-notifications-using-post" [
+export def "restv2-game-admin-push-notifications-test-amazon create-using" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -316,19 +353,19 @@ export def "restv2-game-admin-push-notifications-test-amazon test-push-amazon-no
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/amazon"))
-  let body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/amazon"))
+  let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # testPushAppleDevNotifications
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/apple/development
 # operationId: testPushAppleDevNotificationsUsingPOST
-export def "restv2-game-admin-push-notifications-test-apple-development test-push-apple-dev-notifications-using-post" [
+export def "restv2-game-admin-push-notifications-test-apple-development create-dev-using" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -348,19 +385,19 @@ export def "restv2-game-admin-push-notifications-test-apple-development test-pus
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/apple/development"))
-  let body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/apple/development"))
+  let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # testPushAppleProdNotifications
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/apple/production
 # operationId: testPushAppleProdNotificationsUsingPOST
-export def "restv2-game-admin-push-notifications-test-apple-production test-push-apple-prod-notifications-using-post" [
+export def "restv2-game-admin-push-notifications-test-apple-production create-prod-using" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -380,19 +417,19 @@ export def "restv2-game-admin-push-notifications-test-apple-production test-push
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/apple/production"))
-  let body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/apple/production"))
+  let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # testPushGoogleNotifications
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/google
 # operationId: testPushGoogleNotificationsUsingPOST
-export def "restv2-game-admin-push-notifications-test-google test-push-google-notifications-using-post" [
+export def "restv2-game-admin-push-notifications-test-google create-using" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -412,19 +449,19 @@ export def "restv2-game-admin-push-notifications-test-google test-push-google-no
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/google"))
-  let body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/google"))
+  let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # testWindows8Notifications
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/microsoft/windows8
 # operationId: testWindows8NotificationsUsingPOST
-export def "restv2-game-admin-push-notifications-test-microsoft-windows8 test-windows8-notifications-using-post" [
+export def "restv2-game-admin-push-notifications-test-microsoft-windows8 create-using" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -444,19 +481,19 @@ export def "restv2-game-admin-push-notifications-test-microsoft-windows8 test-wi
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/microsoft/windows8"))
-  let body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/microsoft/windows8"))
+  let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # testWindowsPhone8Notifications
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/microsoft/windowsPhone8
 # operationId: testWindowsPhone8NotificationsUsingPOST
-export def "restv2-game-admin-push-notifications-test-microsoft-windows-phone8 test-windows-phone8-notifications-using-post" [
+export def "restv2-game-admin-push-notifications-test-microsoft-windows-phone8 create-using" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -476,19 +513,19 @@ export def "restv2-game-admin-push-notifications-test-microsoft-windows-phone8 t
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/microsoft/windowsPhone8"))
-  let body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/microsoft/windowsPhone8"))
+  let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # testViberIntegrationNotifications
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/viber/integration
 # operationId: testViberIntegrationNotificationsUsingPOST
-export def "restv2-game-admin-push-notifications-test-viber-integration test-viber-integration-notifications-using-post" [
+export def "restv2-game-admin-push-notifications-test-viber-integration create-using" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -508,19 +545,19 @@ export def "restv2-game-admin-push-notifications-test-viber-integration test-vib
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/viber/integration"))
-  let body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/viber/integration"))
+  let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # testViberProductionNotifications
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/viber/production
 # operationId: testViberProductionNotificationsUsingPOST
-export def "restv2-game-admin-push-notifications-test-viber-production test-viber-production-notifications-using-post" [
+export def "restv2-game-admin-push-notifications-test-viber-production create-using" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -540,19 +577,19 @@ export def "restv2-game-admin-push-notifications-test-viber-production test-vibe
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/viber/production"))
-  let body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/pushNotifications/test/viber/production"))
+  let req_body = {"customJson": $custom_json, "messageId": $message_id, "pushId": $push_id, "subtitle": $subtitle, "summary": $summary, "title": $title} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # getScriptDifferences
 #
 # GET /restv2/game/{apiKey}/admin/scripts/differences/{snapshotId1}/{snapshotId2}
 # operationId: getScriptDifferencesUsingGET
-export def "restv2-game-admin-scripts-differences get-script-differences-using-get" [
+export def "restv2-game-admin-scripts-differences get-using-get" [
   api_key: string
   snapshot_id1: string
   snapshot_id2: string
@@ -567,7 +604,7 @@ export def "restv2-game-admin-scripts-differences get-script-differences-using-g
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, snapshot_id1: $snapshot_id1, snapshot_id2: $snapshot_id2} | format pattern "/restv2/game/{api_key}/admin/scripts/differences/{snapshot_id1}/{snapshot_id2}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id1: (encode-path-segment $snapshot_id1), snapshot_id2: (encode-path-segment $snapshot_id2)} | format pattern "/restv2/game/{api_key}/admin/scripts/differences/{snapshot_id1}/{snapshot_id2}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -577,7 +614,7 @@ export def "restv2-game-admin-scripts-differences get-script-differences-using-g
 #
 # GET /restv2/game/{apiKey}/admin/scripts/export
 # operationId: exportZipUsingGET
-export def "restv2-game-admin-scripts-export export-zip-using-get" [
+export def "restv2-game-admin-scripts-export get-zip-using" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -590,7 +627,7 @@ export def "restv2-game-admin-scripts-export export-zip-using-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/scripts/export"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/scripts/export"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -600,7 +637,7 @@ export def "restv2-game-admin-scripts-export export-zip-using-get" [
 #
 # POST /restv2/game/{apiKey}/admin/scripts/import/accept
 # operationId: importAcceptUsingPOST
-export def "restv2-game-admin-scripts-import-accept import-accept-using-post" [
+export def "restv2-game-admin-scripts-import-accept create-using" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -610,26 +647,27 @@ export def "restv2-game-admin-scripts-import-accept import-accept-using-post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-body: string # body
+  --body: string # body
   file: string # file (format: binary)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "body" $qp_body "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/scripts/import/accept") $qp)
-  let body = {"file": $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let qp = [(serialize-qp "body" $body "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/scripts/import/accept") $qp)
+  let req_body = {"file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["file"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # importZip
 #
 # POST /restv2/game/{apiKey}/admin/scripts/import/preview
 # operationId: importZipUsingPOST
-export def "restv2-game-admin-scripts-import-preview import-zip-using-post" [
+export def "restv2-game-admin-scripts-import-preview create-zip-using" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -644,19 +682,20 @@ export def "restv2-game-admin-scripts-import-preview import-zip-using-post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/scripts/import/preview"))
-  let body = {"file": $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/scripts/import/preview"))
+  let req_body = {"file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let mp = (build-multipart-body $req_body ["file"])
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $mp.content_type $mp.body
 }
 
 # getScriptVersions
 #
 # GET /restv2/game/{apiKey}/admin/scripts/versions
 # operationId: getScriptVersionsUsingGET_1
-export def "restv2-game-admin-scripts-versions get-script-versions-using-get-by-apiKey" [
+export def "restv2-game-admin-scripts-versions get-using-get-by-apiKey" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -671,7 +710,7 @@ export def "restv2-game-admin-scripts-versions get-script-versions-using-get-by-
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/scripts/versions") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/scripts/versions") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -681,7 +720,7 @@ export def "restv2-game-admin-scripts-versions get-script-versions-using-get-by-
 #
 # GET /restv2/game/{apiKey}/admin/scripts/versions/{page}
 # operationId: getScriptVersionsUsingGET
-export def "restv2-game-admin-scripts-versions get-script-versions-using-get" [
+export def "restv2-game-admin-scripts-versions get-using-get" [
   api_key: string
   page: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -697,7 +736,7 @@ export def "restv2-game-admin-scripts-versions get-script-versions-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: $api_key, page: $page} | format pattern "/restv2/game/{api_key}/admin/scripts/versions/{page}") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), page: (encode-path-segment $page)} | format pattern "/restv2/game/{api_key}/admin/scripts/versions/{page}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -707,7 +746,7 @@ export def "restv2-game-admin-scripts-versions get-script-versions-using-get" [
 #
 # GET /restv2/game/{apiKey}/admin/segmentQueryFilters
 # operationId: getSegmentQueryFiltersUsingGET
-export def "restv2-game-admin-segment-query-filters get-segment-query-filters-using-get" [
+export def "restv2-game-admin-segment-query-filters get-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -720,7 +759,7 @@ export def "restv2-game-admin-segment-query-filters get-segment-query-filters-us
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -730,7 +769,7 @@ export def "restv2-game-admin-segment-query-filters get-segment-query-filters-us
 #
 # GET /restv2/game/{apiKey}/admin/segmentQueryFilters/config
 # operationId: getSegmentQueryFiltersConfigUsingGET
-export def "restv2-game-admin-segment-query-filters-config get-segment-query-filters-config-using-get" [
+export def "restv2-game-admin-segment-query-filters-config get-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -743,7 +782,7 @@ export def "restv2-game-admin-segment-query-filters-config get-segment-query-fil
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters/config"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters/config"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -754,7 +793,7 @@ export def "restv2-game-admin-segment-query-filters-config get-segment-query-fil
 # PUT /restv2/game/{apiKey}/admin/segmentQueryFilters/config
 # operationId: updateSegmentQueryFiltersConfigUsingPUT
 # --customFilters item shape: {key?: string, name?: string, options?: list, type?: string}
-export def "restv2-game-admin-segment-query-filters-config update-segment-query-filters-config-using-put" [
+export def "restv2-game-admin-segment-query-filters-config update-using-update" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -765,24 +804,24 @@ export def "restv2-game-admin-segment-query-filters-config update-segment-query-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --custom-filters: list # item shape: {key?: string, name?: string, options?: list, type?: string}
-  --hidden-filters: list
+  --hidden-filters: list<string>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters/config"))
-  let body = {"customFilters": $custom_filters, "hiddenFilters": $hidden_filters} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters/config"))
+  let req_body = {"customFilters": $custom_filters, "hiddenFilters": $hidden_filters} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # getSegmentQueryStandardFilters
 #
 # GET /restv2/game/{apiKey}/admin/segmentQueryFilters/standardFilters
 # operationId: getSegmentQueryStandardFiltersUsingGET
-export def "restv2-game-admin-segment-query-filters-standard-filters get-segment-query-standard-filters-using-get" [
+export def "restv2-game-admin-segment-query-filters-standard-filters get-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -795,7 +834,7 @@ export def "restv2-game-admin-segment-query-filters-standard-filters get-segment
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters/standardFilters"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/segmentQueryFilters/standardFilters"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -805,7 +844,7 @@ export def "restv2-game-admin-segment-query-filters-standard-filters get-segment
 #
 # GET /restv2/game/{apiKey}/admin/snapshots
 # operationId: getSnapshotsUsingGET_1
-export def "restv2-game-admin-snapshots get-snapshots-using-get-by-apiKey" [
+export def "restv2-game-admin-snapshots get-using-get-by-apiKey" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -820,7 +859,7 @@ export def "restv2-game-admin-snapshots get-snapshots-using-get-by-apiKey" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/snapshots") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/snapshots") $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -830,7 +869,7 @@ export def "restv2-game-admin-snapshots get-snapshots-using-get-by-apiKey" [
 #
 # POST /restv2/game/{apiKey}/admin/snapshots
 # operationId: createSnapshotsUsingPOST
-export def "restv2-game-admin-snapshots create-snapshots-using-post" [
+export def "restv2-game-admin-snapshots create-using-create" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -845,19 +884,19 @@ export def "restv2-game-admin-snapshots create-snapshots-using-post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/snapshots"))
-  let body = {"description": $description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/snapshots"))
+  let req_body = {"description": $description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # getLiveSnapshotId
 #
 # GET /restv2/game/{apiKey}/admin/snapshots/liveSnapshotId
 # operationId: getLiveSnapshotIdUsingGET
-export def "restv2-game-admin-snapshots-live-snapshot-id get-live-snapshot-using-get" [
+export def "restv2-game-admin-snapshots-live-snapshot-id get-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -870,7 +909,7 @@ export def "restv2-game-admin-snapshots-live-snapshot-id get-live-snapshot-using
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/snapshots/liveSnapshotId"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/snapshots/liveSnapshotId"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -880,7 +919,7 @@ export def "restv2-game-admin-snapshots-live-snapshot-id get-live-snapshot-using
 #
 # GET /restv2/game/{apiKey}/admin/snapshots/page/{page}
 # operationId: getSnapshotsUsingGET
-export def "restv2-game-admin-snapshots-page get-snapshots-using-get" [
+export def "restv2-game-admin-snapshots-page get-using-get" [
   api_key: string
   page: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -896,7 +935,7 @@ export def "restv2-game-admin-snapshots-page get-snapshots-using-get" [
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: $api_key, page: $page} | format pattern "/restv2/game/{api_key}/admin/snapshots/page/{page}") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), page: (encode-path-segment $page)} | format pattern "/restv2/game/{api_key}/admin/snapshots/page/{page}") $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -906,7 +945,7 @@ export def "restv2-game-admin-snapshots-page get-snapshots-using-get" [
 #
 # POST /restv2/game/{apiKey}/admin/snapshots/revert/to/{snapshotId}
 # operationId: revertToSnapshotUsingPOST
-export def "restv2-game-admin-snapshots-revert-to revertToSnapshotUsingPOST" [
+export def "restv2-game-admin-snapshots-revert-to create-using" [
   api_key: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -920,7 +959,7 @@ export def "restv2-game-admin-snapshots-revert-to revertToSnapshotUsingPOST" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, snapshot_id: $snapshot_id} | format pattern "/restv2/game/{api_key}/admin/snapshots/revert/to/{snapshot_id}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/revert/to/{snapshot_id}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -930,7 +969,7 @@ export def "restv2-game-admin-snapshots-revert-to revertToSnapshotUsingPOST" [
 #
 # DELETE /restv2/game/{apiKey}/admin/snapshots/{snapshotId}
 # operationId: deleteSnapshotUsingDELETE_1
-export def "restv2-game-admin-snapshots delete-snapshot-using-delete-by-apiKey-snapshotId" [
+export def "restv2-game-admin-snapshots delete-using-delete-by-apiKey-snapshotId" [
   api_key: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -944,7 +983,7 @@ export def "restv2-game-admin-snapshots delete-snapshot-using-delete-by-apiKey-s
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, snapshot_id: $snapshot_id} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -954,7 +993,7 @@ export def "restv2-game-admin-snapshots delete-snapshot-using-delete-by-apiKey-s
 #
 # GET /restv2/game/{apiKey}/admin/snapshots/{snapshotId}
 # operationId: getSnapshotUsingGET
-export def "restv2-game-admin-snapshots get-snapshot-using-get" [
+export def "restv2-game-admin-snapshots get-using-get" [
   api_key: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -968,7 +1007,7 @@ export def "restv2-game-admin-snapshots get-snapshot-using-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, snapshot_id: $snapshot_id} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -978,7 +1017,7 @@ export def "restv2-game-admin-snapshots get-snapshot-using-get" [
 #
 # POST /restv2/game/{apiKey}/admin/snapshots/{snapshotId}/copy
 # operationId: copySnapshotToNewGameUsingPOST
-export def "restv2-game-admin-snapshots-copy copy-snapshot-to-new-game-using-post" [
+export def "restv2-game-admin-snapshots-copy create-to-new-using" [
   api_key: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -997,7 +1036,7 @@ export def "restv2-game-admin-snapshots-copy copy-snapshot-to-new-game-using-pos
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeGameConfig" $include_game_config "scalar") (serialize-qp "includeMetadata" $include_metadata "scalar") (serialize-qp "includeBinaries" $include_binaries "scalar") (serialize-qp "includeCollaborators" $include_collaborators "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: $api_key, snapshot_id: $snapshot_id} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/copy") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/copy") $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1007,7 +1046,7 @@ export def "restv2-game-admin-snapshots-copy copy-snapshot-to-new-game-using-pos
 #
 # POST /restv2/game/{apiKey}/admin/snapshots/{snapshotId}/copy/to/{targetApiKey}
 # operationId: copySnapshotToExistingGameUsingPOST_1
-export def "restv2-game-admin-snapshots-copy-to copy-snapshot-to-existing-game-using-post-by-apiKey-snapshotId-targetApiKey" [
+export def "restv2-game-admin-snapshots-copy-to create-existing-using-by-apiKey-snapshotId-targetApiKey" [
   api_key: string
   snapshot_id: string
   target_api_key: string
@@ -1027,7 +1066,7 @@ export def "restv2-game-admin-snapshots-copy-to copy-snapshot-to-existing-game-u
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includeGameConfig" $include_game_config "scalar") (serialize-qp "includeMetadata" $include_metadata "scalar") (serialize-qp "includeBinaries" $include_binaries "scalar") (serialize-qp "includeCollaborators" $include_collaborators "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({api_key: $api_key, snapshot_id: $snapshot_id, target_api_key: $target_api_key} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/copy/to/{target_api_key}") $qp)
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id), target_api_key: (encode-path-segment $target_api_key)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/copy/to/{target_api_key}") $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1037,7 +1076,7 @@ export def "restv2-game-admin-snapshots-copy-to copy-snapshot-to-existing-game-u
 #
 # POST /restv2/game/{apiKey}/admin/snapshots/{snapshotId}/publish
 # operationId: publishSnapshotUsingPOST_1
-export def "restv2-game-admin-snapshots-publish publish-snapshot-using-post-by-apiKey-snapshotId" [
+export def "restv2-game-admin-snapshots-publish create-using-by-apiKey-snapshotId" [
   api_key: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1051,7 +1090,7 @@ export def "restv2-game-admin-snapshots-publish publish-snapshot-using-post-by-a
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, snapshot_id: $snapshot_id} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/publish"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/publish"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1061,7 +1100,7 @@ export def "restv2-game-admin-snapshots-publish publish-snapshot-using-post-by-a
 #
 # POST /restv2/game/{apiKey}/admin/snapshots/{snapshotId}/unpublish
 # operationId: unpublishSnapshotUsingPOST
-export def "restv2-game-admin-snapshots-unpublish delete-snapshot-using-post" [
+export def "restv2-game-admin-snapshots-unpublish create-using" [
   api_key: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1075,7 +1114,7 @@ export def "restv2-game-admin-snapshots-unpublish delete-snapshot-using-post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, snapshot_id: $snapshot_id} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/unpublish"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/admin/snapshots/{snapshot_id}/unpublish"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1085,7 +1124,7 @@ export def "restv2-game-admin-snapshots-unpublish delete-snapshot-using-post" [
 #
 # GET /restv2/game/{apiKey}/admin/testHarness/scenarios
 # operationId: getTestHarnessScenariosUsingGET
-export def "restv2-game-admin-test-harness-scenarios get-test-harness-scenarios-using-get" [
+export def "restv2-game-admin-test-harness-scenarios list" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1098,7 +1137,7 @@ export def "restv2-game-admin-test-harness-scenarios get-test-harness-scenarios-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1108,7 +1147,7 @@ export def "restv2-game-admin-test-harness-scenarios get-test-harness-scenarios-
 #
 # POST /restv2/game/{apiKey}/admin/testHarness/scenarios
 # operationId: createTestHarnessScenarioUsingPOST
-export def "restv2-game-admin-test-harness-scenarios create-test-harness-scenario-using-post" [
+export def "restv2-game-admin-test-harness-scenarios create-using-create" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1124,19 +1163,19 @@ export def "restv2-game-admin-test-harness-scenarios create-test-harness-scenari
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios"))
-  let body = {"scenarioJson": $scenario_json, "scenarioName": $scenario_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios"))
+  let req_body = {"scenarioJson": $scenario_json, "scenarioName": $scenario_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # deleteTestHarnessScenario
 #
 # DELETE /restv2/game/{apiKey}/admin/testHarness/scenarios/{scenarioName}
 # operationId: deleteTestHarnessScenarioUsingDELETE
-export def "restv2-game-admin-test-harness-scenarios delete-test-harness-scenario-using-delete" [
+export def "restv2-game-admin-test-harness-scenarios delete-using-delete" [
   api_key: string
   scenario_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1150,7 +1189,7 @@ export def "restv2-game-admin-test-harness-scenarios delete-test-harness-scenari
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, scenario_name: $scenario_name} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios/{scenario_name}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), scenario_name: (encode-path-segment $scenario_name)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios/{scenario_name}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1160,7 +1199,7 @@ export def "restv2-game-admin-test-harness-scenarios delete-test-harness-scenari
 #
 # GET /restv2/game/{apiKey}/admin/testHarness/scenarios/{scenarioName}
 # operationId: getTestHarnessScenarioUsingGET
-export def "restv2-game-admin-test-harness-scenarios get-test-harness-scenario-using-get" [
+export def "restv2-game-admin-test-harness-scenarios get-using-get" [
   api_key: string
   scenario_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1174,7 +1213,7 @@ export def "restv2-game-admin-test-harness-scenarios get-test-harness-scenario-u
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, scenario_name: $scenario_name} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios/{scenario_name}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), scenario_name: (encode-path-segment $scenario_name)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios/{scenario_name}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1184,7 +1223,7 @@ export def "restv2-game-admin-test-harness-scenarios get-test-harness-scenario-u
 #
 # PUT /restv2/game/{apiKey}/admin/testHarness/scenarios/{scenarioName}
 # operationId: updateTestHarnessScenarioUsingPUT
-export def "restv2-game-admin-test-harness-scenarios update-test-harness-scenario-using-put" [
+export def "restv2-game-admin-test-harness-scenarios update-using-update" [
   api_key: string
   scenario_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1201,19 +1240,19 @@ export def "restv2-game-admin-test-harness-scenarios update-test-harness-scenari
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, scenario_name: $scenario_name} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios/{scenario_name}"))
-  let body = {"scenarioJson": $scenario_json, "scenarioName": $body_scenario_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), scenario_name: (encode-path-segment $scenario_name)} | format pattern "/restv2/game/{api_key}/admin/testHarness/scenarios/{scenario_name}"))
+  let req_body = {"scenarioJson": $scenario_json, "scenarioName": $body_scenario_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Resets the secret of a credential
 #
 # POST /restv2/game/{apiKey}/config/~credentials/{credentialName}/resetSecret
 # operationId: updateCredentialSecretUsingPOST
-export def "restv2-game-config-credentials-reset-secret update-credential-secret-using-post" [
+export def "restv2-game-config-credentials-reset-secret update-credential-using-create" [
   api_key: string
   credential_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1227,7 +1266,7 @@ export def "restv2-game-config-credentials-reset-secret update-credential-secret
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, credential_name: $credential_name} | format pattern "/restv2/game/{api_key}/config/~credentials/{credential_name}/resetSecret"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), credential_name: (encode-path-segment $credential_name)} | format pattern "/restv2/game/{api_key}/config/~credentials/{credential_name}/resetSecret"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1237,7 +1276,7 @@ export def "restv2-game-config-credentials-reset-secret update-credential-secret
 #
 # GET /restv2/game/{apiKey}/endpoints
 # operationId: getGamesEndpointsUsingGET
-export def "restv2-game-endpoints get-games-endpoints-using-get" [
+export def "restv2-game-endpoints get-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1250,7 +1289,7 @@ export def "restv2-game-endpoints get-games-endpoints-using-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/endpoints"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/endpoints"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1260,7 +1299,7 @@ export def "restv2-game-endpoints get-games-endpoints-using-get" [
 #
 # GET /restv2/game/{apiKey}/manage/experiments
 # operationId: getExperimentsUsingGET
-export def "restv2-game-manage-experiments get-experiments-using-get" [
+export def "restv2-game-manage-experiments list" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1273,7 +1312,7 @@ export def "restv2-game-manage-experiments get-experiments-using-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/manage/experiments"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/experiments"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1284,7 +1323,7 @@ export def "restv2-game-manage-experiments get-experiments-using-get" [
 # POST /restv2/game/{apiKey}/manage/experiments
 # operationId: createExperimentUsingPOST
 # --config shape: {playerMongoQuery?: string, playerQuery?: string, variants?: string}
-export def "restv2-game-manage-experiments create-experiment-using-post" [
+export def "restv2-game-manage-experiments create-using-create" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1304,25 +1343,25 @@ export def "restv2-game-manage-experiments create-experiment-using-post" [
   --measurements-es-query: string
   --name: string
   --percent-hash: string
-  --published-stages: list
+  --published-stages: list<string>
   --start-date: string # format: date-time
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/manage/experiments"))
-  let body = {"active": $active, "changedFieldsAndInitialValues": $changed_fields_and_initial_values, "complete": $complete, "config": $config, "endDate": $end_date, "id": $id, "measurements": $measurements, "measurementsEsQuery": $measurements_es_query, "name": $name, "percentHash": $percent_hash, "publishedStages": $published_stages, "startDate": $start_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/experiments"))
+  let req_body = {"active": $active, "changedFieldsAndInitialValues": $changed_fields_and_initial_values, "complete": $complete, "config": $config, "endDate": $end_date, "id": $id, "measurements": $measurements, "measurementsEsQuery": $measurements_es_query, "name": $name, "percentHash": $percent_hash, "publishedStages": $published_stages, "startDate": $start_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # deleteExperiment
 #
 # DELETE /restv2/game/{apiKey}/manage/experiments/{id}
 # operationId: deleteExperimentUsingDELETE
-export def "restv2-game-manage-experiments delete-experiment-using-delete" [
+export def "restv2-game-manage-experiments delete-using-delete" [
   api_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1336,7 +1375,7 @@ export def "restv2-game-manage-experiments delete-experiment-using-delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, id: $id} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), id: (encode-path-segment $id)} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1346,7 +1385,7 @@ export def "restv2-game-manage-experiments delete-experiment-using-delete" [
 #
 # GET /restv2/game/{apiKey}/manage/experiments/{id}
 # operationId: getExperimentUsingGET
-export def "restv2-game-manage-experiments get-experiment-using-get" [
+export def "restv2-game-manage-experiments get-using-get" [
   api_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1360,7 +1399,7 @@ export def "restv2-game-manage-experiments get-experiment-using-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, id: $id} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), id: (encode-path-segment $id)} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1371,7 +1410,7 @@ export def "restv2-game-manage-experiments get-experiment-using-get" [
 # PUT /restv2/game/{apiKey}/manage/experiments/{id}
 # operationId: updateExperimentUsingPUT
 # --config shape: {playerMongoQuery?: string, playerQuery?: string, variants?: string}
-export def "restv2-game-manage-experiments update-experiment-using-put" [
+export def "restv2-game-manage-experiments update-using-update" [
   api_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1392,25 +1431,25 @@ export def "restv2-game-manage-experiments update-experiment-using-put" [
   --measurements-es-query: string
   --name: string
   --percent-hash: string
-  --published-stages: list
+  --published-stages: list<string>
   --start-date: string # format: date-time
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, id: $id} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}"))
-  let body = {"active": $active, "changedFieldsAndInitialValues": $changed_fields_and_initial_values, "complete": $complete, "config": $config, "endDate": $end_date, "id": $body_id, "measurements": $measurements, "measurementsEsQuery": $measurements_es_query, "name": $name, "percentHash": $percent_hash, "publishedStages": $published_stages, "startDate": $start_date} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), id: (encode-path-segment $id)} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}"))
+  let req_body = {"active": $active, "changedFieldsAndInitialValues": $changed_fields_and_initial_values, "complete": $complete, "config": $config, "endDate": $end_date, "id": $body_id, "measurements": $measurements, "measurementsEsQuery": $measurements_es_query, "name": $name, "percentHash": $percent_hash, "publishedStages": $published_stages, "startDate": $start_date} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # doActionExperiment
 #
 # POST /restv2/game/{apiKey}/manage/experiments/{id}/{action}
 # operationId: doActionExperimentUsingPOST
-export def "restv2-game-manage-experiments doActionExperimentUsingPOST" [
+export def "restv2-game-manage-experiments create-do-using" [
   api_key: string
   id: int
   action: string
@@ -1425,7 +1464,7 @@ export def "restv2-game-manage-experiments doActionExperimentUsingPOST" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, id: $id, action: $action} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}/{action}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), id: (encode-path-segment $id), action: (encode-path-segment $action)} | format pattern "/restv2/game/{api_key}/manage/experiments/{id}/{action}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1435,7 +1474,7 @@ export def "restv2-game-manage-experiments doActionExperimentUsingPOST" [
 #
 # GET /restv2/game/{apiKey}/manage/queries
 # operationId: listQueriesUsingGET
-export def "restv2-game-manage-queries list-queries-using-get" [
+export def "restv2-game-manage-queries list-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1448,7 +1487,7 @@ export def "restv2-game-manage-queries list-queries-using-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/manage/queries"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/queries"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1458,7 +1497,7 @@ export def "restv2-game-manage-queries list-queries-using-get" [
 #
 # POST /restv2/game/{apiKey}/manage/queries
 # operationId: createQueryUsingPOST
-export def "restv2-game-manage-queries create-query-using-post" [
+export def "restv2-game-manage-queries create-list-using-create" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1476,19 +1515,19 @@ export def "restv2-game-manage-queries create-query-using-post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/manage/queries"))
-  let body = {"esRules": $es_rules, "name": $name, "qbRules": $qb_rules, "shortCode": $short_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/queries"))
+  let req_body = {"esRules": $es_rules, "name": $name, "qbRules": $qb_rules, "shortCode": $short_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # deleteQuery
 #
 # DELETE /restv2/game/{apiKey}/manage/queries/{shortCode}
 # operationId: deleteQueryUsingDELETE
-export def "restv2-game-manage-queries delete-query-using-delete" [
+export def "restv2-game-manage-queries delete-list-using-delete" [
   api_key: string
   short_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1502,7 +1541,7 @@ export def "restv2-game-manage-queries delete-query-using-delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, short_code: $short_code} | format pattern "/restv2/game/{api_key}/manage/queries/{short_code}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/queries/{short_code}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1512,7 +1551,7 @@ export def "restv2-game-manage-queries delete-query-using-delete" [
 #
 # GET /restv2/game/{apiKey}/manage/queries/{shortCode}
 # operationId: getQueryUsingGET
-export def "restv2-game-manage-queries get-query-using-get" [
+export def "restv2-game-manage-queries get-list-using-get" [
   api_key: string
   short_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1526,7 +1565,7 @@ export def "restv2-game-manage-queries get-query-using-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, short_code: $short_code} | format pattern "/restv2/game/{api_key}/manage/queries/{short_code}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/queries/{short_code}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1536,7 +1575,7 @@ export def "restv2-game-manage-queries get-query-using-get" [
 #
 # PUT /restv2/game/{apiKey}/manage/queries/{shortCode}
 # operationId: updateQueryUsingPUT
-export def "restv2-game-manage-queries update-query-using-put" [
+export def "restv2-game-manage-queries update-list-using-update" [
   api_key: string
   short_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1555,19 +1594,19 @@ export def "restv2-game-manage-queries update-query-using-put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, short_code: $short_code} | format pattern "/restv2/game/{api_key}/manage/queries/{short_code}"))
-  let body = {"esRules": $es_rules, "name": $name, "qbRules": $qb_rules, "shortCode": $body_short_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/queries/{short_code}"))
+  let req_body = {"esRules": $es_rules, "name": $name, "qbRules": $qb_rules, "shortCode": $body_short_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # listScreens
 #
 # GET /restv2/game/{apiKey}/manage/screens
 # operationId: listScreensUsingGET
-export def "restv2-game-manage-screens list-screens-using-get" [
+export def "restv2-game-manage-screens list-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1580,7 +1619,7 @@ export def "restv2-game-manage-screens list-screens-using-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/manage/screens"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/screens"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1590,7 +1629,7 @@ export def "restv2-game-manage-screens list-screens-using-get" [
 #
 # POST /restv2/game/{apiKey}/manage/screens
 # operationId: createScreenUsingPOST
-export def "restv2-game-manage-screens create-screen-using-post" [
+export def "restv2-game-manage-screens create-using-create" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1600,7 +1639,7 @@ export def "restv2-game-manage-screens create-screen-using-post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --groups: list
+  --groups: list<string>
   --name: string
   --short-code: string
   --template: string
@@ -1608,19 +1647,19 @@ export def "restv2-game-manage-screens create-screen-using-post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/manage/screens"))
-  let body = {"groups": $groups, "name": $name, "shortCode": $short_code, "template": $template} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/screens"))
+  let req_body = {"groups": $groups, "name": $name, "shortCode": $short_code, "template": $template} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # listExecutableScreens
 #
 # GET /restv2/game/{apiKey}/manage/screens/executable
 # operationId: listExecutableScreensUsingGET
-export def "restv2-game-manage-screens-executable list-executable-screens-using-get" [
+export def "restv2-game-manage-screens-executable list-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1633,7 +1672,7 @@ export def "restv2-game-manage-screens-executable list-executable-screens-using-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/manage/screens/executable"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/screens/executable"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1643,7 +1682,7 @@ export def "restv2-game-manage-screens-executable list-executable-screens-using-
 #
 # DELETE /restv2/game/{apiKey}/manage/screens/{shortCode}
 # operationId: deleteScreenUsingDELETE
-export def "restv2-game-manage-screens delete-screen-using-delete" [
+export def "restv2-game-manage-screens delete-using-delete" [
   api_key: string
   short_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1657,7 +1696,7 @@ export def "restv2-game-manage-screens delete-screen-using-delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, short_code: $short_code} | format pattern "/restv2/game/{api_key}/manage/screens/{short_code}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/screens/{short_code}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1667,7 +1706,7 @@ export def "restv2-game-manage-screens delete-screen-using-delete" [
 #
 # GET /restv2/game/{apiKey}/manage/screens/{shortCode}
 # operationId: getScreenUsingGET
-export def "restv2-game-manage-screens get-screen-using-get" [
+export def "restv2-game-manage-screens get-using-get" [
   api_key: string
   short_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1681,7 +1720,7 @@ export def "restv2-game-manage-screens get-screen-using-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, short_code: $short_code} | format pattern "/restv2/game/{api_key}/manage/screens/{short_code}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/screens/{short_code}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1691,7 +1730,7 @@ export def "restv2-game-manage-screens get-screen-using-get" [
 #
 # PUT /restv2/game/{apiKey}/manage/screens/{shortCode}
 # operationId: updateScreenUsingPUT
-export def "restv2-game-manage-screens update-screen-using-put" [
+export def "restv2-game-manage-screens update-using-update" [
   api_key: string
   short_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1702,7 +1741,7 @@ export def "restv2-game-manage-screens update-screen-using-put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --groups: list
+  --groups: list<string>
   --name: string
   --body-short-code: string
   --template: string
@@ -1710,19 +1749,19 @@ export def "restv2-game-manage-screens update-screen-using-put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, short_code: $short_code} | format pattern "/restv2/game/{api_key}/manage/screens/{short_code}"))
-  let body = {"groups": $groups, "name": $name, "shortCode": $body_short_code, "template": $template} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/screens/{short_code}"))
+  let req_body = {"groups": $groups, "name": $name, "shortCode": $body_short_code, "template": $template} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # listSnapshots
 #
 # GET /restv2/game/{apiKey}/manage/snapshots
 # operationId: listSnapshotsUsingGET
-export def "restv2-game-manage-snapshots list-snapshots-using-get" [
+export def "restv2-game-manage-snapshots list-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1735,7 +1774,7 @@ export def "restv2-game-manage-snapshots list-snapshots-using-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/manage/snapshots"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/snapshots"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1745,7 +1784,7 @@ export def "restv2-game-manage-snapshots list-snapshots-using-get" [
 #
 # POST /restv2/game/{apiKey}/manage/snapshots
 # operationId: createSnapshotUsingPOST
-export def "restv2-game-manage-snapshots create-snapshot-using-post" [
+export def "restv2-game-manage-snapshots create-using-create" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1760,19 +1799,19 @@ export def "restv2-game-manage-snapshots create-snapshot-using-post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/manage/snapshots"))
-  let body = {"description": $description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/snapshots"))
+  let req_body = {"description": $description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # deleteSnapshot
 #
 # DELETE /restv2/game/{apiKey}/manage/snapshots/{snapshotId}
 # operationId: deleteSnapshotUsingDELETE
-export def "restv2-game-manage-snapshots delete-snapshot-using-delete" [
+export def "restv2-game-manage-snapshots delete-using-delete" [
   api_key: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1786,7 +1825,7 @@ export def "restv2-game-manage-snapshots delete-snapshot-using-delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, snapshot_id: $snapshot_id} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1796,7 +1835,7 @@ export def "restv2-game-manage-snapshots delete-snapshot-using-delete" [
 #
 # POST /restv2/game/{apiKey}/manage/snapshots/{snapshotId}/copy/to/{targetApiKey}
 # operationId: copySnapshotToExistingGameUsingPOST
-export def "restv2-game-manage-snapshots-copy-to copy-snapshot-to-existing-game-using-post" [
+export def "restv2-game-manage-snapshots-copy-to create-existing-using" [
   api_key: string
   snapshot_id: string
   target_api_key: string
@@ -1811,7 +1850,7 @@ export def "restv2-game-manage-snapshots-copy-to copy-snapshot-to-existing-game-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, snapshot_id: $snapshot_id, target_api_key: $target_api_key} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}/copy/to/{target_api_key}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id), target_api_key: (encode-path-segment $target_api_key)} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}/copy/to/{target_api_key}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1821,7 +1860,7 @@ export def "restv2-game-manage-snapshots-copy-to copy-snapshot-to-existing-game-
 #
 # POST /restv2/game/{apiKey}/manage/snapshots/{snapshotId}/publish
 # operationId: publishSnapshotUsingPOST
-export def "restv2-game-manage-snapshots-publish publish-snapshot-using-post" [
+export def "restv2-game-manage-snapshots-publish create-using" [
   api_key: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1835,7 +1874,7 @@ export def "restv2-game-manage-snapshots-publish publish-snapshot-using-post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, snapshot_id: $snapshot_id} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}/publish"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}/publish"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1845,7 +1884,7 @@ export def "restv2-game-manage-snapshots-publish publish-snapshot-using-post" [
 #
 # POST /restv2/game/{apiKey}/manage/snapshots/{snapshotId}/revert
 # operationId: revertSnapshotUsingPOST
-export def "restv2-game-manage-snapshots-revert revertSnapshotUsingPOST" [
+export def "restv2-game-manage-snapshots-revert create-using" [
   api_key: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1859,7 +1898,7 @@ export def "restv2-game-manage-snapshots-revert revertSnapshotUsingPOST" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, snapshot_id: $snapshot_id} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}/revert"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/restv2/game/{api_key}/manage/snapshots/{snapshot_id}/revert"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1869,7 +1908,7 @@ export def "restv2-game-manage-snapshots-revert revertSnapshotUsingPOST" [
 #
 # GET /restv2/game/{apiKey}/manage/snippets
 # operationId: listSnippetsUsingGET
-export def "restv2-game-manage-snippets list-snippets-using-get" [
+export def "restv2-game-manage-snippets list-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1882,7 +1921,7 @@ export def "restv2-game-manage-snippets list-snippets-using-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/manage/snippets"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/snippets"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1892,7 +1931,7 @@ export def "restv2-game-manage-snippets list-snippets-using-get" [
 #
 # POST /restv2/game/{apiKey}/manage/snippets
 # operationId: createSnippetUsingPOST
-export def "restv2-game-manage-snippets create-snippet-using-post" [
+export def "restv2-game-manage-snippets create-using-create" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1902,7 +1941,7 @@ export def "restv2-game-manage-snippets create-snippet-using-post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --groups: list
+  --groups: list<string>
   --name: string
   --script: string
   --script-data: string
@@ -1912,19 +1951,19 @@ export def "restv2-game-manage-snippets create-snippet-using-post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/manage/snippets"))
-  let body = {"groups": $groups, "name": $name, "script": $script, "scriptData": $script_data, "shortCode": $short_code, "template": $template} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/manage/snippets"))
+  let req_body = {"groups": $groups, "name": $name, "script": $script, "scriptData": $script_data, "shortCode": $short_code, "template": $template} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # deleteSnippet
 #
 # DELETE /restv2/game/{apiKey}/manage/snippets/{shortCode}
 # operationId: deleteSnippetUsingDELETE
-export def "restv2-game-manage-snippets delete-snippet-using-delete" [
+export def "restv2-game-manage-snippets delete-using-delete" [
   api_key: string
   short_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1938,7 +1977,7 @@ export def "restv2-game-manage-snippets delete-snippet-using-delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, short_code: $short_code} | format pattern "/restv2/game/{api_key}/manage/snippets/{short_code}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/snippets/{short_code}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1948,7 +1987,7 @@ export def "restv2-game-manage-snippets delete-snippet-using-delete" [
 #
 # GET /restv2/game/{apiKey}/manage/snippets/{shortCode}
 # operationId: getSnippetUsingGET
-export def "restv2-game-manage-snippets get-snippet-using-get" [
+export def "restv2-game-manage-snippets get-using-get" [
   api_key: string
   short_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1962,7 +2001,7 @@ export def "restv2-game-manage-snippets get-snippet-using-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, short_code: $short_code} | format pattern "/restv2/game/{api_key}/manage/snippets/{short_code}"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/snippets/{short_code}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1972,7 +2011,7 @@ export def "restv2-game-manage-snippets get-snippet-using-get" [
 #
 # PUT /restv2/game/{apiKey}/manage/snippets/{shortCode}
 # operationId: updateSnippetUsingPUT
-export def "restv2-game-manage-snippets update-snippet-using-put" [
+export def "restv2-game-manage-snippets update-using-update" [
   api_key: string
   short_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1983,7 +2022,7 @@ export def "restv2-game-manage-snippets update-snippet-using-put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --groups: list
+  --groups: list<string>
   --name: string
   --script: string
   --script-data: string
@@ -1993,19 +2032,19 @@ export def "restv2-game-manage-snippets update-snippet-using-put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key, short_code: $short_code} | format pattern "/restv2/game/{api_key}/manage/snippets/{short_code}"))
-  let body = {"groups": $groups, "name": $name, "script": $script, "scriptData": $script_data, "shortCode": $body_short_code, "template": $template} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key), short_code: (encode-path-segment $short_code)} | format pattern "/restv2/game/{api_key}/manage/snippets/{short_code}"))
+  let req_body = {"groups": $groups, "name": $name, "script": $script, "scriptData": $script_data, "shortCode": $body_short_code, "template": $template} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # restoreDeletedGame
 #
 # POST /restv2/game/{apiKey}/restore
 # operationId: restoreDeletedGameUsingPOST
-export def "restv2-game-restore restoreDeletedGameUsingPOST" [
+export def "restv2-game-restore create-deleted-using" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2018,7 +2057,7 @@ export def "restv2-game-restore restoreDeletedGameUsingPOST" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({api_key: $api_key} | format pattern "/restv2/game/{api_key}/restore"))
+  let full_url = (build-url $base ({api_key: (encode-path-segment $api_key)} | format pattern "/restv2/game/{api_key}/restore"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2028,7 +2067,7 @@ export def "restv2-game-restore restoreDeletedGameUsingPOST" [
 #
 # POST /restv2/game/{gameApiKey}/region/{regionCode}
 # operationId: setGameRegionUsingPOST
-export def "restv2-game-region setGameRegionUsingPOST" [
+export def "restv2-game-region update-using-create" [
   game_api_key: string
   region_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2042,7 +2081,7 @@ export def "restv2-game-region setGameRegionUsingPOST" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({game_api_key: $game_api_key, region_code: $region_code} | format pattern "/restv2/game/{game_api_key}/region/{region_code}"))
+  let full_url = (build-url $base ({game_api_key: (encode-path-segment $game_api_key), region_code: (encode-path-segment $region_code)} | format pattern "/restv2/game/{game_api_key}/region/{region_code}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2052,7 +2091,7 @@ export def "restv2-game-region setGameRegionUsingPOST" [
 #
 # GET /restv2/game/{gameApiKey}/regions
 # operationId: getGameRegionOptionsUsingGET
-export def "restv2-game-regions get-game-region-options-using-get" [
+export def "restv2-game-regions get-options-using-get" [
   game_api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2065,7 +2104,7 @@ export def "restv2-game-regions get-game-region-options-using-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({game_api_key: $game_api_key} | format pattern "/restv2/game/{game_api_key}/regions"))
+  let full_url = (build-url $base ({game_api_key: (encode-path-segment $game_api_key)} | format pattern "/restv2/game/{game_api_key}/regions"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2097,7 +2136,7 @@ export def "restv2-games list-using-get" [
 #
 # GET /restv2/games/deleted
 # operationId: listDeletedUsingGET
-export def "restv2-games-deleted list-deleted-using-get" [
+export def "restv2-games-deleted list-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

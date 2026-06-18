@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -141,7 +150,7 @@ export def "setup-appointments get" [
 ]: nothing -> record<auditTrail: table<appointmentId: string, id: string, modificationType: string, modifiedBy: string, modifiedOn: string, notesAfter: string, notesBefore: string, statusAfter: string, statusBefore: string>, bookedBy: string, businessName: string, calendarId: string, confirmationNumber: string, confirmed: bool, createDate: string, customFields: record, customerId: string, customerMessage: string, customers: table<appointmentId: string, customerId: string>, date: string, dateInternational: string, downloadIcsUrl: string, duration: int, email: string, emailConfirmationSent: string, emailReminderSent: string, endDateTime: string, firstname: string, groupSize: int, id: string, ipAddress: string, lastModifiedBy: string, lastModifiedOn: string, lastname: string, latitude: string, location: string, locationId: string, longitude: string, name: string, notes: string, object: string, onlineBooking: bool, paymentStatus: int, phone: string, phoneExt: string, phoneType: string, rescheduledId: string, resourceEmail: string, resourceGroupId: string, resourceGroupName: string, resourceId: string, resourceImageUrl: string, resourceName: string, resources: table<appointmentId: string, resourceEmail: string, resourceGroupId: string, resourceId: string, resourceImageUrl: string, resourceName: string>, serviceAllocationId: string, serviceId: string, serviceImageUrl: string, serviceName: string, smsConfirmationSent: string, smsReminderSent: string, startDateTime: string, status: string, stripeChargeId: string, stripeRefundId: string, time: int, timezone: int, timezoneIana: string, timezoneId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/appointments/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/appointments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -150,7 +159,7 @@ export def "setup-appointments get" [
 # Reassign Appointment
 #
 # PUT /setup/v1/appointments/{id}/reassign/resource/{resourceId}
-export def "setup-appointments-reassign-resource put" [
+export def "setup-appointments-reassign-resource update" [
   id: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -164,7 +173,7 @@ export def "setup-appointments-reassign-resource put" [
 ]: nothing -> record<auditTrail: table<appointmentId: string, id: string, modificationType: string, modifiedBy: string, modifiedOn: string, notesAfter: string, notesBefore: string, statusAfter: string, statusBefore: string>, bookedBy: string, businessName: string, calendarId: string, confirmationNumber: string, confirmed: bool, createDate: string, customFields: record, customerId: string, customerMessage: string, customers: table<appointmentId: string, customerId: string>, date: string, dateInternational: string, downloadIcsUrl: string, duration: int, email: string, emailConfirmationSent: string, emailReminderSent: string, endDateTime: string, firstname: string, groupSize: int, id: string, ipAddress: string, lastModifiedBy: string, lastModifiedOn: string, lastname: string, latitude: string, location: string, locationId: string, longitude: string, name: string, notes: string, object: string, onlineBooking: bool, paymentStatus: int, phone: string, phoneExt: string, phoneType: string, rescheduledId: string, resourceEmail: string, resourceGroupId: string, resourceGroupName: string, resourceId: string, resourceImageUrl: string, resourceName: string, resources: table<appointmentId: string, resourceEmail: string, resourceGroupId: string, resourceId: string, resourceImageUrl: string, resourceName: string>, serviceAllocationId: string, serviceId: string, serviceImageUrl: string, serviceName: string, smsConfirmationSent: string, smsReminderSent: string, startDateTime: string, status: string, stripeChargeId: string, stripeRefundId: string, time: int, timezone: int, timezoneIana: string, timezoneId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, resource_id: $resource_id} | format pattern "/setup/v1/appointments/{id}/reassign/resource/{resource_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), resource_id: (encode-path-segment $resource_id)} | format pattern "/setup/v1/appointments/{id}/reassign/resource/{resource_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -200,7 +209,7 @@ export def "setup-businessusers list" [
 # Create User
 #
 # POST /setup/v1/businessusers
-export def "setup-businessusers post" [
+export def "setup-businessusers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,11 +229,11 @@ export def "setup-businessusers post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/v1/businessusers")
-  let body = {"email": $email, "locationId": $location_id, "name": $name, "resourceId": $resource_id, "role": $role, "sendRegistrationInvite": $send_registration_invite} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "locationId": $location_id, "name": $name, "resourceId": $resource_id, "role": $role, "sendRegistrationInvite": $send_registration_invite} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List User Permissions
@@ -272,7 +281,7 @@ export def "setup-businessusers-companies get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "searchText" $search_text "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({email: $email} | format pattern "/setup/v1/businessusers/{email}/companies") $qp)
+  let full_url = (build-url $base ({email: (encode-path-segment $email)} | format pattern "/setup/v1/businessusers/{email}/companies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -294,7 +303,7 @@ export def "setup-businessusers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/businessusers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/businessusers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -316,7 +325,7 @@ export def "setup-businessusers get" [
 ]: nothing -> record<accountId: string, businessName: string, email: string, id: string, identityAccount: bool, locationId: string, name: string, object: string, permissions: table<access: string, function: string, object: string>, resourceId: string, resourceName: string, role: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/businessusers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/businessusers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -325,7 +334,7 @@ export def "setup-businessusers get" [
 # Update User
 #
 # PUT /setup/v1/businessusers/{id}
-export def "setup-businessusers put" [
+export def "setup-businessusers update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -344,12 +353,12 @@ export def "setup-businessusers put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/businessusers/{id}"))
-  let body = {"email": $email, "name": $name, "resourceId": $resource_id, "role": $role, "sendRegistrationInvite": $send_registration_invite} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/businessusers/{id}"))
+  let req_body = {"email": $email, "name": $name, "resourceId": $resource_id, "role": $role, "sendRegistrationInvite": $send_registration_invite} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Calendars
@@ -382,7 +391,7 @@ export def "setup-calendars list" [
 #
 # POST /setup/v1/calendars
 # --availability shape: {fri?: record, mon?: record, sat?: record, sun?: record, thu?: record, tue?: record, wed?: record}
-export def "setup-calendars post" [
+export def "setup-calendars create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,11 +412,11 @@ export def "setup-calendars post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/v1/calendars")
-  let body = {"availability": $availability, "bookingsPerSlot": $bookings_per_slot, "interval": $interval, "locationId": $location_id, "name": $name, "resourceGroupId": $resource_group_id, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"availability": $availability, "bookingsPerSlot": $bookings_per_slot, "interval": $interval, "locationId": $location_id, "name": $name, "resourceGroupId": $resource_group_id, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Calendar Block
@@ -426,7 +435,7 @@ export def "setup-calendars-block delete" [
 ]: nothing -> record<calendarId: string, deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: string, locationId: string, object: string, reason: string, repeat: record<frequency: string, interval: int, monthDay: string, monthType: string, weekdays: string>, repeats: bool, startDate: string, startTime: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/calendars/block/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/calendars/block/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -436,7 +445,7 @@ export def "setup-calendars-block delete" [
 #
 # PUT /setup/v1/calendars/block/{id}
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-calendars-block put" [
+export def "setup-calendars-block update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -457,12 +466,12 @@ export def "setup-calendars-block put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/calendars/block/{id}"))
-  let body = {"endDate": $end_date, "endTime": $end_time, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "startDate": $start_date, "startTime": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/calendars/block/{id}"))
+  let req_body = {"endDate": $end_date, "endTime": $end_time, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "startDate": $start_date, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Calendar Block
@@ -481,7 +490,7 @@ export def "setup-calendars-blocks get-by-id" [
 ]: nothing -> record<calendarId: string, deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: string, locationId: string, object: string, reason: string, repeat: record<frequency: string, interval: int, monthDay: string, monthType: string, weekdays: string>, repeats: bool, startDate: string, startTime: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/calendars/blocks/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/calendars/blocks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -503,7 +512,7 @@ export def "setup-calendars delete" [
 ]: nothing -> record<availability: record<fri: record<endTime: int, startTime: int>, mon: record<endTime: int, startTime: int>, sat: record<endTime: int, startTime: int>, sun: record<endTime: int, startTime: int>, thu: record<endTime: int, startTime: int>, tue: record<endTime: int, startTime: int>, wed: record<endTime: int, startTime: int>>, bookingsPerSlot: int, deletedStatus: bool, deletedTime: string, id: string, interval: int, locationId: string, name: string, object: string, primary: bool, resourceGroupId: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/calendars/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/calendars/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -525,7 +534,7 @@ export def "setup-calendars get" [
 ]: nothing -> record<availability: record<fri: record<endTime: int, startTime: int>, mon: record<endTime: int, startTime: int>, sat: record<endTime: int, startTime: int>, sun: record<endTime: int, startTime: int>, thu: record<endTime: int, startTime: int>, tue: record<endTime: int, startTime: int>, wed: record<endTime: int, startTime: int>>, bookingsPerSlot: int, deletedStatus: bool, deletedTime: string, id: string, interval: int, locationId: string, name: string, object: string, primary: bool, resourceGroupId: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/calendars/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/calendars/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -535,7 +544,7 @@ export def "setup-calendars get" [
 #
 # PUT /setup/v1/calendars/{id}
 # --availability shape: {fri?: record, mon?: record, sat?: record, sun?: record, thu?: record, tue?: record, wed?: record}
-export def "setup-calendars put" [
+export def "setup-calendars update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -556,19 +565,19 @@ export def "setup-calendars put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/calendars/{id}"))
-  let body = {"availability": $availability, "bookingsPerSlot": $bookings_per_slot, "interval": $interval, "locationId": $location_id, "name": $name, "resourceGroupId": $resource_group_id, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/calendars/{id}"))
+  let req_body = {"availability": $availability, "bookingsPerSlot": $bookings_per_slot, "interval": $interval, "locationId": $location_id, "name": $name, "resourceGroupId": $resource_group_id, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create Calendar Block
 #
 # POST /setup/v1/calendars/{id}/block
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-calendars-block post" [
+export def "setup-calendars-block create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -589,12 +598,12 @@ export def "setup-calendars-block post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/calendars/{id}/block"))
-  let body = {"endDate": $end_date, "endTime": $end_time, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "startDate": $start_date, "startTime": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/calendars/{id}/block"))
+  let req_body = {"endDate": $end_date, "endTime": $end_time, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "startDate": $start_date, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Calendar Blocks
@@ -616,7 +625,7 @@ export def "setup-calendars-blocks get-by-id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/calendars/{id}/blocks") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/calendars/{id}/blocks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -625,7 +634,7 @@ export def "setup-calendars-blocks get-by-id-1" [
 # Recover Calendar
 #
 # PUT /setup/v1/calendars/{id}/recover
-export def "setup-calendars-recover put" [
+export def "setup-calendars-recover update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -638,7 +647,7 @@ export def "setup-calendars-recover put" [
 ]: nothing -> record<availability: record<fri: record<endTime: int, startTime: int>, mon: record<endTime: int, startTime: int>, sat: record<endTime: int, startTime: int>, sun: record<endTime: int, startTime: int>, thu: record<endTime: int, startTime: int>, tue: record<endTime: int, startTime: int>, wed: record<endTime: int, startTime: int>>, bookingsPerSlot: int, deletedStatus: bool, deletedTime: string, id: string, interval: int, locationId: string, name: string, object: string, primary: bool, resourceGroupId: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/calendars/{id}/recover"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/calendars/{id}/recover"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -663,7 +672,7 @@ export def "setup-calendars-services get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/calendars/{id}/services") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/calendars/{id}/services") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -693,7 +702,7 @@ export def "setup-companies get" [
 # Create Company
 #
 # POST /setup/v1/companies
-export def "setup-companies post" [
+export def "setup-companies create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,17 +737,17 @@ export def "setup-companies post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/v1/companies")
-  let body = {"addressLine1": $address_line1, "addressLine2": $address_line2, "bookingWebhookUrl": $booking_webhook_url, "city": $city, "country": $country, "customerWebhookUrl": $customer_webhook_url, "disableEmailAndSmsNotifications": $disable_email_and_sms_notifications, "email": $email, "fax": $fax, "name": $name, "notificationFromEmailAddress": $notification_from_email_address, "notificationFromName": $notification_from_name, "phone": $phone, "postalCode": $postal_code, "registrationEmail": $registration_email, "reminderWebhookUrl": $reminder_webhook_url, "resourceWebhookUrl": $resource_webhook_url, "state": $state, "timezoneName": $timezone_name, "webhookSignatureHash": $webhook_signature_hash, "website": $website} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"addressLine1": $address_line1, "addressLine2": $address_line2, "bookingWebhookUrl": $booking_webhook_url, "city": $city, "country": $country, "customerWebhookUrl": $customer_webhook_url, "disableEmailAndSmsNotifications": $disable_email_and_sms_notifications, "email": $email, "fax": $fax, "name": $name, "notificationFromEmailAddress": $notification_from_email_address, "notificationFromName": $notification_from_name, "phone": $phone, "postalCode": $postal_code, "registrationEmail": $registration_email, "reminderWebhookUrl": $reminder_webhook_url, "resourceWebhookUrl": $resource_webhook_url, "state": $state, "timezoneName": $timezone_name, "webhookSignatureHash": $webhook_signature_hash, "website": $website} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update Company
 #
 # PUT /setup/v1/companies
-export def "setup-companies put" [
+export def "setup-companies update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -773,11 +782,11 @@ export def "setup-companies put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/v1/companies")
-  let body = {"addressLine1": $address_line1, "addressLine2": $address_line2, "bookingWebhookUrl": $booking_webhook_url, "city": $city, "country": $country, "customerWebhookUrl": $customer_webhook_url, "disableEmailAndSmsNotifications": $disable_email_and_sms_notifications, "email": $email, "fax": $fax, "name": $name, "notificationFromEmailAddress": $notification_from_email_address, "notificationFromName": $notification_from_name, "phone": $phone, "postalCode": $postal_code, "registrationEmail": $registration_email, "reminderWebhookUrl": $reminder_webhook_url, "resourceWebhookUrl": $resource_webhook_url, "state": $state, "timezoneName": $timezone_name, "webhookSignatureHash": $webhook_signature_hash, "website": $website} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"addressLine1": $address_line1, "addressLine2": $address_line2, "bookingWebhookUrl": $booking_webhook_url, "city": $city, "country": $country, "customerWebhookUrl": $customer_webhook_url, "disableEmailAndSmsNotifications": $disable_email_and_sms_notifications, "email": $email, "fax": $fax, "name": $name, "notificationFromEmailAddress": $notification_from_email_address, "notificationFromName": $notification_from_name, "phone": $phone, "postalCode": $postal_code, "registrationEmail": $registration_email, "reminderWebhookUrl": $reminder_webhook_url, "resourceWebhookUrl": $resource_webhook_url, "state": $state, "timezoneName": $timezone_name, "webhookSignatureHash": $webhook_signature_hash, "website": $website} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Company Domains
@@ -804,7 +813,7 @@ export def "setup-companies-domains list" [
 # Create Company Domain
 #
 # POST /setup/v1/companies/domains
-export def "setup-companies-domains post" [
+export def "setup-companies-domains create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -819,11 +828,11 @@ export def "setup-companies-domains post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/v1/companies/domains")
-  let body = {"domain": $domain} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"domain": $domain} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Company Domain
@@ -842,7 +851,7 @@ export def "setup-companies-domains delete" [
 ]: nothing -> record<domain: string, id: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/companies/domains/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/companies/domains/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -864,7 +873,7 @@ export def "setup-companies-domains get" [
 ]: nothing -> record<domain: string, id: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/companies/domains/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/companies/domains/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -873,7 +882,7 @@ export def "setup-companies-domains get" [
 # Update Company Domain
 #
 # PUT /setup/v1/companies/domains/{id}
-export def "setup-companies-domains put" [
+export def "setup-companies-domains update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -888,12 +897,12 @@ export def "setup-companies-domains put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/companies/domains/{id}"))
-  let body = {"domain": $domain} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/companies/domains/{id}"))
+  let req_body = {"domain": $domain} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Email Templates
@@ -962,7 +971,7 @@ export def "setup-companies-email-templates-master get" [
 # Create Master Template Settings
 #
 # POST /setup/v1/companies/email/templates/master
-export def "setup-companies-email-templates-master post" [
+export def "setup-companies-email-templates-master create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1002,11 +1011,11 @@ export def "setup-companies-email-templates-master post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/v1/companies/email/templates/master")
-  let body = {"centerEmailContent": $center_email_content, "centerEmailContentPanel": $center_email_content_panel, "centerEmailFooter": $center_email_footer, "contentBackgroundColor": $content_background_color, "contentColor": $content_color, "contentLinkColor": $content_link_color, "emailBackgroundColor": $email_background_color, "emailColor": $email_color, "emailLinkColor": $email_link_color, "footerFontSize": $footer_font_size, "footerLogoHeight": $footer_logo_height, "footerLogoPadding": $footer_logo_padding, "footerPanelEmailContact": $footer_panel_email_contact, "footerPanelPhoneContact": $footer_panel_phone_contact, "footerPanelWebsiteContact": $footer_panel_website_contact, "headerLogoHeight": $header_logo_height, "headerLogoPadding": $header_logo_padding, "panelBackgroundColor": $panel_background_color, "panelColor": $panel_color, "panelLinkColor": $panel_link_color, "privacyPolicyLink": $privacy_policy_link, "showContentPanel": $show_content_panel, "showFooterLogo": $show_footer_logo, "showFooterPanel": $show_footer_panel, "showHeaderLogo": $show_header_logo, "showHeaderPanel": $show_header_panel} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"centerEmailContent": $center_email_content, "centerEmailContentPanel": $center_email_content_panel, "centerEmailFooter": $center_email_footer, "contentBackgroundColor": $content_background_color, "contentColor": $content_color, "contentLinkColor": $content_link_color, "emailBackgroundColor": $email_background_color, "emailColor": $email_color, "emailLinkColor": $email_link_color, "footerFontSize": $footer_font_size, "footerLogoHeight": $footer_logo_height, "footerLogoPadding": $footer_logo_padding, "footerPanelEmailContact": $footer_panel_email_contact, "footerPanelPhoneContact": $footer_panel_phone_contact, "footerPanelWebsiteContact": $footer_panel_website_contact, "headerLogoHeight": $header_logo_height, "headerLogoPadding": $header_logo_padding, "panelBackgroundColor": $panel_background_color, "panelColor": $panel_color, "panelLinkColor": $panel_link_color, "privacyPolicyLink": $privacy_policy_link, "showContentPanel": $show_content_panel, "showFooterLogo": $show_footer_logo, "showFooterPanel": $show_footer_panel, "showHeaderLogo": $show_header_logo, "showHeaderPanel": $show_header_panel} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Email Template
@@ -1025,7 +1034,7 @@ export def "setup-companies-email-templates get" [
 ]: nothing -> record<content: string, contentType: string, statusCode: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/setup/v1/companies/email/templates/{template_name}"))
+  let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/setup/v1/companies/email/templates/{template_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1058,7 +1067,7 @@ export def "setup-companies-regions list" [
 # Create Region
 #
 # POST /setup/v1/companies/regions
-export def "setup-companies-regions post" [
+export def "setup-companies-regions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1073,11 +1082,11 @@ export def "setup-companies-regions post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/v1/companies/regions")
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Region
@@ -1096,7 +1105,7 @@ export def "setup-companies-regions delete" [
 ]: nothing -> record<id: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/companies/regions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/companies/regions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1118,7 +1127,7 @@ export def "setup-companies-regions get" [
 ]: nothing -> record<id: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/companies/regions/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/companies/regions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1127,7 +1136,7 @@ export def "setup-companies-regions get" [
 # Update Region
 #
 # PUT /setup/v1/companies/regions/{id}
-export def "setup-companies-regions put" [
+export def "setup-companies-regions update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1142,12 +1151,12 @@ export def "setup-companies-regions put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/companies/regions/{id}"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/companies/regions/{id}"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Time Zones
@@ -1166,7 +1175,7 @@ export def "setup-companies-timezones get" [
 ]: nothing -> record<object: string, regions: list<string>, timezones: table<name: string, region: string, timezoneIanna: string, tzOffset: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({date: $date} | format pattern "/setup/v1/companies/timezones/{date}"))
+  let full_url = (build-url $base ({date: (encode-path-segment $date)} | format pattern "/setup/v1/companies/timezones/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1217,7 +1226,7 @@ export def "setup-customers get" [
 ]: nothing -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, birthdate: string, businessName: string, companyName: string, contact: record<businessPhone: string, businessPhoneExt: string, conferenceInfo: string, homePhone: string, mobilePhone: string, phoneType: string, skypeUsername: string>, createdBy: string, createdOn: string, customFields: record, deletedStatus: bool, deletedTime: string, disabled: bool, email: string, emailInfo: bool, emailPromotion: bool, firstname: string, gender: string, groupId: string, id: string, inviteEmailSent: string, lastVisitDate: string, lastname: string, latitude: string, locationId: string, longitude: string, modifiedBy: string, modifiedOn: string, name: string, notificationType: string, object: string, registeredBy: string, registrationDate: string, resourceId: string, stripeCustomerId: string, subscriptionId: string, verificationDate: string, verifiedBy: string, welcomeEmailSent: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/customers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/customers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1239,7 +1248,7 @@ export def "setup-customers-privacy get" [
 ]: nothing -> record<appointments: table<auditTrail: list, bookedBy: string, businessName: string, calendarId: string, confirmationNumber: string, confirmed: bool, createDate: string, customFields: record, customerId: string, customerMessage: string, customers: list, date: string, dateInternational: string, downloadIcsUrl: string, duration: int, email: string, emailConfirmationSent: string, emailReminderSent: string, endDateTime: string, firstname: string, groupSize: int, id: string, ipAddress: string, lastModifiedBy: string, lastModifiedOn: string, lastname: string, latitude: string, location: string, locationId: string, longitude: string, name: string, notes: string, object: string, onlineBooking: bool, paymentStatus: int, phone: string, phoneExt: string, phoneType: string, rescheduledId: string, resourceEmail: string, resourceGroupId: string, resourceGroupName: string, resourceId: string, resourceImageUrl: string, resourceName: string, resources: list, serviceAllocationId: string, serviceId: string, serviceImageUrl: string, serviceName: string, smsConfirmationSent: string, smsReminderSent: string, startDateTime: string, status: string, stripeChargeId: string, stripeRefundId: string, time: int, timezone: int, timezoneIana: string, timezoneId: string>, customer: record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, birthdate: string, businessName: string, companyName: string, contact: record<businessPhone: string, businessPhoneExt: string, conferenceInfo: string, homePhone: string, mobilePhone: string, phoneType: string, skypeUsername: string>, createdBy: string, createdOn: string, customFields: record, deletedStatus: bool, deletedTime: string, disabled: bool, email: string, emailInfo: bool, emailPromotion: bool, firstname: string, gender: string, groupId: string, id: string, inviteEmailSent: string, lastVisitDate: string, lastname: string, latitude: string, locationId: string, longitude: string, modifiedBy: string, modifiedOn: string, name: string, notificationType: string, object: string, registeredBy: string, registrationDate: string, resourceId: string, stripeCustomerId: string, subscriptionId: string, verificationDate: string, verifiedBy: string, welcomeEmailSent: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/customers/{id}/privacy"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/customers/{id}/privacy"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1281,7 +1290,7 @@ export def "setup-locations list" [
 # --businessHours shape: {fri?: record, mon?: record, sat?: record, sun?: record, thu?: record, tue?: record, wed?: record}
 # --defaults shape: {autoUpdateCustomer?: bool, businessNotification?: bool, customerCity?: bool, customerState?: bool, emailInfo?: bool, enableUtcTimezone?: bool}
 # --settings shape: {bookAheadUnit?: int, bookAheadValue?: int, bookInAdvance?: int, bookingTimerMins?: int, customerBookingsPerDay?: int, enableWorldTimezones?: bool}
-export def "setup-locations post" [
+export def "setup-locations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1310,18 +1319,18 @@ export def "setup-locations post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/v1/locations")
-  let body = {"address": $address, "adminEmail": $admin_email, "adminName": $admin_name, "appointmentReminders": $appointment_reminders, "businessHours": $business_hours, "defaults": $defaults, "email": $email, "fax": $fax, "friendlyId": $friendly_id, "name": $name, "phone": $phone, "regionId": $region_id, "settings": $settings, "timezoneName": $timezone_name, "website": $website} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address": $address, "adminEmail": $admin_email, "adminName": $admin_name, "appointmentReminders": $appointment_reminders, "businessHours": $business_hours, "defaults": $defaults, "email": $email, "fax": $fax, "friendlyId": $friendly_id, "name": $name, "phone": $phone, "regionId": $region_id, "settings": $settings, "timezoneName": $timezone_name, "website": $website} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create Locations Bulk
 #
 # POST /setup/v1/locations/bulk
 # --locations item shape: {address?: record, adminEmail?: string, adminName?: string, appointmentReminders?: record, businessHours?: record, defaults?: record, email?: string, fax?: string, friendlyId?: string, name?: string, phone?: string, regionId?: string, settings?: record, timezoneName?: string, website?: string}
-export def "setup-locations-bulk post" [
+export def "setup-locations-bulk create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1336,11 +1345,11 @@ export def "setup-locations-bulk post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/v1/locations/bulk")
-  let body = {"locations": $locations} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"locations": $locations} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Unlink Service
@@ -1359,7 +1368,7 @@ export def "setup-locations-services delete-by-id" [
 ]: nothing -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, adminEmail: string, adminName: string, appointmentReminders: record<emailFirstReminder: int, emailFirstReminderInterval: int, emailSecondReminder: int, emailSecondReminderInterval: int, smsFirstReminder: int, smsFirstReminderInterval: int, smsSecondReminder: int, smsSecondReminderInterval: int>, businessHolidays: table<businessClosed: bool, holidayName: string, id: string, publicHolidayId: int>, businessHours: record<fri: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, mon: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, sat: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, sun: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, thu: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, tue: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, wed: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>>, companyId: string, companyName: string, defaults: record<autoUpdateCustomer: bool, businessNotification: bool, customerCity: bool, customerState: bool, emailInfo: bool, enableUtcTimezone: bool, object: string>, email: string, fax: string, friendlyId: string, id: string, imageUrl: string, latitude: float, logo: string, longitude: float, name: string, object: string, phone: string, primaryBusiness: bool, primaryCalendarId: string, regionId: string, services: table<id: int, object: string, serviceId: int, serviceName: string>, settings: record<availabilityForm: int, bookAheadUnit: int, bookAheadValue: int, bookInAdvance: int, bookWithAccount: bool, bookingConfirmationMessage: string, bookingMessage: string, bookingPolicy: string, bookingTimerMins: int, businessId: string, companyId: string, customerBookingsPerDay: int, customerVerification: bool, defaultService: bool, defaultToCustomerTimezone: bool, disableAuthorization: bool, enableWorldTimezones: bool, enabled: bool, familyMembersEnabled: bool, firstAvailable: bool, formFlow: int, hideBreadCrumbNav: bool, hideContinueBooking: bool, hideLocationNav: bool, hideNavBar: bool, hideServiceGroupsNav: bool, hideServicesNav: bool, id: int, lateCancelAction: int, lateCancelHours: int, lateRescheduleAction: int, lateRescheduleHours: int, liveMode: bool, locationId: string, object: string, resourceAnyLabel: string, resourceLabel: string, resourceSelection: bool, returnToAvailability: bool, returnToService: bool, serviceLabel: string, showBusinessLogo: bool, showOnSchedLogo: bool, showServiceGroups: bool>, timezoneIana: string, timezoneId: string, timezoneOffset: int, travel: record<distance: string, proximity: string, startAddress: string, startLat: string, startLon: string, units: string>, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/services/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/services/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1381,7 +1390,7 @@ export def "setup-locations-services get-by-id" [
 ]: nothing -> record<id: int, object: string, serviceId: int, serviceName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/services/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/services/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1403,7 +1412,7 @@ export def "setup-locations delete" [
 ]: nothing -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, adminEmail: string, adminName: string, appointmentReminders: record<emailFirstReminder: int, emailFirstReminderInterval: int, emailSecondReminder: int, emailSecondReminderInterval: int, smsFirstReminder: int, smsFirstReminderInterval: int, smsSecondReminder: int, smsSecondReminderInterval: int>, businessHolidays: table<businessClosed: bool, holidayName: string, id: string, publicHolidayId: int>, businessHours: record<fri: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, mon: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, sat: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, sun: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, thu: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, tue: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, wed: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>>, companyId: string, companyName: string, defaults: record<autoUpdateCustomer: bool, businessNotification: bool, customerCity: bool, customerState: bool, emailInfo: bool, enableUtcTimezone: bool, object: string>, email: string, fax: string, friendlyId: string, id: string, imageUrl: string, latitude: float, logo: string, longitude: float, name: string, object: string, phone: string, primaryBusiness: bool, primaryCalendarId: string, regionId: string, services: table<id: int, object: string, serviceId: int, serviceName: string>, settings: record<availabilityForm: int, bookAheadUnit: int, bookAheadValue: int, bookInAdvance: int, bookWithAccount: bool, bookingConfirmationMessage: string, bookingMessage: string, bookingPolicy: string, bookingTimerMins: int, businessId: string, companyId: string, customerBookingsPerDay: int, customerVerification: bool, defaultService: bool, defaultToCustomerTimezone: bool, disableAuthorization: bool, enableWorldTimezones: bool, enabled: bool, familyMembersEnabled: bool, firstAvailable: bool, formFlow: int, hideBreadCrumbNav: bool, hideContinueBooking: bool, hideLocationNav: bool, hideNavBar: bool, hideServiceGroupsNav: bool, hideServicesNav: bool, id: int, lateCancelAction: int, lateCancelHours: int, lateRescheduleAction: int, lateRescheduleHours: int, liveMode: bool, locationId: string, object: string, resourceAnyLabel: string, resourceLabel: string, resourceSelection: bool, returnToAvailability: bool, returnToService: bool, serviceLabel: string, showBusinessLogo: bool, showOnSchedLogo: bool, showServiceGroups: bool>, timezoneIana: string, timezoneId: string, timezoneOffset: int, travel: record<distance: string, proximity: string, startAddress: string, startLat: string, startLon: string, units: string>, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1425,7 +1434,7 @@ export def "setup-locations get" [
 ]: nothing -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, adminEmail: string, adminName: string, appointmentReminders: record<emailFirstReminder: int, emailFirstReminderInterval: int, emailSecondReminder: int, emailSecondReminderInterval: int, smsFirstReminder: int, smsFirstReminderInterval: int, smsSecondReminder: int, smsSecondReminderInterval: int>, businessHolidays: table<businessClosed: bool, holidayName: string, id: string, publicHolidayId: int>, businessHours: record<fri: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, mon: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, sat: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, sun: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, thu: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, tue: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, wed: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>>, companyId: string, companyName: string, defaults: record<autoUpdateCustomer: bool, businessNotification: bool, customerCity: bool, customerState: bool, emailInfo: bool, enableUtcTimezone: bool, object: string>, email: string, fax: string, friendlyId: string, id: string, imageUrl: string, latitude: float, logo: string, longitude: float, name: string, object: string, phone: string, primaryBusiness: bool, primaryCalendarId: string, regionId: string, services: table<id: int, object: string, serviceId: int, serviceName: string>, settings: record<availabilityForm: int, bookAheadUnit: int, bookAheadValue: int, bookInAdvance: int, bookWithAccount: bool, bookingConfirmationMessage: string, bookingMessage: string, bookingPolicy: string, bookingTimerMins: int, businessId: string, companyId: string, customerBookingsPerDay: int, customerVerification: bool, defaultService: bool, defaultToCustomerTimezone: bool, disableAuthorization: bool, enableWorldTimezones: bool, enabled: bool, familyMembersEnabled: bool, firstAvailable: bool, formFlow: int, hideBreadCrumbNav: bool, hideContinueBooking: bool, hideLocationNav: bool, hideNavBar: bool, hideServiceGroupsNav: bool, hideServicesNav: bool, id: int, lateCancelAction: int, lateCancelHours: int, lateRescheduleAction: int, lateRescheduleHours: int, liveMode: bool, locationId: string, object: string, resourceAnyLabel: string, resourceLabel: string, resourceSelection: bool, returnToAvailability: bool, returnToService: bool, serviceLabel: string, showBusinessLogo: bool, showOnSchedLogo: bool, showServiceGroups: bool>, timezoneIana: string, timezoneId: string, timezoneOffset: int, travel: record<distance: string, proximity: string, startAddress: string, startLat: string, startLon: string, units: string>, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1439,7 +1448,7 @@ export def "setup-locations get" [
 # --businessHours shape: {fri?: record, mon?: record, sat?: record, sun?: record, thu?: record, tue?: record, wed?: record}
 # --defaults shape: {autoUpdateCustomer?: bool, businessNotification?: bool, customerCity?: bool, customerState?: bool, emailInfo?: bool, enableUtcTimezone?: bool}
 # --settings shape: {bookAheadUnit?: int, bookAheadValue?: int, bookInAdvance?: int, bookingTimerMins?: int, customerBookingsPerDay?: int, enableWorldTimezones?: bool}
-export def "setup-locations put" [
+export def "setup-locations update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1470,12 +1479,12 @@ export def "setup-locations put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "removeRegion" $remove_region "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/{id}") $qp)
-  let body = {"address": $address, "adminEmail": $admin_email, "adminName": $admin_name, "appointmentReminders": $appointment_reminders, "businessHours": $business_hours, "defaults": $defaults, "email": $email, "fax": $fax, "friendlyId": $friendly_id, "name": $name, "phone": $phone, "regionId": $region_id, "settings": $settings, "timezoneName": $timezone_name, "website": $website} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/{id}") $qp)
+  let req_body = {"address": $address, "adminEmail": $admin_email, "adminName": $admin_name, "appointmentReminders": $appointment_reminders, "businessHours": $business_hours, "defaults": $defaults, "email": $email, "fax": $fax, "friendlyId": $friendly_id, "name": $name, "phone": $phone, "regionId": $region_id, "settings": $settings, "timezoneName": $timezone_name, "website": $website} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Reminders
@@ -1494,7 +1503,7 @@ export def "setup-locations-appointmentreminders get" [
 ]: nothing -> record<emailFirstReminder: int, emailFirstReminderInterval: int, emailSecondReminder: int, emailSecondReminderInterval: int, smsFirstReminder: int, smsFirstReminderInterval: int, smsSecondReminder: int, smsSecondReminderInterval: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/{id}/appointmentreminders"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/{id}/appointmentreminders"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1503,7 +1512,7 @@ export def "setup-locations-appointmentreminders get" [
 # Update Reminders
 #
 # PUT /setup/v1/locations/{id}/appointmentreminders
-export def "setup-locations-appointmentreminders put" [
+export def "setup-locations-appointmentreminders update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1525,12 +1534,12 @@ export def "setup-locations-appointmentreminders put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/{id}/appointmentreminders"))
-  let body = {"emailFirstReminder": $email_first_reminder, "emailFirstReminderInterval": $email_first_reminder_interval, "emailSecondReminder": $email_second_reminder, "emailSecondReminderInterval": $email_second_reminder_interval, "smsFirstReminder": $sms_first_reminder, "smsFirstReminderInterval": $sms_first_reminder_interval, "smsSecondReminder": $sms_second_reminder, "smsSecondReminderInterval": $sms_second_reminder_interval} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/{id}/appointmentreminders"))
+  let req_body = {"emailFirstReminder": $email_first_reminder, "emailFirstReminderInterval": $email_first_reminder_interval, "emailSecondReminder": $email_second_reminder, "emailSecondReminderInterval": $email_second_reminder_interval, "smsFirstReminder": $sms_first_reminder, "smsFirstReminderInterval": $sms_first_reminder_interval, "smsSecondReminder": $sms_second_reminder, "smsSecondReminderInterval": $sms_second_reminder_interval} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete All Location Images
@@ -1551,7 +1560,7 @@ export def "setup-locations-deleteallimages delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "uppercase" $uppercase "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/{id}/deleteallimages") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/{id}/deleteallimages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1573,7 +1582,7 @@ export def "setup-locations-deleteimage delete" [
 ]: nothing -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, adminEmail: string, adminName: string, appointmentReminders: record<emailFirstReminder: int, emailFirstReminderInterval: int, emailSecondReminder: int, emailSecondReminderInterval: int, smsFirstReminder: int, smsFirstReminderInterval: int, smsSecondReminder: int, smsSecondReminderInterval: int>, businessHolidays: table<businessClosed: bool, holidayName: string, id: string, publicHolidayId: int>, businessHours: record<fri: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, mon: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, sat: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, sun: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, thu: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, tue: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, wed: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>>, companyId: string, companyName: string, defaults: record<autoUpdateCustomer: bool, businessNotification: bool, customerCity: bool, customerState: bool, emailInfo: bool, enableUtcTimezone: bool, object: string>, email: string, fax: string, friendlyId: string, id: string, imageUrl: string, latitude: float, logo: string, longitude: float, name: string, object: string, phone: string, primaryBusiness: bool, primaryCalendarId: string, regionId: string, services: table<id: int, object: string, serviceId: int, serviceName: string>, settings: record<availabilityForm: int, bookAheadUnit: int, bookAheadValue: int, bookInAdvance: int, bookWithAccount: bool, bookingConfirmationMessage: string, bookingMessage: string, bookingPolicy: string, bookingTimerMins: int, businessId: string, companyId: string, customerBookingsPerDay: int, customerVerification: bool, defaultService: bool, defaultToCustomerTimezone: bool, disableAuthorization: bool, enableWorldTimezones: bool, enabled: bool, familyMembersEnabled: bool, firstAvailable: bool, formFlow: int, hideBreadCrumbNav: bool, hideContinueBooking: bool, hideLocationNav: bool, hideNavBar: bool, hideServiceGroupsNav: bool, hideServicesNav: bool, id: int, lateCancelAction: int, lateCancelHours: int, lateRescheduleAction: int, lateRescheduleHours: int, liveMode: bool, locationId: string, object: string, resourceAnyLabel: string, resourceLabel: string, resourceSelection: bool, returnToAvailability: bool, returnToService: bool, serviceLabel: string, showBusinessLogo: bool, showOnSchedLogo: bool, showServiceGroups: bool>, timezoneIana: string, timezoneId: string, timezoneOffset: int, travel: record<distance: string, proximity: string, startAddress: string, startLat: string, startLon: string, units: string>, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/{id}/deleteimage"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/{id}/deleteimage"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1595,7 +1604,7 @@ export def "setup-locations-email-templates list" [
 ]: nothing -> record<data: table<customized: bool, description: string, name: string, object: string, scope: string>, object: string, total: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/{id}/email/templates"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/{id}/email/templates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1604,7 +1613,7 @@ export def "setup-locations-email-templates list" [
 # Create Custom Template
 #
 # POST /setup/v1/locations/{id}/email/templates
-export def "setup-locations-email-templates post" [
+export def "setup-locations-email-templates create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1620,12 +1629,12 @@ export def "setup-locations-email-templates post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/{id}/email/templates"))
-  let body = {"templateContent": $template_content, "templateName": $template_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/{id}/email/templates"))
+  let req_body = {"templateContent": $template_content, "templateName": $template_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Master Template Settings
@@ -1644,7 +1653,7 @@ export def "setup-locations-email-templates-master delete" [
 ]: nothing -> record<centerEmailContent: bool, centerEmailContentPanel: bool, centerEmailFooter: bool, contentBackgroundColor: string, contentColor: string, contentLinkColor: string, emailBackgroundColor: string, emailColor: string, emailLinkColor: string, footerFontSize: string, footerLogoHeight: string, footerLogoPadding: string, footerPanelEmailContact: bool, footerPanelPhoneContact: bool, footerPanelWebsiteContact: bool, headerLogoHeight: string, headerLogoPadding: string, panelBackgroundColor: string, panelColor: string, panelLinkColor: string, privacyPolicyLink: string, showContentPanel: bool, showFooterLogo: bool, showFooterPanel: bool, showHeaderLogo: bool, showHeaderPanel: bool, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/{id}/email/templates/master"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/{id}/email/templates/master"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1666,7 +1675,7 @@ export def "setup-locations-email-templates-master get" [
 ]: nothing -> record<centerEmailContent: bool, centerEmailContentPanel: bool, centerEmailFooter: bool, contentBackgroundColor: string, contentColor: string, contentLinkColor: string, emailBackgroundColor: string, emailColor: string, emailLinkColor: string, footerFontSize: string, footerLogoHeight: string, footerLogoPadding: string, footerPanelEmailContact: bool, footerPanelPhoneContact: bool, footerPanelWebsiteContact: bool, headerLogoHeight: string, headerLogoPadding: string, panelBackgroundColor: string, panelColor: string, panelLinkColor: string, privacyPolicyLink: string, showContentPanel: bool, showFooterLogo: bool, showFooterPanel: bool, showHeaderLogo: bool, showHeaderPanel: bool, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/{id}/email/templates/master"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/{id}/email/templates/master"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1675,7 +1684,7 @@ export def "setup-locations-email-templates-master get" [
 # Create Master Template Settings
 #
 # POST /setup/v1/locations/{id}/email/templates/master
-export def "setup-locations-email-templates-master post" [
+export def "setup-locations-email-templates-master create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1715,12 +1724,12 @@ export def "setup-locations-email-templates-master post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/{id}/email/templates/master"))
-  let body = {"centerEmailContent": $center_email_content, "centerEmailContentPanel": $center_email_content_panel, "centerEmailFooter": $center_email_footer, "contentBackgroundColor": $content_background_color, "contentColor": $content_color, "contentLinkColor": $content_link_color, "emailBackgroundColor": $email_background_color, "emailColor": $email_color, "emailLinkColor": $email_link_color, "footerFontSize": $footer_font_size, "footerLogoHeight": $footer_logo_height, "footerLogoPadding": $footer_logo_padding, "footerPanelEmailContact": $footer_panel_email_contact, "footerPanelPhoneContact": $footer_panel_phone_contact, "footerPanelWebsiteContact": $footer_panel_website_contact, "headerLogoHeight": $header_logo_height, "headerLogoPadding": $header_logo_padding, "panelBackgroundColor": $panel_background_color, "panelColor": $panel_color, "panelLinkColor": $panel_link_color, "privacyPolicyLink": $privacy_policy_link, "showContentPanel": $show_content_panel, "showFooterLogo": $show_footer_logo, "showFooterPanel": $show_footer_panel, "showHeaderLogo": $show_header_logo, "showHeaderPanel": $show_header_panel} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/{id}/email/templates/master"))
+  let req_body = {"centerEmailContent": $center_email_content, "centerEmailContentPanel": $center_email_content_panel, "centerEmailFooter": $center_email_footer, "contentBackgroundColor": $content_background_color, "contentColor": $content_color, "contentLinkColor": $content_link_color, "emailBackgroundColor": $email_background_color, "emailColor": $email_color, "emailLinkColor": $email_link_color, "footerFontSize": $footer_font_size, "footerLogoHeight": $footer_logo_height, "footerLogoPadding": $footer_logo_padding, "footerPanelEmailContact": $footer_panel_email_contact, "footerPanelPhoneContact": $footer_panel_phone_contact, "footerPanelWebsiteContact": $footer_panel_website_contact, "headerLogoHeight": $header_logo_height, "headerLogoPadding": $header_logo_padding, "panelBackgroundColor": $panel_background_color, "panelColor": $panel_color, "panelLinkColor": $panel_link_color, "privacyPolicyLink": $privacy_policy_link, "showContentPanel": $show_content_panel, "showFooterLogo": $show_footer_logo, "showFooterPanel": $show_footer_panel, "showHeaderLogo": $show_header_logo, "showHeaderPanel": $show_header_panel} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Custom Template
@@ -1740,7 +1749,7 @@ export def "setup-locations-email-templates delete" [
 ]: nothing -> record<content: string, contentType: string, statusCode: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, template_name: $template_name} | format pattern "/setup/v1/locations/{id}/email/templates/{template_name}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), template_name: (encode-path-segment $template_name)} | format pattern "/setup/v1/locations/{id}/email/templates/{template_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1763,7 +1772,7 @@ export def "setup-locations-email-templates get" [
 ]: nothing -> record<content: string, contentType: string, statusCode: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, template_name: $template_name} | format pattern "/setup/v1/locations/{id}/email/templates/{template_name}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), template_name: (encode-path-segment $template_name)} | format pattern "/setup/v1/locations/{id}/email/templates/{template_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1785,7 +1794,7 @@ export def "setup-locations-google-service-account delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/{id}/google/service/account"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/{id}/google/service/account"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1794,7 +1803,7 @@ export def "setup-locations-google-service-account delete" [
 # Create Google Cal Access
 #
 # POST /setup/v1/locations/{id}/google/service/account
-export def "setup-locations-google-service-account post" [
+export def "setup-locations-google-service-account create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1818,18 +1827,18 @@ export def "setup-locations-google-service-account post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/{id}/google/service/account"))
-  let body = {"auth_provider_x509_cert_url": $auth_provider_x509_cert_url, "auth_uri": $auth_uri, "client_email": $client_email, "client_id": $client_id, "client_x509_cert_url": $client_x509_cert_url, "private_key": $private_key, "private_key_id": $private_key_id, "project_id": $project_id, "token_uri": $token_uri, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/{id}/google/service/account"))
+  let req_body = {"auth_provider_x509_cert_url": $auth_provider_x509_cert_url, "auth_uri": $auth_uri, "client_email": $client_email, "client_id": $client_id, "client_x509_cert_url": $client_x509_cert_url, "private_key": $private_key, "private_key_id": $private_key_id, "project_id": $project_id, "token_uri": $token_uri, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update Location Holidays
 #
 # PUT /setup/v1/locations/{id}/holidays/{holidayId}/{closed}
-export def "setup-locations-holidays put" [
+export def "setup-locations-holidays update" [
   id: string
   holiday_id: string
   closed: bool
@@ -1844,7 +1853,7 @@ export def "setup-locations-holidays put" [
 ]: nothing -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, adminEmail: string, adminName: string, appointmentReminders: record<emailFirstReminder: int, emailFirstReminderInterval: int, emailSecondReminder: int, emailSecondReminderInterval: int, smsFirstReminder: int, smsFirstReminderInterval: int, smsSecondReminder: int, smsSecondReminderInterval: int>, businessHolidays: table<businessClosed: bool, holidayName: string, id: string, publicHolidayId: int>, businessHours: record<fri: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, mon: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, sat: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, sun: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, thu: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, tue: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, wed: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>>, companyId: string, companyName: string, defaults: record<autoUpdateCustomer: bool, businessNotification: bool, customerCity: bool, customerState: bool, emailInfo: bool, enableUtcTimezone: bool, object: string>, email: string, fax: string, friendlyId: string, id: string, imageUrl: string, latitude: float, logo: string, longitude: float, name: string, object: string, phone: string, primaryBusiness: bool, primaryCalendarId: string, regionId: string, services: table<id: int, object: string, serviceId: int, serviceName: string>, settings: record<availabilityForm: int, bookAheadUnit: int, bookAheadValue: int, bookInAdvance: int, bookWithAccount: bool, bookingConfirmationMessage: string, bookingMessage: string, bookingPolicy: string, bookingTimerMins: int, businessId: string, companyId: string, customerBookingsPerDay: int, customerVerification: bool, defaultService: bool, defaultToCustomerTimezone: bool, disableAuthorization: bool, enableWorldTimezones: bool, enabled: bool, familyMembersEnabled: bool, firstAvailable: bool, formFlow: int, hideBreadCrumbNav: bool, hideContinueBooking: bool, hideLocationNav: bool, hideNavBar: bool, hideServiceGroupsNav: bool, hideServicesNav: bool, id: int, lateCancelAction: int, lateCancelHours: int, lateRescheduleAction: int, lateRescheduleHours: int, liveMode: bool, locationId: string, object: string, resourceAnyLabel: string, resourceLabel: string, resourceSelection: bool, returnToAvailability: bool, returnToService: bool, serviceLabel: string, showBusinessLogo: bool, showOnSchedLogo: bool, showServiceGroups: bool>, timezoneIana: string, timezoneId: string, timezoneOffset: int, travel: record<distance: string, proximity: string, startAddress: string, startLat: string, startLon: string, units: string>, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, holiday_id: $holiday_id, closed: $closed} | format pattern "/setup/v1/locations/{id}/holidays/{holiday_id}/{closed}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), holiday_id: (encode-path-segment $holiday_id), closed: (encode-path-segment $closed)} | format pattern "/setup/v1/locations/{id}/holidays/{holiday_id}/{closed}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1853,7 +1862,7 @@ export def "setup-locations-holidays put" [
 # Recover Location
 #
 # PUT /setup/v1/locations/{id}/recover
-export def "setup-locations-recover put" [
+export def "setup-locations-recover update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1866,7 +1875,7 @@ export def "setup-locations-recover put" [
 ]: nothing -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, adminEmail: string, adminName: string, appointmentReminders: record<emailFirstReminder: int, emailFirstReminderInterval: int, emailSecondReminder: int, emailSecondReminderInterval: int, smsFirstReminder: int, smsFirstReminderInterval: int, smsSecondReminder: int, smsSecondReminderInterval: int>, businessHolidays: table<businessClosed: bool, holidayName: string, id: string, publicHolidayId: int>, businessHours: record<fri: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, mon: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, sat: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, sun: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, thu: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, tue: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, wed: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>>, companyId: string, companyName: string, defaults: record<autoUpdateCustomer: bool, businessNotification: bool, customerCity: bool, customerState: bool, emailInfo: bool, enableUtcTimezone: bool, object: string>, email: string, fax: string, friendlyId: string, id: string, imageUrl: string, latitude: float, logo: string, longitude: float, name: string, object: string, phone: string, primaryBusiness: bool, primaryCalendarId: string, regionId: string, services: table<id: int, object: string, serviceId: int, serviceName: string>, settings: record<availabilityForm: int, bookAheadUnit: int, bookAheadValue: int, bookInAdvance: int, bookWithAccount: bool, bookingConfirmationMessage: string, bookingMessage: string, bookingPolicy: string, bookingTimerMins: int, businessId: string, companyId: string, customerBookingsPerDay: int, customerVerification: bool, defaultService: bool, defaultToCustomerTimezone: bool, disableAuthorization: bool, enableWorldTimezones: bool, enabled: bool, familyMembersEnabled: bool, firstAvailable: bool, formFlow: int, hideBreadCrumbNav: bool, hideContinueBooking: bool, hideLocationNav: bool, hideNavBar: bool, hideServiceGroupsNav: bool, hideServicesNav: bool, id: int, lateCancelAction: int, lateCancelHours: int, lateRescheduleAction: int, lateRescheduleHours: int, liveMode: bool, locationId: string, object: string, resourceAnyLabel: string, resourceLabel: string, resourceSelection: bool, returnToAvailability: bool, returnToService: bool, serviceLabel: string, showBusinessLogo: bool, showOnSchedLogo: bool, showServiceGroups: bool>, timezoneIana: string, timezoneId: string, timezoneOffset: int, travel: record<distance: string, proximity: string, startAddress: string, startLat: string, startLon: string, units: string>, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/{id}/recover"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/{id}/recover"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1888,7 +1897,7 @@ export def "setup-locations-services delete-by-id-1" [
 ]: nothing -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, adminEmail: string, adminName: string, appointmentReminders: record<emailFirstReminder: int, emailFirstReminderInterval: int, emailSecondReminder: int, emailSecondReminderInterval: int, smsFirstReminder: int, smsFirstReminderInterval: int, smsSecondReminder: int, smsSecondReminderInterval: int>, businessHolidays: table<businessClosed: bool, holidayName: string, id: string, publicHolidayId: int>, businessHours: record<fri: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, mon: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, sat: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, sun: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, thu: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, tue: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, wed: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>>, companyId: string, companyName: string, defaults: record<autoUpdateCustomer: bool, businessNotification: bool, customerCity: bool, customerState: bool, emailInfo: bool, enableUtcTimezone: bool, object: string>, email: string, fax: string, friendlyId: string, id: string, imageUrl: string, latitude: float, logo: string, longitude: float, name: string, object: string, phone: string, primaryBusiness: bool, primaryCalendarId: string, regionId: string, services: table<id: int, object: string, serviceId: int, serviceName: string>, settings: record<availabilityForm: int, bookAheadUnit: int, bookAheadValue: int, bookInAdvance: int, bookWithAccount: bool, bookingConfirmationMessage: string, bookingMessage: string, bookingPolicy: string, bookingTimerMins: int, businessId: string, companyId: string, customerBookingsPerDay: int, customerVerification: bool, defaultService: bool, defaultToCustomerTimezone: bool, disableAuthorization: bool, enableWorldTimezones: bool, enabled: bool, familyMembersEnabled: bool, firstAvailable: bool, formFlow: int, hideBreadCrumbNav: bool, hideContinueBooking: bool, hideLocationNav: bool, hideNavBar: bool, hideServiceGroupsNav: bool, hideServicesNav: bool, id: int, lateCancelAction: int, lateCancelHours: int, lateRescheduleAction: int, lateRescheduleHours: int, liveMode: bool, locationId: string, object: string, resourceAnyLabel: string, resourceLabel: string, resourceSelection: bool, returnToAvailability: bool, returnToService: bool, serviceLabel: string, showBusinessLogo: bool, showOnSchedLogo: bool, showServiceGroups: bool>, timezoneIana: string, timezoneId: string, timezoneOffset: int, travel: record<distance: string, proximity: string, startAddress: string, startLat: string, startLon: string, units: string>, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/{id}/services"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/{id}/services"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1913,7 +1922,7 @@ export def "setup-locations-services get-by-id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/{id}/services") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/{id}/services") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1922,7 +1931,7 @@ export def "setup-locations-services get-by-id-1" [
 # Create Linked Service
 #
 # POST /setup/v1/locations/{id}/services
-export def "setup-locations-services post" [
+export def "setup-locations-services create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1937,17 +1946,18 @@ export def "setup-locations-services post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/{id}/services"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/{id}/services"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update Location Scope
 #
 # PUT /setup/v1/locations/{id}/settings/scope/{settingsScope}
-export def "setup-locations-settings-scope put" [
+export def "setup-locations-settings-scope update" [
   id: string
   settings_scope: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1961,7 +1971,7 @@ export def "setup-locations-settings-scope put" [
 ]: nothing -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, adminEmail: string, adminName: string, appointmentReminders: record<emailFirstReminder: int, emailFirstReminderInterval: int, emailSecondReminder: int, emailSecondReminderInterval: int, smsFirstReminder: int, smsFirstReminderInterval: int, smsSecondReminder: int, smsSecondReminderInterval: int>, businessHolidays: table<businessClosed: bool, holidayName: string, id: string, publicHolidayId: int>, businessHours: record<fri: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, mon: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, sat: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, sun: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, thu: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, tue: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>, wed: record<endTime: int, is24Hours: bool, isOpen: bool, startTime: int>>, companyId: string, companyName: string, defaults: record<autoUpdateCustomer: bool, businessNotification: bool, customerCity: bool, customerState: bool, emailInfo: bool, enableUtcTimezone: bool, object: string>, email: string, fax: string, friendlyId: string, id: string, imageUrl: string, latitude: float, logo: string, longitude: float, name: string, object: string, phone: string, primaryBusiness: bool, primaryCalendarId: string, regionId: string, services: table<id: int, object: string, serviceId: int, serviceName: string>, settings: record<availabilityForm: int, bookAheadUnit: int, bookAheadValue: int, bookInAdvance: int, bookWithAccount: bool, bookingConfirmationMessage: string, bookingMessage: string, bookingPolicy: string, bookingTimerMins: int, businessId: string, companyId: string, customerBookingsPerDay: int, customerVerification: bool, defaultService: bool, defaultToCustomerTimezone: bool, disableAuthorization: bool, enableWorldTimezones: bool, enabled: bool, familyMembersEnabled: bool, firstAvailable: bool, formFlow: int, hideBreadCrumbNav: bool, hideContinueBooking: bool, hideLocationNav: bool, hideNavBar: bool, hideServiceGroupsNav: bool, hideServicesNav: bool, id: int, lateCancelAction: int, lateCancelHours: int, lateRescheduleAction: int, lateRescheduleHours: int, liveMode: bool, locationId: string, object: string, resourceAnyLabel: string, resourceLabel: string, resourceSelection: bool, returnToAvailability: bool, returnToService: bool, serviceLabel: string, showBusinessLogo: bool, showOnSchedLogo: bool, showServiceGroups: bool>, timezoneIana: string, timezoneId: string, timezoneOffset: int, travel: record<distance: string, proximity: string, startAddress: string, startLat: string, startLon: string, units: string>, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, settings_scope: $settings_scope} | format pattern "/setup/v1/locations/{id}/settings/scope/{settings_scope}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), settings_scope: (encode-path-segment $settings_scope)} | format pattern "/setup/v1/locations/{id}/settings/scope/{settings_scope}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1970,7 +1980,7 @@ export def "setup-locations-settings-scope put" [
 # Upload Location Image
 #
 # POST /setup/v1/locations/{id}/uploadimage
-export def "setup-locations-uploadimage post" [
+export def "setup-locations-uploadimage create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1986,12 +1996,12 @@ export def "setup-locations-uploadimage post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/locations/{id}/uploadimage"))
-  let body = {"imageFileData": $image_file_data, "imageFileName": $image_file_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/locations/{id}/uploadimage"))
+  let req_body = {"imageFileData": $image_file_data, "imageFileName": $image_file_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Resource Groups
@@ -2023,7 +2033,7 @@ export def "setup-resourcegroups list" [
 # Create Resource Group
 #
 # POST /setup/v1/resourcegroups
-export def "setup-resourcegroups post" [
+export def "setup-resourcegroups create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2041,11 +2051,11 @@ export def "setup-resourcegroups post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/v1/resourcegroups")
-  let body = {"description": $description, "email": $email, "locationId": $location_id, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "email": $email, "locationId": $location_id, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Resource Group
@@ -2064,7 +2074,7 @@ export def "setup-resourcegroups delete" [
 ]: nothing -> record<bookingNotification: int, deletedStatus: bool, deletedTime: string, description: string, email: string, id: string, locationId: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resourcegroups/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resourcegroups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2086,7 +2096,7 @@ export def "setup-resourcegroups get" [
 ]: nothing -> record<bookingNotification: int, deletedStatus: bool, deletedTime: string, description: string, email: string, id: string, locationId: string, name: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resourcegroups/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resourcegroups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2095,7 +2105,7 @@ export def "setup-resourcegroups get" [
 # Update Resource Group
 #
 # PUT /setup/v1/resourcegroups/{id}
-export def "setup-resourcegroups put" [
+export def "setup-resourcegroups update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2112,18 +2122,18 @@ export def "setup-resourcegroups put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resourcegroups/{id}"))
-  let body = {"description": $description, "email": $email, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resourcegroups/{id}"))
+  let req_body = {"description": $description, "email": $email, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Recover Resource Group
 #
 # PUT /setup/v1/resourcegroups/{id}/recover
-export def "setup-resourcegroups-recover put" [
+export def "setup-resourcegroups-recover update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2136,7 +2146,7 @@ export def "setup-resourcegroups-recover put" [
 ]: nothing -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, availability: record<fri: record<endTime: int, startTime: int>, mon: record<endTime: int, startTime: int>, sat: record<endTime: int, startTime: int>, sun: record<endTime: int, startTime: int>, thu: record<endTime: int, startTime: int>, tue: record<endTime: int, startTime: int>, wed: record<endTime: int, startTime: int>>, bioLink: string, bookingNotification: int, calendarAvailability: int, contact: record<businessPhone: string, businessPhoneExt: string, conferenceInfo: string, homePhone: string, mobilePhone: string, phoneType: string, skypeUsername: string>, customFields: record<field1: string, field10: string, field2: string, field3: string, field4: string, field5: string, field6: string, field7: string, field8: string, field9: string>, deletedStatus: bool, deletedTime: string, description: string, effectiveDate: string, email: string, gender: string, googleCalendarAuthUrl: string, googleCalendarAuthorized: bool, googleCalendarId: string, groupId: int, hourly: float, id: string, ignoreBusinessHours: bool, imageUrl: string, locationId: string, name: string, notificationType: int, object: string, options: record<bioLink: string, bookingNotification: int, calendarAvailability: int, displayColor: string, effectiveDate: string, gender: string, googleCalendarId: string, hourly: float, ignoreBusinessHours: bool, notificationType: int, outlookCalendarId: string, sortKey: int>, outlookCalendarAuthUrl: string, outlookCalendarAuthorized: bool, outlookCalendarId: string, phone: record<businessPhone: string, businessPhoneExt: string, homePhone: string, mobilePhone: string, phoneType: string>, recurringAvailability: bool, services: table<object: string, serviceId: int, serviceName: string>, skypeName: string, sortKey: int, timezoneIana: string, timezoneId: string, timezoneOffset: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resourcegroups/{id}/recover"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resourcegroups/{id}/recover"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2181,7 +2191,7 @@ export def "setup-resources list" [
 # --contact shape: {businessPhone?: string, businessPhoneExt?: string, conferenceInfo?: string, homePhone?: string, mobilePhone?: string, preferredPhoneType?: string, skypeUsername?: string}
 # --customFields shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
 # --options shape: {bioLink?: string, bookingNotification?: int, calendarAvailability?: int, displayColor?: string, effectiveDate?: string, gender?: string, googleCalendarId?: string, hourly?: float, ignoreBusinessHours?: bool, notificationType?: int, outlookCalendarId?: string, sortKey?: int}
-export def "setup-resources post" [
+export def "setup-resources create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2203,7 +2213,7 @@ export def "setup-resources post" [
   --name: string # nullable
   --options: record # Options for the new resource — shape: {bioLink?: string, bookingNotification?: int, calendarAvailability?: int, displayColor?: string, effectiveDate?: string, gender?: string, googleCalendarId?: string, hourly?: float, ignoreBusinessHours?: bool, notificationType?: int, outlookCalendarId?: string, sortKey?: int}
   --recurring-availability: oneof<nothing, bool> # nullable
-  --service-ids: list # nullable
+  --service-ids: list<string> # nullable
   --timezone-id: string # nullable
 ]: any -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, availability: record<fri: record<endTime: int, startTime: int>, mon: record<endTime: int, startTime: int>, sat: record<endTime: int, startTime: int>, sun: record<endTime: int, startTime: int>, thu: record<endTime: int, startTime: int>, tue: record<endTime: int, startTime: int>, wed: record<endTime: int, startTime: int>>, bioLink: string, bookingNotification: int, calendarAvailability: int, contact: record<businessPhone: string, businessPhoneExt: string, conferenceInfo: string, homePhone: string, mobilePhone: string, phoneType: string, skypeUsername: string>, customFields: record<field1: string, field10: string, field2: string, field3: string, field4: string, field5: string, field6: string, field7: string, field8: string, field9: string>, deletedStatus: bool, deletedTime: string, description: string, effectiveDate: string, email: string, gender: string, googleCalendarAuthUrl: string, googleCalendarAuthorized: bool, googleCalendarId: string, groupId: int, hourly: float, id: string, ignoreBusinessHours: bool, imageUrl: string, locationId: string, name: string, notificationType: int, object: string, options: record<bioLink: string, bookingNotification: int, calendarAvailability: int, displayColor: string, effectiveDate: string, gender: string, googleCalendarId: string, hourly: float, ignoreBusinessHours: bool, notificationType: int, outlookCalendarId: string, sortKey: int>, outlookCalendarAuthUrl: string, outlookCalendarAuthorized: bool, outlookCalendarId: string, phone: record<businessPhone: string, businessPhoneExt: string, homePhone: string, mobilePhone: string, phoneType: string>, recurringAvailability: bool, services: table<object: string, serviceId: int, serviceName: string>, skypeName: string, sortKey: int, timezoneIana: string, timezoneId: string, timezoneOffset: int> {
   let input = $in
@@ -2211,11 +2221,11 @@ export def "setup-resources post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "googleAuthReturnUrl" $google_auth_return_url "scalar") (serialize-qp "outlookAuthReturnUrl" $outlook_auth_return_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setup/v1/resources" $qp)
-  let body = {"address": $address, "availability": $availability, "contact": $contact, "customFields": $custom_fields, "description": $description, "email": $email, "groupId": $group_id, "locationId": $location_id, "name": $name, "options": $options, "recurringAvailability": $recurring_availability, "serviceIds": $service_ids, "timezoneId": $timezone_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"address": $address, "availability": $availability, "contact": $contact, "customFields": $custom_fields, "description": $description, "email": $email, "groupId": $group_id, "locationId": $location_id, "name": $name, "options": $options, "recurringAvailability": $recurring_availability, "serviceIds": $service_ids, "timezoneId": $timezone_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Allocation
@@ -2234,7 +2244,7 @@ export def "setup-resources-allocations delete" [
 ]: nothing -> record<businessId: int, deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: int, object: string, reason: string, repeat: record<frequency: string, interval: int, monthDay: string, monthType: string, weekdays: string>, repeats: bool, resourceId: int, startDate: string, startTime: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/allocations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/allocations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2256,7 +2266,7 @@ export def "setup-resources-allocations get-by-id" [
 ]: nothing -> record<businessId: int, deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: int, object: string, reason: string, repeat: record<frequency: string, interval: int, monthDay: string, monthType: string, weekdays: string>, repeats: bool, resourceId: int, startDate: string, startTime: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/allocations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/allocations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2266,7 +2276,7 @@ export def "setup-resources-allocations get-by-id" [
 #
 # PUT /setup/v1/resources/allocations/{id}
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-resources-allocations put" [
+export def "setup-resources-allocations update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2287,12 +2297,12 @@ export def "setup-resources-allocations put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/allocations/{id}"))
-  let body = {"endDate": $end_date, "endTime": $end_time, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "startDate": $start_date, "startTime": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/allocations/{id}"))
+  let req_body = {"endDate": $end_date, "endTime": $end_time, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "startDate": $start_date, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Block
@@ -2311,7 +2321,7 @@ export def "setup-resources-block delete" [
 ]: nothing -> record<businessId: int, deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: int, object: string, reason: string, repeat: record<frequency: string, interval: int, monthDay: string, monthType: string, weekdays: string>, repeats: bool, resourceId: int, startDate: string, startTime: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/block/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/block/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2321,7 +2331,7 @@ export def "setup-resources-block delete" [
 #
 # PUT /setup/v1/resources/block/{id}
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-resources-block put" [
+export def "setup-resources-block update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2343,12 +2353,12 @@ export def "setup-resources-block put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/block/{id}"))
-  let body = {"allDay": $all_day, "endDate": $end_date, "endTime": $end_time, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "startDate": $start_date, "startTime": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/block/{id}"))
+  let req_body = {"allDay": $all_day, "endDate": $end_date, "endTime": $end_time, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "startDate": $start_date, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Block
@@ -2367,7 +2377,7 @@ export def "setup-resources-blocks get-by-id" [
 ]: nothing -> record<businessId: int, deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: int, object: string, reason: string, repeat: record<frequency: string, interval: int, monthDay: string, monthType: string, weekdays: string>, repeats: bool, resourceId: int, startDate: string, startTime: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/blocks/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/blocks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2376,8 +2386,8 @@ export def "setup-resources-blocks get-by-id" [
 # Create Resources Bulk
 #
 # POST /setup/v1/resources/bulk
-# --resources item shape: {address?: record, availability?: record, contact?: record, customFields?: record, description?: string, email?: string, groupId?: string, locationId?: string, name?: string, options?: record, recurringAvailability?: bool, serviceIds?: list, timezoneId?: string}
-export def "setup-resources-bulk post" [
+# --resources item shape: {address?: record, availability?: record, contact?: record, customFields?: record, description?: string, email?: string, groupId?: string, locationId?: string, name?: string, options?: record, recurringAvailability?: bool, serviceIds?: list<string>, timezoneId?: string}
+export def "setup-resources-bulk create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2388,25 +2398,25 @@ export def "setup-resources-bulk post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --google-auth-return-url: string # Google calendar authorization return url
   --outlook-auth-return-url: string # Outlook calendar authorization return url
-  --resources: list # nullable — item shape: {address?: record, availability?: record, contact?: record, customFields?: record, description?: string, email?: string, groupId?: string, locationId?: string, name?: string, options?: record, recurringAvailability?: bool, serviceIds?: list, timezoneId?: string}
+  --resources: list # nullable — item shape: {address?: record, availability?: record, contact?: record, customFields?: record, description?: string, email?: string, groupId?: string, locationId?: string, name?: string, options?: record, recurringAvailability?: bool, serviceIds?: list<string>, timezoneId?: string}
 ]: any -> table<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, availability: record<fri: record, mon: record, sat: record, sun: record, thu: record, tue: record, wed: record>, bioLink: string, bookingNotification: int, calendarAvailability: int, contact: record<businessPhone: string, businessPhoneExt: string, conferenceInfo: string, homePhone: string, mobilePhone: string, phoneType: string, skypeUsername: string>, customFields: record<field1: string, field10: string, field2: string, field3: string, field4: string, field5: string, field6: string, field7: string, field8: string, field9: string>, deletedStatus: bool, deletedTime: string, description: string, effectiveDate: string, email: string, gender: string, googleCalendarAuthUrl: string, googleCalendarAuthorized: bool, googleCalendarId: string, groupId: int, hourly: float, id: string, ignoreBusinessHours: bool, imageUrl: string, locationId: string, name: string, notificationType: int, object: string, options: record<bioLink: string, bookingNotification: int, calendarAvailability: int, displayColor: string, effectiveDate: string, gender: string, googleCalendarId: string, hourly: float, ignoreBusinessHours: bool, notificationType: int, outlookCalendarId: string, sortKey: int>, outlookCalendarAuthUrl: string, outlookCalendarAuthorized: bool, outlookCalendarId: string, phone: record<businessPhone: string, businessPhoneExt: string, homePhone: string, mobilePhone: string, phoneType: string>, recurringAvailability: bool, services: list<record>, skypeName: string, sortKey: int, timezoneIana: string, timezoneId: string, timezoneOffset: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "googleAuthReturnUrl" $google_auth_return_url "scalar") (serialize-qp "outlookAuthReturnUrl" $outlook_auth_return_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setup/v1/resources/bulk" $qp)
-  let body = {"resources": $resources} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"resources": $resources} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update Resources Bulk
 #
 # PUT /setup/v1/resources/bulk
-# --resources item shape: {address?: record, availability?: record, contact?: record, customFields?: record, description?: string, email?: string, groupId?: string, id?: string, name?: string, options?: record, recurringAvailability?: bool, serviceIds?: list, timezoneId?: string}
-export def "setup-resources-bulk put" [
+# --resources item shape: {address?: record, availability?: record, contact?: record, customFields?: record, description?: string, email?: string, groupId?: string, id?: string, name?: string, options?: record, recurringAvailability?: bool, serviceIds?: list<string>, timezoneId?: string}
+export def "setup-resources-bulk update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2417,18 +2427,18 @@ export def "setup-resources-bulk put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --google-auth-return-url: string # Google calendar authorization return url
   --outlook-auth-return-url: string # Outlook calendar authorization return url
-  --resources: list # nullable — item shape: {address?: record, availability?: record, contact?: record, customFields?: record, description?: string, email?: string, groupId?: string, id?: string, name?: string, options?: record, recurringAvailability?: bool, serviceIds?: list, timezoneId?: string}
+  --resources: list # nullable — item shape: {address?: record, availability?: record, contact?: record, customFields?: record, description?: string, email?: string, groupId?: string, id?: string, name?: string, options?: record, recurringAvailability?: bool, serviceIds?: list<string>, timezoneId?: string}
 ]: any -> table<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, availability: record<fri: record, mon: record, sat: record, sun: record, thu: record, tue: record, wed: record>, bioLink: string, bookingNotification: int, calendarAvailability: int, contact: record<businessPhone: string, businessPhoneExt: string, conferenceInfo: string, homePhone: string, mobilePhone: string, phoneType: string, skypeUsername: string>, customFields: record<field1: string, field10: string, field2: string, field3: string, field4: string, field5: string, field6: string, field7: string, field8: string, field9: string>, deletedStatus: bool, deletedTime: string, description: string, effectiveDate: string, email: string, gender: string, googleCalendarAuthUrl: string, googleCalendarAuthorized: bool, googleCalendarId: string, groupId: int, hourly: float, id: string, ignoreBusinessHours: bool, imageUrl: string, locationId: string, name: string, notificationType: int, object: string, options: record<bioLink: string, bookingNotification: int, calendarAvailability: int, displayColor: string, effectiveDate: string, gender: string, googleCalendarId: string, hourly: float, ignoreBusinessHours: bool, notificationType: int, outlookCalendarId: string, sortKey: int>, outlookCalendarAuthUrl: string, outlookCalendarAuthorized: bool, outlookCalendarId: string, phone: record<businessPhone: string, businessPhoneExt: string, homePhone: string, mobilePhone: string, phoneType: string>, recurringAvailability: bool, services: list<record>, skypeName: string, sortKey: int, timezoneIana: string, timezoneId: string, timezoneOffset: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "googleAuthReturnUrl" $google_auth_return_url "scalar") (serialize-qp "outlookAuthReturnUrl" $outlook_auth_return_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setup/v1/resources/bulk" $qp)
-  let body = {"resources": $resources} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"resources": $resources} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Time Zones
@@ -2468,7 +2478,7 @@ export def "setup-resources delete" [
 ]: nothing -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, availability: record<fri: record<endTime: int, startTime: int>, mon: record<endTime: int, startTime: int>, sat: record<endTime: int, startTime: int>, sun: record<endTime: int, startTime: int>, thu: record<endTime: int, startTime: int>, tue: record<endTime: int, startTime: int>, wed: record<endTime: int, startTime: int>>, bioLink: string, bookingNotification: int, calendarAvailability: int, contact: record<businessPhone: string, businessPhoneExt: string, conferenceInfo: string, homePhone: string, mobilePhone: string, phoneType: string, skypeUsername: string>, customFields: record<field1: string, field10: string, field2: string, field3: string, field4: string, field5: string, field6: string, field7: string, field8: string, field9: string>, deletedStatus: bool, deletedTime: string, description: string, effectiveDate: string, email: string, gender: string, googleCalendarAuthUrl: string, googleCalendarAuthorized: bool, googleCalendarId: string, groupId: int, hourly: float, id: string, ignoreBusinessHours: bool, imageUrl: string, locationId: string, name: string, notificationType: int, object: string, options: record<bioLink: string, bookingNotification: int, calendarAvailability: int, displayColor: string, effectiveDate: string, gender: string, googleCalendarId: string, hourly: float, ignoreBusinessHours: bool, notificationType: int, outlookCalendarId: string, sortKey: int>, outlookCalendarAuthUrl: string, outlookCalendarAuthorized: bool, outlookCalendarId: string, phone: record<businessPhone: string, businessPhoneExt: string, homePhone: string, mobilePhone: string, phoneType: string>, recurringAvailability: bool, services: table<object: string, serviceId: int, serviceName: string>, skypeName: string, sortKey: int, timezoneIana: string, timezoneId: string, timezoneOffset: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2493,7 +2503,7 @@ export def "setup-resources get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "googleAuthReturnUrl" $google_auth_return_url "scalar") (serialize-qp "outlookAuthReturnUrl" $outlook_auth_return_url "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2507,7 +2517,7 @@ export def "setup-resources get" [
 # --contact shape: {businessPhone?: string, businessPhoneExt?: string, conferenceInfo?: string, homePhone?: string, mobilePhone?: string, preferredPhoneType?: string, skypeUsername?: string}
 # --customFields shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
 # --options shape: {bioLink?: string, bookingNotification?: int, calendarAvailability?: int, displayColor?: string, effectiveDate?: string, gender?: string, googleCalendarId?: string, hourly?: float, ignoreBusinessHours?: bool, notificationType?: int, outlookCalendarId?: string, sortKey?: int}
-export def "setup-resources put" [
+export def "setup-resources update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2530,19 +2540,19 @@ export def "setup-resources put" [
   --name: string # nullable
   --options: record # shape: {bioLink?: string, bookingNotification?: int, calendarAvailability?: int, displayColor?: string, effectiveDate?: string, gender?: string, googleCalendarId?: string, hourly?: float, ignoreBusinessHours?: bool, notificationType?: int, outlookCalendarId?: string, sortKey?: int}
   --recurring-availability: oneof<nothing, bool> # nullable
-  --service-ids: list # nullable
+  --service-ids: list<string> # nullable
   --timezone-id: string # nullable
 ]: any -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, availability: record<fri: record<endTime: int, startTime: int>, mon: record<endTime: int, startTime: int>, sat: record<endTime: int, startTime: int>, sun: record<endTime: int, startTime: int>, thu: record<endTime: int, startTime: int>, tue: record<endTime: int, startTime: int>, wed: record<endTime: int, startTime: int>>, bioLink: string, bookingNotification: int, calendarAvailability: int, contact: record<businessPhone: string, businessPhoneExt: string, conferenceInfo: string, homePhone: string, mobilePhone: string, phoneType: string, skypeUsername: string>, customFields: record<field1: string, field10: string, field2: string, field3: string, field4: string, field5: string, field6: string, field7: string, field8: string, field9: string>, deletedStatus: bool, deletedTime: string, description: string, effectiveDate: string, email: string, gender: string, googleCalendarAuthUrl: string, googleCalendarAuthorized: bool, googleCalendarId: string, groupId: int, hourly: float, id: string, ignoreBusinessHours: bool, imageUrl: string, locationId: string, name: string, notificationType: int, object: string, options: record<bioLink: string, bookingNotification: int, calendarAvailability: int, displayColor: string, effectiveDate: string, gender: string, googleCalendarId: string, hourly: float, ignoreBusinessHours: bool, notificationType: int, outlookCalendarId: string, sortKey: int>, outlookCalendarAuthUrl: string, outlookCalendarAuthorized: bool, outlookCalendarId: string, phone: record<businessPhone: string, businessPhoneExt: string, homePhone: string, mobilePhone: string, phoneType: string>, recurringAvailability: bool, services: table<object: string, serviceId: int, serviceName: string>, skypeName: string, sortKey: int, timezoneIana: string, timezoneId: string, timezoneOffset: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "googleAuthReturnUrl" $google_auth_return_url "scalar") (serialize-qp "outlookAuthReturnUrl" $outlook_auth_return_url "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/{id}") $qp)
-  let body = {"address": $address, "availability": $availability, "contact": $contact, "customFields": $custom_fields, "description": $description, "email": $email, "groupId": $group_id, "locationId": $location_id, "name": $name, "options": $options, "recurringAvailability": $recurring_availability, "serviceIds": $service_ids, "timezoneId": $timezone_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/{id}") $qp)
+  let req_body = {"address": $address, "availability": $availability, "contact": $contact, "customFields": $custom_fields, "description": $description, "email": $email, "groupId": $group_id, "locationId": $location_id, "name": $name, "options": $options, "recurringAvailability": $recurring_availability, "serviceIds": $service_ids, "timezoneId": $timezone_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Resource Allocations
@@ -2566,7 +2576,7 @@ export def "setup-resources-allocations get-by-id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/{id}/allocations") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/{id}/allocations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2576,7 +2586,7 @@ export def "setup-resources-allocations get-by-id-1" [
 #
 # POST /setup/v1/resources/{id}/allocations
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-resources-allocations post" [
+export def "setup-resources-allocations create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2597,12 +2607,12 @@ export def "setup-resources-allocations post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/{id}/allocations"))
-  let body = {"endDate": $end_date, "endTime": $end_time, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "startDate": $start_date, "startTime": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/{id}/allocations"))
+  let req_body = {"endDate": $end_date, "endTime": $end_time, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "startDate": $start_date, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Weekly Availability
@@ -2621,7 +2631,7 @@ export def "setup-resources-availability get" [
 ]: nothing -> record<businessId: int, ignoreBusinessHours: bool, resourceId: int, resourceName: string, resourceTzo: int, weekdays: record<fri: record<displayEndTime: string, displayStartTime: string, endTime: int, startTime: int>, mon: record<displayEndTime: string, displayStartTime: string, endTime: int, startTime: int>, sat: record<displayEndTime: string, displayStartTime: string, endTime: int, startTime: int>, sun: record<displayEndTime: string, displayStartTime: string, endTime: int, startTime: int>, thu: record<displayEndTime: string, displayStartTime: string, endTime: int, startTime: int>, tue: record<displayEndTime: string, displayStartTime: string, endTime: int, startTime: int>, wed: record<displayEndTime: string, displayStartTime: string, endTime: int, startTime: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/{id}/availability"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/{id}/availability"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2637,7 +2647,7 @@ export def "setup-resources-availability get" [
 # --thu shape: {endTime?: int, startTime?: int}
 # --tue shape: {endTime?: int, startTime?: int}
 # --wed shape: {endTime?: int, startTime?: int}
-export def "setup-resources-availability put" [
+export def "setup-resources-availability update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2658,19 +2668,19 @@ export def "setup-resources-availability put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/{id}/availability"))
-  let body = {"fri": $fri, "mon": $mon, "sat": $sat, "sun": $sun, "thu": $thu, "tue": $tue, "wed": $wed} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/{id}/availability"))
+  let req_body = {"fri": $fri, "mon": $mon, "sat": $sat, "sun": $sun, "thu": $thu, "tue": $tue, "wed": $wed} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create Block
 #
 # POST /setup/v1/resources/{id}/block
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-resources-block post" [
+export def "setup-resources-block create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2692,12 +2702,12 @@ export def "setup-resources-block post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/{id}/block"))
-  let body = {"allDay": $all_day, "endDate": $end_date, "endTime": $end_time, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "startDate": $start_date, "startTime": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/{id}/block"))
+  let req_body = {"allDay": $all_day, "endDate": $end_date, "endTime": $end_time, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "startDate": $start_date, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Resource Blocks
@@ -2721,7 +2731,7 @@ export def "setup-resources-blocks get-by-id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/{id}/blocks") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/{id}/blocks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2746,7 +2756,7 @@ export def "setup-resources-calendar-auth-google get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "googleAuthReturnUrl" $google_auth_return_url "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, google_email_address: $google_email_address} | format pattern "/setup/v1/resources/{id}/calendar/auth/google/{google_email_address}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), google_email_address: (encode-path-segment $google_email_address)} | format pattern "/setup/v1/resources/{id}/calendar/auth/google/{google_email_address}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2771,7 +2781,7 @@ export def "setup-resources-calendar-auth-outlook get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "outlookAuthReturnUrl" $outlook_auth_return_url "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, outlook_email_address: $outlook_email_address} | format pattern "/setup/v1/resources/{id}/calendar/auth/outlook/{outlook_email_address}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), outlook_email_address: (encode-path-segment $outlook_email_address)} | format pattern "/setup/v1/resources/{id}/calendar/auth/outlook/{outlook_email_address}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2793,7 +2803,7 @@ export def "setup-resources-deleteimage delete" [
 ]: nothing -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, availability: record<fri: record<endTime: int, startTime: int>, mon: record<endTime: int, startTime: int>, sat: record<endTime: int, startTime: int>, sun: record<endTime: int, startTime: int>, thu: record<endTime: int, startTime: int>, tue: record<endTime: int, startTime: int>, wed: record<endTime: int, startTime: int>>, bioLink: string, bookingNotification: int, calendarAvailability: int, contact: record<businessPhone: string, businessPhoneExt: string, conferenceInfo: string, homePhone: string, mobilePhone: string, phoneType: string, skypeUsername: string>, customFields: record<field1: string, field10: string, field2: string, field3: string, field4: string, field5: string, field6: string, field7: string, field8: string, field9: string>, deletedStatus: bool, deletedTime: string, description: string, effectiveDate: string, email: string, gender: string, googleCalendarAuthUrl: string, googleCalendarAuthorized: bool, googleCalendarId: string, groupId: int, hourly: float, id: string, ignoreBusinessHours: bool, imageUrl: string, locationId: string, name: string, notificationType: int, object: string, options: record<bioLink: string, bookingNotification: int, calendarAvailability: int, displayColor: string, effectiveDate: string, gender: string, googleCalendarId: string, hourly: float, ignoreBusinessHours: bool, notificationType: int, outlookCalendarId: string, sortKey: int>, outlookCalendarAuthUrl: string, outlookCalendarAuthorized: bool, outlookCalendarId: string, phone: record<businessPhone: string, businessPhoneExt: string, homePhone: string, mobilePhone: string, phoneType: string>, recurringAvailability: bool, services: table<object: string, serviceId: int, serviceName: string>, skypeName: string, sortKey: int, timezoneIana: string, timezoneId: string, timezoneOffset: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/{id}/deleteimage"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/{id}/deleteimage"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2802,7 +2812,7 @@ export def "setup-resources-deleteimage delete" [
 # Reassign Resource
 #
 # PUT /setup/v1/resources/{id}/reassign/appointments/{resourceId}
-export def "setup-resources-reassign-appointments put" [
+export def "setup-resources-reassign-appointments update" [
   id: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2820,7 +2830,7 @@ export def "setup-resources-reassign-appointments put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "calendarId" $calendar_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, resource_id: $resource_id} | format pattern "/setup/v1/resources/{id}/reassign/appointments/{resource_id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), resource_id: (encode-path-segment $resource_id)} | format pattern "/setup/v1/resources/{id}/reassign/appointments/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2829,7 +2839,7 @@ export def "setup-resources-reassign-appointments put" [
 # Recover Resource
 #
 # PUT /setup/v1/resources/{id}/recover
-export def "setup-resources-recover put" [
+export def "setup-resources-recover update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2845,7 +2855,7 @@ export def "setup-resources-recover put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "googleAuthReturnUrl" $google_auth_return_url "scalar") (serialize-qp "outlookAuthReturnUrl" $outlook_auth_return_url "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/{id}/recover") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/{id}/recover") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2867,7 +2877,7 @@ export def "setup-resources-services delete" [
 ]: nothing -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, availability: record<fri: record<endTime: int, startTime: int>, mon: record<endTime: int, startTime: int>, sat: record<endTime: int, startTime: int>, sun: record<endTime: int, startTime: int>, thu: record<endTime: int, startTime: int>, tue: record<endTime: int, startTime: int>, wed: record<endTime: int, startTime: int>>, bioLink: string, bookingNotification: int, calendarAvailability: int, contact: record<businessPhone: string, businessPhoneExt: string, conferenceInfo: string, homePhone: string, mobilePhone: string, phoneType: string, skypeUsername: string>, customFields: record<field1: string, field10: string, field2: string, field3: string, field4: string, field5: string, field6: string, field7: string, field8: string, field9: string>, deletedStatus: bool, deletedTime: string, description: string, effectiveDate: string, email: string, gender: string, googleCalendarAuthUrl: string, googleCalendarAuthorized: bool, googleCalendarId: string, groupId: int, hourly: float, id: string, ignoreBusinessHours: bool, imageUrl: string, locationId: string, name: string, notificationType: int, object: string, options: record<bioLink: string, bookingNotification: int, calendarAvailability: int, displayColor: string, effectiveDate: string, gender: string, googleCalendarId: string, hourly: float, ignoreBusinessHours: bool, notificationType: int, outlookCalendarId: string, sortKey: int>, outlookCalendarAuthUrl: string, outlookCalendarAuthorized: bool, outlookCalendarId: string, phone: record<businessPhone: string, businessPhoneExt: string, homePhone: string, mobilePhone: string, phoneType: string>, recurringAvailability: bool, services: table<object: string, serviceId: int, serviceName: string>, skypeName: string, sortKey: int, timezoneIana: string, timezoneId: string, timezoneOffset: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/{id}/services"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/{id}/services"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2876,7 +2886,7 @@ export def "setup-resources-services delete" [
 # Create Linked Services
 #
 # POST /setup/v1/resources/{id}/services
-export def "setup-resources-services post" [
+export def "setup-resources-services create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2891,17 +2901,18 @@ export def "setup-resources-services post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/{id}/services"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/{id}/services"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update Linked Services
 #
 # PUT /setup/v1/resources/{id}/services
-export def "setup-resources-services put" [
+export def "setup-resources-services update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2916,17 +2927,18 @@ export def "setup-resources-services put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/{id}/services"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/{id}/services"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Upload Resource Image
 #
 # POST /setup/v1/resources/{id}/uploadimage
-export def "setup-resources-uploadimage post" [
+export def "setup-resources-uploadimage create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2942,12 +2954,12 @@ export def "setup-resources-uploadimage post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/resources/{id}/uploadimage"))
-  let body = {"imageFileData": $image_file_data, "imageFileName": $image_file_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/resources/{id}/uploadimage"))
+  let req_body = {"imageFileData": $image_file_data, "imageFileName": $image_file_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Service Groups
@@ -2978,7 +2990,7 @@ export def "setup-servicegroups list" [
 # Create Service Group
 #
 # POST /setup/v1/servicegroups
-export def "setup-servicegroups post" [
+export def "setup-servicegroups create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2996,11 +3008,11 @@ export def "setup-servicegroups post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/v1/servicegroups")
-  let body = {"description": $description, "locationId": $location_id, "name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"description": $description, "locationId": $location_id, "name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Service Group
@@ -3019,7 +3031,7 @@ export def "setup-servicegroups delete" [
 ]: nothing -> record<companyId: string, description: string, id: string, imageUrl: string, isDeleted: bool, locationId: string, name: string, object: string, type: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/servicegroups/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/servicegroups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3041,7 +3053,7 @@ export def "setup-servicegroups get" [
 ]: nothing -> record<companyId: string, description: string, id: string, imageUrl: string, isDeleted: bool, locationId: string, name: string, object: string, type: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/servicegroups/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/servicegroups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3050,7 +3062,7 @@ export def "setup-servicegroups get" [
 # Update Service Group
 #
 # PUT /setup/v1/servicegroups/{id}
-export def "setup-servicegroups put" [
+export def "setup-servicegroups update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3068,18 +3080,18 @@ export def "setup-servicegroups put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/servicegroups/{id}"))
-  let body = {"description": $description, "locationId": $location_id, "name": $name, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/servicegroups/{id}"))
+  let req_body = {"description": $description, "locationId": $location_id, "name": $name, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Recover Service Group
 #
 # PUT /setup/v1/servicegroups/{id}/recover
-export def "setup-servicegroups-recover put" [
+export def "setup-servicegroups-recover update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3092,7 +3104,7 @@ export def "setup-servicegroups-recover put" [
 ]: nothing -> record<companyId: string, description: string, id: string, imageUrl: string, isDeleted: bool, locationId: string, name: string, object: string, type: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/servicegroups/{id}/recover"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/servicegroups/{id}/recover"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3133,7 +3145,7 @@ export def "setup-services list" [
 # --fees shape: {cancellationFeeAmount?: float, cancellationFeeTaxable?: bool, feeAmount?: float, feeTaxable?: bool, nonRefundable?: bool}
 # --options shape: {consumerPadding?: bool, defaultService?: bool, durationInterval?: int, durationMax?: int, durationMin?: int, durationSelect?: bool, padding?: int}
 # --settings shape: {bookAheadUnit?: int, bookAheadValue?: int, bookInAdvance?: int}
-export def "setup-services post" [
+export def "setup-services create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3164,11 +3176,11 @@ export def "setup-services post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/v1/services")
-  let body = {"availability": $availability, "bookingInterval": $booking_interval, "bookingLimit": $booking_limit, "customFields": $custom_fields, "description": $description, "duration": $duration, "fees": $fees, "locationId": $location_id, "maxCapacity": $max_capacity, "maxGroupSize": $max_group_size, "mediaPageUrl": $media_page_url, "name": $name, "options": $options, "public": $public, "serviceGroupId": $service_group_id, "settings": $settings, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"availability": $availability, "bookingInterval": $booking_interval, "bookingLimit": $booking_limit, "customFields": $custom_fields, "description": $description, "duration": $duration, "fees": $fees, "locationId": $location_id, "maxCapacity": $max_capacity, "maxGroupSize": $max_group_size, "mediaPageUrl": $media_page_url, "name": $name, "options": $options, "public": $public, "serviceGroupId": $service_group_id, "settings": $settings, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Allocation
@@ -3187,7 +3199,7 @@ export def "setup-services-allocations delete" [
 ]: nothing -> record<bookingCount: int, bookingLimit: int, deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: string, locationId: string, object: string, reason: string, repeat: record<frequency: string, interval: int, monthDay: string, monthType: string, weekdays: string>, repeats: bool, resourceAddress: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, resourceDescription: string, resourceId: string, resourceImageUrl: string, resourceName: string, resourcePhone: record<businessPhone: string, businessPhoneExt: string, homePhone: string, mobilePhone: string, phoneType: string>, serviceDescription: string, serviceDuration: int, serviceId: string, serviceImageUrl: string, serviceName: string, startDate: string, startTime: int, timezoneName: string, timezoneOffset: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/allocations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/allocations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3209,7 +3221,7 @@ export def "setup-services-allocations get-by-id" [
 ]: nothing -> record<bookingCount: int, bookingLimit: int, deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: string, locationId: string, object: string, reason: string, repeat: record<frequency: string, interval: int, monthDay: string, monthType: string, weekdays: string>, repeats: bool, resourceAddress: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, resourceDescription: string, resourceId: string, resourceImageUrl: string, resourceName: string, resourcePhone: record<businessPhone: string, businessPhoneExt: string, homePhone: string, mobilePhone: string, phoneType: string>, serviceDescription: string, serviceDuration: int, serviceId: string, serviceImageUrl: string, serviceName: string, startDate: string, startTime: int, timezoneName: string, timezoneOffset: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/allocations/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/allocations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3219,7 +3231,7 @@ export def "setup-services-allocations get-by-id" [
 #
 # PUT /setup/v1/services/allocations/{id}
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-services-allocations put" [
+export def "setup-services-allocations update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3243,12 +3255,12 @@ export def "setup-services-allocations put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/allocations/{id}"))
-  let body = {"bookingLimit": $booking_limit, "endDate": $end_date, "endTime": $end_time, "locationId": $location_id, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "resourceId": $resource_id, "startDate": $start_date, "startTime": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/allocations/{id}"))
+  let req_body = {"bookingLimit": $booking_limit, "endDate": $end_date, "endTime": $end_time, "locationId": $location_id, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "resourceId": $resource_id, "startDate": $start_date, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Block
@@ -3267,7 +3279,7 @@ export def "setup-services-block delete" [
 ]: nothing -> record<businessId: int, deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: int, object: string, reason: string, repeat: record<frequency: string, interval: int, monthDay: string, monthType: string, weekdays: string>, repeats: bool, resourceId: int, startDate: string, startTime: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/block/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/block/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3277,7 +3289,7 @@ export def "setup-services-block delete" [
 #
 # PUT /setup/v1/services/block/{id}
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-services-block put" [
+export def "setup-services-block update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3298,12 +3310,12 @@ export def "setup-services-block put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/block/{id}"))
-  let body = {"endDate": $end_date, "endTime": $end_time, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "startDate": $start_date, "startTime": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/block/{id}"))
+  let req_body = {"endDate": $end_date, "endTime": $end_time, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "startDate": $start_date, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Block
@@ -3322,7 +3334,7 @@ export def "setup-services-blocks get-by-id" [
 ]: nothing -> record<businessId: int, deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: int, object: string, reason: string, repeat: record<frequency: string, interval: int, monthDay: string, monthType: string, weekdays: string>, repeats: bool, resourceId: int, startDate: string, startTime: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/blocks/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/blocks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3331,7 +3343,7 @@ export def "setup-services-blocks get-by-id" [
 # Link Service to Calendar
 #
 # POST /setup/v1/services/calendar
-export def "setup-services-calendar post" [
+export def "setup-services-calendar create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3348,11 +3360,11 @@ export def "setup-services-calendar post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/v1/services/calendar")
-  let body = {"calendarId": $calendar_id, "locationId": $location_id, "serviceId": $service_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"calendarId": $calendar_id, "locationId": $location_id, "serviceId": $service_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete Service Links
@@ -3371,7 +3383,7 @@ export def "setup-services-calendar delete" [
 ]: nothing -> record<calendarId: string, calendarName: string, id: string, locationId: string, serviceId: string, serviceName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/calendar/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/calendar/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3393,7 +3405,7 @@ export def "setup-services delete" [
 ]: nothing -> record<availability: record<fri: record<endTime: int, startTime: int>, mon: record<endTime: int, startTime: int>, sat: record<endTime: int, startTime: int>, sun: record<endTime: int, startTime: int>, thu: record<endTime: int, startTime: int>, tue: record<endTime: int, startTime: int>, wed: record<endTime: int, startTime: int>>, bookAheadUnit: int, bookAheadValue: int, bookInAdvance: int, bookingInterval: int, bookingLimit: int, calendarId: string, calendarResourceGroupId: string, cancellationFeeAmount: float, cancellationFeeTaxable: bool, companyId: string, consumerPadding: bool, customFields: record<field1: string, field10: string, field2: string, field3: string, field4: string, field5: string, field6: string, field7: string, field8: string, field9: string>, dailyBookingLimitCount: int, dailyBookingLimitMinutes: int, defaultService: bool, description: string, duration: int, durationInterval: int, durationMax: int, durationMin: int, durationSelect: bool, feeAmount: float, feeTaxable: bool, id: string, imageUrl: string, locationId: string, maxBookingLimit: int, maxCapacity: int, maxGroupSize: int, maxResourceBookingLimit: int, mediaPageUrl: string, name: string, nonRefundable: bool, object: string, padding: int, roundRobin: int, serviceGroupId: int, serviceGroupName: string, showOnline: bool, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3415,7 +3427,7 @@ export def "setup-services get" [
 ]: nothing -> record<availability: record<fri: record<endTime: int, startTime: int>, mon: record<endTime: int, startTime: int>, sat: record<endTime: int, startTime: int>, sun: record<endTime: int, startTime: int>, thu: record<endTime: int, startTime: int>, tue: record<endTime: int, startTime: int>, wed: record<endTime: int, startTime: int>>, bookAheadUnit: int, bookAheadValue: int, bookInAdvance: int, bookingInterval: int, bookingLimit: int, calendarId: string, calendarResourceGroupId: string, cancellationFeeAmount: float, cancellationFeeTaxable: bool, companyId: string, consumerPadding: bool, customFields: record<field1: string, field10: string, field2: string, field3: string, field4: string, field5: string, field6: string, field7: string, field8: string, field9: string>, dailyBookingLimitCount: int, dailyBookingLimitMinutes: int, defaultService: bool, description: string, duration: int, durationInterval: int, durationMax: int, durationMin: int, durationSelect: bool, feeAmount: float, feeTaxable: bool, id: string, imageUrl: string, locationId: string, maxBookingLimit: int, maxCapacity: int, maxGroupSize: int, maxResourceBookingLimit: int, mediaPageUrl: string, name: string, nonRefundable: bool, object: string, padding: int, roundRobin: int, serviceGroupId: int, serviceGroupName: string, showOnline: bool, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3429,7 +3441,7 @@ export def "setup-services get" [
 # --fees shape: {cancellationFeeAmount?: float, cancellationFeeTaxable?: bool, feeAmount?: float, feeTaxable?: bool, nonRefundable?: bool}
 # --options shape: {consumerPadding?: bool, defaultService?: bool, durationInterval?: int, durationMax?: int, durationMin?: int, durationSelect?: bool, padding?: int}
 # --settings shape: {bookAheadUnit?: int, bookAheadValue?: int, bookInAdvance?: int}
-export def "setup-services put" [
+export def "setup-services update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3460,12 +3472,12 @@ export def "setup-services put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/{id}"))
-  let body = {"availability": $availability, "bookingInterval": $booking_interval, "bookingLimit": $booking_limit, "customFields": $custom_fields, "description": $description, "duration": $duration, "fees": $fees, "locationId": $location_id, "maxCapacity": $max_capacity, "maxGroupSize": $max_group_size, "mediaPageUrl": $media_page_url, "name": $name, "options": $options, "public": $public, "serviceGroupId": $service_group_id, "settings": $settings, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/{id}"))
+  let req_body = {"availability": $availability, "bookingInterval": $booking_interval, "bookingLimit": $booking_limit, "customFields": $custom_fields, "description": $description, "duration": $duration, "fees": $fees, "locationId": $location_id, "maxCapacity": $max_capacity, "maxGroupSize": $max_group_size, "mediaPageUrl": $media_page_url, "name": $name, "options": $options, "public": $public, "serviceGroupId": $service_group_id, "settings": $settings, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Service Allocations
@@ -3491,7 +3503,7 @@ export def "setup-services-allocations get-by-id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locationId" $location_id "scalar") (serialize-qp "resourceId" $resource_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/{id}/allocations") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/{id}/allocations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3501,7 +3513,7 @@ export def "setup-services-allocations get-by-id-1" [
 #
 # POST /setup/v1/services/{id}/allocations
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-services-allocations post" [
+export def "setup-services-allocations create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3525,19 +3537,19 @@ export def "setup-services-allocations post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/{id}/allocations"))
-  let body = {"bookingLimit": $booking_limit, "endDate": $end_date, "endTime": $end_time, "locationId": $location_id, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "resourceId": $resource_id, "startDate": $start_date, "startTime": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/{id}/allocations"))
+  let req_body = {"bookingLimit": $booking_limit, "endDate": $end_date, "endTime": $end_time, "locationId": $location_id, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "resourceId": $resource_id, "startDate": $start_date, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create Allocations Bulk
 #
 # POST /setup/v1/services/{id}/allocations/bulk
 # --serviceAllocations item shape: {bookingLimit?: int, endDate?: string, endTime?: int, locationId?: string, reason?: string, repeat?: record, repeats?: bool, resourceId?: string, startDate?: string, startTime?: int}
-export def "setup-services-allocations-bulk post" [
+export def "setup-services-allocations-bulk create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3552,12 +3564,12 @@ export def "setup-services-allocations-bulk post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/{id}/allocations/bulk"))
-  let body = {"serviceAllocations": $service_allocations} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/{id}/allocations/bulk"))
+  let req_body = {"serviceAllocations": $service_allocations} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get Weekly Availability
@@ -3576,7 +3588,7 @@ export def "setup-services-availability get" [
 ]: nothing -> record<ignoreBusinessHours: bool, serviceId: int, serviceName: string, weekdays: record<fri: record<displayEndTime: string, displayStartTime: string, endTime: int, startTime: int>, mon: record<displayEndTime: string, displayStartTime: string, endTime: int, startTime: int>, sat: record<displayEndTime: string, displayStartTime: string, endTime: int, startTime: int>, sun: record<displayEndTime: string, displayStartTime: string, endTime: int, startTime: int>, thu: record<displayEndTime: string, displayStartTime: string, endTime: int, startTime: int>, tue: record<displayEndTime: string, displayStartTime: string, endTime: int, startTime: int>, wed: record<displayEndTime: string, displayStartTime: string, endTime: int, startTime: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/{id}/availability"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/{id}/availability"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3592,7 +3604,7 @@ export def "setup-services-availability get" [
 # --thu shape: {endTime?: int, startTime?: int}
 # --tue shape: {endTime?: int, startTime?: int}
 # --wed shape: {endTime?: int, startTime?: int}
-export def "setup-services-availability put" [
+export def "setup-services-availability update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3613,19 +3625,19 @@ export def "setup-services-availability put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/{id}/availability"))
-  let body = {"fri": $fri, "mon": $mon, "sat": $sat, "sun": $sun, "thu": $thu, "tue": $tue, "wed": $wed} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/{id}/availability"))
+  let req_body = {"fri": $fri, "mon": $mon, "sat": $sat, "sun": $sun, "thu": $thu, "tue": $tue, "wed": $wed} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create Block
 #
 # POST /setup/v1/services/{id}/block
 # --repeat shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-export def "setup-services-block post" [
+export def "setup-services-block create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3647,12 +3659,12 @@ export def "setup-services-block post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/{id}/block"))
-  let body = {"endDate": $end_date, "endTime": $end_time, "locationId": $location_id, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "startDate": $start_date, "startTime": $start_time} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/{id}/block"))
+  let req_body = {"endDate": $end_date, "endTime": $end_time, "locationId": $location_id, "reason": $reason, "repeat": $repeat, "repeats": $repeats, "startDate": $start_date, "startTime": $start_time} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List Service Blocks
@@ -3676,7 +3688,7 @@ export def "setup-services-blocks get-by-id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/{id}/blocks") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/{id}/blocks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3700,7 +3712,7 @@ export def "setup-services-calendar get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "locationId" $location_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/{id}/calendar") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/{id}/calendar") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3722,7 +3734,7 @@ export def "setup-services-deleteimage delete" [
 ]: nothing -> record<availability: record<fri: record<endTime: int, startTime: int>, mon: record<endTime: int, startTime: int>, sat: record<endTime: int, startTime: int>, sun: record<endTime: int, startTime: int>, thu: record<endTime: int, startTime: int>, tue: record<endTime: int, startTime: int>, wed: record<endTime: int, startTime: int>>, bookAheadUnit: int, bookAheadValue: int, bookInAdvance: int, bookingInterval: int, bookingLimit: int, calendarId: string, calendarResourceGroupId: string, cancellationFeeAmount: float, cancellationFeeTaxable: bool, companyId: string, consumerPadding: bool, customFields: record<field1: string, field10: string, field2: string, field3: string, field4: string, field5: string, field6: string, field7: string, field8: string, field9: string>, dailyBookingLimitCount: int, dailyBookingLimitMinutes: int, defaultService: bool, description: string, duration: int, durationInterval: int, durationMax: int, durationMin: int, durationSelect: bool, feeAmount: float, feeTaxable: bool, id: string, imageUrl: string, locationId: string, maxBookingLimit: int, maxCapacity: int, maxGroupSize: int, maxResourceBookingLimit: int, mediaPageUrl: string, name: string, nonRefundable: bool, object: string, padding: int, roundRobin: int, serviceGroupId: int, serviceGroupName: string, showOnline: bool, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/{id}/deleteimage"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/{id}/deleteimage"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3731,7 +3743,7 @@ export def "setup-services-deleteimage delete" [
 # Recover Service
 #
 # PUT /setup/v1/services/{id}/recover
-export def "setup-services-recover put" [
+export def "setup-services-recover update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3744,7 +3756,7 @@ export def "setup-services-recover put" [
 ]: nothing -> record<availability: record<fri: record<endTime: int, startTime: int>, mon: record<endTime: int, startTime: int>, sat: record<endTime: int, startTime: int>, sun: record<endTime: int, startTime: int>, thu: record<endTime: int, startTime: int>, tue: record<endTime: int, startTime: int>, wed: record<endTime: int, startTime: int>>, bookAheadUnit: int, bookAheadValue: int, bookInAdvance: int, bookingInterval: int, bookingLimit: int, calendarId: string, calendarResourceGroupId: string, cancellationFeeAmount: float, cancellationFeeTaxable: bool, companyId: string, consumerPadding: bool, customFields: record<field1: string, field10: string, field2: string, field3: string, field4: string, field5: string, field6: string, field7: string, field8: string, field9: string>, dailyBookingLimitCount: int, dailyBookingLimitMinutes: int, defaultService: bool, description: string, duration: int, durationInterval: int, durationMax: int, durationMin: int, durationSelect: bool, feeAmount: float, feeTaxable: bool, id: string, imageUrl: string, locationId: string, maxBookingLimit: int, maxCapacity: int, maxGroupSize: int, maxResourceBookingLimit: int, mediaPageUrl: string, name: string, nonRefundable: bool, object: string, padding: int, roundRobin: int, serviceGroupId: int, serviceGroupName: string, showOnline: bool, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/{id}/recover"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/{id}/recover"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3771,7 +3783,7 @@ export def "setup-services-resources get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "googleAuthReturnUrl" $google_auth_return_url "scalar") (serialize-qp "outlookAuthReturnUrl" $outlook_auth_return_url "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/{id}/resources") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/{id}/resources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3780,7 +3792,7 @@ export def "setup-services-resources get" [
 # Upload Service Image
 #
 # POST /setup/v1/services/{id}/uploadimage
-export def "setup-services-uploadimage post" [
+export def "setup-services-uploadimage create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3796,10 +3808,10 @@ export def "setup-services-uploadimage post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/setup/v1/services/{id}/uploadimage"))
-  let body = {"imageFileData": $image_file_data, "imageFileName": $image_file_name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/v1/services/{id}/uploadimage"))
+  let req_body = {"imageFileData": $image_file_data, "imageFileName": $image_file_name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

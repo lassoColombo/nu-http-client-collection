@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.tvmaze.com/v1" "http://api.tvmaze.com/v1"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def embed-completer [] { ["episode"] }
@@ -75,7 +85,7 @@ def embed-completer-4 [] { ["webchannel"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-poll post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-poll create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +108,7 @@ export def commands []: nothing -> table {
 # Poll whether an authentication request was confirmed
 #
 # POST /auth/poll
-export def "auth-poll post" [
+export def "auth-poll create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -113,17 +123,17 @@ export def "auth-poll post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/poll")
-  let body = {"token": $body_token} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"token": $body_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Start an authentication request
 #
 # POST /auth/start
-export def "auth-start post" [
+export def "auth-start create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,11 +149,11 @@ export def "auth-start post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/start")
-  let body = {"email": $email, "email_confirmation": $email_confirmation} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "email_confirmation": $email_confirmation} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Validate your authentication credentials
@@ -170,7 +180,7 @@ export def "auth-validate get" [
 # Mark episodes as acquired or watched based on their IDs
 #
 # POST /scrobble/episodes
-export def "scrobble-episodes post" [
+export def "scrobble-episodes create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,17 +195,18 @@ export def "scrobble-episodes post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/scrobble/episodes")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Mark an episode as acquired or watched based on its ID
 #
 # PUT /scrobble/episodes/{episode_id}
 # --_embedded shape: {episode?: record}
-export def "scrobble-episodes put" [
+export def "scrobble-episodes update" [
   episode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -212,18 +223,18 @@ export def "scrobble-episodes put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({episode_id: $episode_id} | format pattern "/scrobble/episodes/{episode_id}"))
-  let body = {"_embedded": $embedded, "marked_at": $marked_at, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({episode_id: (encode-path-segment $episode_id)} | format pattern "/scrobble/episodes/{episode_id}"))
+  let req_body = {"_embedded": $embedded, "marked_at": $marked_at, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Mark episodes within a show as acquired or watched based on their attributes
 #
 # POST /scrobble/shows
-export def "scrobble-shows post" [
+export def "scrobble-shows create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,10 +253,11 @@ export def "scrobble-shows post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tvmaze_id" $tvmaze_id "scalar") (serialize-qp "thetvdb_id" $thetvdb_id "scalar") (serialize-qp "imdb_id" $imdb_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/scrobble/shows" $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List watched and acquired episodes for a show
@@ -266,7 +278,7 @@ export def "scrobble-shows get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed" $embed "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({show_id: $show_id} | format pattern "/scrobble/shows/{show_id}") $qp)
+  let full_url = (build-url $base ({show_id: (encode-path-segment $show_id)} | format pattern "/scrobble/shows/{show_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -311,7 +323,7 @@ export def "user-episodes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({episode_id: $episode_id} | format pattern "/user/episodes/{episode_id}"))
+  let full_url = (build-url $base ({episode_id: (encode-path-segment $episode_id)} | format pattern "/user/episodes/{episode_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -333,7 +345,7 @@ export def "user-episodes get" [
 ]: nothing -> record<_embedded: record<episode: record>, episode_id: int, marked_at: int, type: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({episode_id: $episode_id} | format pattern "/user/episodes/{episode_id}"))
+  let full_url = (build-url $base ({episode_id: (encode-path-segment $episode_id)} | format pattern "/user/episodes/{episode_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -343,7 +355,7 @@ export def "user-episodes get" [
 #
 # PUT /user/episodes/{episode_id}
 # --_embedded shape: {episode?: record}
-export def "user-episodes put" [
+export def "user-episodes update" [
   episode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,12 +372,12 @@ export def "user-episodes put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({episode_id: $episode_id} | format pattern "/user/episodes/{episode_id}"))
-  let body = {"_embedded": $embedded, "marked_at": $marked_at, "type": $type} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({episode_id: (encode-path-segment $episode_id)} | format pattern "/user/episodes/{episode_id}"))
+  let req_body = {"_embedded": $embedded, "marked_at": $marked_at, "type": $type} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List the followed networks
@@ -407,7 +419,7 @@ export def "user-follows-networks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({network_id: $network_id} | format pattern "/user/follows/networks/{network_id}"))
+  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/user/follows/networks/{network_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -429,7 +441,7 @@ export def "user-follows-networks get" [
 ]: nothing -> record<_embedded: record<network: record>, network_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({network_id: $network_id} | format pattern "/user/follows/networks/{network_id}"))
+  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/user/follows/networks/{network_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -438,7 +450,7 @@ export def "user-follows-networks get" [
 # Follow a network
 #
 # PUT /user/follows/networks/{network_id}
-export def "user-follows-networks put" [
+export def "user-follows-networks update" [
   network_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -451,7 +463,7 @@ export def "user-follows-networks put" [
 ]: nothing -> record<_embedded: record<network: record>, network_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({network_id: $network_id} | format pattern "/user/follows/networks/{network_id}"))
+  let full_url = (build-url $base ({network_id: (encode-path-segment $network_id)} | format pattern "/user/follows/networks/{network_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -496,7 +508,7 @@ export def "user-follows-people delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({person_id: $person_id} | format pattern "/user/follows/people/{person_id}"))
+  let full_url = (build-url $base ({person_id: (encode-path-segment $person_id)} | format pattern "/user/follows/people/{person_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -518,7 +530,7 @@ export def "user-follows-people get" [
 ]: nothing -> record<_embedded: record<person: record>, person_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({person_id: $person_id} | format pattern "/user/follows/people/{person_id}"))
+  let full_url = (build-url $base ({person_id: (encode-path-segment $person_id)} | format pattern "/user/follows/people/{person_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -527,7 +539,7 @@ export def "user-follows-people get" [
 # Follow a person
 #
 # PUT /user/follows/people/{person_id}
-export def "user-follows-people put" [
+export def "user-follows-people update" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -540,7 +552,7 @@ export def "user-follows-people put" [
 ]: nothing -> record<_embedded: record<person: record>, person_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({person_id: $person_id} | format pattern "/user/follows/people/{person_id}"))
+  let full_url = (build-url $base ({person_id: (encode-path-segment $person_id)} | format pattern "/user/follows/people/{person_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -585,7 +597,7 @@ export def "user-follows-shows delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({show_id: $show_id} | format pattern "/user/follows/shows/{show_id}"))
+  let full_url = (build-url $base ({show_id: (encode-path-segment $show_id)} | format pattern "/user/follows/shows/{show_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -607,7 +619,7 @@ export def "user-follows-shows get" [
 ]: nothing -> record<_embedded: record<show: record>, show_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({show_id: $show_id} | format pattern "/user/follows/shows/{show_id}"))
+  let full_url = (build-url $base ({show_id: (encode-path-segment $show_id)} | format pattern "/user/follows/shows/{show_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -616,7 +628,7 @@ export def "user-follows-shows get" [
 # Follow a show
 #
 # PUT /user/follows/shows/{show_id}
-export def "user-follows-shows put" [
+export def "user-follows-shows update" [
   show_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -629,7 +641,7 @@ export def "user-follows-shows put" [
 ]: nothing -> record<_embedded: record<show: record>, show_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({show_id: $show_id} | format pattern "/user/follows/shows/{show_id}"))
+  let full_url = (build-url $base ({show_id: (encode-path-segment $show_id)} | format pattern "/user/follows/shows/{show_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -674,7 +686,7 @@ export def "user-follows-webchannels delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webchannel_id: $webchannel_id} | format pattern "/user/follows/webchannels/{webchannel_id}"))
+  let full_url = (build-url $base ({webchannel_id: (encode-path-segment $webchannel_id)} | format pattern "/user/follows/webchannels/{webchannel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -696,7 +708,7 @@ export def "user-follows-webchannels get" [
 ]: nothing -> record<_embedded: record<webchannel: record>, webchannel_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webchannel_id: $webchannel_id} | format pattern "/user/follows/webchannels/{webchannel_id}"))
+  let full_url = (build-url $base ({webchannel_id: (encode-path-segment $webchannel_id)} | format pattern "/user/follows/webchannels/{webchannel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -705,7 +717,7 @@ export def "user-follows-webchannels get" [
 # Follow a webchannel
 #
 # PUT /user/follows/webchannels/{webchannel_id}
-export def "user-follows-webchannels put" [
+export def "user-follows-webchannels update" [
   webchannel_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -718,7 +730,7 @@ export def "user-follows-webchannels put" [
 ]: nothing -> record<_embedded: record<webchannel: record>, webchannel_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({webchannel_id: $webchannel_id} | format pattern "/user/follows/webchannels/{webchannel_id}"))
+  let full_url = (build-url $base ({webchannel_id: (encode-path-segment $webchannel_id)} | format pattern "/user/follows/webchannels/{webchannel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -748,7 +760,7 @@ export def "user-tags get" [
 # Create a new tag
 #
 # POST /user/tags
-export def "user-tags post" [
+export def "user-tags create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -763,11 +775,11 @@ export def "user-tags post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/tags")
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a specific tag
@@ -786,7 +798,7 @@ export def "user-tags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/user/tags/{tag_id}"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/user/tags/{tag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -795,7 +807,7 @@ export def "user-tags delete" [
 # Update a specific tag
 #
 # PATCH /user/tags/{tag_id}
-export def "user-tags patch" [
+export def "user-tags update" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -810,12 +822,12 @@ export def "user-tags patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/user/tags/{tag_id}"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/user/tags/{tag_id}"))
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List all shows under this tag
@@ -836,7 +848,7 @@ export def "user-tags-shows get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed" $embed "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({tag_id: $tag_id} | format pattern "/user/tags/{tag_id}/shows") $qp)
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/user/tags/{tag_id}/shows") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -859,7 +871,7 @@ export def "user-tags-shows delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_id: $tag_id, show_id: $show_id} | format pattern "/user/tags/{tag_id}/shows/{show_id}"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id), show_id: (encode-path-segment $show_id)} | format pattern "/user/tags/{tag_id}/shows/{show_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -868,7 +880,7 @@ export def "user-tags-shows delete" [
 # Tag a show
 #
 # PUT /user/tags/{tag_id}/shows/{show_id}
-export def "user-tags-shows put" [
+export def "user-tags-shows update" [
   tag_id: int
   show_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -882,7 +894,7 @@ export def "user-tags-shows put" [
 ]: nothing -> record<_embedded: record<show: record>, show_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({tag_id: $tag_id, show_id: $show_id} | format pattern "/user/tags/{tag_id}/shows/{show_id}"))
+  let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id), show_id: (encode-path-segment $show_id)} | format pattern "/user/tags/{tag_id}/shows/{show_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -925,7 +937,7 @@ export def "user-votes-episodes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({episode_id: $episode_id} | format pattern "/user/votes/episodes/{episode_id}"))
+  let full_url = (build-url $base ({episode_id: (encode-path-segment $episode_id)} | format pattern "/user/votes/episodes/{episode_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -947,7 +959,7 @@ export def "user-votes-episodes get" [
 ]: nothing -> record<episode_id: int, vote: int, voted_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({episode_id: $episode_id} | format pattern "/user/votes/episodes/{episode_id}"))
+  let full_url = (build-url $base ({episode_id: (encode-path-segment $episode_id)} | format pattern "/user/votes/episodes/{episode_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -956,7 +968,7 @@ export def "user-votes-episodes get" [
 # Vote for an episode
 #
 # PUT /user/votes/episodes/{episode_id}
-export def "user-votes-episodes put" [
+export def "user-votes-episodes update" [
   episode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -971,12 +983,12 @@ export def "user-votes-episodes put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({episode_id: $episode_id} | format pattern "/user/votes/episodes/{episode_id}"))
-  let body = {"vote": $vote} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({episode_id: (encode-path-segment $episode_id)} | format pattern "/user/votes/episodes/{episode_id}"))
+  let req_body = {"vote": $vote} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # List the shows voted for
@@ -1018,7 +1030,7 @@ export def "user-votes-shows delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({show_id: $show_id} | format pattern "/user/votes/shows/{show_id}"))
+  let full_url = (build-url $base ({show_id: (encode-path-segment $show_id)} | format pattern "/user/votes/shows/{show_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1040,7 +1052,7 @@ export def "user-votes-shows get" [
 ]: nothing -> record<show_id: int, vote: int, voted_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({show_id: $show_id} | format pattern "/user/votes/shows/{show_id}"))
+  let full_url = (build-url $base ({show_id: (encode-path-segment $show_id)} | format pattern "/user/votes/shows/{show_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1049,7 +1061,7 @@ export def "user-votes-shows get" [
 # Vote for a show
 #
 # PUT /user/votes/shows/{show_id}
-export def "user-votes-shows put" [
+export def "user-votes-shows update" [
   show_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1064,10 +1076,10 @@ export def "user-votes-shows put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({show_id: $show_id} | format pattern "/user/votes/shows/{show_id}"))
-  let body = {"vote": $vote} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({show_id: (encode-path-segment $show_id)} | format pattern "/user/votes/shows/{show_id}"))
+  let req_body = {"vote": $vote} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

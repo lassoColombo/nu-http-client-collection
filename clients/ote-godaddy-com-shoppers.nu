@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -116,11 +125,11 @@ export def "shoppers-subaccount create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/shoppers/subaccount")
-  let body = {"email": $email, "externalId": $external_id, "marketId": $market_id, "nameFirst": $name_first, "nameLast": $name_last, "password": $password} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"email": $email, "externalId": $external_id, "marketId": $market_id, "nameFirst": $name_first, "nameLast": $name_last, "password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Request the deletion of a shopper profile
@@ -142,7 +151,7 @@ export def "shoppers delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "auditClientIp" $audit_client_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({shopper_id: $shopper_id} | format pattern "/v1/shoppers/{shopper_id}") $qp)
+  let full_url = (build-url $base ({shopper_id: (encode-path-segment $shopper_id)} | format pattern "/v1/shoppers/{shopper_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -163,12 +172,12 @@ export def "shoppers get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --includes: list # Additional properties to be included in the response shopper object
+  --includes: list<string> # Additional properties to be included in the response shopper object
 ]: nothing -> record<customerId: string, email: string, externalId: int, marketId: string, nameFirst: string, nameLast: string, shopperId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includes" $includes "csv")] | flatten | str join "&"
-  let full_url = (build-url $base ({shopper_id: $shopper_id} | format pattern "/v1/shoppers/{shopper_id}") $qp)
+  let full_url = (build-url $base ({shopper_id: (encode-path-segment $shopper_id)} | format pattern "/v1/shoppers/{shopper_id}") $qp)
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,19 +207,19 @@ export def "shoppers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shopper_id: $shopper_id} | format pattern "/v1/shoppers/{shopper_id}"))
-  let body = {"email": $email, "externalId": $external_id, "marketId": $market_id, "nameFirst": $name_first, "nameLast": $name_last} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({shopper_id: (encode-path-segment $shopper_id)} | format pattern "/v1/shoppers/{shopper_id}"))
+  let req_body = {"email": $email, "externalId": $external_id, "marketId": $market_id, "nameFirst": $name_first, "nameLast": $name_last} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Set subaccount's password
 #
 # PUT /v1/shoppers/{shopperId}/factors/password
 # operationId: changePassword
-export def "shoppers-factors-password changePassword" [
+export def "shoppers-factors-password update-change" [
   shopper_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -225,12 +234,12 @@ export def "shoppers-factors-password changePassword" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({shopper_id: $shopper_id} | format pattern "/v1/shoppers/{shopper_id}/factors/password"))
-  let body = {"secret": $secret} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({shopper_id: (encode-path-segment $shopper_id)} | format pattern "/v1/shoppers/{shopper_id}/factors/password"))
+  let req_body = {"secret": $secret} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get details for the specified Shopper
@@ -253,7 +262,7 @@ export def "shoppers-status get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "auditClientIp" $audit_client_ip "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({shopper_id: $shopper_id} | format pattern "/v1/shoppers/{shopper_id}/status") $qp)
+  let full_url = (build-url $base ({shopper_id: (encode-path-segment $shopper_id)} | format pattern "/v1/shoppers/{shopper_id}/status") $qp)
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -82,7 +91,7 @@ def line-code-completer [] { ["BL" "GR" "OR" "RD" "SV" "YL"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "lines 5476364f031f5909e4fe3314" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "lines get-5476364f031f5909e4fe3314" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -106,7 +115,7 @@ export def commands []: nothing -> table {
 #
 # GET /Lines
 # operationId: 5476364f031f5909e4fe3314
-export def "lines 5476364f031f5909e4fe3314" [
+export def "lines get-5476364f031f5909e4fe3314" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,7 +137,7 @@ export def "lines 5476364f031f5909e4fe3314" [
 #
 # GET /Path
 # operationId: 5476364f031f5909e4fe3316
-export def "path 5476364f031f5909e4fe3316" [
+export def "path get-5476364f031f5909e4fe3316" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,8 +146,8 @@ export def "path 5476364f031f5909e4fe3316" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --from-station-code: string@from-station-code-completer # Station code for the origin station.  Use the Station List method to return a list of all station codes. (default: N06)
-  --to-station-code: string@to-station-code-completer # Station code for the origin station.  Use the Station List method to return a list of all station codes. (default: G05)
+  --from-station-code: string@from-station-code-completer # Station code for the origin station. Use the Station List method to return a list of all station codes. (default: N06)
+  --to-station-code: string@to-station-code-completer # Station code for the origin station. Use the Station List method to return a list of all station codes. (default: G05)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -153,7 +162,7 @@ export def "path 5476364f031f5909e4fe3316" [
 #
 # GET /SrcStationToDstStationInfo
 # operationId: 5476364f031f5909e4fe331b
-export def "src-station-to-dst-station-info 5476364f031f5909e4fe331b" [
+export def "src-station-to-dst-station-info get-5476364f031f5909e4fe331b" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,8 +171,8 @@ export def "src-station-to-dst-station-info 5476364f031f5909e4fe331b" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --from-station-code: string@from-station-code-completer-1 # Station code for the origin station.  Use the Station List method to return a list of all station codes. (default: E10)
-  --to-station-code: string@to-station-code-completer-1 # Station code for the destination station.  Use the Station List method to return a list of all station codes. (default: J03)
+  --from-station-code: string@from-station-code-completer-1 # Station code for the origin station. Use the Station List method to return a list of all station codes. (default: E10)
+  --to-station-code: string@to-station-code-completer-1 # Station code for the destination station. Use the Station List method to return a list of all station codes. (default: J03)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -178,7 +187,7 @@ export def "src-station-to-dst-station-info 5476364f031f5909e4fe331b" [
 #
 # GET /StationEntrances
 # operationId: 5476364f031f5909e4fe3317
-export def "station-entrances 5476364f031f5909e4fe3317" [
+export def "station-entrances get-5476364f031f5909e4fe3317" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,7 +213,7 @@ export def "station-entrances 5476364f031f5909e4fe3317" [
 #
 # GET /StationInfo
 # operationId: 5476364f031f5909e4fe3318
-export def "station-info 5476364f031f5909e4fe3318" [
+export def "station-info get-5476364f031f5909e4fe3318" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +222,7 @@ export def "station-info 5476364f031f5909e4fe3318" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --station-code: string@station-code-completer # Station code.  Use the Station List method to return a list of all station codes. (default: A01)
+  --station-code: string@station-code-completer # Station code. Use the Station List method to return a list of all station codes. (default: A01)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -228,7 +237,7 @@ export def "station-info 5476364f031f5909e4fe3318" [
 #
 # GET /StationParking
 # operationId: 5476364f031f5909e4fe3315
-export def "station-parking 5476364f031f5909e4fe3315" [
+export def "station-parking get-5476364f031f5909e4fe3315" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +246,7 @@ export def "station-parking 5476364f031f5909e4fe3315" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --station-code: string@station-code-completer-1 # Station code.  Use the Station List method to return a list of all station codes.
+  --station-code: string@station-code-completer-1 # Station code. Use the Station List method to return a list of all station codes.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -252,7 +261,7 @@ export def "station-parking 5476364f031f5909e4fe3315" [
 #
 # GET /StationTimes
 # operationId: 5476364f031f5909e4fe331a
-export def "station-times 5476364f031f5909e4fe331a" [
+export def "station-times get-5476364f031f5909e4fe331a" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +270,7 @@ export def "station-times 5476364f031f5909e4fe331a" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --station-code: string@station-code-completer-2 # Station code.  Use the Station List method to return a list of all station codes. (default: E10)
+  --station-code: string@station-code-completer-2 # Station code. Use the Station List method to return a list of all station codes. (default: E10)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -276,7 +285,7 @@ export def "station-times 5476364f031f5909e4fe331a" [
 #
 # GET /Stations
 # operationId: 5476364f031f5909e4fe3319
-export def "stations 5476364f031f5909e4fe3319" [
+export def "stations get-5476364f031f5909e4fe3319" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,7 +294,7 @@ export def "stations 5476364f031f5909e4fe3319" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --line-code: string@line-code-completer # Two-letter line code abbreviation:  <ul> <li>RD - Red</li> <li>YL - Yellow</li> <li>GR - Green</li> <li>BL - Blue</li> <li>OR - Orange</li> <li>SV - Silver</li> </ul>
+  --line-code: string@line-code-completer # Two-letter line code abbreviation: RD - Red YL - Yellow GR - Green BL - Blue OR - Orange SV - Silver
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -300,7 +309,7 @@ export def "stations 5476364f031f5909e4fe3319" [
 #
 # GET /json/jLines
 # operationId: 5476364f031f5909e4fe330c
-export def "json-j-lines 5476364f031f5909e4fe330c" [
+export def "json-j-lines get-5476364f031f5909e4fe330c" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,7 +331,7 @@ export def "json-j-lines 5476364f031f5909e4fe330c" [
 #
 # GET /json/jPath
 # operationId: 5476364f031f5909e4fe330e
-export def "json-j-path 5476364f031f5909e4fe330e" [
+export def "json-j-path get-5476364f031f5909e4fe330e" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,8 +340,8 @@ export def "json-j-path 5476364f031f5909e4fe330e" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --from-station-code: string@from-station-code-completer # Station code for the origin station.  Use the Station List method to return a list of all station codes. (default: N06)
-  --to-station-code: string@to-station-code-completer # Station code for the destination station.  Use the Station List method to return a list of all station codes. (default: G05)
+  --from-station-code: string@from-station-code-completer # Station code for the origin station. Use the Station List method to return a list of all station codes. (default: N06)
+  --to-station-code: string@to-station-code-completer # Station code for the destination station. Use the Station List method to return a list of all station codes. (default: G05)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -347,7 +356,7 @@ export def "json-j-path 5476364f031f5909e4fe330e" [
 #
 # GET /json/jSrcStationToDstStationInfo
 # operationId: 5476364f031f5909e4fe3313
-export def "json-j-src-station-to-dst-station-info 5476364f031f5909e4fe3313" [
+export def "json-j-src-station-to-dst-station-info get-5476364f031f5909e4fe3313" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,8 +365,8 @@ export def "json-j-src-station-to-dst-station-info 5476364f031f5909e4fe3313" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --from-station-code: string@from-station-code-completer-1 # Station code for the origin station.  Use the Station List method to return a list of all station codes. (default: E10)
-  --to-station-code: string@to-station-code-completer-1 # Station code for the destination station.  Use the Station List method to return a list of all station codes. (default: J03)
+  --from-station-code: string@from-station-code-completer-1 # Station code for the origin station. Use the Station List method to return a list of all station codes. (default: E10)
+  --to-station-code: string@to-station-code-completer-1 # Station code for the destination station. Use the Station List method to return a list of all station codes. (default: J03)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -372,7 +381,7 @@ export def "json-j-src-station-to-dst-station-info 5476364f031f5909e4fe3313" [
 #
 # GET /json/jStationEntrances
 # operationId: 5476364f031f5909e4fe330f
-export def "json-j-station-entrances 5476364f031f5909e4fe330f" [
+export def "json-j-station-entrances get-5476364f031f5909e4fe330f" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +407,7 @@ export def "json-j-station-entrances 5476364f031f5909e4fe330f" [
 #
 # GET /json/jStationInfo
 # operationId: 5476364f031f5909e4fe3310
-export def "json-j-station-info 5476364f031f5909e4fe3310" [
+export def "json-j-station-info get-5476364f031f5909e4fe3310" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,7 +416,7 @@ export def "json-j-station-info 5476364f031f5909e4fe3310" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --station-code: string@station-code-completer # Station code.  Use the Station List method to return a list of all station codes. (default: A01)
+  --station-code: string@station-code-completer # Station code. Use the Station List method to return a list of all station codes. (default: A01)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -422,7 +431,7 @@ export def "json-j-station-info 5476364f031f5909e4fe3310" [
 #
 # GET /json/jStationParking
 # operationId: 5476364f031f5909e4fe330d
-export def "json-j-station-parking 5476364f031f5909e4fe330d" [
+export def "json-j-station-parking get-5476364f031f5909e4fe330d" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -431,7 +440,7 @@ export def "json-j-station-parking 5476364f031f5909e4fe330d" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --station-code: string@station-code-completer-1 # Station code.  Use the Station List method to return a list of all station codes.
+  --station-code: string@station-code-completer-1 # Station code. Use the Station List method to return a list of all station codes.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -446,7 +455,7 @@ export def "json-j-station-parking 5476364f031f5909e4fe330d" [
 #
 # GET /json/jStationTimes
 # operationId: 5476364f031f5909e4fe3312
-export def "json-j-station-times 5476364f031f5909e4fe3312" [
+export def "json-j-station-times get-5476364f031f5909e4fe3312" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,7 +464,7 @@ export def "json-j-station-times 5476364f031f5909e4fe3312" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --station-code: string@station-code-completer-2 # Station code.  Use the Station List method to return a list of all station codes. (default: E10)
+  --station-code: string@station-code-completer-2 # Station code. Use the Station List method to return a list of all station codes. (default: E10)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -470,7 +479,7 @@ export def "json-j-station-times 5476364f031f5909e4fe3312" [
 #
 # GET /json/jStations
 # operationId: 5476364f031f5909e4fe3311
-export def "json-j-stations 5476364f031f5909e4fe3311" [
+export def "json-j-stations get-5476364f031f5909e4fe3311" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,7 +488,7 @@ export def "json-j-stations 5476364f031f5909e4fe3311" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --line-code: string@line-code-completer # Two-letter line code abbreviation:  <ul> <li>RD - Red</li> <li>YL - Yellow</li> <li>GR - Green</li> <li>BL - Blue</li> <li>OR - Orange</li> <li>SV - Silver</li> </ul>
+  --line-code: string@line-code-completer # Two-letter line code abbreviation: RD - Red YL - Yellow GR - Green BL - Blue OR - Orange SV - Silver
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)

@@ -12,6 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
@@ -33,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
     "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
     _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
+}
+
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Build URL from base, path, and optional query string
@@ -63,7 +73,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://messaging.twilio.com"] }
-def auth-scheme-completer [] { ["basic"] }
+def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
 def fallback-method-completer [] { ["DELETE" "GET" "HEAD" "PATCH" "POST" "PUT"] }
@@ -123,7 +133,7 @@ export def "deactivations get" [
 # DELETE /v1/LinkShortening/Domains/{DomainSid}/Certificate
 #
 # operationId: DeleteDomainCertV4
-export def "link-shortening-domains-certificate delete-domain-cert-v4" [
+export def "link-shortening-domains-certificate delete-cert" [
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -136,7 +146,7 @@ export def "link-shortening-domains-certificate delete-domain-cert-v4" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({domain_sid: $domain_sid} | format pattern "/v1/LinkShortening/Domains/{domain_sid}/Certificate"))
+  let full_url = (build-url $base ({domain_sid: (encode-path-segment $domain_sid)} | format pattern "/v1/LinkShortening/Domains/{domain_sid}/Certificate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -145,7 +155,7 @@ export def "link-shortening-domains-certificate delete-domain-cert-v4" [
 # GET /v1/LinkShortening/Domains/{DomainSid}/Certificate
 #
 # operationId: FetchDomainCertV4
-export def "link-shortening-domains-certificate get-domain-cert-v4" [
+export def "link-shortening-domains-certificate get-cert" [
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -158,7 +168,7 @@ export def "link-shortening-domains-certificate get-domain-cert-v4" [
 ]: nothing -> record<cert_in_validation: any, certificate_sid: string, date_created: string, date_expires: string, date_updated: string, domain_name: string, domain_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({domain_sid: $domain_sid} | format pattern "/v1/LinkShortening/Domains/{domain_sid}/Certificate"))
+  let full_url = (build-url $base ({domain_sid: (encode-path-segment $domain_sid)} | format pattern "/v1/LinkShortening/Domains/{domain_sid}/Certificate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -167,7 +177,7 @@ export def "link-shortening-domains-certificate get-domain-cert-v4" [
 # POST /v1/LinkShortening/Domains/{DomainSid}/Certificate
 #
 # operationId: UpdateDomainCertV4
-export def "link-shortening-domains-certificate update-domain-cert-v4" [
+export def "link-shortening-domains-certificate update-cert" [
   domain_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -182,12 +192,13 @@ export def "link-shortening-domains-certificate update-domain-cert-v4" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({domain_sid: $domain_sid} | format pattern "/v1/LinkShortening/Domains/{domain_sid}/Certificate"))
-  let body = {"TlsCert": $tls_cert} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_sid: (encode-path-segment $domain_sid)} | format pattern "/v1/LinkShortening/Domains/{domain_sid}/Certificate"))
+  let req_body = {"TlsCert": $tls_cert} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/LinkShortening/Domains/{DomainSid}/Config
@@ -206,7 +217,7 @@ export def "link-shortening-domains-config get" [
 ]: nothing -> record<callback_url: string, config_sid: string, date_created: string, date_updated: string, domain_sid: string, fallback_url: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({domain_sid: $domain_sid} | format pattern "/v1/LinkShortening/Domains/{domain_sid}/Config"))
+  let full_url = (build-url $base ({domain_sid: (encode-path-segment $domain_sid)} | format pattern "/v1/LinkShortening/Domains/{domain_sid}/Config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -231,12 +242,13 @@ export def "link-shortening-domains-config update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({domain_sid: $domain_sid} | format pattern "/v1/LinkShortening/Domains/{domain_sid}/Config"))
-  let body = {"CallbackUrl": $callback_url, "FallbackUrl": $fallback_url} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({domain_sid: (encode-path-segment $domain_sid)} | format pattern "/v1/LinkShortening/Domains/{domain_sid}/Config"))
+  let req_body = {"CallbackUrl": $callback_url, "FallbackUrl": $fallback_url} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/LinkShortening/Domains/{DomainSid}/MessagingServices/{MessagingServiceSid}
@@ -256,7 +268,7 @@ export def "link-shortening-domains-messaging-services delete-linkshortening" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({domain_sid: $domain_sid, messaging_service_sid: $messaging_service_sid} | format pattern "/v1/LinkShortening/Domains/{domain_sid}/MessagingServices/{messaging_service_sid}"))
+  let full_url = (build-url $base ({domain_sid: (encode-path-segment $domain_sid), messaging_service_sid: (encode-path-segment $messaging_service_sid)} | format pattern "/v1/LinkShortening/Domains/{domain_sid}/MessagingServices/{messaging_service_sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -279,7 +291,7 @@ export def "link-shortening-domains-messaging-services create-linkshortening" [
 ]: nothing -> record<domain_sid: string, messaging_service_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({domain_sid: $domain_sid, messaging_service_sid: $messaging_service_sid} | format pattern "/v1/LinkShortening/Domains/{domain_sid}/MessagingServices/{messaging_service_sid}"))
+  let full_url = (build-url $base ({domain_sid: (encode-path-segment $domain_sid), messaging_service_sid: (encode-path-segment $messaging_service_sid)} | format pattern "/v1/LinkShortening/Domains/{domain_sid}/MessagingServices/{messaging_service_sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -301,7 +313,7 @@ export def "link-shortening-messaging-service-domain-config get" [
 ]: nothing -> record<callback_url: string, config_sid: string, date_created: string, date_updated: string, domain_sid: string, fallback_url: string, messaging_service_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({messaging_service_sid: $messaging_service_sid} | format pattern "/v1/LinkShortening/MessagingService/{messaging_service_sid}/DomainConfig"))
+  let full_url = (build-url $base ({messaging_service_sid: (encode-path-segment $messaging_service_sid)} | format pattern "/v1/LinkShortening/MessagingService/{messaging_service_sid}/DomainConfig"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -365,11 +377,12 @@ export def "services create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
   let full_url = (build-url $base "/v1/Services")
-  let body = {"AreaCodeGeomatch": $area_code_geomatch, "FallbackMethod": $fallback_method, "FallbackToLongCode": $fallback_to_long_code, "FallbackUrl": $fallback_url, "FriendlyName": $friendly_name, "InboundMethod": $inbound_method, "InboundRequestUrl": $inbound_request_url, "MmsConverter": $mms_converter, "ScanMessageContent": $scan_message_content, "SmartEncoding": $smart_encoding, "StatusCallback": $status_callback, "StickySender": $sticky_sender, "SynchronousValidation": $synchronous_validation, "UseInboundWebhookOnNumber": $use_inbound_webhook_on_number, "Usecase": $usecase, "ValidityPeriod": $validity_period} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AreaCodeGeomatch": $area_code_geomatch, "FallbackMethod": $fallback_method, "FallbackToLongCode": $fallback_to_long_code, "FallbackUrl": $fallback_url, "FriendlyName": $friendly_name, "InboundMethod": $inbound_method, "InboundRequestUrl": $inbound_request_url, "MmsConverter": $mms_converter, "ScanMessageContent": $scan_message_content, "SmartEncoding": $smart_encoding, "StatusCallback": $status_callback, "StickySender": $sticky_sender, "SynchronousValidation": $synchronous_validation, "UseInboundWebhookOnNumber": $use_inbound_webhook_on_number, "Usecase": $usecase, "ValidityPeriod": $validity_period} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # POST /v1/Services/PreregisteredUsa2p
@@ -391,11 +404,12 @@ export def "services-preregistered-usa2p create-external-campaign" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
   let full_url = (build-url $base "/v1/Services/PreregisteredUsa2p")
-  let body = {"CampaignId": $campaign_id, "MessagingServiceSid": $messaging_service_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"CampaignId": $campaign_id, "MessagingServiceSid": $messaging_service_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Services/Usecases
@@ -439,7 +453,7 @@ export def "services-compliance-usa2p list-us-app-to-person" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({messaging_service_sid: $messaging_service_sid} | format pattern "/v1/Services/{messaging_service_sid}/Compliance/Usa2p") $qp)
+  let full_url = (build-url $base ({messaging_service_sid: (encode-path-segment $messaging_service_sid)} | format pattern "/v1/Services/{messaging_service_sid}/Compliance/Usa2p") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -462,25 +476,26 @@ export def "services-compliance-usa2p create-us-app-to-person" [
   description: string # A short description of what this SMS campaign does. Min length: 40 characters. Max length: 4096 characters.
   --has-embedded-links: oneof<nothing, bool> # Indicates that this SMS campaign will send messages that contain links.
   --has-embedded-phone: oneof<nothing, bool> # Indicates that this SMS campaign will send messages that contain phone numbers.
-  --help-keywords: list # End users should be able to text in a keyword to receive help. Those keywords must be provided as part of the campaign registration request. This field is required if managing help keywords yourself (i.e. not using Twilio's Default or Advanced Opt Out features). Values must be alphanumeric. 255 character maximum.
+  --help-keywords: list<string> # End users should be able to text in a keyword to receive help. Those keywords must be provided as part of the campaign registration request. This field is required if managing help keywords yourself (i.e. not using Twilio's Default or Advanced Opt Out features). Values must be alphanumeric. 255 character maximum.
   --help-message: string # When customers receive the help keywords from their end users, Twilio customers are expected to send back an auto-generated response; this may include the brand name and additional support contact information. This field is required if managing help keywords yourself (i.e. not using Twilio's Default or Advanced Opt Out features). 20 character minimum. 320 character maximum.
   message_flow: string # Required for all Campaigns. Details around how a consumer opts-in to their campaign, therefore giving consent to receive their messages. If multiple opt-in methods can be used for the same campaign, they must all be listed. 40 character minimum. 2048 character maximum.
-  message_samples: list # Message samples, at least 1 and up to 5 sample messages (at least 2 for sole proprietor), >=20 chars, <=1024 chars each.
-  --opt-in-keywords: list # If end users can text in a keyword to start receiving messages from this campaign, those keywords must be provided. This field is required if end users can text in a keyword to start receiving messages from this campaign. Values must be alphanumeric. 255 character maximum.
+  message_samples: list<string> # Message samples, at least 1 and up to 5 sample messages (at least 2 for sole proprietor), >=20 chars, <=1024 chars each.
+  --opt-in-keywords: list<string> # If end users can text in a keyword to start receiving messages from this campaign, those keywords must be provided. This field is required if end users can text in a keyword to start receiving messages from this campaign. Values must be alphanumeric. 255 character maximum.
   --opt-in-message: string # If end users can text in a keyword to start receiving messages from this campaign, the auto-reply messages sent to the end users must be provided. The opt-in response should include the Brand name, confirmation of opt-in enrollment to a recurring message campaign, how to get help, and clear description of how to opt-out. This field is required if end users can text in a keyword to start receiving messages from this campaign. 20 character minimum. 320 character maximum.
-  --opt-out-keywords: list # End users should be able to text in a keyword to stop receiving messages from this campaign. Those keywords must be provided. This field is required if managing opt out keywords yourself (i.e. not using Twilio's Default or Advanced Opt Out features). Values must be alphanumeric. 255 character maximum.
+  --opt-out-keywords: list<string> # End users should be able to text in a keyword to stop receiving messages from this campaign. Those keywords must be provided. This field is required if managing opt out keywords yourself (i.e. not using Twilio's Default or Advanced Opt Out features). Values must be alphanumeric. 255 character maximum.
   --opt-out-message: string # Upon receiving the opt-out keywords from the end users, Twilio customers are expected to send back an auto-generated response, which must provide acknowledgment of the opt-out request and confirmation that no further messages will be sent. It is also recommended that these opt-out messages include the brand name. This field is required if managing opt out keywords yourself (i.e. not using Twilio's Default or Advanced Opt Out features). 20 character minimum. 320 character maximum.
   us_app_to_person_usecase: string # A2P Campaign Use Case. Examples: [ 2FA, EMERGENCY, MARKETING..]
 ]: any -> record<account_sid: string, brand_registration_sid: string, campaign_id: string, campaign_status: string, date_created: string, date_updated: string, description: string, has_embedded_links: bool, has_embedded_phone: bool, help_keywords: list<string>, help_message: string, is_externally_registered: bool, message_flow: string, message_samples: list<string>, messaging_service_sid: string, mock: bool, opt_in_keywords: list<string>, opt_in_message: string, opt_out_keywords: list<string>, opt_out_message: string, rate_limits: any, sid: string, url: string, us_app_to_person_usecase: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({messaging_service_sid: $messaging_service_sid} | format pattern "/v1/Services/{messaging_service_sid}/Compliance/Usa2p"))
-  let body = {"BrandRegistrationSid": $brand_registration_sid, "Description": $description, "HasEmbeddedLinks": $has_embedded_links, "HasEmbeddedPhone": $has_embedded_phone, "HelpKeywords": $help_keywords, "HelpMessage": $help_message, "MessageFlow": $message_flow, "MessageSamples": $message_samples, "OptInKeywords": $opt_in_keywords, "OptInMessage": $opt_in_message, "OptOutKeywords": $opt_out_keywords, "OptOutMessage": $opt_out_message, "UsAppToPersonUsecase": $us_app_to_person_usecase} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({messaging_service_sid: (encode-path-segment $messaging_service_sid)} | format pattern "/v1/Services/{messaging_service_sid}/Compliance/Usa2p"))
+  let req_body = {"BrandRegistrationSid": $brand_registration_sid, "Description": $description, "HasEmbeddedLinks": $has_embedded_links, "HasEmbeddedPhone": $has_embedded_phone, "HelpKeywords": $help_keywords, "HelpMessage": $help_message, "MessageFlow": $message_flow, "MessageSamples": $message_samples, "OptInKeywords": $opt_in_keywords, "OptInMessage": $opt_in_message, "OptOutKeywords": $opt_out_keywords, "OptOutMessage": $opt_out_message, "UsAppToPersonUsecase": $us_app_to_person_usecase} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Services/{MessagingServiceSid}/Compliance/Usa2p/Usecases
@@ -501,7 +516,7 @@ export def "services-compliance-usa2p-usecases get-us-app-to-person" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
   let qp = [(serialize-qp "BrandRegistrationSid" $brand_registration_sid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({messaging_service_sid: $messaging_service_sid} | format pattern "/v1/Services/{messaging_service_sid}/Compliance/Usa2p/Usecases") $qp)
+  let full_url = (build-url $base ({messaging_service_sid: (encode-path-segment $messaging_service_sid)} | format pattern "/v1/Services/{messaging_service_sid}/Compliance/Usa2p/Usecases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -524,7 +539,7 @@ export def "services-compliance-usa2p delete-us-app-to-person" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({messaging_service_sid: $messaging_service_sid, sid: $sid} | format pattern "/v1/Services/{messaging_service_sid}/Compliance/Usa2p/{sid}"))
+  let full_url = (build-url $base ({messaging_service_sid: (encode-path-segment $messaging_service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{messaging_service_sid}/Compliance/Usa2p/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -547,7 +562,7 @@ export def "services-compliance-usa2p get-us-app-to-person" [
 ]: nothing -> record<account_sid: string, brand_registration_sid: string, campaign_id: string, campaign_status: string, date_created: string, date_updated: string, description: string, has_embedded_links: bool, has_embedded_phone: bool, help_keywords: list<string>, help_message: string, is_externally_registered: bool, message_flow: string, message_samples: list<string>, messaging_service_sid: string, mock: bool, opt_in_keywords: list<string>, opt_in_message: string, opt_out_keywords: list<string>, opt_out_message: string, rate_limits: any, sid: string, url: string, us_app_to_person_usecase: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({messaging_service_sid: $messaging_service_sid, sid: $sid} | format pattern "/v1/Services/{messaging_service_sid}/Compliance/Usa2p/{sid}"))
+  let full_url = (build-url $base ({messaging_service_sid: (encode-path-segment $messaging_service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{messaging_service_sid}/Compliance/Usa2p/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -573,7 +588,7 @@ export def "services-alpha-senders list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/AlphaSenders") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/AlphaSenders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -597,12 +612,13 @@ export def "services-alpha-senders create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/AlphaSenders"))
-  let body = {"AlphaSender": $alpha_sender} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/AlphaSenders"))
+  let req_body = {"AlphaSender": $alpha_sender} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Services/{ServiceSid}/AlphaSenders/{Sid}
@@ -622,7 +638,7 @@ export def "services-alpha-senders delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/AlphaSenders/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/AlphaSenders/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -645,7 +661,7 @@ export def "services-alpha-senders get" [
 ]: nothing -> record<account_sid: string, alpha_sender: string, capabilities: list<string>, date_created: string, date_updated: string, service_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/AlphaSenders/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/AlphaSenders/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -671,7 +687,7 @@ export def "services-phone-numbers list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/PhoneNumbers") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/PhoneNumbers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -695,12 +711,13 @@ export def "services-phone-numbers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/PhoneNumbers"))
-  let body = {"PhoneNumberSid": $phone_number_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/PhoneNumbers"))
+  let req_body = {"PhoneNumberSid": $phone_number_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Services/{ServiceSid}/PhoneNumbers/{Sid}
@@ -720,7 +737,7 @@ export def "services-phone-numbers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/PhoneNumbers/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/PhoneNumbers/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -743,7 +760,7 @@ export def "services-phone-numbers get" [
 ]: nothing -> record<account_sid: string, capabilities: list<string>, country_code: string, date_created: string, date_updated: string, phone_number: string, service_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/PhoneNumbers/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/PhoneNumbers/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -769,7 +786,7 @@ export def "services-short-codes list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/ShortCodes") $qp)
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/ShortCodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -793,12 +810,13 @@ export def "services-short-codes create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/ShortCodes"))
-  let body = {"ShortCodeSid": $short_code_sid} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid)} | format pattern "/v1/Services/{service_sid}/ShortCodes"))
+  let req_body = {"ShortCodeSid": $short_code_sid} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # DELETE /v1/Services/{ServiceSid}/ShortCodes/{Sid}
@@ -818,7 +836,7 @@ export def "services-short-codes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/ShortCodes/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/ShortCodes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -841,7 +859,7 @@ export def "services-short-codes get" [
 ]: nothing -> record<account_sid: string, capabilities: list<string>, country_code: string, date_created: string, date_updated: string, service_sid: string, short_code: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/ShortCodes/{sid}"))
+  let full_url = (build-url $base ({service_sid: (encode-path-segment $service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{service_sid}/ShortCodes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -863,7 +881,7 @@ export def "services delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Services/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -885,7 +903,7 @@ export def "services get" [
 ]: nothing -> record<account_sid: string, area_code_geomatch: bool, date_created: string, date_updated: string, fallback_method: string, fallback_to_long_code: bool, fallback_url: string, friendly_name: string, inbound_method: string, inbound_request_url: string, links: record, mms_converter: bool, scan_message_content: string, sid: string, smart_encoding: bool, status_callback: string, sticky_sender: bool, synchronous_validation: bool, url: string, us_app_to_person_registered: bool, use_inbound_webhook_on_number: bool, usecase: string, validity_period: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Services/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -924,12 +942,13 @@ export def "services update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Services/{sid}"))
-  let body = {"AreaCodeGeomatch": $area_code_geomatch, "FallbackMethod": $fallback_method, "FallbackToLongCode": $fallback_to_long_code, "FallbackUrl": $fallback_url, "FriendlyName": $friendly_name, "InboundMethod": $inbound_method, "InboundRequestUrl": $inbound_request_url, "MmsConverter": $mms_converter, "ScanMessageContent": $scan_message_content, "SmartEncoding": $smart_encoding, "StatusCallback": $status_callback, "StickySender": $sticky_sender, "SynchronousValidation": $synchronous_validation, "UseInboundWebhookOnNumber": $use_inbound_webhook_on_number, "Usecase": $usecase, "ValidityPeriod": $validity_period} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{sid}"))
+  let req_body = {"AreaCodeGeomatch": $area_code_geomatch, "FallbackMethod": $fallback_method, "FallbackToLongCode": $fallback_to_long_code, "FallbackUrl": $fallback_url, "FriendlyName": $friendly_name, "InboundMethod": $inbound_method, "InboundRequestUrl": $inbound_request_url, "MmsConverter": $mms_converter, "ScanMessageContent": $scan_message_content, "SmartEncoding": $smart_encoding, "StatusCallback": $status_callback, "StickySender": $sticky_sender, "SynchronousValidation": $synchronous_validation, "UseInboundWebhookOnNumber": $use_inbound_webhook_on_number, "Usecase": $usecase, "ValidityPeriod": $validity_period} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Tollfree/Verifications
@@ -988,22 +1007,23 @@ export def "tollfree-verifications create" [
   --external-reference-id: string # An optional external reference ID supplied by customer and echoed back on status retrieval.
   message_volume: string # Estimate monthly volume of messages from the Tollfree Number.
   notification_email: string # The email address to receive the notification about the verification result. .
-  opt_in_image_urls: list # Link to an image that shows the opt-in workflow. Multiple images allowed and must be a publicly hosted URL.
+  opt_in_image_urls: list<string> # Link to an image that shows the opt-in workflow. Multiple images allowed and must be a publicly hosted URL.
   opt_in_type: string@opt-in-type-completer
   production_message_sample: string # An example of message content, i.e. a sample message.
   tollfree_phone_number_sid: string # The SID of the Phone Number associated with the Tollfree Verification.
-  use_case_categories: list # The category of the use case for the Tollfree Number. List as many are applicable..
+  use_case_categories: list<string> # The category of the use case for the Tollfree Number. List as many are applicable..
   use_case_summary: string # Use this to further explain how messaging is used by the business or organization.
 ]: any -> record<account_sid: string, additional_information: string, business_city: string, business_contact_email: string, business_contact_first_name: string, business_contact_last_name: string, business_contact_phone: string, business_country: string, business_name: string, business_postal_code: string, business_state_province_region: string, business_street_address: string, business_street_address2: string, business_website: string, customer_profile_sid: string, date_created: string, date_updated: string, error_code: int, external_reference_id: string, message_volume: string, notification_email: string, opt_in_image_urls: list<string>, opt_in_type: string, production_message_sample: string, regulated_item_sid: string, rejection_reason: string, resource_links: any, sid: string, status: string, tollfree_phone_number_sid: string, trust_product_sid: string, url: string, use_case_categories: list<string>, use_case_summary: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
   let full_url = (build-url $base "/v1/Tollfree/Verifications")
-  let body = {"AdditionalInformation": $additional_information, "BusinessCity": $business_city, "BusinessContactEmail": $business_contact_email, "BusinessContactFirstName": $business_contact_first_name, "BusinessContactLastName": $business_contact_last_name, "BusinessContactPhone": $business_contact_phone, "BusinessCountry": $business_country, "BusinessName": $business_name, "BusinessPostalCode": $business_postal_code, "BusinessStateProvinceRegion": $business_state_province_region, "BusinessStreetAddress": $business_street_address, "BusinessStreetAddress2": $business_street_address2, "BusinessWebsite": $business_website, "CustomerProfileSid": $customer_profile_sid, "ExternalReferenceId": $external_reference_id, "MessageVolume": $message_volume, "NotificationEmail": $notification_email, "OptInImageUrls": $opt_in_image_urls, "OptInType": $opt_in_type, "ProductionMessageSample": $production_message_sample, "TollfreePhoneNumberSid": $tollfree_phone_number_sid, "UseCaseCategories": $use_case_categories, "UseCaseSummary": $use_case_summary} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"AdditionalInformation": $additional_information, "BusinessCity": $business_city, "BusinessContactEmail": $business_contact_email, "BusinessContactFirstName": $business_contact_first_name, "BusinessContactLastName": $business_contact_last_name, "BusinessContactPhone": $business_contact_phone, "BusinessCountry": $business_country, "BusinessName": $business_name, "BusinessPostalCode": $business_postal_code, "BusinessStateProvinceRegion": $business_state_province_region, "BusinessStreetAddress": $business_street_address, "BusinessStreetAddress2": $business_street_address2, "BusinessWebsite": $business_website, "CustomerProfileSid": $customer_profile_sid, "ExternalReferenceId": $external_reference_id, "MessageVolume": $message_volume, "NotificationEmail": $notification_email, "OptInImageUrls": $opt_in_image_urls, "OptInType": $opt_in_type, "ProductionMessageSample": $production_message_sample, "TollfreePhoneNumberSid": $tollfree_phone_number_sid, "UseCaseCategories": $use_case_categories, "UseCaseSummary": $use_case_summary} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/Tollfree/Verifications/{Sid}
@@ -1022,7 +1042,7 @@ export def "tollfree-verifications get" [
 ]: nothing -> record<account_sid: string, additional_information: string, business_city: string, business_contact_email: string, business_contact_first_name: string, business_contact_last_name: string, business_contact_phone: string, business_country: string, business_name: string, business_postal_code: string, business_state_province_region: string, business_street_address: string, business_street_address2: string, business_website: string, customer_profile_sid: string, date_created: string, date_updated: string, error_code: int, external_reference_id: string, message_volume: string, notification_email: string, opt_in_image_urls: list<string>, opt_in_type: string, production_message_sample: string, regulated_item_sid: string, rejection_reason: string, resource_links: any, sid: string, status: string, tollfree_phone_number_sid: string, trust_product_sid: string, url: string, use_case_categories: list<string>, use_case_summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Tollfree/Verifications/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Tollfree/Verifications/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1056,21 +1076,22 @@ export def "tollfree-verifications update" [
   --business-website: string # The website of the business or organization using the Tollfree number.
   --message-volume: string # Estimate monthly volume of messages from the Tollfree Number.
   --notification-email: string # The email address to receive the notification about the verification result. .
-  --opt-in-image-urls: list # Link to an image that shows the opt-in workflow. Multiple images allowed and must be a publicly hosted URL.
+  --opt-in-image-urls: list<string> # Link to an image that shows the opt-in workflow. Multiple images allowed and must be a publicly hosted URL.
   --opt-in-type: string@opt-in-type-completer
   --production-message-sample: string # An example of message content, i.e. a sample message.
-  --use-case-categories: list # The category of the use case for the Tollfree Number. List as many are applicable..
+  --use-case-categories: list<string> # The category of the use case for the Tollfree Number. List as many are applicable..
   --use-case-summary: string # Use this to further explain how messaging is used by the business or organization.
 ]: any -> record<account_sid: string, additional_information: string, business_city: string, business_contact_email: string, business_contact_first_name: string, business_contact_last_name: string, business_contact_phone: string, business_country: string, business_name: string, business_postal_code: string, business_state_province_region: string, business_street_address: string, business_street_address2: string, business_website: string, customer_profile_sid: string, date_created: string, date_updated: string, error_code: int, external_reference_id: string, message_volume: string, notification_email: string, opt_in_image_urls: list<string>, opt_in_type: string, production_message_sample: string, regulated_item_sid: string, rejection_reason: string, resource_links: any, sid: string, status: string, tollfree_phone_number_sid: string, trust_product_sid: string, url: string, use_case_categories: list<string>, use_case_summary: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Tollfree/Verifications/{sid}"))
-  let body = {"AdditionalInformation": $additional_information, "BusinessCity": $business_city, "BusinessContactEmail": $business_contact_email, "BusinessContactFirstName": $business_contact_first_name, "BusinessContactLastName": $business_contact_last_name, "BusinessContactPhone": $business_contact_phone, "BusinessCountry": $business_country, "BusinessName": $business_name, "BusinessPostalCode": $business_postal_code, "BusinessStateProvinceRegion": $business_state_province_region, "BusinessStreetAddress": $business_street_address, "BusinessStreetAddress2": $business_street_address2, "BusinessWebsite": $business_website, "MessageVolume": $message_volume, "NotificationEmail": $notification_email, "OptInImageUrls": $opt_in_image_urls, "OptInType": $opt_in_type, "ProductionMessageSample": $production_message_sample, "UseCaseCategories": $use_case_categories, "UseCaseSummary": $use_case_summary} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Tollfree/Verifications/{sid}"))
+  let req_body = {"AdditionalInformation": $additional_information, "BusinessCity": $business_city, "BusinessContactEmail": $business_contact_email, "BusinessContactFirstName": $business_contact_first_name, "BusinessContactLastName": $business_contact_last_name, "BusinessContactPhone": $business_contact_phone, "BusinessCountry": $business_country, "BusinessName": $business_name, "BusinessPostalCode": $business_postal_code, "BusinessStateProvinceRegion": $business_state_province_region, "BusinessStreetAddress": $business_street_address, "BusinessStreetAddress2": $business_street_address2, "BusinessWebsite": $business_website, "MessageVolume": $message_volume, "NotificationEmail": $notification_email, "OptInImageUrls": $opt_in_image_urls, "OptInType": $opt_in_type, "ProductionMessageSample": $production_message_sample, "UseCaseCategories": $use_case_categories, "UseCaseSummary": $use_case_summary} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/a2p/BrandRegistrations
@@ -1120,11 +1141,12 @@ export def "a2p-brand-registrations create" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
   let full_url = (build-url $base "/v1/a2p/BrandRegistrations")
-  let body = {"A2PProfileBundleSid": $a2p_profile_bundle_sid, "BrandType": $brand_type, "CustomerProfileBundleSid": $customer_profile_bundle_sid, "Mock": $mock, "SkipAutomaticSecVet": $skip_automatic_sec_vet} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"A2PProfileBundleSid": $a2p_profile_bundle_sid, "BrandType": $brand_type, "CustomerProfileBundleSid": $customer_profile_bundle_sid, "Mock": $mock, "SkipAutomaticSecVet": $skip_automatic_sec_vet} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # POST /v1/a2p/BrandRegistrations/{BrandRegistrationSid}/SmsOtp
@@ -1143,7 +1165,7 @@ export def "a2p-brand-registrations-sms-otp create" [
 ]: nothing -> record<account_sid: string, brand_registration_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({brand_registration_sid: $brand_registration_sid} | format pattern "/v1/a2p/BrandRegistrations/{brand_registration_sid}/SmsOtp"))
+  let full_url = (build-url $base ({brand_registration_sid: (encode-path-segment $brand_registration_sid)} | format pattern "/v1/a2p/BrandRegistrations/{brand_registration_sid}/SmsOtp"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1170,7 +1192,7 @@ export def "a2p-brand-registrations-vettings list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
   let qp = [(serialize-qp "VettingProvider" $vetting_provider "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({brand_sid: $brand_sid} | format pattern "/v1/a2p/BrandRegistrations/{brand_sid}/Vettings") $qp)
+  let full_url = (build-url $base ({brand_sid: (encode-path-segment $brand_sid)} | format pattern "/v1/a2p/BrandRegistrations/{brand_sid}/Vettings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1195,12 +1217,13 @@ export def "a2p-brand-registrations-vettings create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({brand_sid: $brand_sid} | format pattern "/v1/a2p/BrandRegistrations/{brand_sid}/Vettings"))
-  let body = {"VettingId": $vetting_id, "VettingProvider": $vetting_provider} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({brand_sid: (encode-path-segment $brand_sid)} | format pattern "/v1/a2p/BrandRegistrations/{brand_sid}/Vettings"))
+  let req_body = {"VettingId": $vetting_id, "VettingProvider": $vetting_provider} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # GET /v1/a2p/BrandRegistrations/{BrandSid}/Vettings/{BrandVettingSid}
@@ -1220,7 +1243,7 @@ export def "a2p-brand-registrations-vettings get" [
 ]: nothing -> record<account_sid: string, brand_sid: string, brand_vetting_sid: string, date_created: string, date_updated: string, url: string, vetting_class: string, vetting_id: string, vetting_provider: string, vetting_status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({brand_sid: $brand_sid, brand_vetting_sid: $brand_vetting_sid} | format pattern "/v1/a2p/BrandRegistrations/{brand_sid}/Vettings/{brand_vetting_sid}"))
+  let full_url = (build-url $base ({brand_sid: (encode-path-segment $brand_sid), brand_vetting_sid: (encode-path-segment $brand_vetting_sid)} | format pattern "/v1/a2p/BrandRegistrations/{brand_sid}/Vettings/{brand_vetting_sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1242,7 +1265,7 @@ export def "a2p-brand-registrations get" [
 ]: nothing -> record<a2p_profile_bundle_sid: string, account_sid: string, brand_feedback: list<string>, brand_score: int, brand_type: string, customer_profile_bundle_sid: string, date_created: string, date_updated: string, failure_reason: string, government_entity: bool, identity_status: string, links: record, mock: bool, russell_3000: bool, sid: string, skip_automatic_sec_vet: bool, status: string, tax_exempt_status: string, tcr_id: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/a2p/BrandRegistrations/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/a2p/BrandRegistrations/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1264,7 +1287,7 @@ export def "a2p-brand-registrations update" [
 ]: nothing -> record<a2p_profile_bundle_sid: string, account_sid: string, brand_feedback: list<string>, brand_score: int, brand_type: string, customer_profile_bundle_sid: string, date_created: string, date_updated: string, failure_reason: string, government_entity: bool, identity_status: string, links: record, mock: bool, russell_3000: bool, sid: string, skip_automatic_sec_vet: bool, status: string, tax_exempt_status: string, tcr_id: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.twilio.com")
-  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/a2p/BrandRegistrations/{sid}"))
+  let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/a2p/BrandRegistrations/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -72,7 +81,7 @@ def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api 58d8bcb7a9e6240e200cff24" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-58d8bcb7a9e6240e200cff24" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +105,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: 58d8bcb7a9e6240e200cff24
-export def "api 58d8bcb7a9e6240e200cff24" [
+export def "api get-58d8bcb7a9e6240e200cff24" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,7 +128,7 @@ export def "api 58d8bcb7a9e6240e200cff24" [
 #
 # GET /countrycode/{countryCode}
 # operationId: 58d8bcb8a9e6240e200cff26
-export def "countrycode 58d8bcb8a9e6240e200cff26" [
+export def "countrycode get-58d8bcb8a9e6240e200cff26" [
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -133,7 +142,7 @@ export def "countrycode 58d8bcb8a9e6240e200cff26" [
 ]: nothing -> table<city: string, country: record<code: string, name: string>, geoCoordinates: record<latitude: float, longitude: float>, id: string, name: string, self: record<href: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({country_code: $country_code} | format pattern "/countrycode/{country_code}"))
+  let full_url = (build-url $base ({country_code: (encode-path-segment $country_code)} | format pattern "/countrycode/{country_code}"))
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -143,7 +152,7 @@ export def "countrycode 58d8bcb8a9e6240e200cff26" [
 #
 # GET /nearest
 # operationId: 58d8bcb8a9e6240e200cff27
-export def "nearest 58d8bcb8a9e6240e200cff27" [
+export def "nearest get-58d8bcb8a9e6240e200cff27" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,7 +180,7 @@ export def "nearest 58d8bcb8a9e6240e200cff27" [
 #
 # GET /nearest/{id}
 # operationId: 58d8bcb8a9e6240e200cff28
-export def "nearest 58d8bcb8a9e6240e200cff28" [
+export def "nearest get-58d8bcb8a9e6240e200cff28" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -188,7 +197,7 @@ export def "nearest 58d8bcb8a9e6240e200cff28" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxDistanceInKm" $max_distance_in_km "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/nearest/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/nearest/{id}") $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,7 +207,7 @@ export def "nearest 58d8bcb8a9e6240e200cff28" [
 #
 # GET /{id}
 # operationId: 58d8bcb7a9e6240e200cff25
-export def "api 58d8bcb7a9e6240e200cff25" [
+export def "api get-58d8bcb7a9e6240e200cff25" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -212,7 +221,7 @@ export def "api 58d8bcb7a9e6240e200cff25" [
 ]: nothing -> record<city: string, country: record<code: string, name: string>, geoCoordinates: record<latitude: float, longitude: float>, id: string, inboundRoutes: record<href: string>, name: string, outboundRoutes: record<href: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/{id}"))
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

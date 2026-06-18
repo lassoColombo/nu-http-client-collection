@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -69,7 +78,7 @@ def auth-scheme-completer [] { ["x-api-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "device-detect device" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "device-detect create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # POST /device/detect
 # operationId: detect_device
-export def "device-detect device" [
+export def "device-detect create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -116,18 +125,18 @@ export def "device-detect device" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/detect")
-  let body = {"ftp_banner": $ftp_banner, "hostname": $hostname, "http_response": $http_response, "https_response": $https_response, "nic_mac": $nic_mac, "snmp_sysdescr": $snmp_sysdescr, "snmp_sysoid": $snmp_sysoid, "telnet_banner": $telnet_banner, "upnp_response": $upnp_response} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ftp_banner": $ftp_banner, "hostname": $hostname, "http_response": $http_response, "https_response": $https_response, "nic_mac": $nic_mac, "snmp_sysdescr": $snmp_sysdescr, "snmp_sysoid": $snmp_sysoid, "telnet_banner": $telnet_banner, "upnp_response": $upnp_response} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get default accounts and password hashes of a firmware
 #
 # GET /firmware/{firmware_hash}/accounts
 # operationId: get_accounts
-export def "firmware-accounts accounts" [
+export def "firmware-accounts get" [
   firmware_hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -140,7 +149,7 @@ export def "firmware-accounts accounts" [
 ]: nothing -> table<gid: int, hash_algorithm: string, home_dir: string, name: string, pwd_hash: string, shell: string, uid: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({firmware_hash: $firmware_hash} | format pattern "/firmware/{firmware_hash}/accounts"))
+  let full_url = (build-url $base ({firmware_hash: (encode-path-segment $firmware_hash)} | format pattern "/firmware/{firmware_hash}/accounts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -150,7 +159,7 @@ export def "firmware-accounts accounts" [
 #
 # GET /firmware/{firmware_hash}/config-issues
 # operationId: get_config_issues
-export def "firmware-config-issues issues" [
+export def "firmware-config-issues get" [
   firmware_hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -163,7 +172,7 @@ export def "firmware-config-issues issues" [
 ]: nothing -> table<config_file: string, issues: list<string>, service_name: string, suggestions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({firmware_hash: $firmware_hash} | format pattern "/firmware/{firmware_hash}/config-issues"))
+  let full_url = (build-url $base ({firmware_hash: (encode-path-segment $firmware_hash)} | format pattern "/firmware/{firmware_hash}/config-issues"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,7 +182,7 @@ export def "firmware-config-issues issues" [
 #
 # GET /firmware/{firmware_hash}/expired-certs
 # operationId: get_expired_certs
-export def "firmware-expired-certs certs" [
+export def "firmware-expired-certs get" [
   firmware_hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -186,7 +195,7 @@ export def "firmware-expired-certs certs" [
 ]: nothing -> table<file_hash: string, file_name: string, public_key: record<algorithm: string, bits: int>, subject_name: string, thumb_print: string, valid_from: string, valid_to: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({firmware_hash: $firmware_hash} | format pattern "/firmware/{firmware_hash}/expired-certs"))
+  let full_url = (build-url $base ({firmware_hash: (encode-path-segment $firmware_hash)} | format pattern "/firmware/{firmware_hash}/expired-certs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -196,7 +205,7 @@ export def "firmware-expired-certs certs" [
 #
 # GET /firmware/{firmware_hash}/private-keys
 # operationId: get_private_keys
-export def "firmware-private-keys keys" [
+export def "firmware-private-keys get" [
   firmware_hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -209,7 +218,7 @@ export def "firmware-private-keys keys" [
 ]: nothing -> table<algorithm: string, bits: int, file_hash: string, file_name: string, pem_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({firmware_hash: $firmware_hash} | format pattern "/firmware/{firmware_hash}/private-keys"))
+  let full_url = (build-url $base ({firmware_hash: (encode-path-segment $firmware_hash)} | format pattern "/firmware/{firmware_hash}/private-keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -219,7 +228,7 @@ export def "firmware-private-keys keys" [
 #
 # GET /firmware/{firmware_hash}/risk
 # operationId: get_risk
-export def "firmware-risk risk" [
+export def "firmware-risk get" [
   firmware_hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,7 +241,7 @@ export def "firmware-risk risk" [
 ]: nothing -> record<risk_summary: record<client_tools_risk: string, crypto_risk: string, kernel_risk: string, net_services_risk: string>, vulnerable_components: table<category: string, cvss_max: float, name: string, version: string, vulnerabilities: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({firmware_hash: $firmware_hash} | format pattern "/firmware/{firmware_hash}/risk"))
+  let full_url = (build-url $base ({firmware_hash: (encode-path-segment $firmware_hash)} | format pattern "/firmware/{firmware_hash}/risk"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -242,7 +251,7 @@ export def "firmware-risk risk" [
 #
 # GET /firmware/{firmware_hash}/weak-certs
 # operationId: get_weak_certs
-export def "firmware-weak-certs certs" [
+export def "firmware-weak-certs get" [
   firmware_hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -255,7 +264,7 @@ export def "firmware-weak-certs certs" [
 ]: nothing -> table<file_hash: string, file_name: string, sign_algorithm: string, subject_name: string, thumb_print: string, valid_from: string, valid_to: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({firmware_hash: $firmware_hash} | format pattern "/firmware/{firmware_hash}/weak-certs"))
+  let full_url = (build-url $base ({firmware_hash: (encode-path-segment $firmware_hash)} | format pattern "/firmware/{firmware_hash}/weak-certs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -265,7 +274,7 @@ export def "firmware-weak-certs certs" [
 #
 # GET /firmware/{firmware_hash}/weak-keys
 # operationId: get_weak_keys
-export def "firmware-weak-keys keys" [
+export def "firmware-weak-keys get" [
   firmware_hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,7 +287,7 @@ export def "firmware-weak-keys keys" [
 ]: nothing -> table<algorithm: string, bits: int, file_hash: string, file_name: string, pem_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({firmware_hash: $firmware_hash} | format pattern "/firmware/{firmware_hash}/weak-keys"))
+  let full_url = (build-url $base ({firmware_hash: (encode-path-segment $firmware_hash)} | format pattern "/firmware/{firmware_hash}/weak-keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

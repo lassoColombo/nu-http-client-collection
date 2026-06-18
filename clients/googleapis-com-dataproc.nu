@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -74,7 +83,7 @@ def job-state-matcher-completer [] { ["ACTIVE" "ALL" "NON_ACTIVE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects-regions-clusters dataprocprojectsregionsclusterslist" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects-regions-clusters list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/projects/{projectId}/regions/{region}/clusters
 # operationId: dataproc.projects.regions.clusters.list
-export def "projects-regions-clusters dataprocprojectsregionsclusterslist" [
+export def "projects-regions-clusters list" [
   project_id: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -127,7 +136,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclusterslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, region: $region} | format pattern "/v1/projects/{project_id}/regions/{region}/clusters") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), region: (encode-path-segment $region)} | format pattern "/v1/projects/{project_id}/regions/{region}/clusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -140,7 +149,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclusterslist" [
 # --config shape: {autoscalingConfig?: record, auxiliaryNodeGroups?: list, configBucket?: string, dataprocMetricConfig?: record, encryptionConfig?: record, endpointConfig?: record, gceClusterConfig?: record, gkeClusterConfig?: record, initializationActions?: list, lifecycleConfig?: record, masterConfig?: record, metastoreConfig?: record, secondaryWorkerConfig?: record, securityConfig?: record, softwareConfig?: record, tempBucket?: string, workerConfig?: record}
 # --metrics shape: {hdfsMetrics?: record, yarnMetrics?: record}
 # --virtualClusterConfig shape: {auxiliaryServicesConfig?: record, kubernetesClusterConfig?: record, stagingBucket?: string}
-export def "projects-regions-clusters dataprocprojectsregionsclusterscreate" [
+export def "projects-regions-clusters create" [
   project_id: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -176,19 +185,19 @@ export def "projects-regions-clusters dataprocprojectsregionsclusterscreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "actionOnFailedPrimaryWorkers" $action_on_failed_primary_workers "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, region: $region} | format pattern "/v1/projects/{project_id}/regions/{region}/clusters") $qp)
-  let body = {"clusterName": $cluster_name, "config": $config, "labels": $labels, "metrics": $metrics, "projectId": $body_project_id, "status": $status, "virtualClusterConfig": $virtual_cluster_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), region: (encode-path-segment $region)} | format pattern "/v1/projects/{project_id}/regions/{region}/clusters") $qp)
+  let req_body = {"clusterName": $cluster_name, "config": $config, "labels": $labels, "metrics": $metrics, "projectId": $body_project_id, "status": $status, "virtualClusterConfig": $virtual_cluster_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a cluster in a project. The returned Operation.metadata will be ClusterOperationMetadata (https://cloud.google.com/dataproc/docs/reference/rpc/google.cloud.dataproc.v1#clusteroperationmetadata).
 #
 # DELETE /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}
 # operationId: dataproc.projects.regions.clusters.delete
-export def "projects-regions-clusters dataprocprojectsregionsclustersdelete" [
+export def "projects-regions-clusters delete" [
   project_id: string
   region: string
   cluster_name: string
@@ -217,7 +226,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clusterUuid" $cluster_uuid "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, region: $region, cluster_name: $cluster_name} | format pattern "/v1/projects/{project_id}/regions/{region}/clusters/{cluster_name}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), region: (encode-path-segment $region), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/v1/projects/{project_id}/regions/{region}/clusters/{cluster_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -227,7 +236,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersdelete" [
 #
 # GET /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}
 # operationId: dataproc.projects.regions.clusters.get
-export def "projects-regions-clusters dataprocprojectsregionsclustersget" [
+export def "projects-regions-clusters get" [
   project_id: string
   region: string
   cluster_name: string
@@ -254,7 +263,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, region: $region, cluster_name: $cluster_name} | format pattern "/v1/projects/{project_id}/regions/{region}/clusters/{cluster_name}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), region: (encode-path-segment $region), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/v1/projects/{project_id}/regions/{region}/clusters/{cluster_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -267,7 +276,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersget" [
 # --config shape: {autoscalingConfig?: record, auxiliaryNodeGroups?: list, configBucket?: string, dataprocMetricConfig?: record, encryptionConfig?: record, endpointConfig?: record, gceClusterConfig?: record, gkeClusterConfig?: record, initializationActions?: list, lifecycleConfig?: record, masterConfig?: record, metastoreConfig?: record, secondaryWorkerConfig?: record, securityConfig?: record, softwareConfig?: record, tempBucket?: string, workerConfig?: record}
 # --metrics shape: {hdfsMetrics?: record, yarnMetrics?: record}
 # --virtualClusterConfig shape: {auxiliaryServicesConfig?: record, kubernetesClusterConfig?: record, stagingBucket?: string}
-export def "projects-regions-clusters dataprocprojectsregionsclusterspatch" [
+export def "projects-regions-clusters update" [
   project_id: string
   region: string
   cluster_name: string
@@ -292,7 +301,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclusterspatch" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --graceful-decommission-timeout: string # Optional. Timeout for graceful YARN decommissioning. Graceful decommissioning allows removing nodes from the cluster without interrupting jobs in progress. Timeout specifies how long to wait for jobs in progress to finish before forcefully removing nodes (and potentially interrupting jobs). Default timeout is 0 (for forceful decommission), and the maximum allowed timeout is 1 day. (see JSON representation of Duration (https://developers.google.com/protocol-buffers/docs/proto3#json)).Only supported on Dataproc image versions 1.2 and higher.
   --request-id: string # Optional. A unique ID used to identify the request. If the server receives two UpdateClusterRequest (https://cloud.google.com/dataproc/docs/reference/rpc/google.cloud.dataproc.v1#google.cloud.dataproc.v1.UpdateClusterRequest)s with the same id, then the second request will be ignored and the first google.longrunning.Operation created and stored in the backend is returned.It is recommended to always set this value to a UUID (https://en.wikipedia.org/wiki/Universally_unique_identifier).The ID must contain only letters (a-z, A-Z), numbers (0-9), underscores (_), and hyphens (-). The maximum length is 40 characters.
-  --update-mask: string # Required. Specifies the path, relative to Cluster, of the field to update. For example, to change the number of workers in a cluster to 5, the update_mask parameter would be specified as config.worker_config.num_instances, and the PATCH request body would specify the new value, as follows: { "config":{ "workerConfig":{ "numInstances":"5" } } } Similarly, to change the number of preemptible workers in a cluster to 5, the update_mask parameter would be config.secondary_worker_config.num_instances, and the PATCH request body would be set as follows: { "config":{ "secondaryWorkerConfig":{ "numInstances":"5" } } } *Note:* Currently, only the following fields can be updated: *Mask* *Purpose* *labels* Update labels *config.worker_config.num_instances* Resize primary worker group *config.secondary_worker_config.num_instances* Resize secondary worker group config.autoscaling_config.policy_uri Use, stop using, or change autoscaling policies 
+  --update-mask: string # Required. Specifies the path, relative to Cluster, of the field to update. For example, to change the number of workers in a cluster to 5, the update_mask parameter would be specified as config.worker_config.num_instances, and the PATCH request body would specify the new value, as follows: { "config":{ "workerConfig":{ "numInstances":"5" } } } Similarly, to change the number of preemptible workers in a cluster to 5, the update_mask parameter would be config.secondary_worker_config.num_instances, and the PATCH request body would be set as follows: { "config":{ "secondaryWorkerConfig":{ "numInstances":"5" } } } *Note:* Currently, only the following fields can be updated: *Mask* *Purpose* *labels* Update labels *config.worker_config.num_instances* Resize primary worker group *config.secondary_worker_config.num_instances* Resize secondary worker group config.autoscaling_config.policy_uri Use, stop using, or change autoscaling policies
   --body-cluster-name: string # Required. The cluster name, which must be unique within a project. The name must start with a lowercase letter, and can contain up to 51 lowercase letters, numbers, and hyphens. It cannot end with a hyphen. The name of a deleted cluster can be reused.
   --config: record # The cluster config. — shape: {autoscalingConfig?: record, auxiliaryNodeGroups?: list, configBucket?: string, dataprocMetricConfig?: record, encryptionConfig?: record, endpointConfig?: record, gceClusterConfig?: record, gkeClusterConfig?: record, initializationActions?: list, lifecycleConfig?: record, masterConfig?: record, metastoreConfig?: record, secondaryWorkerConfig?: record, securityConfig?: record, softwareConfig?: record, tempBucket?: string, workerConfig?: record}
   --labels: record # Optional. The labels to associate with this cluster. Label keys must contain 1 to 63 characters, and must conform to RFC 1035 (https://www.ietf.org/rfc/rfc1035.txt). Label values may be empty, but, if present, must contain 1 to 63 characters, and must conform to RFC 1035 (https://www.ietf.org/rfc/rfc1035.txt). No more than 32 labels can be associated with a cluster.
@@ -305,12 +314,12 @@ export def "projects-regions-clusters dataprocprojectsregionsclusterspatch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "gracefulDecommissionTimeout" $graceful_decommission_timeout "scalar") (serialize-qp "requestId" $request_id "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, region: $region, cluster_name: $cluster_name} | format pattern "/v1/projects/{project_id}/regions/{region}/clusters/{cluster_name}") $qp)
-  let body = {"clusterName": $body_cluster_name, "config": $config, "labels": $labels, "metrics": $metrics, "projectId": $body_project_id, "status": $status, "virtualClusterConfig": $virtual_cluster_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), region: (encode-path-segment $region), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/v1/projects/{project_id}/regions/{region}/clusters/{cluster_name}") $qp)
+  let req_body = {"clusterName": $body_cluster_name, "config": $config, "labels": $labels, "metrics": $metrics, "projectId": $body_project_id, "status": $status, "virtualClusterConfig": $virtual_cluster_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets cluster diagnostic information. The returned Operation.metadata will be ClusterOperationMetadata (https://cloud.google.com/dataproc/docs/reference/rpc/google.cloud.dataproc.v1#clusteroperationmetadata). After the operation completes, Operation.response contains DiagnoseClusterResults (https://cloud.google.com/dataproc/docs/reference/rpc/google.cloud.dataproc.v1#diagnoseclusterresults).
@@ -318,7 +327,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclusterspatch" [
 # POST /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}:diagnose
 # operationId: dataproc.projects.regions.clusters.diagnose
 # --diagnosisInterval shape: {endTime?: string, startTime?: string}
-export def "projects-regions-clusters dataprocprojectsregionsclustersdiagnose" [
+export def "projects-regions-clusters create-diagnose" [
   project_id: string
   region: string
   cluster_name: string
@@ -343,28 +352,28 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersdiagnose" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --diagnosis-interval: record # Represents a time interval, encoded as a Timestamp start (inclusive) and a Timestamp end (exclusive).The start must be less than or equal to the end. When the start equals the end, the interval is empty (matches no time). When both start and end are unspecified, the interval matches any time. — shape: {endTime?: string, startTime?: string}
   --job: string # Optional. DEPRECATED Specifies the job on which diagnosis is to be performed. Format: projects/{project}/regions/{region}/jobs/{job}
-  --jobs: list # Optional. Specifies a list of jobs on which diagnosis is to be performed. Format: projects/{project}/regions/{region}/jobs/{job}
+  --jobs: list<string> # Optional. Specifies a list of jobs on which diagnosis is to be performed. Format: projects/{project}/regions/{region}/jobs/{job}
   --yarn-application-id: string # Optional. DEPRECATED Specifies the yarn application on which diagnosis is to be performed.
-  --yarn-application-ids: list # Optional. Specifies a list of yarn applications on which diagnosis is to be performed.
+  --yarn-application-ids: list<string> # Optional. Specifies a list of yarn applications on which diagnosis is to be performed.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, region: $region, cluster_name: $cluster_name} | format pattern "/v1/projects/{project_id}/regions/{region}/clusters/{cluster_name}:diagnose") $qp)
-  let body = {"diagnosisInterval": $diagnosis_interval, "job": $job, "jobs": $jobs, "yarnApplicationId": $yarn_application_id, "yarnApplicationIds": $yarn_application_ids} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), region: (encode-path-segment $region), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/v1/projects/{project_id}/regions/{region}/clusters/{cluster_name}:diagnose") $qp)
+  let req_body = {"diagnosisInterval": $diagnosis_interval, "job": $job, "jobs": $jobs, "yarnApplicationId": $yarn_application_id, "yarnApplicationIds": $yarn_application_ids} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Repairs a cluster.
 #
 # POST /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}:repair
 # operationId: dataproc.projects.regions.clusters.repair
-# --nodePools item shape: {id?: string, instanceNames?: list, repairAction?: "REPAIR_ACTION_UNSPECIFIED"|"DELETE"}
-export def "projects-regions-clusters dataprocprojectsregionsclustersrepair" [
+# --nodePools item shape: {id?: string, instanceNames?: list<string>, repairAction?: "REPAIR_ACTION_UNSPECIFIED"|"DELETE"}
+export def "projects-regions-clusters create-repair" [
   project_id: string
   region: string
   cluster_name: string
@@ -389,7 +398,7 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersrepair" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster-uuid: string # Optional. Specifying the cluster_uuid means the RPC will fail (with error NOT_FOUND) if a cluster with the specified UUID does not exist.
   --graceful-decommission-timeout: string # Optional. Timeout for graceful YARN decommissioning. Graceful decommissioning facilitates the removal of cluster nodes without interrupting jobs in progress. The timeout specifies the amount of time to wait for jobs finish before forcefully removing nodes. The default timeout is 0 for forceful decommissioning, and the maximum timeout period is 1 day. (see JSON Mapping—Duration (https://developers.google.com/protocol-buffers/docs/proto3#json)).graceful_decommission_timeout is supported in Dataproc image versions 1.2+. (format: google-duration)
-  --node-pools: list # Optional. Node pools and corresponding repair action to be taken. All node pools should be unique in this request. i.e. Multiple entries for the same node pool id are not allowed. — item shape: {id?: string, instanceNames?: list, repairAction?: "REPAIR_ACTION_UNSPECIFIED"|"DELETE"}
+  --node-pools: list # Optional. Node pools and corresponding repair action to be taken. All node pools should be unique in this request. i.e. Multiple entries for the same node pool id are not allowed. — item shape: {id?: string, instanceNames?: list<string>, repairAction?: "REPAIR_ACTION_UNSPECIFIED"|"DELETE"}
   --parent-operation-id: string # Optional. operation id of the parent operation sending the repair request
   --request-id: string # Optional. A unique ID used to identify the request. If the server receives two RepairClusterRequests with the same ID, the second request is ignored, and the first google.longrunning.Operation created and stored in the backend is returned.Recommendation: Set this value to a UUID (https://en.wikipedia.org/wiki/Universally_unique_identifier).The ID must contain only letters (a-z, A-Z), numbers (0-9), underscores (_), and hyphens (-). The maximum length is 40 characters.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
@@ -397,19 +406,19 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersrepair" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, region: $region, cluster_name: $cluster_name} | format pattern "/v1/projects/{project_id}/regions/{region}/clusters/{cluster_name}:repair") $qp)
-  let body = {"clusterUuid": $cluster_uuid, "gracefulDecommissionTimeout": $graceful_decommission_timeout, "nodePools": $node_pools, "parentOperationId": $parent_operation_id, "requestId": $request_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), region: (encode-path-segment $region), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/v1/projects/{project_id}/regions/{region}/clusters/{cluster_name}:repair") $qp)
+  let req_body = {"clusterUuid": $cluster_uuid, "gracefulDecommissionTimeout": $graceful_decommission_timeout, "nodePools": $node_pools, "parentOperationId": $parent_operation_id, "requestId": $request_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Starts a cluster in a project.
 #
 # POST /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}:start
 # operationId: dataproc.projects.regions.clusters.start
-export def "projects-regions-clusters dataprocprojectsregionsclustersstart" [
+export def "projects-regions-clusters start" [
   project_id: string
   region: string
   cluster_name: string
@@ -439,19 +448,19 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersstart" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, region: $region, cluster_name: $cluster_name} | format pattern "/v1/projects/{project_id}/regions/{region}/clusters/{cluster_name}:start") $qp)
-  let body = {"clusterUuid": $cluster_uuid, "requestId": $request_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), region: (encode-path-segment $region), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/v1/projects/{project_id}/regions/{region}/clusters/{cluster_name}:start") $qp)
+  let req_body = {"clusterUuid": $cluster_uuid, "requestId": $request_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Stops a cluster in a project.
 #
 # POST /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}:stop
 # operationId: dataproc.projects.regions.clusters.stop
-export def "projects-regions-clusters dataprocprojectsregionsclustersstop" [
+export def "projects-regions-clusters stop" [
   project_id: string
   region: string
   cluster_name: string
@@ -481,19 +490,19 @@ export def "projects-regions-clusters dataprocprojectsregionsclustersstop" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, region: $region, cluster_name: $cluster_name} | format pattern "/v1/projects/{project_id}/regions/{region}/clusters/{cluster_name}:stop") $qp)
-  let body = {"clusterUuid": $cluster_uuid, "requestId": $request_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), region: (encode-path-segment $region), cluster_name: (encode-path-segment $cluster_name)} | format pattern "/v1/projects/{project_id}/regions/{region}/clusters/{cluster_name}:stop") $qp)
+  let req_body = {"clusterUuid": $cluster_uuid, "requestId": $request_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists regions/{region}/jobs in a project.
 #
 # GET /v1/projects/{projectId}/regions/{region}/jobs
 # operationId: dataproc.projects.regions.jobs.list
-export def "projects-regions-jobs dataprocprojectsregionsjobslist" [
+export def "projects-regions-jobs list" [
   project_id: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -524,7 +533,7 @@ export def "projects-regions-jobs dataprocprojectsregionsjobslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clusterName" $cluster_name "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "jobStateMatcher" $job_state_matcher "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, region: $region} | format pattern "/v1/projects/{project_id}/regions/{region}/jobs") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), region: (encode-path-segment $region)} | format pattern "/v1/projects/{project_id}/regions/{region}/jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -534,7 +543,7 @@ export def "projects-regions-jobs dataprocprojectsregionsjobslist" [
 #
 # DELETE /v1/projects/{projectId}/regions/{region}/jobs/{jobId}
 # operationId: dataproc.projects.regions.jobs.delete
-export def "projects-regions-jobs dataprocprojectsregionsjobsdelete" [
+export def "projects-regions-jobs delete" [
   project_id: string
   region: string
   job_id: string
@@ -561,7 +570,7 @@ export def "projects-regions-jobs dataprocprojectsregionsjobsdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, region: $region, job_id: $job_id} | format pattern "/v1/projects/{project_id}/regions/{region}/jobs/{job_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), region: (encode-path-segment $region), job_id: (encode-path-segment $job_id)} | format pattern "/v1/projects/{project_id}/regions/{region}/jobs/{job_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -571,7 +580,7 @@ export def "projects-regions-jobs dataprocprojectsregionsjobsdelete" [
 #
 # GET /v1/projects/{projectId}/regions/{region}/jobs/{jobId}
 # operationId: dataproc.projects.regions.jobs.get
-export def "projects-regions-jobs dataprocprojectsregionsjobsget" [
+export def "projects-regions-jobs get" [
   project_id: string
   region: string
   job_id: string
@@ -598,7 +607,7 @@ export def "projects-regions-jobs dataprocprojectsregionsjobsget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, region: $region, job_id: $job_id} | format pattern "/v1/projects/{project_id}/regions/{region}/jobs/{job_id}") $qp)
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), region: (encode-path-segment $region), job_id: (encode-path-segment $job_id)} | format pattern "/v1/projects/{project_id}/regions/{region}/jobs/{job_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -609,20 +618,20 @@ export def "projects-regions-jobs dataprocprojectsregionsjobsget" [
 # PATCH /v1/projects/{projectId}/regions/{region}/jobs/{jobId}
 # operationId: dataproc.projects.regions.jobs.patch
 # --driverSchedulingConfig shape: {memoryMb?: int, vcores?: int}
-# --hadoopJob shape: {archiveUris?: list, args?: list, fileUris?: list, jarFileUris?: list, loggingConfig?: record, mainClass?: string, mainJarFileUri?: string, properties?: record}
-# --hiveJob shape: {continueOnFailure?: bool, jarFileUris?: list, properties?: record, queryFileUri?: string, queryList?: record, scriptVariables?: record}
-# --pigJob shape: {continueOnFailure?: bool, jarFileUris?: list, loggingConfig?: record, properties?: record, queryFileUri?: string, queryList?: record, scriptVariables?: record}
+# --hadoopJob shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, jarFileUris?: list<string>, loggingConfig?: record, mainClass?: string, mainJarFileUri?: string, properties?: record}
+# --hiveJob shape: {continueOnFailure?: bool, jarFileUris?: list<string>, properties?: record, queryFileUri?: string, queryList?: record, scriptVariables?: record}
+# --pigJob shape: {continueOnFailure?: bool, jarFileUris?: list<string>, loggingConfig?: record, properties?: record, queryFileUri?: string, queryList?: record, scriptVariables?: record}
 # --placement shape: {clusterLabels?: record, clusterName?: string}
-# --prestoJob shape: {clientTags?: list, continueOnFailure?: bool, loggingConfig?: record, outputFormat?: string, properties?: record, queryFileUri?: string, queryList?: record}
-# --pysparkJob shape: {archiveUris?: list, args?: list, fileUris?: list, jarFileUris?: list, loggingConfig?: record, mainPythonFileUri?: string, properties?: record, pythonFileUris?: list}
+# --prestoJob shape: {clientTags?: list<string>, continueOnFailure?: bool, loggingConfig?: record, outputFormat?: string, properties?: record, queryFileUri?: string, queryList?: record}
+# --pysparkJob shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, jarFileUris?: list<string>, loggingConfig?: record, mainPythonFileUri?: string, properties?: record, pythonFileUris?: list<string>}
 # --reference shape: {jobId?: string, projectId?: string}
 # --scheduling shape: {maxFailuresPerHour?: int, maxFailuresTotal?: int}
-# --sparkJob shape: {archiveUris?: list, args?: list, fileUris?: list, jarFileUris?: list, loggingConfig?: record, mainClass?: string, mainJarFileUri?: string, properties?: record}
-# --sparkRJob shape: {archiveUris?: list, args?: list, fileUris?: list, loggingConfig?: record, mainRFileUri?: string, properties?: record}
-# --sparkSqlJob shape: {jarFileUris?: list, loggingConfig?: record, properties?: record, queryFileUri?: string, queryList?: record, scriptVariables?: record}
-# --trinoJob shape: {clientTags?: list, continueOnFailure?: bool, loggingConfig?: record, outputFormat?: string, properties?: record, queryFileUri?: string, queryList?: record}
+# --sparkJob shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, jarFileUris?: list<string>, loggingConfig?: record, mainClass?: string, mainJarFileUri?: string, properties?: record}
+# --sparkRJob shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, loggingConfig?: record, mainRFileUri?: string, properties?: record}
+# --sparkSqlJob shape: {jarFileUris?: list<string>, loggingConfig?: record, properties?: record, queryFileUri?: string, queryList?: record, scriptVariables?: record}
+# --trinoJob shape: {clientTags?: list<string>, continueOnFailure?: bool, loggingConfig?: record, outputFormat?: string, properties?: record, queryFileUri?: string, queryList?: record}
 # --yarnApplications item shape: {name?: string, progress?: float, state?: "STATE_UNSPECIFIED"|"NEW"|"NEW_SAVING"|"SUBMITTED"|"ACCEPTED"|"RUNNING"|"FINISHED"|"FAILED"|"KILLED", trackingUrl?: string}
-export def "projects-regions-jobs dataprocprojectsregionsjobspatch" [
+export def "projects-regions-jobs update" [
   project_id: string
   region: string
   job_id: string
@@ -647,38 +656,38 @@ export def "projects-regions-jobs dataprocprojectsregionsjobspatch" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --update-mask: string # Required. Specifies the path, relative to Job, of the field to update. For example, to update the labels of a Job the update_mask parameter would be specified as labels, and the PATCH request body would specify the new value. *Note:* Currently, labels is the only field that can be updated.
   --driver-scheduling-config: record # Driver scheduling configuration. — shape: {memoryMb?: int, vcores?: int}
-  --hadoop-job: record # A Dataproc job for running Apache Hadoop MapReduce (https://hadoop.apache.org/docs/current/hadoop-mapreduce-client/hadoop-mapreduce-client-core/MapReduceTutorial.html) jobs on Apache Hadoop YARN (https://hadoop.apache.org/docs/r2.7.1/hadoop-yarn/hadoop-yarn-site/YARN.html). — shape: {archiveUris?: list, args?: list, fileUris?: list, jarFileUris?: list, loggingConfig?: record, mainClass?: string, mainJarFileUri?: string, properties?: record}
-  --hive-job: record # A Dataproc job for running Apache Hive (https://hive.apache.org/) queries on YARN. — shape: {continueOnFailure?: bool, jarFileUris?: list, properties?: record, queryFileUri?: string, queryList?: record, scriptVariables?: record}
+  --hadoop-job: record # A Dataproc job for running Apache Hadoop MapReduce (https://hadoop.apache.org/docs/current/hadoop-mapreduce-client/hadoop-mapreduce-client-core/MapReduceTutorial.html) jobs on Apache Hadoop YARN (https://hadoop.apache.org/docs/r2.7.1/hadoop-yarn/hadoop-yarn-site/YARN.html). — shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, jarFileUris?: list<string>, loggingConfig?: record, mainClass?: string, mainJarFileUri?: string, properties?: record}
+  --hive-job: record # A Dataproc job for running Apache Hive (https://hive.apache.org/) queries on YARN. — shape: {continueOnFailure?: bool, jarFileUris?: list<string>, properties?: record, queryFileUri?: string, queryList?: record, scriptVariables?: record}
   --labels: record # Optional. The labels to associate with this job. Label keys must contain 1 to 63 characters, and must conform to RFC 1035 (https://www.ietf.org/rfc/rfc1035.txt). Label values may be empty, but, if present, must contain 1 to 63 characters, and must conform to RFC 1035 (https://www.ietf.org/rfc/rfc1035.txt). No more than 32 labels can be associated with a job.
-  --pig-job: record # A Dataproc job for running Apache Pig (https://pig.apache.org/) queries on YARN. — shape: {continueOnFailure?: bool, jarFileUris?: list, loggingConfig?: record, properties?: record, queryFileUri?: string, queryList?: record, scriptVariables?: record}
+  --pig-job: record # A Dataproc job for running Apache Pig (https://pig.apache.org/) queries on YARN. — shape: {continueOnFailure?: bool, jarFileUris?: list<string>, loggingConfig?: record, properties?: record, queryFileUri?: string, queryList?: record, scriptVariables?: record}
   --placement: record # Dataproc job config. — shape: {clusterLabels?: record, clusterName?: string}
-  --presto-job: record # A Dataproc job for running Presto (https://prestosql.io/) queries. IMPORTANT: The Dataproc Presto Optional Component (https://cloud.google.com/dataproc/docs/concepts/components/presto) must be enabled when the cluster is created to submit a Presto job to the cluster. — shape: {clientTags?: list, continueOnFailure?: bool, loggingConfig?: record, outputFormat?: string, properties?: record, queryFileUri?: string, queryList?: record}
-  --pyspark-job: record # A Dataproc job for running Apache PySpark (https://spark.apache.org/docs/0.9.0/python-programming-guide.html) applications on YARN. — shape: {archiveUris?: list, args?: list, fileUris?: list, jarFileUris?: list, loggingConfig?: record, mainPythonFileUri?: string, properties?: record, pythonFileUris?: list}
+  --presto-job: record # A Dataproc job for running Presto (https://prestosql.io/) queries. IMPORTANT: The Dataproc Presto Optional Component (https://cloud.google.com/dataproc/docs/concepts/components/presto) must be enabled when the cluster is created to submit a Presto job to the cluster. — shape: {clientTags?: list<string>, continueOnFailure?: bool, loggingConfig?: record, outputFormat?: string, properties?: record, queryFileUri?: string, queryList?: record}
+  --pyspark-job: record # A Dataproc job for running Apache PySpark (https://spark.apache.org/docs/0.9.0/python-programming-guide.html) applications on YARN. — shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, jarFileUris?: list<string>, loggingConfig?: record, mainPythonFileUri?: string, properties?: record, pythonFileUris?: list<string>}
   --reference: record # Encapsulates the full scoping used to reference a job. — shape: {jobId?: string, projectId?: string}
   --scheduling: record # Job scheduling options. — shape: {maxFailuresPerHour?: int, maxFailuresTotal?: int}
-  --spark-job: record # A Dataproc job for running Apache Spark (https://spark.apache.org/) applications on YARN. — shape: {archiveUris?: list, args?: list, fileUris?: list, jarFileUris?: list, loggingConfig?: record, mainClass?: string, mainJarFileUri?: string, properties?: record}
-  --spark-r-job: record # A Dataproc job for running Apache SparkR (https://spark.apache.org/docs/latest/sparkr.html) applications on YARN. — shape: {archiveUris?: list, args?: list, fileUris?: list, loggingConfig?: record, mainRFileUri?: string, properties?: record}
-  --spark-sql-job: record # A Dataproc job for running Apache Spark SQL (https://spark.apache.org/sql/) queries. — shape: {jarFileUris?: list, loggingConfig?: record, properties?: record, queryFileUri?: string, queryList?: record, scriptVariables?: record}
+  --spark-job: record # A Dataproc job for running Apache Spark (https://spark.apache.org/) applications on YARN. — shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, jarFileUris?: list<string>, loggingConfig?: record, mainClass?: string, mainJarFileUri?: string, properties?: record}
+  --spark-r-job: record # A Dataproc job for running Apache SparkR (https://spark.apache.org/docs/latest/sparkr.html) applications on YARN. — shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, loggingConfig?: record, mainRFileUri?: string, properties?: record}
+  --spark-sql-job: record # A Dataproc job for running Apache Spark SQL (https://spark.apache.org/sql/) queries. — shape: {jarFileUris?: list<string>, loggingConfig?: record, properties?: record, queryFileUri?: string, queryList?: record, scriptVariables?: record}
   --status: record # Dataproc job status.
-  --trino-job: record # A Dataproc job for running Trino (https://trino.io/) queries. IMPORTANT: The Dataproc Trino Optional Component (https://cloud.google.com/dataproc/docs/concepts/components/trino) must be enabled when the cluster is created to submit a Trino job to the cluster. — shape: {clientTags?: list, continueOnFailure?: bool, loggingConfig?: record, outputFormat?: string, properties?: record, queryFileUri?: string, queryList?: record}
+  --trino-job: record # A Dataproc job for running Trino (https://trino.io/) queries. IMPORTANT: The Dataproc Trino Optional Component (https://cloud.google.com/dataproc/docs/concepts/components/trino) must be enabled when the cluster is created to submit a Trino job to the cluster. — shape: {clientTags?: list<string>, continueOnFailure?: bool, loggingConfig?: record, outputFormat?: string, properties?: record, queryFileUri?: string, queryList?: record}
 ]: any -> record<done: bool, driverControlFilesUri: string, driverOutputResourceUri: string, driverSchedulingConfig: record<memoryMb: int, vcores: int>, hadoopJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, hiveJob: record<continueOnFailure: bool, jarFileUris: list<string>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, jobUuid: string, labels: record, pigJob: record<continueOnFailure: bool, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, placement: record<clusterLabels: record, clusterName: string, clusterUuid: string>, prestoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, pysparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainPythonFileUri: string, properties: record, pythonFileUris: list<string>>, reference: record<jobId: string, projectId: string>, scheduling: record<maxFailuresPerHour: int, maxFailuresTotal: int>, sparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, sparkRJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainRFileUri: string, properties: record>, sparkSqlJob: record<jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, status: record<details: string, state: string, stateStartTime: string, substate: string>, statusHistory: table<details: string, state: string, stateStartTime: string, substate: string>, trinoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, yarnApplications: table<name: string, progress: float, state: string, trackingUrl: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, region: $region, job_id: $job_id} | format pattern "/v1/projects/{project_id}/regions/{region}/jobs/{job_id}") $qp)
-  let body = {"driverSchedulingConfig": $driver_scheduling_config, "hadoopJob": $hadoop_job, "hiveJob": $hive_job, "labels": $labels, "pigJob": $pig_job, "placement": $placement, "prestoJob": $presto_job, "pysparkJob": $pyspark_job, "reference": $reference, "scheduling": $scheduling, "sparkJob": $spark_job, "sparkRJob": $spark_r_job, "sparkSqlJob": $spark_sql_job, "status": $status, "trinoJob": $trino_job} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), region: (encode-path-segment $region), job_id: (encode-path-segment $job_id)} | format pattern "/v1/projects/{project_id}/regions/{region}/jobs/{job_id}") $qp)
+  let req_body = {"driverSchedulingConfig": $driver_scheduling_config, "hadoopJob": $hadoop_job, "hiveJob": $hive_job, "labels": $labels, "pigJob": $pig_job, "placement": $placement, "prestoJob": $presto_job, "pysparkJob": $pyspark_job, "reference": $reference, "scheduling": $scheduling, "sparkJob": $spark_job, "sparkRJob": $spark_r_job, "sparkSqlJob": $spark_sql_job, "status": $status, "trinoJob": $trino_job} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Starts a job cancellation request. To access the job resource after cancellation, call regions/{region}/jobs.list (https://cloud.google.com/dataproc/docs/reference/rest/v1/projects.regions.jobs/list) or regions/{region}/jobs.get (https://cloud.google.com/dataproc/docs/reference/rest/v1/projects.regions.jobs/get).
 #
 # POST /v1/projects/{projectId}/regions/{region}/jobs/{jobId}:cancel
 # operationId: dataproc.projects.regions.jobs.cancel
-export def "projects-regions-jobs dataprocprojectsregionsjobscancel" [
+export def "projects-regions-jobs cancel" [
   project_id: string
   region: string
   job_id: string
@@ -707,11 +716,12 @@ export def "projects-regions-jobs dataprocprojectsregionsjobscancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, region: $region, job_id: $job_id} | format pattern "/v1/projects/{project_id}/regions/{region}/jobs/{job_id}:cancel") $qp)
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), region: (encode-path-segment $region), job_id: (encode-path-segment $job_id)} | format pattern "/v1/projects/{project_id}/regions/{region}/jobs/{job_id}:cancel") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Submits a job to a cluster.
@@ -719,7 +729,7 @@ export def "projects-regions-jobs dataprocprojectsregionsjobscancel" [
 # POST /v1/projects/{projectId}/regions/{region}/jobs:submit
 # operationId: dataproc.projects.regions.jobs.submit
 # --job shape: {driverSchedulingConfig?: record, hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, placement?: record, prestoJob?: record, pysparkJob?: record, reference?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, status?: record, trinoJob?: record}
-export def "projects-regions-jobs-submit dataprocprojectsregionsjobssubmit" [
+export def "projects-regions-jobs-submit submit" [
   project_id: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -748,12 +758,12 @@ export def "projects-regions-jobs-submit dataprocprojectsregionsjobssubmit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, region: $region} | format pattern "/v1/projects/{project_id}/regions/{region}/jobs:submit") $qp)
-  let body = {"job": $job, "requestId": $request_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), region: (encode-path-segment $region)} | format pattern "/v1/projects/{project_id}/regions/{region}/jobs:submit") $qp)
+  let req_body = {"job": $job, "requestId": $request_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Submits job to a cluster.
@@ -761,7 +771,7 @@ export def "projects-regions-jobs-submit dataprocprojectsregionsjobssubmit" [
 # POST /v1/projects/{projectId}/regions/{region}/jobs:submitAsOperation
 # operationId: dataproc.projects.regions.jobs.submitAsOperation
 # --job shape: {driverSchedulingConfig?: record, hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, placement?: record, prestoJob?: record, pysparkJob?: record, reference?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, status?: record, trinoJob?: record}
-export def "projects-regions-jobs-submit-as-operation dataprocprojectsregionsjobssubmitAsOperation" [
+export def "projects-regions-jobs-submit-as-operation submit" [
   project_id: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -790,19 +800,19 @@ export def "projects-regions-jobs-submit-as-operation dataprocprojectsregionsjob
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project_id: $project_id, region: $region} | format pattern "/v1/projects/{project_id}/regions/{region}/jobs:submitAsOperation") $qp)
-  let body = {"job": $job, "requestId": $request_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), region: (encode-path-segment $region)} | format pattern "/v1/projects/{project_id}/regions/{region}/jobs:submitAsOperation") $qp)
+  let req_body = {"job": $job, "requestId": $request_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deletes a workflow template. It does not cancel in-progress workflows.
 #
 # DELETE /v1/{name}
 # operationId: dataproc.projects.regions.workflowTemplates.delete
-export def "projects dataprocprojectsregionsworkflowTemplatesdelete" [
+export def "projects delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -828,7 +838,7 @@ export def "projects dataprocprojectsregionsworkflowTemplatesdelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -838,7 +848,7 @@ export def "projects dataprocprojectsregionsworkflowTemplatesdelete" [
 #
 # GET /v1/{name}
 # operationId: dataproc.projects.regions.workflowTemplates.get
-export def "projects dataprocprojectsregionsworkflowTemplatesget" [
+export def "projects get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -866,7 +876,7 @@ export def "projects dataprocprojectsregionsworkflowTemplatesget" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -876,10 +886,10 @@ export def "projects dataprocprojectsregionsworkflowTemplatesget" [
 #
 # PUT /v1/{name}
 # operationId: dataproc.projects.regions.workflowTemplates.update
-# --jobs item shape: {hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, prerequisiteStepIds?: list, prestoJob?: record, pysparkJob?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, stepId?: string, trinoJob?: record}
-# --parameters item shape: {description?: string, fields?: list, name?: string, validation?: record}
+# --jobs item shape: {hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, prerequisiteStepIds?: list<string>, prestoJob?: record, pysparkJob?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, stepId?: string, trinoJob?: record}
+# --parameters item shape: {description?: string, fields?: list<string>, name?: string, validation?: record}
 # --placement shape: {clusterSelector?: record, managedCluster?: record}
-export def "projects dataprocprojectsregionsworkflowTemplatesupdate" [
+export def "projects update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -902,9 +912,9 @@ export def "projects dataprocprojectsregionsworkflowTemplatesupdate" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --dag-timeout: string # Optional. Timeout duration for the DAG of jobs, expressed in seconds (see JSON representation of duration (https://developers.google.com/protocol-buffers/docs/proto3#json)). The timeout duration must be from 10 minutes ("600s") to 24 hours ("86400s"). The timer begins when the first job is submitted. If the workflow is running at the end of the timeout period, any remaining jobs are cancelled, the workflow is ended, and if the workflow was running on a managed cluster, the cluster is deleted. (format: google-duration)
   --id: string
-  --jobs: list # Required. The Directed Acyclic Graph of Jobs to submit. — item shape: {hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, prerequisiteStepIds?: list, prestoJob?: record, pysparkJob?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, stepId?: string, trinoJob?: record}
+  --jobs: list # Required. The Directed Acyclic Graph of Jobs to submit. — item shape: {hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, prerequisiteStepIds?: list<string>, prestoJob?: record, pysparkJob?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, stepId?: string, trinoJob?: record}
   --labels: record # Optional. The labels to associate with this template. These labels will be propagated to all jobs and clusters created by the workflow instance.Label keys must contain 1 to 63 characters, and must conform to RFC 1035 (https://www.ietf.org/rfc/rfc1035.txt).Label values may be empty, but, if present, must contain 1 to 63 characters, and must conform to RFC 1035 (https://www.ietf.org/rfc/rfc1035.txt).No more than 32 labels can be associated with a template.
-  --parameters: list # Optional. Template parameters whose values are substituted into the template. Values for parameters must be provided when the template is instantiated. — item shape: {description?: string, fields?: list, name?: string, validation?: record}
+  --parameters: list # Optional. Template parameters whose values are substituted into the template. Values for parameters must be provided when the template is instantiated. — item shape: {description?: string, fields?: list<string>, name?: string, validation?: record}
   --placement: record # Specifies workflow execution target.Either managed_cluster or cluster_selector is required. — shape: {clusterSelector?: record, managedCluster?: record}
   --version: int # Optional. Used to perform a consistent read-modify-write.This field should be left blank for a CreateWorkflowTemplate request. It is required for an UpdateWorkflowTemplate request, and must match the current server version. A typical update template flow would fetch the current template with a GetWorkflowTemplate request, which will return the current template with the version field filled in with the current server version. The user updates other fields in the template, then returns it as part of the UpdateWorkflowTemplate request. (format: int32)
 ]: any -> record<createTime: string, dagTimeout: string, id: string, jobs: table<hadoopJob: record, hiveJob: record, labels: record, pigJob: record, prerequisiteStepIds: list, prestoJob: record, pysparkJob: record, scheduling: record, sparkJob: record, sparkRJob: record, sparkSqlJob: record, stepId: string, trinoJob: record>, labels: record, name: string, parameters: table<description: string, fields: list, name: string, validation: record>, placement: record<clusterSelector: record<clusterLabels: record, zone: string>, managedCluster: record<clusterName: string, config: record, labels: record>>, updateTime: string, version: int> {
@@ -912,19 +922,19 @@ export def "projects dataprocprojectsregionsworkflowTemplatesupdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}") $qp)
-  let body = {"dagTimeout": $dag_timeout, "id": $id, "jobs": $jobs, "labels": $labels, "parameters": $parameters, "placement": $placement, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp)
+  let req_body = {"dagTimeout": $dag_timeout, "id": $id, "jobs": $jobs, "labels": $labels, "parameters": $parameters, "placement": $placement, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Starts asynchronous cancellation on a long-running operation. The server makes a best effort to cancel the operation, but success is not guaranteed. If the server doesn't support this method, it returns google.rpc.Code.UNIMPLEMENTED. Clients can use Operations.GetOperation or other methods to check whether the cancellation succeeded or whether the operation completed despite cancellation. On successful cancellation, the operation is not deleted; instead, it becomes an operation with an Operation.error value with a google.rpc.Status.code of 1, corresponding to Code.CANCELLED.
 #
 # POST /v1/{name}:cancel
 # operationId: dataproc.projects.regions.operations.cancel
-export def "projects dataprocprojectsregionsoperationscancel" [
+export def "projects cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -949,7 +959,7 @@ export def "projects dataprocprojectsregionsoperationscancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:cancel") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -959,7 +969,7 @@ export def "projects dataprocprojectsregionsoperationscancel" [
 #
 # POST /v1/{name}:instantiate
 # operationId: dataproc.projects.regions.workflowTemplates.instantiate
-export def "projects dataprocprojectsregionsworkflowTemplatesinstantiate" [
+export def "projects create-instantiate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -988,19 +998,19 @@ export def "projects dataprocprojectsregionsworkflowTemplatesinstantiate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:instantiate") $qp)
-  let body = {"parameters": $parameters, "requestId": $request_id, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:instantiate") $qp)
+  let req_body = {"parameters": $parameters, "requestId": $request_id, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Resizes a node group in a cluster. The returned Operation.metadata is NodeGroupOperationMetadata (https://cloud.google.com/dataproc/docs/reference/rpc/google.cloud.dataproc.v1#nodegroupoperationmetadata).
 #
 # POST /v1/{name}:resize
 # operationId: dataproc.projects.regions.clusters.nodeGroups.resize
-export def "projects dataprocprojectsregionsclustersnodeGroupsresize" [
+export def "projects resize" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1029,19 +1039,19 @@ export def "projects dataprocprojectsregionsclustersnodeGroupsresize" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/v1/{name}:resize") $qp)
-  let body = {"gracefulDecommissionTimeout": $graceful_decommission_timeout, "requestId": $request_id, "size": $size} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:resize") $qp)
+  let req_body = {"gracefulDecommissionTimeout": $graceful_decommission_timeout, "requestId": $request_id, "size": $size} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists autoscaling policies in the project.
 #
 # GET /v1/{parent}/autoscalingPolicies
 # operationId: dataproc.projects.regions.autoscalingPolicies.list
-export def "autoscaling-policies dataprocprojectsregionsautoscalingPolicieslist" [
+export def "autoscaling-policies list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1068,7 +1078,7 @@ export def "autoscaling-policies dataprocprojectsregionsautoscalingPolicieslist"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/autoscalingPolicies") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/autoscalingPolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1081,7 +1091,7 @@ export def "autoscaling-policies dataprocprojectsregionsautoscalingPolicieslist"
 # --basicAlgorithm shape: {cooldownPeriod?: string, sparkStandaloneConfig?: record, yarnConfig?: record}
 # --secondaryWorkerConfig shape: {maxInstances?: int, minInstances?: int, weight?: int}
 # --workerConfig shape: {maxInstances?: int, minInstances?: int, weight?: int}
-export def "autoscaling-policies dataprocprojectsregionsautoscalingPoliciescreate" [
+export def "autoscaling-policies create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1112,19 +1122,19 @@ export def "autoscaling-policies dataprocprojectsregionsautoscalingPoliciescreat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/autoscalingPolicies") $qp)
-  let body = {"basicAlgorithm": $basic_algorithm, "id": $id, "labels": $labels, "secondaryWorkerConfig": $secondary_worker_config, "workerConfig": $worker_config} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/autoscalingPolicies") $qp)
+  let req_body = {"basicAlgorithm": $basic_algorithm, "id": $id, "labels": $labels, "secondaryWorkerConfig": $secondary_worker_config, "workerConfig": $worker_config} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists batch workloads.
 #
 # GET /v1/{parent}/batches
 # operationId: dataproc.projects.locations.batches.list
-export def "batches dataprocprojectslocationsbatcheslist" [
+export def "batches list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1153,7 +1163,7 @@ export def "batches dataprocprojectslocationsbatcheslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/batches") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/batches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1164,13 +1174,13 @@ export def "batches dataprocprojectslocationsbatcheslist" [
 # POST /v1/{parent}/batches
 # operationId: dataproc.projects.locations.batches.create
 # --environmentConfig shape: {executionConfig?: record, peripheralsConfig?: record}
-# --pysparkBatch shape: {archiveUris?: list, args?: list, fileUris?: list, jarFileUris?: list, mainPythonFileUri?: string, pythonFileUris?: list}
+# --pysparkBatch shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, jarFileUris?: list<string>, mainPythonFileUri?: string, pythonFileUris?: list<string>}
 # --runtimeConfig shape: {containerImage?: string, properties?: record, version?: string}
 # --runtimeInfo shape: {approximateUsage?: record, currentUsage?: record}
-# --sparkBatch shape: {archiveUris?: list, args?: list, fileUris?: list, jarFileUris?: list, mainClass?: string, mainJarFileUri?: string}
-# --sparkRBatch shape: {archiveUris?: list, args?: list, fileUris?: list, mainRFileUri?: string}
-# --sparkSqlBatch shape: {jarFileUris?: list, queryFileUri?: string, queryVariables?: record}
-export def "batches dataprocprojectslocationsbatchescreate" [
+# --sparkBatch shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, jarFileUris?: list<string>, mainClass?: string, mainJarFileUri?: string}
+# --sparkRBatch shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, mainRFileUri?: string}
+# --sparkSqlBatch shape: {jarFileUris?: list<string>, queryFileUri?: string, queryVariables?: record}
+export def "batches create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1195,23 +1205,23 @@ export def "batches dataprocprojectslocationsbatchescreate" [
   --request-id: string # Optional. A unique ID used to identify the request. If the service receives two CreateBatchRequest (https://cloud.google.com/dataproc/docs/reference/rpc/google.cloud.dataproc.v1#google.cloud.dataproc.v1.CreateBatchRequest)s with the same request_id, the second request is ignored and the Operation that corresponds to the first Batch created and stored in the backend is returned.Recommendation: Set this value to a UUID (https://en.wikipedia.org/wiki/Universally_unique_identifier).The value must contain only letters (a-z, A-Z), numbers (0-9), underscores (_), and hyphens (-). The maximum length is 40 characters.
   --environment-config: record # Environment configuration for a workload. — shape: {executionConfig?: record, peripheralsConfig?: record}
   --labels: record # Optional. The labels to associate with this batch. Label keys must contain 1 to 63 characters, and must conform to RFC 1035 (https://www.ietf.org/rfc/rfc1035.txt). Label values may be empty, but, if present, must contain 1 to 63 characters, and must conform to RFC 1035 (https://www.ietf.org/rfc/rfc1035.txt). No more than 32 labels can be associated with a batch.
-  --pyspark-batch: record # A configuration for running an Apache PySpark (https://spark.apache.org/docs/latest/api/python/getting_started/quickstart.html) batch workload. — shape: {archiveUris?: list, args?: list, fileUris?: list, jarFileUris?: list, mainPythonFileUri?: string, pythonFileUris?: list}
+  --pyspark-batch: record # A configuration for running an Apache PySpark (https://spark.apache.org/docs/latest/api/python/getting_started/quickstart.html) batch workload. — shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, jarFileUris?: list<string>, mainPythonFileUri?: string, pythonFileUris?: list<string>}
   --runtime-config: record # Runtime configuration for a workload. — shape: {containerImage?: string, properties?: record, version?: string}
   --runtime-info: record # Runtime information about workload execution. — shape: {approximateUsage?: record, currentUsage?: record}
-  --spark-batch: record # A configuration for running an Apache Spark (https://spark.apache.org/) batch workload. — shape: {archiveUris?: list, args?: list, fileUris?: list, jarFileUris?: list, mainClass?: string, mainJarFileUri?: string}
-  --spark-r-batch: record # A configuration for running an Apache SparkR (https://spark.apache.org/docs/latest/sparkr.html) batch workload. — shape: {archiveUris?: list, args?: list, fileUris?: list, mainRFileUri?: string}
-  --spark-sql-batch: record # A configuration for running Apache Spark SQL (https://spark.apache.org/sql/) queries as a batch workload. — shape: {jarFileUris?: list, queryFileUri?: string, queryVariables?: record}
+  --spark-batch: record # A configuration for running an Apache Spark (https://spark.apache.org/) batch workload. — shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, jarFileUris?: list<string>, mainClass?: string, mainJarFileUri?: string}
+  --spark-r-batch: record # A configuration for running an Apache SparkR (https://spark.apache.org/docs/latest/sparkr.html) batch workload. — shape: {archiveUris?: list<string>, args?: list<string>, fileUris?: list<string>, mainRFileUri?: string}
+  --spark-sql-batch: record # A configuration for running Apache Spark SQL (https://spark.apache.org/sql/) queries as a batch workload. — shape: {jarFileUris?: list<string>, queryFileUri?: string, queryVariables?: record}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "batchId" $batch_id "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/batches") $qp)
-  let body = {"environmentConfig": $environment_config, "labels": $labels, "pysparkBatch": $pyspark_batch, "runtimeConfig": $runtime_config, "runtimeInfo": $runtime_info, "sparkBatch": $spark_batch, "sparkRBatch": $spark_r_batch, "sparkSqlBatch": $spark_sql_batch} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/batches") $qp)
+  let req_body = {"environmentConfig": $environment_config, "labels": $labels, "pysparkBatch": $pyspark_batch, "runtimeConfig": $runtime_config, "runtimeInfo": $runtime_info, "sparkBatch": $spark_batch, "sparkRBatch": $spark_r_batch, "sparkSqlBatch": $spark_sql_batch} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Creates a node group in a cluster. The returned Operation.metadata is NodeGroupOperationMetadata (https://cloud.google.com/dataproc/docs/reference/rpc/google.cloud.dataproc.v1#nodegroupoperationmetadata).
@@ -1219,7 +1229,7 @@ export def "batches dataprocprojectslocationsbatchescreate" [
 # POST /v1/{parent}/nodeGroups
 # operationId: dataproc.projects.regions.clusters.nodeGroups.create
 # --nodeGroupConfig shape: {accelerators?: list, diskConfig?: record, imageUri?: string, machineTypeUri?: string, managedGroupConfig?: record, minCpuPlatform?: string, numInstances?: int, preemptibility?: "PREEMPTIBILITY_UNSPECIFIED"|"NON_PREEMPTIBLE"|"PREEMPTIBLE"|"SPOT"}
-export def "node-groups dataprocprojectsregionsclustersnodeGroupscreate" [
+export def "node-groups create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1245,25 +1255,25 @@ export def "node-groups dataprocprojectsregionsclustersnodeGroupscreate" [
   --labels: record # Optional. Node group labels. Label keys must consist of from 1 to 63 characters and conform to RFC 1035 (https://www.ietf.org/rfc/rfc1035.txt). Label values can be empty. If specified, they must consist of from 1 to 63 characters and conform to RFC 1035 (https://www.ietf.org/rfc/rfc1035.txt). The node group must have no more than 32 labelsn.
   --name: string # The Node group resource name (https://aip.dev/122).
   --node-group-config: record # The config settings for Compute Engine resources in an instance group, such as a master or worker group. — shape: {accelerators?: list, diskConfig?: record, imageUri?: string, machineTypeUri?: string, managedGroupConfig?: record, minCpuPlatform?: string, numInstances?: int, preemptibility?: "PREEMPTIBILITY_UNSPECIFIED"|"NON_PREEMPTIBLE"|"PREEMPTIBLE"|"SPOT"}
-  --roles: list # Required. Node group roles.
+  --roles: list<string> # Required. Node group roles.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "nodeGroupId" $node_group_id "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/nodeGroups") $qp)
-  let body = {"labels": $labels, "name": $name, "nodeGroupConfig": $node_group_config, "roles": $roles} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/nodeGroups") $qp)
+  let req_body = {"labels": $labels, "name": $name, "nodeGroupConfig": $node_group_config, "roles": $roles} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Lists workflows that match the specified filter in the request.
 #
 # GET /v1/{parent}/workflowTemplates
 # operationId: dataproc.projects.regions.workflowTemplates.list
-export def "workflow-templates dataprocprojectsregionsworkflowTemplateslist" [
+export def "workflow-templates list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1290,7 +1300,7 @@ export def "workflow-templates dataprocprojectsregionsworkflowTemplateslist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/workflowTemplates") $qp)
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/workflowTemplates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1300,10 +1310,10 @@ export def "workflow-templates dataprocprojectsregionsworkflowTemplateslist" [
 #
 # POST /v1/{parent}/workflowTemplates
 # operationId: dataproc.projects.regions.workflowTemplates.create
-# --jobs item shape: {hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, prerequisiteStepIds?: list, prestoJob?: record, pysparkJob?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, stepId?: string, trinoJob?: record}
-# --parameters item shape: {description?: string, fields?: list, name?: string, validation?: record}
+# --jobs item shape: {hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, prerequisiteStepIds?: list<string>, prestoJob?: record, pysparkJob?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, stepId?: string, trinoJob?: record}
+# --parameters item shape: {description?: string, fields?: list<string>, name?: string, validation?: record}
 # --placement shape: {clusterSelector?: record, managedCluster?: record}
-export def "workflow-templates dataprocprojectsregionsworkflowTemplatescreate" [
+export def "workflow-templates create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1326,9 +1336,9 @@ export def "workflow-templates dataprocprojectsregionsworkflowTemplatescreate" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --dag-timeout: string # Optional. Timeout duration for the DAG of jobs, expressed in seconds (see JSON representation of duration (https://developers.google.com/protocol-buffers/docs/proto3#json)). The timeout duration must be from 10 minutes ("600s") to 24 hours ("86400s"). The timer begins when the first job is submitted. If the workflow is running at the end of the timeout period, any remaining jobs are cancelled, the workflow is ended, and if the workflow was running on a managed cluster, the cluster is deleted. (format: google-duration)
   --id: string
-  --jobs: list # Required. The Directed Acyclic Graph of Jobs to submit. — item shape: {hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, prerequisiteStepIds?: list, prestoJob?: record, pysparkJob?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, stepId?: string, trinoJob?: record}
+  --jobs: list # Required. The Directed Acyclic Graph of Jobs to submit. — item shape: {hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, prerequisiteStepIds?: list<string>, prestoJob?: record, pysparkJob?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, stepId?: string, trinoJob?: record}
   --labels: record # Optional. The labels to associate with this template. These labels will be propagated to all jobs and clusters created by the workflow instance.Label keys must contain 1 to 63 characters, and must conform to RFC 1035 (https://www.ietf.org/rfc/rfc1035.txt).Label values may be empty, but, if present, must contain 1 to 63 characters, and must conform to RFC 1035 (https://www.ietf.org/rfc/rfc1035.txt).No more than 32 labels can be associated with a template.
-  --parameters: list # Optional. Template parameters whose values are substituted into the template. Values for parameters must be provided when the template is instantiated. — item shape: {description?: string, fields?: list, name?: string, validation?: record}
+  --parameters: list # Optional. Template parameters whose values are substituted into the template. Values for parameters must be provided when the template is instantiated. — item shape: {description?: string, fields?: list<string>, name?: string, validation?: record}
   --placement: record # Specifies workflow execution target.Either managed_cluster or cluster_selector is required. — shape: {clusterSelector?: record, managedCluster?: record}
   --version: int # Optional. Used to perform a consistent read-modify-write.This field should be left blank for a CreateWorkflowTemplate request. It is required for an UpdateWorkflowTemplate request, and must match the current server version. A typical update template flow would fetch the current template with a GetWorkflowTemplate request, which will return the current template with the version field filled in with the current server version. The user updates other fields in the template, then returns it as part of the UpdateWorkflowTemplate request. (format: int32)
 ]: any -> record<createTime: string, dagTimeout: string, id: string, jobs: table<hadoopJob: record, hiveJob: record, labels: record, pigJob: record, prerequisiteStepIds: list, prestoJob: record, pysparkJob: record, scheduling: record, sparkJob: record, sparkRJob: record, sparkSqlJob: record, stepId: string, trinoJob: record>, labels: record, name: string, parameters: table<description: string, fields: list, name: string, validation: record>, placement: record<clusterSelector: record<clusterLabels: record, zone: string>, managedCluster: record<clusterName: string, config: record, labels: record>>, updateTime: string, version: int> {
@@ -1336,22 +1346,22 @@ export def "workflow-templates dataprocprojectsregionsworkflowTemplatescreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/workflowTemplates") $qp)
-  let body = {"dagTimeout": $dag_timeout, "id": $id, "jobs": $jobs, "labels": $labels, "parameters": $parameters, "placement": $placement, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/workflowTemplates") $qp)
+  let req_body = {"dagTimeout": $dag_timeout, "id": $id, "jobs": $jobs, "labels": $labels, "parameters": $parameters, "placement": $placement, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Instantiates a template and begins execution.This method is equivalent to executing the sequence CreateWorkflowTemplate, InstantiateWorkflowTemplate, DeleteWorkflowTemplate.The returned Operation can be used to track execution of workflow by polling operations.get. The Operation will complete when entire workflow is finished.The running workflow can be aborted via operations.cancel. This will cause any inflight jobs to be cancelled and workflow-owned clusters to be deleted.The Operation.metadata will be WorkflowMetadata (https://cloud.google.com/dataproc/docs/reference/rpc/google.cloud.dataproc.v1#workflowmetadata). Also see Using WorkflowMetadata (https://cloud.google.com/dataproc/docs/concepts/workflows/debugging#using_workflowmetadata).On successful completion, Operation.response will be Empty.
 #
 # POST /v1/{parent}/workflowTemplates:instantiateInline
 # operationId: dataproc.projects.regions.workflowTemplates.instantiateInline
-# --jobs item shape: {hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, prerequisiteStepIds?: list, prestoJob?: record, pysparkJob?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, stepId?: string, trinoJob?: record}
-# --parameters item shape: {description?: string, fields?: list, name?: string, validation?: record}
+# --jobs item shape: {hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, prerequisiteStepIds?: list<string>, prestoJob?: record, pysparkJob?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, stepId?: string, trinoJob?: record}
+# --parameters item shape: {description?: string, fields?: list<string>, name?: string, validation?: record}
 # --placement shape: {clusterSelector?: record, managedCluster?: record}
-export def "workflow-templates-instantiate-inline dataprocprojectsregionsworkflowTemplatesinstantiateInline" [
+export def "workflow-templates-instantiate-inline create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1375,9 +1385,9 @@ export def "workflow-templates-instantiate-inline dataprocprojectsregionsworkflo
   --request-id: string # Optional. A tag that prevents multiple concurrent workflow instances with the same tag from running. This mitigates risk of concurrent instances started due to retries.It is recommended to always set this value to a UUID (https://en.wikipedia.org/wiki/Universally_unique_identifier).The tag must contain only letters (a-z, A-Z), numbers (0-9), underscores (_), and hyphens (-). The maximum length is 40 characters.
   --dag-timeout: string # Optional. Timeout duration for the DAG of jobs, expressed in seconds (see JSON representation of duration (https://developers.google.com/protocol-buffers/docs/proto3#json)). The timeout duration must be from 10 minutes ("600s") to 24 hours ("86400s"). The timer begins when the first job is submitted. If the workflow is running at the end of the timeout period, any remaining jobs are cancelled, the workflow is ended, and if the workflow was running on a managed cluster, the cluster is deleted. (format: google-duration)
   --id: string
-  --jobs: list # Required. The Directed Acyclic Graph of Jobs to submit. — item shape: {hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, prerequisiteStepIds?: list, prestoJob?: record, pysparkJob?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, stepId?: string, trinoJob?: record}
+  --jobs: list # Required. The Directed Acyclic Graph of Jobs to submit. — item shape: {hadoopJob?: record, hiveJob?: record, labels?: record, pigJob?: record, prerequisiteStepIds?: list<string>, prestoJob?: record, pysparkJob?: record, scheduling?: record, sparkJob?: record, sparkRJob?: record, sparkSqlJob?: record, stepId?: string, trinoJob?: record}
   --labels: record # Optional. The labels to associate with this template. These labels will be propagated to all jobs and clusters created by the workflow instance.Label keys must contain 1 to 63 characters, and must conform to RFC 1035 (https://www.ietf.org/rfc/rfc1035.txt).Label values may be empty, but, if present, must contain 1 to 63 characters, and must conform to RFC 1035 (https://www.ietf.org/rfc/rfc1035.txt).No more than 32 labels can be associated with a template.
-  --parameters: list # Optional. Template parameters whose values are substituted into the template. Values for parameters must be provided when the template is instantiated. — item shape: {description?: string, fields?: list, name?: string, validation?: record}
+  --parameters: list # Optional. Template parameters whose values are substituted into the template. Values for parameters must be provided when the template is instantiated. — item shape: {description?: string, fields?: list<string>, name?: string, validation?: record}
   --placement: record # Specifies workflow execution target.Either managed_cluster or cluster_selector is required. — shape: {clusterSelector?: record, managedCluster?: record}
   --version: int # Optional. Used to perform a consistent read-modify-write.This field should be left blank for a CreateWorkflowTemplate request. It is required for an UpdateWorkflowTemplate request, and must match the current server version. A typical update template flow would fetch the current template with a GetWorkflowTemplate request, which will return the current template with the version field filled in with the current server version. The user updates other fields in the template, then returns it as part of the UpdateWorkflowTemplate request. (format: int32)
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
@@ -1385,19 +1395,19 @@ export def "workflow-templates-instantiate-inline dataprocprojectsregionsworkflo
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/workflowTemplates:instantiateInline") $qp)
-  let body = {"dagTimeout": $dag_timeout, "id": $id, "jobs": $jobs, "labels": $labels, "parameters": $parameters, "placement": $placement, "version": $version} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1/{parent}/workflowTemplates:instantiateInline") $qp)
+  let req_body = {"dagTimeout": $dag_timeout, "id": $id, "jobs": $jobs, "labels": $labels, "parameters": $parameters, "placement": $placement, "version": $version} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Inject encrypted credentials into all of the VMs in a cluster.The target cluster must be a personal auth cluster assigned to the user who is issuing the RPC.
 #
 # POST /v1/{project}/{region}/{cluster}:injectCredentials
 # operationId: dataproc.projects.regions.clusters.injectCredentials
-export def "projects dataprocprojectsregionsclustersinjectCredentials" [
+export def "projects create-inject-credentials" [
   project: string
   region: string
   cluster: string
@@ -1427,12 +1437,12 @@ export def "projects dataprocprojectsregionsclustersinjectCredentials" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({project: $project, region: $region, cluster: $cluster} | format pattern "/v1/{project}/{region}/{cluster}:injectCredentials") $qp)
-  let body = {"clusterUuid": $cluster_uuid, "credentialsCiphertext": $credentials_ciphertext} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({project: (encode-path-segment $project), region: (encode-path-segment $region), cluster: (encode-path-segment $cluster)} | format pattern "/v1/{project}/{region}/{cluster}:injectCredentials") $qp)
+  let req_body = {"clusterUuid": $cluster_uuid, "credentialsCiphertext": $credentials_ciphertext} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Gets the access control policy for a resource. Returns an empty policy if the resource exists and does not have a policy set.
@@ -1440,7 +1450,7 @@ export def "projects dataprocprojectsregionsclustersinjectCredentials" [
 # POST /v1/{resource}:getIamPolicy
 # operationId: dataproc.projects.regions.workflowTemplates.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "projects dataprocprojectsregionsworkflowTemplatesgetIamPolicy" [
+export def "projects get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1467,12 +1477,12 @@ export def "projects dataprocprojectsregionsworkflowTemplatesgetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:getIamPolicy") $qp)
-  let body = {"options": $options} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:getIamPolicy") $qp)
+  let req_body = {"options": $options} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Sets the access control policy on the specified resource. Replaces any existing policy.Can return NOT_FOUND, INVALID_ARGUMENT, and PERMISSION_DENIED errors.
@@ -1480,7 +1490,7 @@ export def "projects dataprocprojectsregionsworkflowTemplatesgetIamPolicy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: dataproc.projects.regions.workflowTemplates.setIamPolicy
 # --policy shape: {bindings?: list, etag?: string, version?: int}
-export def "projects dataprocprojectsregionsworkflowTemplatessetIamPolicy" [
+export def "projects update-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1507,19 +1517,19 @@ export def "projects dataprocprojectsregionsworkflowTemplatessetIamPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:setIamPolicy") $qp)
-  let body = {"policy": $policy} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:setIamPolicy") $qp)
+  let req_body = {"policy": $policy} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Returns permissions that a caller has on the specified resource. If the resource does not exist, this will return an empty set of permissions, not a NOT_FOUND error.Note: This operation is designed to be used for building permission-aware UIs and command-line tools, not for authorization checking. This operation may "fail open" without warning.
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: dataproc.projects.regions.workflowTemplates.testIamPermissions
-export def "projects dataprocprojectsregionsworkflowTemplatestestIamPermissions" [
+export def "projects test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1540,16 +1550,16 @@ export def "projects dataprocprojectsregionsworkflowTemplatestestIamPermissions"
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --permissions: list # The set of permissions to check for the resource. Permissions with wildcards (such as * or storage.*) are not allowed. For more information see IAM Overview (https://cloud.google.com/iam/docs/overview#permissions).
+  --permissions: list<string> # The set of permissions to check for the resource. Permissions with wildcards (such as * or storage.*) are not allowed. For more information see IAM Overview (https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource: $resource} | format pattern "/v1/{resource}:testIamPermissions") $qp)
-  let body = {"permissions": $permissions} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1/{resource}:testIamPermissions") $qp)
+  let req_body = {"permissions": $permissions} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

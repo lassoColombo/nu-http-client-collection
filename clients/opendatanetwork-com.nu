@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -70,7 +79,7 @@ def format-completer [] { ["google"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-availability get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-availability find-list-available-for-some-entities" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /data/v1/availability/
 # operationId: Find all available data for some entities
-export def "data-availability get" [
+export def "data-availability find-list-available-for-some-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,10 +120,10 @@ export def "data-availability get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/data/v1/availability/" $qp)
-  let extra_headers = {"X-App-Token": $x_app_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-App-Token": $x_app_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -122,7 +131,7 @@ export def "data-availability get" [
 #
 # GET /data/v1/constraint/{variable}
 # operationId: Get constraint permutations for entities
-export def "data-constraint get" [
+export def "data-constraint get-permutations-for-entities" [
   variable: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -140,11 +149,11 @@ export def "data-constraint get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "constraint" $constraint "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({variable: $variable} | format pattern "/data/v1/constraint/{variable}") $qp)
-  let extra_headers = {"X-App-Token": $x_app_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({variable: (encode-path-segment $variable)} | format pattern "/data/v1/constraint/{variable}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-App-Token": $x_app_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -152,7 +161,7 @@ export def "data-constraint get" [
 #
 # GET /data/v1/map/new
 # operationId: Create a map
-export def "data-map-new get" [
+export def "data-map-new create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,10 +180,10 @@ export def "data-map-new get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "variable" $variable "scalar") (serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "constraint" $constraint "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/data/v1/map/new" $qp)
-  let extra_headers = {"X-App-Token": $x_app_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-App-Token": $x_app_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -182,7 +191,7 @@ export def "data-map-new get" [
 #
 # GET /data/v1/values
 # operationId: Get values for variables
-export def "data-values get" [
+export def "data-values get-for-variables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,8 +202,8 @@ export def "data-values get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --variable: string # Comma separated list of variable IDs. Defaults to retrieving all variables. It is also possible to pass in a topic such as `demographics`, or a dataset such as `demographics.population`, which would both be equivalent to specifying `demographics.population.count` and `demographics.population.change`. Note that only variables in the same dataset are allowed. (e.g. demographics.population.count)
   --entity-id: string # Comma separated list of entity IDs. Defaults to retrieving all entities. Note that since there is currently no results pagination, retrieving values for all entities may produce incomplete results. (e.g. 0100000US,0400000US53)
-  --forecast: float # Number of steps to forecast. Must be an integer between 0 and 20. Forecasts are produced using linear extrapolation on the data. They are only available when retrieving data for a single variable across many numerical constraint options.  + Default `0` (e.g. 3)
-  --describe: oneof<nothing, bool> # Whether or not to produce a description of the data. Set to `true` to produce a description. Descriptions are not available if no entities are specified.  + Default `false` (e.g. false)
+  --forecast: float # Number of steps to forecast. Must be an integer between 0 and 20. Forecasts are produced using linear extrapolation on the data. They are only available when retrieving data for a single variable across many numerical constraint options. + Default `0` (e.g. 3)
+  --describe: oneof<nothing, bool> # Whether or not to produce a description of the data. Set to `true` to produce a description. Descriptions are not available if no entities are specified. + Default `false` (e.g. false)
   --format: string@format-completer # If format is set to `google`, the data frame will be formatted as a [Google Visualizations data table](https://developers.google.com/chart/interactive/docs/reference#datatable-class). If the format is not provided or invalid, then the frame will be formatted normally.
   --app-token: string # The [Socrata App Token](https://dev.socrata.com/docs/app-tokens.html) to be used with your request. The `app_token` parameter is required if an app token is not passed via the `X-App-Token` HTTP header. Clients must [register for their own app tokens](https://dev.socrata.com/docs/app-tokens.html). (e.g. cQovpGcdUT1CSzgYk0KPYdAI0)
   --x-app-token: string # e.g. cQovpGcdUT1CSzgYk0KPYdAI0 (e.g. cQovpGcdUT1CSzgYk0KPYdAI0)
@@ -203,10 +212,10 @@ export def "data-values get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "variable" $variable "scalar") (serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "forecast" $forecast "scalar") (serialize-qp "describe" $describe "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/data/v1/values" $qp)
-  let extra_headers = {"X-App-Token": $x_app_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-App-Token": $x_app_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -214,7 +223,7 @@ export def "data-values get" [
 #
 # GET /entity/v1
 # operationId: Get Entities
-export def "entity list" [
+export def "entity get-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,10 +242,10 @@ export def "entity list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "entity_name" $entity_name "scalar") (serialize-qp "entity_type" $entity_type "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/entity/v1" $qp)
-  let extra_headers = {"X-App-Token": $x_app_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-App-Token": $x_app_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -244,7 +253,7 @@ export def "entity list" [
 #
 # GET /entity/v1/{relation}
 # operationId: Find the relatives of an entity
-export def "entity get" [
+export def "entity find-relatives" [
   relation: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,11 +272,11 @@ export def "entity get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "variable_id" $variable_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({relation: $relation} | format pattern "/entity/v1/{relation}") $qp)
-  let extra_headers = {"X-App-Token": $x_app_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({relation: (encode-path-segment $relation)} | format pattern "/entity/v1/{relation}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-App-Token": $x_app_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -295,10 +304,10 @@ export def "search-dataset get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "dataset_id" $dataset_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/v1/dataset" $qp)
-  let extra_headers = {"X-App-Token": $x_app_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-App-Token": $x_app_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -325,10 +334,10 @@ export def "search-question get" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/v1/question" $qp)
-  let extra_headers = {"X-App-Token": $x_app_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-App-Token": $x_app_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
@@ -336,7 +345,7 @@ export def "search-question get" [
 #
 # GET /suggest/v1/{type}
 # operationId: Get suggestions
-export def "suggest get" [
+export def "suggest get-suggestions" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -348,17 +357,17 @@ export def "suggest get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Query to match. (e.g. seattl)
   --limit: float # Maximum number of results to return. Must be an integer from 0 to 100. (default: 5)
-  --variable-id: string # This parameter is only available when suggesting entities with `type=entity`. If it is provided, suggestions will be filtered to include only entities that have data for the given variable.  If the variable provided is invalid, no entities will be returned.  Note that this filtering will increase response time significantly, so it should only be used when necessary. (e.g. demographics.population.count)
+  --variable-id: string # This parameter is only available when suggesting entities with `type=entity`. If it is provided, suggestions will be filtered to include only entities that have data for the given variable. If the variable provided is invalid, no entities will be returned. Note that this filtering will increase response time significantly, so it should only be used when necessary. (e.g. demographics.population.count)
   --app-token: string # The [Socrata App Token](https://dev.socrata.com/docs/app-tokens.html) to be used with your request. The `app_token` parameter is required if an app token is not passed via the `X-App-Token` HTTP header. Clients must [register for their own app tokens](https://dev.socrata.com/docs/app-tokens.html). (e.g. cQovpGcdUT1CSzgYk0KPYdAI0)
   --x-app-token: string # e.g. cQovpGcdUT1CSzgYk0KPYdAI0 (e.g. cQovpGcdUT1CSzgYk0KPYdAI0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "variable_id" $variable_id "scalar") (serialize-qp "app_token" $app_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type: $type} | format pattern "/suggest/v1/{type}") $qp)
-  let extra_headers = {"X-App-Token": $x_app_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/suggest/v1/{type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"X-App-Token": $x_app_token} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
